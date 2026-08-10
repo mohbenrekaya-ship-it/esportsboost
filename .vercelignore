@@ -1,0 +1,19 @@
+# Reference-only design handoffs — never imported at build time (see CLAUDE.md)
+redesign_zip/
+redesign_zip_v2/
+
+# Build output — Vercel regenerates it via buildCommand
+site/dist/
+
+# Local fulfilment log, never committed
+site/orders.log
+orders.log
+
+# Docs not needed at runtime
+CRO-AUDIT.md
+CRO-AUDIT.fr.md
+
+# Python / macOS cruft
+__pycache__/
+*.py[cod]
+.DS_Store

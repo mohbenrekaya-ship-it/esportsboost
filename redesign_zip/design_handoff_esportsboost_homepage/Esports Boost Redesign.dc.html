@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="nocturne.css">
+<style>
+  body { background: var(--color-bg); }
+  a { color: var(--color-accent); }
+  a:hover { color: var(--color-accent-300); }
+</style>
+</helmet>
+
+<section style="padding: 40px 48px 80px; display: flex; flex-direction: column; gap: 28px">
+  <div style="display: flex; flex-direction: column; gap: 6px; max-width: 720px">
+    <h6 style="color: var(--color-accent); margin: 0">Turn 1 — homepage directions</h6>
+    <p class="text-muted" style="font-size: 14px; margin: 0">Two takes on the same content. Both run the order wizard live — pick game and ranks and the price and ETA move. Reference them in chat as <a href="#1a">1a</a> or <a href="#1b">1b</a>.</p>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start">
+
+    <div id="1a" style="display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: baseline; gap: 12px">
+        <span class="tag tag-outline">1a</span>
+        <div>
+          <div style="font-family: var(--font-heading); font-size: 17px">Ledger</div>
+          <div class="text-muted" style="font-size: 13px">Editorial and dense. Copy leads, the wizard sits beside it as a compact quote card.</div>
+        </div>
+      </div>
+
+      <div style="width: 1280px; box-shadow: var(--shadow-md); border-radius: var(--radius-lg); overflow: hidden; background: var(--color-bg)">
+
+        <nav class="nav" style="padding: 18px 56px; gap: 28px; border-bottom: 1px solid var(--color-divider)">
+          <span class="nav-brand" style="letter-spacing: -0.02em">esports<span style="color: var(--color-accent)">boost</span></span>
+          <a href="#1a" aria-current="page">Games</a>
+          <a href="#1a">Boosters</a>
+          <a href="#1a">Guarantee</a>
+          <a href="#1a">Support</a>
+          <span style="width: 1px; height: 20px; background: var(--color-divider)"></span>
+          <a href="#1a" style="opacity: .75">Sign in</a>
+          <a href="#1a" class="btn btn-primary">Start an order</a>
+        </nav>
+
+        <div style="display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 64px; padding: 76px 56px 64px; align-items: start">
+          <div style="display: flex; flex-direction: column; gap: 22px">
+            <h6 style="color: var(--color-accent); margin: 0">Rank boosting · 9 games · since 2019</h6>
+            <h1 style="font-size: 62px; line-height: 1.02; margin: 0; letter-spacing: -0.03em; text-wrap: balance">Stop grinding<br>a rank you<br>already beat.</h1>
+            <p style="font-size: 17px; line-height: 1.6; max-width: 46ch; color: color-mix(in srgb, var(--color-text) 78%, transparent); margin: 0">A verified booster takes the queue you don't have time for. You pick the target, watch it happen from the dashboard, and keep the account. No bots, no shared logins, no guesswork on price.</p>
+            <div style="display: flex; gap: 12px; align-items: center; padding-top: 6px">
+              <a href="#1a" class="btn btn-primary" style="padding: 11px 20px; font-size: 15px">Configure your boost</a>
+              <a href="#1a" class="btn btn-secondary" style="padding: 11px 20px; font-size: 15px">See booster ranks</a>
+            </div>
+            <div style="display: flex; gap: 34px; padding-top: 30px; flex-wrap: wrap">
+              <div style="display: flex; flex-direction: column; gap: 2px">
+                <span style="font-family: var(--font-heading); font-size: 26px">4.8 / 5</span>
+                <span class="text-muted" style="font-size: 12px">Trustpilot · 3,140 reviews</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 2px">
+                <span style="font-family: var(--font-heading); font-size: 26px">92,400</span>
+                <span class="text-muted" style="font-size: 12px">Boosts completed</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 2px">
+                <span style="font-family: var(--font-heading); font-size: 26px">41,000</span>
+                <span class="text-muted" style="font-size: 12px">Players in Discord</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card elev-md" style="padding: 24px; gap: 16px; border-radius: var(--radius-lg)">
+            <div style="display: flex; align-items: center; justify-content: space-between">
+              <span class="card-kicker" style="margin: 0">Order wizard · step 1 of 3</span>
+              <span class="tag tag-accent">Live price</span>
+            </div>
+            <div class="field">
+              <label for="a-game">Game</label>
+              <select id="a-game" class="input" value="{{ aGame }}" onChange="{{ setAGame }}">
+                <sc-for list="{{ games }}" as="g" hint-placeholder-count="9">
+                  <option value="{{ g }}">{{ g }}</option>
+                </sc-for>
+              </select>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+              <div class="field">
+                <label for="a-from">Current rank</label>
+                <select id="a-from" class="input" value="{{ aFrom }}" onChange="{{ setAFrom }}">
+                  <sc-for list="{{ aRanks }}" as="r" hint-placeholder-count="9">
+                    <option value="{{ r }}">{{ r }}</option>
+                  </sc-for>
+                </select>
+              </div>
+              <div class="field">
+                <label for="a-to">Target rank</label>
+                <select id="a-to" class="input" value="{{ aTo }}" onChange="{{ setATo }}">
+                  <sc-for list="{{ aRanks }}" as="r" hint-placeholder-count="9">
+                    <option value="{{ r }}">{{ r }}</option>
+                  </sc-for>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label>How it's played</label>
+              <div class="seg" style="width: 100%">
+                <label class="seg-opt" style="flex: 1; justify-content: center">
+                  <input type="radio" name="a-mode" value="Piloted" checked="{{ aPiloted }}" onChange="{{ setAMode }}" />
+                  Piloted
+                </label>
+                <label class="seg-opt" style="flex: 1; justify-content: center">
+                  <input type="radio" name="a-mode" value="Duo queue" checked="{{ aDuo }}" onChange="{{ setAMode }}" />
+                  Duo queue
+                </label>
+              </div>
+            </div>
+            <div style="height: 1px; background: var(--color-divider); margin: 2px 0"></div>
+            <div style="display: flex; align-items: flex-end; justify-content: space-between">
+              <div style="display: flex; flex-direction: column; gap: 2px">
+                <span class="text-muted" style="font-size: 12px">{{ aSummary }}</span>
+                <span style="font-family: var(--font-heading); font-size: 34px; line-height: 1.1">{{ aPrice }}</span>
+              </div>
+              <div style="text-align: right; display: flex; flex-direction: column; gap: 2px">
+                <span class="text-muted" style="font-size: 12px">Est. delivery</span>
+                <span style="font-family: var(--font-heading); font-size: 17px">{{ aEta }}</span>
+              </div>
+            </div>
+            <a href="#1a" class="btn btn-primary btn-block" style="padding: 11px">Continue to checkout</a>
+            <span class="text-muted" style="font-size: 11px; text-align: center">Money-back until a booster is assigned · VPN matched to your region</span>
+          </div>
+        </div>
+
+        <div style="padding: 0 56px">
+          <div style="height: 1px; background: linear-gradient(to right, transparent, var(--color-divider) 48px, var(--color-divider) calc(100% - 48px), transparent)"></div>
+        </div>
+
+        <div style="padding: 64px 56px; display: flex; flex-direction: column; gap: 26px">
+          <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+            <h2 style="margin: 0; font-size: 34px; letter-spacing: -0.02em">Pick your game</h2>
+            <span class="text-muted" style="font-size: 13px">Prices are per division and shown before you sign in.</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px">
+            <sc-for list="{{ gameCards }}" as="g" hint-placeholder-count="9">
+              <div class="card" style="gap: 12px; padding: 0; overflow: hidden; background: var(--color-surface)">
+                <div style="height: 104px; background: repeating-linear-gradient(135deg, #262939 0 9px, #1d2030 9px 18px); display: grid; place-items: center">
+                  <span style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; letter-spacing: .08em; color: var(--color-neutral-500)">{{ g.slot }}</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px; padding: 4px 16px 16px">
+                  <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px">
+                    <span class="card-title">{{ g.name }}</span>
+                    <span style="font-size: 13px; color: var(--color-accent-300)">{{ g.from }}</span>
+                  </div>
+                  <span class="text-muted" style="font-size: 12px">{{ g.services }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="padding: 8px 56px 64px; display: grid; grid-template-columns: 1fr 1fr; gap: 64px">
+          <div style="display: flex; flex-direction: column; gap: 22px">
+            <h2 style="margin: 0; font-size: 34px; letter-spacing: -0.02em">Three steps, then it's out of your hands</h2>
+            <div style="display: flex; flex-direction: column; gap: 20px">
+              <div style="display: grid; grid-template-columns: 34px 1fr; gap: 16px; align-items: start">
+                <span style="font-family: var(--font-heading); font-size: 15px; color: var(--color-accent); border: 1px solid var(--color-accent); border-radius: var(--radius-md); text-align: center; padding: 4px 0">01</span>
+                <div>
+                  <div style="font-family: var(--font-heading); font-size: 17px; margin-bottom: 4px">Configure and pay</div>
+                  <p class="text-muted" style="font-size: 14px; margin: 0">Ranks, mode, champion or agent preferences, offline appear, scheduled hours. The price never changes after checkout.</p>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: 34px 1fr; gap: 16px; align-items: start">
+                <span style="font-family: var(--font-heading); font-size: 15px; color: var(--color-accent); border: 1px solid var(--color-accent); border-radius: var(--radius-md); text-align: center; padding: 4px 0">02</span>
+                <div>
+                  <div style="font-family: var(--font-heading); font-size: 17px; margin-bottom: 4px">A booster claims it, usually inside 20 minutes</div>
+                  <p class="text-muted" style="font-size: 14px; margin: 0">You see their rank, region, win rate and current queue before they start. Swap them once, free, no reason needed.</p>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: 34px 1fr; gap: 16px; align-items: start">
+                <span style="font-family: var(--font-heading); font-size: 15px; color: var(--color-accent); border: 1px solid var(--color-accent); border-radius: var(--radius-md); text-align: center; padding: 4px 0">03</span>
+                <div>
+                  <div style="font-family: var(--font-heading); font-size: 17px; margin-bottom: 4px">Track every match, pause any time</div>
+                  <p class="text-muted" style="font-size: 14px; margin: 0">Match history, LP graph and chat in one dashboard. Pause from the dashboard and the account is yours again in minutes.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 14px">
+            <div style="display: flex; align-items: baseline; justify-content: space-between">
+              <h4 style="margin: 0">Boosters on shift now</h4>
+              <span class="tag tag-neutral">{{ onlineCount }} online</span>
+            </div>
+            <table class="table">
+              <thead>
+                <tr><th>Booster</th><th>Game</th><th>Peak</th><th>Win rate</th><th>Queue</th></tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ boosters }}" as="b" hint-placeholder-count="5">
+                  <tr>
+                    <td>{{ b.handle }}</td>
+                    <td class="text-muted">{{ b.game }}</td>
+                    <td>{{ b.peak }}</td>
+                    <td style="color: var(--color-accent-300)">{{ b.wr }}</td>
+                    <td class="text-muted">{{ b.queue }}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+            <p class="text-muted" style="font-size: 12px; margin: 0">Every booster is trialled live before onboarding and reviewed monthly. Ranks shown are verified from match history, not self-reported.</p>
+          </div>
+        </div>
+
+        <div style="padding: 48px 56px 64px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px">
+          <div class="card elev-sm" style="padding: 20px; gap: 8px">
+            <span class="card-kicker">Guarantee</span>
+            <span class="card-title">Finished or refunded</span>
+            <p class="card-body">If a boost stalls past its ETA you get the unfinished portion back, pro-rated, without opening a ticket war.</p>
+          </div>
+          <div class="card elev-sm" style="padding: 20px; gap: 8px">
+            <span class="card-kicker">Privacy</span>
+            <span class="card-title">Nobody sees your name</span>
+            <p class="card-body">Regional VPN, your own sensitivity and crosshair, offline appearance, and sessions inside your normal play hours.</p>
+          </div>
+          <div class="card elev-sm" style="padding: 20px; gap: 8px">
+            <span class="card-kicker">Support</span>
+            <span class="card-title">Answered in minutes, not days</span>
+            <p class="card-body">Live chat 24/7 with people who play the game. Median first reply last month: 3m 40s.</p>
+          </div>
+        </div>
+
+        <div style="padding: 44px 56px; border-top: 1px solid var(--color-divider); display: flex; align-items: center; justify-content: space-between; gap: 40px">
+          <div>
+            <div style="font-family: var(--font-heading); font-size: 24px; margin-bottom: 4px">Know your price before you sign up.</div>
+            <span class="text-muted" style="font-size: 14px">The calculator is on every page. No account needed to see it.</span>
+          </div>
+          <a href="#1a" class="btn btn-primary" style="padding: 11px 22px; font-size: 15px">Start an order</a>
+        </div>
+
+        <div style="padding: 28px 56px 34px; background: var(--color-neutral-900); display: flex; justify-content: space-between; gap: 40px; font-size: 13px">
+          <span class="text-muted">© 2026 eSports Boost</span>
+          <div style="display: flex; gap: 22px">
+            <a href="#1a" style="color: inherit; text-decoration: none; opacity: .7">Terms</a>
+            <a href="#1a" style="color: inherit; text-decoration: none; opacity: .7">Refunds</a>
+            <a href="#1a" style="color: inherit; text-decoration: none; opacity: .7">Privacy</a>
+            <a href="#1a" style="color: inherit; text-decoration: none; opacity: .7">Become a booster</a>
+            <a href="#1a" style="color: inherit; text-decoration: none; opacity: .7">Discord</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1b" style="display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: baseline; gap: 12px">
+        <span class="tag tag-outline">1b</span>
+        <div>
+          <div style="font-family: var(--font-heading); font-size: 17px">Ladder</div>
+          <div class="text-muted" style="font-size: 13px">The wizard is the hero. Rank ladder you click through, price updates under it.</div>
+        </div>
+      </div>
+
+      <div style="width: 1280px; box-shadow: var(--shadow-md); border-radius: var(--radius-lg); overflow: hidden; background: var(--color-bg)">
+
+        <nav class="nav" style="padding: 18px 56px; gap: 28px">
+          <span class="nav-brand" style="letter-spacing: -0.02em">esports<span style="color: var(--color-accent)">boost</span></span>
+          <a href="#1b" aria-current="page">Games</a>
+          <a href="#1b">How it works</a>
+          <a href="#1b">Reviews</a>
+          <a href="#1b">Support</a>
+          <span style="width: 1px; height: 20px; background: var(--color-divider)"></span>
+          <a href="#1b" style="opacity: .75">Sign in</a>
+          <a href="#1b" class="btn btn-secondary">Track my order</a>
+        </nav>
+
+        <div style="padding: 60px 56px 52px; display: flex; flex-direction: column; gap: 34px">
+          <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 48px">
+            <div style="max-width: 30ch">
+              <h1 style="font-size: 54px; line-height: 1.03; margin: 0 0 14px; letter-spacing: -0.03em">Where are you, and where should you be?</h1>
+              <p style="font-size: 16px; line-height: 1.6; color: color-mix(in srgb, var(--color-text) 75%, transparent); margin: 0">Set the two ends of the climb. The price and the delivery window are final from here.</p>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; max-width: 560px; justify-content: flex-end">
+              <sc-for list="{{ games }}" as="g" hint-placeholder-count="9">
+                <span class="tag tag-neutral" style="cursor: pointer; padding: 6px 12px; font-size: 12px">{{ g }}</span>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="background: var(--color-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: 30px 30px 26px; display: flex; flex-direction: column; gap: 26px">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px">
+              <div style="display: flex; align-items: center; gap: 14px">
+                <span class="card-kicker" style="margin: 0">{{ bGame }}</span>
+                <span class="text-muted" style="font-size: 13px">Solo queue ranked ladder</span>
+              </div>
+              <div class="seg">
+                <label class="seg-opt">
+                  <input type="radio" name="b-mode" value="Piloted" checked="{{ bPiloted }}" onChange="{{ setBMode }}" />
+                  Piloted
+                </label>
+                <label class="seg-opt">
+                  <input type="radio" name="b-mode" value="Duo queue" checked="{{ bDuo }}" onChange="{{ setBMode }}" />
+                  Duo queue
+                </label>
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 10px">
+              <span class="text-muted" style="font-size: 12px">Click a tier to set your current rank, then your target.</span>
+              <div style="display: flex; gap: 6px">
+                <sc-for list="{{ bLadder }}" as="t" hint-placeholder-count="9">
+                  <div onClick="{{ t.pick }}" style="{{ t.style }}">
+                    <span style="font-family: var(--font-heading); font-size: 13px">{{ t.name }}</span>
+                    <span style="font-size: 10px; opacity: .6; font-family: ui-monospace, Menlo, monospace">{{ t.tag }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 30px; border-top: 1px solid var(--color-divider); padding-top: 22px">
+              <div style="display: flex; gap: 44px; align-items: flex-end">
+                <div style="display: flex; flex-direction: column; gap: 3px">
+                  <span class="text-muted" style="font-size: 12px">{{ bSummary }}</span>
+                  <span style="font-family: var(--font-heading); font-size: 40px; line-height: 1">{{ bPrice }}</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 3px">
+                  <span class="text-muted" style="font-size: 12px">Delivered in</span>
+                  <span style="font-family: var(--font-heading); font-size: 19px">{{ bEta }}</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 3px">
+                  <span class="text-muted" style="font-size: 12px">Boosters free now</span>
+                  <span style="font-family: var(--font-heading); font-size: 19px">{{ onlineCount }}</span>
+                </div>
+              </div>
+              <div style="display: flex; gap: 10px; align-items: center">
+                <a href="#1b" class="btn btn-secondary" style="padding: 12px 18px; font-size: 15px">Add options</a>
+                <a href="#1b" class="btn btn-primary" style="padding: 12px 24px; font-size: 15px">Continue</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: var(--color-section); padding: 46px 56px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px">
+          <div style="display: flex; flex-direction: column; gap: 3px">
+            <span style="font-family: var(--font-heading); font-size: 36px; line-height: 1">92,400</span>
+            <span style="font-size: 13px; color: var(--color-accent-200)">Boosts completed since 2019</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 3px">
+            <span style="font-family: var(--font-heading); font-size: 36px; line-height: 1">4.8 / 5</span>
+            <span style="font-size: 13px; color: var(--color-accent-200)">Trustpilot, 3,140 reviews</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 3px">
+            <span style="font-family: var(--font-heading); font-size: 36px; line-height: 1">18 min</span>
+            <span style="font-size: 13px; color: var(--color-accent-200)">Median time to a claimed order</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 3px">
+            <span style="font-family: var(--font-heading); font-size: 36px; line-height: 1">41,000</span>
+            <span style="font-size: 13px; color: var(--color-accent-200)">Players in the Discord</span>
+          </div>
+        </div>
+
+        <div style="padding: 60px 56px 20px; display: flex; flex-direction: column; gap: 20px">
+          <h2 style="margin: 0; font-size: 34px; letter-spacing: -0.02em">Every game, every service</h2>
+          <div style="display: flex; flex-direction: column">
+            <sc-for list="{{ gameCards }}" as="g" hint-placeholder-count="9">
+              <div style="display: grid; grid-template-columns: 220px 1fr 120px 120px; gap: 24px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--color-divider)">
+                <span style="font-family: var(--font-heading); font-size: 18px">{{ g.name }}</span>
+                <span class="text-muted" style="font-size: 13px">{{ g.services }}</span>
+                <span style="font-size: 13px; color: var(--color-accent-300)">{{ g.from }}</span>
+                <a href="#1b" class="btn btn-ghost" style="justify-self: end">Configure →</a>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="padding: 56px; display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 56px; align-items: center">
+          <div style="aspect-ratio: 4 / 3; border-radius: var(--radius-lg); background: repeating-linear-gradient(135deg, #262939 0 10px, #1d2030 10px 20px); display: grid; place-items: center">
+            <span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .08em; color: var(--color-neutral-500)">dashboard screenshot — order tracking</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 24px">
+            <h2 style="margin: 0; font-size: 32px; letter-spacing: -0.02em">You watch the whole thing</h2>
+            <div style="display: flex; flex-direction: column; gap: 16px">
+              <div>
+                <div style="font-family: var(--font-heading); font-size: 16px; margin-bottom: 3px">Match-by-match history</div>
+                <p class="text-muted" style="font-size: 14px; margin: 0">Every game your booster plays, with the LP swing, KDA and replay link.</p>
+              </div>
+              <div>
+                <div style="font-family: var(--font-heading); font-size: 16px; margin-bottom: 3px">Pause on one click</div>
+                <p class="text-muted" style="font-size: 14px; margin: 0">Want to play tonight? Pause, and the account is free within minutes.</p>
+              </div>
+              <div>
+                <div style="font-family: var(--font-heading); font-size: 16px; margin-bottom: 3px">Chat with the booster, not a queue</div>
+                <p class="text-muted" style="font-size: 14px; margin: 0">Ask for a champion pool, a schedule, or a swap. Support reads the same thread.</p>
+              </div>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap">
+              <span class="tag tag-accent">Regional VPN</span>
+              <span class="tag tag-accent">Offline appearance</span>
+              <span class="tag tag-accent">Pro-rated refunds</span>
+              <span class="tag tag-accent">No account sharing on duo</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 8px 56px 60px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px">
+          <sc-for list="{{ reviews }}" as="r" hint-placeholder-count="3">
+            <div class="card elev-sm" style="padding: 20px; gap: 10px">
+              <span class="card-kicker">{{ r.rank }}</span>
+              <p class="card-body" style="font-size: 14px; opacity: .9">{{ r.text }}</p>
+              <span class="card-meta">{{ r.meta }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="padding: 44px 56px; border-top: 1px solid var(--color-divider); display: flex; align-items: center; justify-content: space-between; gap: 40px">
+          <div>
+            <div style="font-family: var(--font-heading); font-size: 24px; margin-bottom: 4px">{{ bSummary }} — {{ bPrice }}</div>
+            <span class="text-muted" style="font-size: 14px">Nothing changes after checkout. Refunded in full until a booster claims it.</span>
+          </div>
+          <a href="#1b" class="btn btn-primary" style="padding: 11px 22px; font-size: 15px">Continue your order</a>
+        </div>
+
+        <div style="padding: 28px 56px 34px; background: var(--color-neutral-900); display: flex; justify-content: space-between; gap: 40px; font-size: 13px">
+          <span class="text-muted">© 2026 eSports Boost</span>
+          <div style="display: flex; gap: 22px">
+            <a href="#1b" style="color: inherit; text-decoration: none; opacity: .7">Terms</a>
+            <a href="#1b" style="color: inherit; text-decoration: none; opacity: .7">Refunds</a>
+            <a href="#1b" style="color: inherit; text-decoration: none; opacity: .7">Privacy</a>
+            <a href="#1b" style="color: inherit; text-decoration: none; opacity: .7">Become a booster</a>
+            <a href="#1b" style="color: inherit; text-decoration: none; opacity: .7">Discord</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;pricePerDivision&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:26,&quot;min&quot;:10,&quot;max&quot;:60,&quot;step&quot;:2,&quot;unit&quot;:&quot;$&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Pricing&quot;},&quot;compactGames&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Content&quot;}}">
+const LADDERS = {
+  "League of Legends": ["Iron", "Bronze", "Silver", "Gold", "Platinum", "Emerald", "Diamond", "Master", "Grandmaster", "Challenger"],
+  "Valorant": ["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"],
+  "Counter-Strike 2": ["5k", "10k", "13k", "15k", "17k", "19k", "21k", "25k", "30k"],
+  "Teamfight Tactics": ["Iron", "Bronze", "Silver", "Gold", "Platinum", "Emerald", "Diamond", "Master", "Challenger"],
+  "Marvel Rivals": ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Grandmaster", "Celestial", "Eternity", "One Above All"],
+  "Dota 2": ["Herald", "Guardian", "Crusader", "Archon", "Legend", "Ancient", "Divine", "Immortal"],
+  "Apex Legends": ["Rookie", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Predator"],
+  "Overwatch 2": ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Grandmaster", "Champion"],
+  "Rocket League": ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Champion", "Grand Champ", "Supersonic"]
+};
+
+const SERVICES = {
+  "League of Legends": "Elo boost · placements · net wins · duo · coaching",
+  "Valorant": "Rank boost · placements · unrated wins · duo · coaching",
+  "Counter-Strike 2": "Premier rating · Faceit levels · Wingman · wins",
+  "Teamfight Tactics": "Rank boost · placements · double-up",
+  "Marvel Rivals": "Rank boost · net wins · duo · coaching",
+  "Dota 2": "MMR boost · calibration · net wins · duo",
+  "Apex Legends": "Rank boost · badges · kills · duo",
+  "Overwatch 2": "Rank boost · placements · net wins · duo",
+  "Rocket League": "Rank boost · tournament wins · duo · coaching"
+};
+
+const SLOTS = {
+  "League of Legends": "key art — lol",
+  "Valorant": "key art — valorant",
+  "Counter-Strike 2": "key art — cs2",
+  "Teamfight Tactics": "key art — tft",
+  "Marvel Rivals": "key art — rivals",
+  "Dota 2": "key art — dota 2",
+  "Apex Legends": "key art — apex",
+  "Overwatch 2": "key art — ow2",
+  "Rocket League": "key art — rocket league"
+};
+
+const FACTOR = {
+  "League of Legends": 1.0,
+  "Valorant": 1.15,
+  "Counter-Strike 2": 1.45,
+  "Teamfight Tactics": 0.8,
+  "Marvel Rivals": 0.95,
+  "Dota 2": 1.25,
+  "Apex Legends": 1.1,
+  "Overwatch 2": 0.9,
+  "Rocket League": 0.7
+};
+
+class Component extends DCLogic {
+  state = {
+    aGame: "League of Legends", aFrom: "Gold", aTo: "Diamond", aMode: "Piloted",
+    bGame: "Valorant", bFrom: "Silver", bTo: "Diamond", bMode: "Piloted",
+    bNext: "from"
+  };
+
+  per() { return this.props.pricePerDivision ?? 26; }
+
+  quote(game, from, to, mode) {
+    const ladder = LADDERS[game] || [];
+    const i = ladder.indexOf(from), j = ladder.indexOf(to);
+    const steps = j - i;
+    if (steps <= 0) return { price: "—", eta: "—", summary: "Target must sit above your current rank" };
+    const climb = Math.max(1, i - 1);
+    const raw = steps * this.per() * (FACTOR[game] || 1) * (1 + climb * 0.22) * (mode === "Duo queue" ? 1.55 : 1);
+    const days = Math.max(1, Math.round(steps * 1.4 + climb * 0.3));
+    return {
+      price: "$" + Math.round(raw),
+      eta: days === 1 ? "about 1 day" : days + " days",
+      summary: from + " → " + to + " · " + mode
+    };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const games = Object.keys(LADDERS);
+    const a = this.quote(s.aGame, s.aFrom, s.aTo, s.aMode);
+    const b = this.quote(s.bGame, s.bFrom, s.bTo, s.bMode);
+    const bl = LADDERS[s.bGame] || [];
+    const bi = bl.indexOf(s.bFrom), bj = bl.indexOf(s.bTo);
+
+    const shown = (this.props.compactGames ?? false) ? games.slice(0, 6) : games;
+
+    const tierStyle = (idx) => {
+      const inRange = bi >= 0 && bj > bi && idx > bi && idx <= bj;
+      const isEnd = idx === bi || idx === bj;
+      const base = "flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:12px 4px;border-radius:8px;cursor:pointer;user-select:none;text-align:center;border:1px solid ";
+      if (isEnd) return base + "var(--color-accent);background:color-mix(in srgb, var(--color-accent) 18%, transparent);color:var(--color-accent-100)";
+      if (inRange) return base + "color-mix(in srgb, var(--color-accent) 40%, transparent);background:color-mix(in srgb, var(--color-accent) 7%, transparent)";
+      return base + "var(--color-divider);background:transparent;color:color-mix(in srgb, var(--color-text) 62%, transparent)";
+    };
+
+    return {
+      games,
+      gameCards: shown.map((g) => {
+        const q = this.quote(g, LADDERS[g][1], LADDERS[g][2], "Piloted");
+        return { name: g, services: SERVICES[g], slot: SLOTS[g], from: "from " + q.price };
+      }),
+      aGame: s.aGame, aFrom: s.aFrom, aTo: s.aTo,
+      aRanks: LADDERS[s.aGame],
+      aPiloted: s.aMode === "Piloted", aDuo: s.aMode === "Duo queue",
+      aPrice: a.price, aEta: a.eta, aSummary: a.summary,
+      setAGame: (e) => this.setState({ aGame: e.target.value, aFrom: LADDERS[e.target.value][3], aTo: LADDERS[e.target.value][5] }),
+      setAFrom: (e) => this.setState({ aFrom: e.target.value }),
+      setATo: (e) => this.setState({ aTo: e.target.value }),
+      setAMode: (e) => this.setState({ aMode: e.target.value }),
+
+      bGame: s.bGame,
+      bPiloted: s.bMode === "Piloted", bDuo: s.bMode === "Duo queue",
+      bPrice: b.price, bEta: b.eta, bSummary: b.summary,
+      setBMode: (e) => this.setState({ bMode: e.target.value }),
+      bLadder: bl.map((name, idx) => ({
+        name,
+        tag: idx === bi ? "you" : (idx === bj ? "target" : ""),
+        style: tierStyle(idx),
+        pick: () => {
+          const last = idx >= bl.length - 1;
+          const next = last ? name : bl[idx + 1];
+          const start = last ? bl[bl.length - 2] : name;
+          if (s.bNext === "from") this.setState({ bFrom: start, bTo: next, bNext: "to" });
+          else if (idx > bi) this.setState({ bTo: name, bNext: "from" });
+          else this.setState({ bFrom: start, bTo: next, bNext: "to" });
+        }
+      })),
+
+      onlineCount: 34,
+      boosters: [
+        { handle: "vantaa", game: "LoL · EUW", peak: "Challenger 1042 LP", wr: "78%", queue: "1 order" },
+        { handle: "kx_reid", game: "Valorant · NA", peak: "Radiant #211", wr: "74%", queue: "free" },
+        { handle: "sable", game: "CS2 · EU", peak: "FPL, 27k Premier", wr: "71%", queue: "2 orders" },
+        { handle: "orvo", game: "LoL · NA", peak: "Grandmaster 640 LP", wr: "69%", queue: "free" },
+        { handle: "nine", game: "Dota 2 · SEA", peak: "Immortal 8.4k", wr: "73%", queue: "1 order" }
+      ],
+      reviews: [
+        { rank: "Gold IV → Platinum II", text: "Booster took it in two evenings and left notes on what I was doing wrong in my own replays. Didn't expect that part.", meta: "Verified order · LoL · EUW" },
+        { rank: "Silver → Ascendant", text: "Duo the whole way, voice on, no drama. Paused it twice because I wanted to play and it was free within ten minutes both times.", meta: "Verified order · Valorant · NA" },
+        { rank: "13k → 19k Premier", text: "Price on the calculator was the price I paid. That's the only reason I came back a third time.", meta: "Verified order · CS2 · EU" }
+      ]
+    };
+  }
+}
+
+</script>
+</body>
+</html>

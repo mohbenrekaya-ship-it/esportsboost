@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="./image-slot.js"></script>
+<style>
+  body { margin: 0; background: #06060a; color: #f4f1ec; font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  h1, h2, h3 { font-family: "Chakra Petch", system-ui, sans-serif; font-weight: 700; margin: 0; line-height: 0.94; letter-spacing: -0.02em; text-transform: uppercase; }
+  p { margin: 0; }
+  a { color: #ff6a3d; text-decoration: none; }
+  a:hover { color: #ffb046; }
+  @keyframes drift { 0% { transform: translate3d(-3%, 2%, 0) scale(1.06); } 50% { transform: translate3d(4%, -3%, 0) scale(1.14); } 100% { transform: translate3d(-3%, 2%, 0) scale(1.06); } }
+  @keyframes rise { 0% { transform: translateY(0) scale(1); opacity: 0; } 12% { opacity: .9; } 100% { transform: translateY(-260px) scale(.4); opacity: 0; } }
+  @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @keyframes sweep { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+</style>
+</helmet>
+
+<div style="width: 1440px; margin: 0 auto; position: relative; overflow: hidden; background: #06060a">
+
+  <div style="position: relative; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 9px 40px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .18em; color: #6f6f80; border-bottom: 1px solid rgba(255,255,255,.07)">
+    <span>EUW · EUNE · NA · LAN · KR · SEA · OCE</span>
+    <span style="color: #ff6a3d">34 BOOSTERS ON SHIFT — MEDIAN CLAIM 18 MIN</span>
+    <span>USD ▾ &nbsp; EN ▾</span>
+  </div>
+
+  <div style="position: relative; z-index: 3; display: flex; align-items: center; gap: 34px; padding: 18px 40px; background: rgba(6,6,10,.72); backdrop-filter: blur(14px); border-bottom: 1px solid rgba(255,255,255,.07)">
+    <span style="display: flex; align-items: center; gap: 11px; margin-right: auto; font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 19px; letter-spacing: .01em; text-transform: uppercase">
+      <span style="width: 10px; height: 22px; background: linear-gradient(#ffb046, #ff3d0f); clip-path: polygon(0 0, 100% 18%, 62% 100%, 18% 62%)"></span>
+      esports<span style="color: #ff4a1f">boost</span>
+    </span>
+    <a href="#games" style="color: #f4f1ec; font-size: 13px; letter-spacing: .04em">Games</a>
+    <a href="#live" style="color: #9a9aad; font-size: 13px; letter-spacing: .04em">Live</a>
+    <a href="#boosters" style="color: #9a9aad; font-size: 13px; letter-spacing: .04em">Boosters</a>
+    <a href="#safety" style="color: #9a9aad; font-size: 13px; letter-spacing: .04em">Safety</a>
+    <a href="#reviews" style="color: #9a9aad; font-size: 13px; letter-spacing: .04em">Reviews</a>
+    <span style="width: 1px; height: 18px; background: rgba(255,255,255,.12)"></span>
+    <a href="#top" style="color: #9a9aad; font-size: 13px">Sign in</a>
+    <a href="#calc" style="font-family: 'Chakra Petch', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: #06060a; background: linear-gradient(100deg, #ffb046, #ff3d0f); padding: 11px 20px; border-radius: 2px" style-hover="filter: brightness(1.12)">Start an order</a>
+  </div>
+
+  <div id="top" style="position: relative; height: 800px; overflow: hidden; isolation: isolate">
+    <div style="position: absolute; inset: 0; z-index: 0">
+      <image-slot id="im-hero" shape="rect" placeholder="drop hero art — 1440×800, dark, high contrast"></image-slot>
+    </div>
+    <div style="position: absolute; inset: -12%; z-index: 1; pointer-events: none; background: radial-gradient(38% 42% at 62% 34%, rgba(255,77,28,.62), transparent 68%), radial-gradient(30% 34% at 78% 62%, rgba(255,176,70,.34), transparent 70%), radial-gradient(46% 50% at 22% 78%, rgba(58,32,120,.5), transparent 72%); animation: drift 26s ease-in-out infinite; mix-blend-mode: screen"></div>
+    <div style="position: absolute; inset: 0; z-index: 2; pointer-events: none; background-image: url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E&quot;); opacity: .11; mix-blend-mode: overlay"></div>
+    <div style="position: absolute; inset: 0; z-index: 2; pointer-events: none; background: repeating-linear-gradient(to bottom, rgba(255,255,255,.028) 0 1px, transparent 1px 4px)"></div>
+    <div style="position: absolute; inset: 0; z-index: 2; pointer-events: none; background: linear-gradient(to right, rgba(6,6,10,.94) 0%, rgba(6,6,10,.72) 42%, rgba(6,6,10,.18) 70%, rgba(6,6,10,.86) 100%), linear-gradient(to top, #06060a 2%, transparent 46%)"></div>
+    <div style="position: absolute; left: 34%; bottom: 120px; z-index: 2; pointer-events: none">
+      <span style="position: absolute; width: 4px; height: 4px; border-radius: 50%; background: #ff8a4c; box-shadow: 0 0 12px 3px rgba(255,110,50,.75); animation: rise 7s linear infinite"></span>
+      <span style="position: absolute; left: 90px; width: 3px; height: 3px; border-radius: 50%; background: #ffb046; box-shadow: 0 0 10px 3px rgba(255,176,70,.6); animation: rise 9s linear infinite 1.4s"></span>
+      <span style="position: absolute; left: 210px; width: 5px; height: 5px; border-radius: 50%; background: #ff5a24; box-shadow: 0 0 14px 4px rgba(255,90,36,.6); animation: rise 11s linear infinite 3.1s"></span>
+      <span style="position: absolute; left: 330px; width: 3px; height: 3px; border-radius: 50%; background: #ffd39a; box-shadow: 0 0 9px 3px rgba(255,211,154,.55); animation: rise 8.5s linear infinite 2.2s"></span>
+    </div>
+
+    <div style="position: relative; z-index: 3; height: 100%; display: grid; grid-template-columns: 1fr 400px; align-items: center; padding: 0 40px 90px; pointer-events: none">
+      <div style="display: flex; flex-direction: column; gap: 22px; max-width: 760px">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .3em; color: #ff8a4c">VERIFIED BOOSTERS — 9 GAMES — SINCE 2019</span>
+        <h1 style="font-size: 108px; letter-spacing: -0.035em">The rank is yours.<br><span style="background: linear-gradient(96deg, #ffd39a, #ff4a1f 62%); -webkit-background-clip: text; background-clip: text; color: transparent">The grind isn't.</span></h1>
+        <p style="font-size: 17px; max-width: 52ch; color: #c9c6c0">Set two ranks. See the final price before you make an account. Then watch every match land from the dashboard — no bots, no shared logins, no invoice that moves after checkout.</p>
+        <div style="display: flex; gap: 12px; align-items: center; padding-top: 6px; pointer-events: auto">
+          <a href="#calc" style="font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #06060a; background: linear-gradient(100deg, #ffb046, #ff3d0f); padding: 15px 30px; border-radius: 2px; box-shadow: 0 0 44px rgba(255,74,31,.34)">Configure your boost</a>
+          <a href="#live" style="font-family: 'Chakra Petch', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #f4f1ec; border: 1px solid rgba(255,255,255,.22); padding: 15px 26px; border-radius: 2px">Watch a live boost</a>
+        </div>
+      </div>
+      <div style="justify-self: end; display: flex; flex-direction: column; gap: 14px; align-items: flex-end; text-align: right">
+        <div style="position: relative; width: 232px; height: 232px; pointer-events: auto">
+          <div style="position: absolute; inset: -14px; border-radius: 50%; background: conic-gradient(from 210deg, rgba(255,176,70,.9), rgba(255,61,15,.15) 55%, rgba(255,176,70,.9)); filter: blur(16px); opacity: .6"></div>
+          <image-slot id="im-booster" shape="circle" style="position: relative; width: 232px; height: 232px" placeholder="drop booster portrait"></image-slot>
+        </div>
+        <div>
+          <div style="font-family: 'Chakra Petch', sans-serif; font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: .04em">This month's #1 — vantaa</div>
+          <div style="font-size: 12px; color: #9a9aad">Challenger 1042 LP · 78% WR · EUW · 214 orders</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="calc" style="position: absolute; left: 40px; right: 40px; bottom: 26px; z-index: 4; background: rgba(14,14,20,.78); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,.1); border-radius: 3px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .22em; color: #ff8a4c">PRICE CALCULATOR — NO ACCOUNT NEEDED</span>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end">
+          <sc-for list="{{ gameChips }}" as="g" hint-placeholder-count="9">
+            <span onClick="{{ g.pick }}" style="{{ g.style }}">{{ g.name }}</span>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display: flex; gap: 4px">
+        <sc-for list="{{ ladder }}" as="t" hint-placeholder-count="10">
+          <div onClick="{{ t.pick }}" style="{{ t.style }}">
+            <span style="font-family: 'Chakra Petch', sans-serif; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em">{{ t.name }}</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 8px; letter-spacing: .16em; opacity: .75">{{ t.tag }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; border-top: 1px solid rgba(255,255,255,.09); padding-top: 14px">
+        <div style="display: flex; gap: 34px; align-items: flex-end">
+          <div>
+            <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .14em; color: #8b8b99; margin-bottom: 3px">{{ summary }}</div>
+            <div style="font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 40px; line-height: .9">{{ price }}</div>
+          </div>
+          <div>
+            <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .14em; color: #8b8b99; margin-bottom: 3px">DELIVERED IN</div>
+            <div style="font-family: 'Chakra Petch', sans-serif; font-weight: 600; font-size: 19px">{{ eta }}</div>
+          </div>
+          <div style="display: flex; border: 1px solid rgba(255,255,255,.14); border-radius: 2px; overflow: hidden">
+            <span onClick="{{ setPiloted }}" style="{{ pilotedStyle }}">Piloted</span>
+            <span onClick="{{ setDuo }}" style="{{ duoStyle }}">Duo queue</span>
+          </div>
+        </div>
+        <a href="#games" style="font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #06060a; background: linear-gradient(100deg, #ffb046, #ff3d0f); padding: 14px 30px; border-radius: 2px">Continue</a>
+      </div>
+    </div>
+  </div>
+
+  <div style="overflow: hidden; border-top: 1px solid rgba(255,255,255,.07); border-bottom: 1px solid rgba(255,255,255,.07); background: #0a0a11; padding: 11px 0">
+    <div style="display: flex; width: max-content; animation: marquee 38s linear infinite; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .24em; color: #6f6f80">
+      <span style="display: flex; gap: 30px; padding-right: 30px">
+        <span>92,400 BOOSTS DELIVERED</span><span style="color: #ff4a1f">◆</span>
+        <span>4.8 / 5 ON TRUSTPILOT — 3,140 REVIEWS</span><span style="color: #ff4a1f">◆</span>
+        <span>18 MIN MEDIAN TIME TO A CLAIMED ORDER</span><span style="color: #ff4a1f">◆</span>
+        <span>41,000 PLAYERS IN THE DISCORD</span><span style="color: #ff4a1f">◆</span>
+        <span>100% RECOVERY RATE ON ACCOUNT REVIEWS</span><span style="color: #ff4a1f">◆</span>
+      </span>
+      <span style="display: flex; gap: 30px; padding-right: 30px">
+        <span>92,400 BOOSTS DELIVERED</span><span style="color: #ff4a1f">◆</span>
+        <span>4.8 / 5 ON TRUSTPILOT — 3,140 REVIEWS</span><span style="color: #ff4a1f">◆</span>
+        <span>18 MIN MEDIAN TIME TO A CLAIMED ORDER</span><span style="color: #ff4a1f">◆</span>
+        <span>41,000 PLAYERS IN THE DISCORD</span><span style="color: #ff4a1f">◆</span>
+        <span>100% RECOVERY RATE ON ACCOUNT REVIEWS</span><span style="color: #ff4a1f">◆</span>
+      </span>
+    </div>
+  </div>
+
+  <div id="games" style="padding: 88px 40px 20px; display: flex; flex-direction: column; gap: 26px">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 30px">
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .3em; color: #ff8a4c">01 / GAMES</span>
+        <h2 style="font-size: 60px">Nine ladders.<br>Forty services.</h2>
+      </div>
+      <p style="font-size: 14px; color: #9a9aad; max-width: 40ch; text-align: right">Every service is priced per division and shown before you sign in. Placements, net wins, coaching and duo on every title.</p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 208px; gap: 12px">
+      <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="7">
+        <div style="{{ t.wrap }}">
+          <image-slot id="{{ t.slotId }}" shape="rect" placeholder="{{ t.ph }}"></image-slot>
+          <div style="position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, rgba(6,6,10,.95) 4%, rgba(6,6,10,.35) 46%, rgba(6,6,10,.08) 100%)"></div>
+          <div style="position: absolute; inset: 0; pointer-events: none; border: 1px solid rgba(255,255,255,.08)"></div>
+          <span style="position: absolute; top: 14px; left: 16px; pointer-events: none; font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .2em; color: rgba(255,255,255,.62)">{{ t.num }}</span>
+          <div style="position: absolute; left: 16px; right: 16px; bottom: 14px; pointer-events: none; display: flex; flex-direction: column; gap: 3px">
+            <span style="{{ t.titleStyle }}">{{ t.name }}</span>
+            <span style="font-size: 11px; color: #a8a5b2">{{ t.services }}</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .14em; color: #ff8a4c; margin-top: 3px">{{ t.from }}</span>
+          </div>
+        </div>
+      </sc-for>
+      <div style="grid-column: span 1; display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 20px; border: 1px solid rgba(255,255,255,.1); background: linear-gradient(150deg, rgba(255,74,31,.1), transparent 70%)">
+        <span style="font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 30px; text-transform: uppercase; line-height: .95">+ 3<br>more</span>
+        <span style="font-size: 12px; color: #9a9aad">Apex, Overwatch 2, Rocket League</span>
+        <a href="#games" style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .18em">ALL GAMES →</a>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin: 74px 0 0; padding: 34px 40px; background: linear-gradient(100deg, rgba(255,74,31,.14), rgba(58,32,120,.2) 60%, transparent), #0a0a11; border-top: 1px solid rgba(255,255,255,.08); border-bottom: 1px solid rgba(255,255,255,.08); display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px">
+    <div>
+      <div style="font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 44px; line-height: .9">92,400</div>
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .18em; color: #a8a5b2; margin-top: 6px">BOOSTS DELIVERED</div>
+    </div>
+    <div>
+      <div style="font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 44px; line-height: .9">4.8 / 5</div>
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .18em; color: #a8a5b2; margin-top: 6px">TRUSTPILOT · 3,140 REVIEWS</div>
+    </div>
+    <div>
+      <div style="font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 44px; line-height: .9">18 MIN</div>
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .18em; color: #a8a5b2; margin-top: 6px">MEDIAN TIME TO CLAIM</div>
+    </div>
+    <div>
+      <div style="font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 44px; line-height: .9">41,000</div>
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .18em; color: #a8a5b2; margin-top: 6px">PLAYERS IN THE DISCORD</div>
+    </div>
+  </div>
+
+  <div id="live" style="padding: 84px 40px 0; display: grid; grid-template-columns: 1fr 420px; gap: 56px; align-items: start">
+    <div style="display: flex; flex-direction: column; gap: 26px">
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .3em; color: #ff8a4c">02 / LIVE</span>
+        <h2 style="font-size: 52px">Delivered today</h2>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px">
+        <sc-for list="{{ liveFeed }}" as="f" hint-placeholder-count="4">
+          <div style="display: grid; grid-template-columns: 78px 1fr; gap: 14px; align-items: center; background: #0e0e16; border: 1px solid rgba(255,255,255,.08); padding: 12px">
+            <div style="width: 78px; height: 78px; position: relative">
+              <image-slot id="{{ f.slotId }}" shape="rect" placeholder="{{ f.ph }}"></image-slot>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+              <span style="font-family: 'Chakra Petch', sans-serif; font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: .02em">{{ f.climb }}</span>
+              <span style="font-size: 12px; color: #9a9aad">{{ f.game }}</span>
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .18em; color: #6f6f80">{{ f.time }} · {{ f.booster }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div id="safety" style="display: grid; grid-template-columns: 150px 1fr; gap: 30px; padding-top: 34px; border-top: 1px solid rgba(255,255,255,.08)">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .24em; color: #ff8a4c; padding-top: 6px">03 / SAFETY</span>
+        <div style="display: flex; flex-direction: column; gap: 14px">
+          <h3 style="font-size: 30px">Why this doesn't get you banned</h3>
+          <p style="font-size: 14.5px; line-height: 1.75; color: #c9c6c0; max-width: 68ch">Anti-cheat looks for software, not skill. Every piloted order runs behind an enterprise VPN matched to your region, the booster mirrors your sensitivity and crosshair, and sessions are scheduled inside the hours you normally play — so the activity pattern on the account never changes. Duo orders never touch your login at all.</p>
+          <p style="font-size: 14.5px; line-height: 1.75; color: #c9c6c0; max-width: 68ch">Across 92,400 completed orders the recovery rate on account reviews is 100%. If a boost triggers one, support files the appeal and the order is refunded in full while it runs. Your name, email and payment details are never shared with the booster.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="boosters" style="display: flex; flex-direction: column; gap: 14px; background: #0a0a11; border: 1px solid rgba(255,255,255,.08); padding: 22px">
+      <div style="display: flex; align-items: center; gap: 9px">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #ff4a1f; box-shadow: 0 0 0 4px rgba(255,74,31,.2)"></span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .2em; color: #ff8a4c">ON SHIFT NOW — {{ onlineCount }}</span>
+      </div>
+      <sc-for list="{{ boosters }}" as="b" hint-placeholder-count="5">
+        <div style="display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.07)">
+          <div style="width: 44px; height: 44px; position: relative">
+            <image-slot id="{{ b.slotId }}" shape="circle" placeholder="pfp"></image-slot>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0">
+            <span style="font-family: 'Chakra Petch', sans-serif; font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: .03em">{{ b.handle }}</span>
+            <span style="font-size: 11px; color: #9a9aad">{{ b.peak }}</span>
+          </div>
+          <div style="text-align: right">
+            <div style="font-family: 'Chakra Petch', sans-serif; font-weight: 600; font-size: 14px; color: #ffb046">{{ b.wr }}</div>
+            <div style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .12em; color: #6f6f80">{{ b.queue }}</div>
+          </div>
+        </div>
+      </sc-for>
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 16px; border: 1px solid rgba(255,74,31,.4); background: linear-gradient(150deg, rgba(255,74,31,.12), transparent)">
+        <span style="font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 19px; text-transform: uppercase">41,000 in the Discord</span>
+        <span style="font-size: 12px; color: #a8a5b2">Free VOD reviews on Sundays, scrim pickups, and the booster application queue.</span>
+        <a href="#top" style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .18em; margin-top: 4px">JOIN THE SERVER →</a>
+      </div>
+    </div>
+  </div>
+
+  <div id="reviews" style="padding: 80px 40px 0; display: flex; flex-direction: column; gap: 24px">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between">
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .3em; color: #ff8a4c">04 / REVIEWS</span>
+        <h2 style="font-size: 52px">What they said after</h2>
+      </div>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .18em; color: #6f6f80">VERIFIED ORDERS ONLY</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px">
+      <sc-for list="{{ reviews }}" as="r" hint-placeholder-count="3">
+        <div style="background: #0e0e16; border: 1px solid rgba(255,255,255,.08); padding: 22px; display: flex; flex-direction: column; gap: 12px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .16em; color: #ff8a4c">{{ r.rank }}</span>
+          <p style="font-size: 14px; line-height: 1.7; color: #d8d5cf">{{ r.text }}</p>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .14em; color: #6f6f80; margin-top: auto">{{ r.meta }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="position: relative; margin-top: 84px; height: 400px; overflow: hidden; isolation: isolate">
+    <div style="position: absolute; inset: 0; z-index: 0">
+      <image-slot id="im-cta" shape="rect" placeholder="drop closing art — wide, dark, 1440×400"></image-slot>
+    </div>
+    <div style="position: absolute; inset: -10%; z-index: 1; pointer-events: none; background: radial-gradient(40% 60% at 76% 60%, rgba(255,77,28,.5), transparent 70%); animation: drift 32s ease-in-out infinite; mix-blend-mode: screen"></div>
+    <div style="position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(to right, rgba(6,6,10,.95), rgba(6,6,10,.6) 55%, rgba(6,6,10,.2)), linear-gradient(to top, #06060a 3%, transparent 40%)"></div>
+    <div style="position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 20px; padding: 0 40px; pointer-events: none">
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .3em; color: #ff8a4c">{{ summaryUpper }}</span>
+      <h2 style="font-size: 76px; max-width: 22ch">Your climb starts at {{ price }}</h2>
+      <p style="font-size: 15px; color: #c9c6c0; max-width: 54ch">Final at checkout. Refunded in full until a booster claims it, pro-rated after that.</p>
+      <div style="display: flex; gap: 12px; pointer-events: auto; padding-top: 4px">
+        <a href="#calc" style="font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #06060a; background: linear-gradient(100deg, #ffb046, #ff3d0f); padding: 15px 30px; border-radius: 2px; box-shadow: 0 0 44px rgba(255,74,31,.3)">Continue your order</a>
+        <a href="#top" style="font-family: 'Chakra Petch', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #f4f1ec; border: 1px solid rgba(255,255,255,.22); padding: 15px 26px; border-radius: 2px">Talk to support</a>
+      </div>
+    </div>
+  </div>
+
+  <div style="padding: 30px 40px 36px; background: #08080d; border-top: 1px solid rgba(255,255,255,.07); display: flex; justify-content: space-between; gap: 40px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .16em; color: #6f6f80">
+    <span>© 2026 ESPORTS BOOST</span>
+    <div style="display: flex; gap: 22px">
+      <a href="#top" style="color: inherit">TERMS</a>
+      <a href="#top" style="color: inherit">REFUNDS</a>
+      <a href="#top" style="color: inherit">PRIVACY</a>
+      <a href="#top" style="color: inherit">BECOME A BOOSTER</a>
+      <a href="#top" style="color: inherit">DISCORD</a>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;pricePerDivision&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:26,&quot;min&quot;:10,&quot;max&quot;:60,&quot;step&quot;:2,&quot;unit&quot;:&quot;$&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Pricing&quot;}}">
+const LADDERS = {
+  "League of Legends": ["Iron", "Bronze", "Silver", "Gold", "Platinum", "Emerald", "Diamond", "Master", "Grandmaster", "Challenger"],
+  "Valorant": ["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"],
+  "Counter-Strike 2": ["5k", "10k", "13k", "15k", "17k", "19k", "21k", "25k", "30k"],
+  "Teamfight Tactics": ["Iron", "Bronze", "Silver", "Gold", "Platinum", "Emerald", "Diamond", "Master", "Challenger"],
+  "Marvel Rivals": ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Grandmaster", "Celestial", "Eternity", "One Above All"],
+  "Dota 2": ["Herald", "Guardian", "Crusader", "Archon", "Legend", "Ancient", "Divine", "Immortal"],
+  "Apex Legends": ["Rookie", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Predator"],
+  "Overwatch 2": ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Grandmaster", "Champion"],
+  "Rocket League": ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Champion", "Grand Champ", "Supersonic"]
+};
+
+const FACTOR = {
+  "League of Legends": 1.0, "Valorant": 1.15, "Counter-Strike 2": 1.45,
+  "Teamfight Tactics": 0.8, "Marvel Rivals": 0.95, "Dota 2": 1.25,
+  "Apex Legends": 1.1, "Overwatch 2": 0.9, "Rocket League": 0.7
+};
+
+const SERVICES = {
+  "League of Legends": "Elo boost · placements · net wins · duo · coaching",
+  "Valorant": "Rank boost · placements · unrated wins · duo",
+  "Counter-Strike 2": "Premier rating · Faceit levels · Wingman",
+  "Teamfight Tactics": "Rank boost · placements · double-up",
+  "Marvel Rivals": "Rank boost · net wins · duo · coaching",
+  "Dota 2": "MMR boost · calibration · net wins · duo",
+  "Apex Legends": "Rank boost · badges · kills",
+  "Overwatch 2": "Rank boost · placements · net wins",
+  "Rocket League": "Rank boost · tournament wins · duo"
+};
+
+const TILE_SPAN = {
+  "League of Legends": "grid-column: span 2; grid-row: span 2",
+  "Valorant": "grid-column: span 2",
+  "Counter-Strike 2": "",
+  "Marvel Rivals": "",
+  "Dota 2": "grid-column: span 2",
+  "Teamfight Tactics": ""
+};
+
+class Component extends DCLogic {
+  state = { game: "League of Legends", from: "Gold", to: "Diamond", mode: "Piloted", next: "from" };
+
+  per() { return this.props.pricePerDivision ?? 26; }
+
+  quote(game, from, to, mode) {
+    const l = LADDERS[game] || [];
+    const i = l.indexOf(from), j = l.indexOf(to);
+    const steps = j - i;
+    if (steps <= 0) return { price: "—", eta: "—", summary: "Target must sit above your current rank" };
+    const climb = Math.max(1, i - 1);
+    const raw = steps * this.per() * (FACTOR[game] || 1) * (1 + climb * 0.22) * (mode === "Duo queue" ? 1.55 : 1);
+    const days = Math.max(1, Math.round(steps * 1.4 + climb * 0.3));
+    return {
+      price: "$" + Math.round(raw),
+      eta: days === 1 ? "about 1 day" : days + " days",
+      summary: from + " → " + to + " · " + mode
+    };
+  }
+
+  slug(name) { return name.toLowerCase().replace(/[^a-z0-9]+/g, "-"); }
+
+  chipStyle(idx, i, j) {
+    const inRange = i >= 0 && j > i && idx > i && idx <= j;
+    const isEnd = idx === i || idx === j;
+    const base = "flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:11px 4px;border-radius:2px;cursor:pointer;user-select:none;text-align:center;transition:background .15s,border-color .15s;border:1px solid ";
+    if (isEnd) return base + "#ff4a1f;background:linear-gradient(160deg,rgba(255,176,70,.28),rgba(255,61,15,.18));color:#ffe9dc";
+    if (inRange) return base + "rgba(255,74,31,.45);background:rgba(255,74,31,.09);color:#f4f1ec";
+    return base + "rgba(255,255,255,.12);background:transparent;color:#8b8b99";
+  }
+
+  renderVals() {
+    const s = this.state;
+    const games = Object.keys(LADDERS);
+    const q = this.quote(s.game, s.from, s.to, s.mode);
+    const l = LADDERS[s.game] || [];
+    const i = l.indexOf(s.from), j = l.indexOf(s.to);
+    const modeBase = "cursor:pointer;user-select:none;font-family:'Chakra Petch',sans-serif;font-weight:600;font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:9px 14px;";
+
+    const tileOrder = ["League of Legends", "Valorant", "Counter-Strike 2", "Marvel Rivals", "Dota 2", "Teamfight Tactics"];
+
+    return {
+      gameChips: games.map((name) => ({
+        name,
+        style: "cursor:pointer;user-select:none;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;padding:6px 10px;border-radius:2px;border:1px solid " +
+          (name === s.game ? "#ff4a1f;color:#ffd9c9;background:rgba(255,74,31,.14)" : "rgba(255,255,255,.12);color:#8b8b99;background:transparent"),
+        pick: () => {
+          const L = LADDERS[name];
+          this.setState({ game: name, from: L[3], to: L[Math.min(6, L.length - 1)], next: "from" });
+        }
+      })),
+      ladder: l.map((name, idx) => ({
+        name,
+        tag: idx === i ? "YOU" : (idx === j ? "TARGET" : ""),
+        style: this.chipStyle(idx, i, j),
+        pick: () => {
+          const last = idx >= l.length - 1;
+          const next = last ? name : l[idx + 1];
+          const start = last ? l[l.length - 2] : name;
+          if (s.next === "from") this.setState({ from: start, to: next, next: "to" });
+          else if (idx > i) this.setState({ to: name, next: "from" });
+          else this.setState({ from: start, to: next, next: "to" });
+        }
+      })),
+      price: q.price, eta: q.eta, summary: q.summary,
+      summaryUpper: q.summary.toUpperCase(),
+      pilotedStyle: modeBase + (s.mode === "Piloted" ? "background:linear-gradient(100deg,#ffb046,#ff3d0f);color:#06060a" : "color:#8b8b99"),
+      duoStyle: modeBase + (s.mode === "Duo queue" ? "background:linear-gradient(100deg,#ffb046,#ff3d0f);color:#06060a" : "color:#8b8b99"),
+      setPiloted: () => this.setState({ mode: "Piloted" }),
+      setDuo: () => this.setState({ mode: "Duo queue" }),
+
+      tiles: tileOrder.map((name, idx) => {
+        const big = idx === 0;
+        return {
+          name,
+          num: "0" + (idx + 1),
+          services: SERVICES[name],
+          from: "FROM " + this.quote(name, LADDERS[name][1], LADDERS[name][2], "Piloted").price,
+          slotId: "im-game-" + this.slug(name),
+          ph: "drop key art — " + name,
+          wrap: "position:relative;overflow:hidden;" + (TILE_SPAN[name] || ""),
+          titleStyle: "font-family:'Chakra Petch',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.01em;line-height:.98;font-size:" + (big ? "34px" : "18px")
+        };
+      }),
+
+      onlineCount: 34,
+      liveFeed: [
+        { climb: "Platinum II → Diamond IV", game: "League of Legends · EUW", time: "2M AGO", booster: "VANTAA", slotId: "im-feed-1", ph: "match" },
+        { climb: "Silver 3 → Ascendant 1", game: "Valorant · NA", time: "14M AGO", booster: "KX_REID", slotId: "im-feed-2", ph: "match" },
+        { climb: "13,400 → 19,100 Premier", game: "Counter-Strike 2 · EU", time: "38M AGO", booster: "SABLE", slotId: "im-feed-3", ph: "match" },
+        { climb: "Grandmaster → Celestial", game: "Marvel Rivals · NA", time: "1H AGO", booster: "ORVO", slotId: "im-feed-4", ph: "match" }
+      ],
+      boosters: [
+        { handle: "vantaa", peak: "Challenger 1042 LP · EUW", wr: "78%", queue: "1 ORDER", slotId: "im-b1" },
+        { handle: "kx_reid", peak: "Radiant #211 · NA", wr: "74%", queue: "FREE", slotId: "im-b2" },
+        { handle: "sable", peak: "FPL · 27k Premier · EU", wr: "71%", queue: "2 ORDERS", slotId: "im-b3" },
+        { handle: "orvo", peak: "Grandmaster 640 LP · NA", wr: "69%", queue: "FREE", slotId: "im-b4" },
+        { handle: "nine", peak: "Immortal 8.4k · SEA", wr: "73%", queue: "1 ORDER", slotId: "im-b5" }
+      ],
+      reviews: [
+        { rank: "GOLD IV → PLATINUM II", text: "Took it in two evenings and left notes on what I was doing wrong in my own replays. Didn't expect that part.", meta: "VERIFIED ORDER · LOL · EUW" },
+        { rank: "SILVER → ASCENDANT", text: "Duo the whole way, voice on, no drama. Paused it twice because I wanted to play and the account was free within ten minutes both times.", meta: "VERIFIED ORDER · VALORANT · NA" },
+        { rank: "13K → 19K PREMIER", text: "The price on the calculator was the price I paid. That's the only reason I came back a third time.", meta: "VERIFIED ORDER · CS2 · EU" }
+      ]
+    };
+  }
+}
+
+</script>
+</body>
+</html>
