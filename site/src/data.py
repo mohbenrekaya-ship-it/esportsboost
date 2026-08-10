@@ -198,8 +198,8 @@ ADDONS = [
 # ── placeholder statistics ────────────────────────────────────────────────
 STATS = dict(
     trustpilot="4.8 / 5", reviews="3,140", boosts="92,400",
-    discord="41,000", median_claim="18 min",
-    online=34, free_now=11, reply="3m 40s",
+    discord="3,000", median_claim="18 min",
+    online=34, free_now=25, reply="3m 40s",
 )
 
 BOOSTERS = [
@@ -242,15 +242,15 @@ HERO = dict(
 # chip (drop it to ""); `href` (optional) makes the whole line a link.
 PROMO = dict(
     tag="-15%",
-    text="Summer split sale — 15% off every division boost this week only, applied automatically at checkout with code SPLIT15",
+    text="Summer sale — code SPLIT15",
     href="/games/",
 )
 
 MARQUEE = [
     "92,400 boosts delivered",
     "4.8 / 5 on Trustpilot — 3,140 reviews",
-    "18 min median time to a claimed order",
-    "41,000 players in the Discord",
+    "Most orders claimed within 18 min",
+    "3,000 players in the Discord",
     "100% recovery rate on account reviews",
 ]
 

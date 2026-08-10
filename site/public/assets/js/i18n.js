@@ -84,11 +84,12 @@
       /* util bar / nav */
       "Currency": "Devise",
       "Language": "Langue",
-      "34 boosters on shift": "34 boosters en service",
-      "median claim 18 min": "prise médiane 18 min",
-      "11 boosters free right now": "11 boosters libres maintenant",
-      "34 boosters on shift · median claim 18 min · 11 boosters free right now · 41,000 players in the Discord":
-        "34 boosters en service · prise médiane 18 min · 11 boosters libres maintenant · 41 000 joueurs sur le Discord",
+      "34 verified boosters on shift right now": "34 boosters vérifiés en service maintenant",
+      "Most orders claimed within 18 min": "La plupart des commandes prises en 18 min",
+      "25 boosters free and ready to start now": "25 boosters libres, prêts à démarrer",
+      "Join 3,000 players in our Discord community": "Rejoignez 3 000 joueurs sur notre Discord",
+      "34 verified boosters on shift right now · Most orders claimed within 18 min · 25 boosters free and ready to start now · Join 3,000 players in our Discord community":
+        "34 boosters vérifiés en service maintenant · La plupart des commandes prises en 18 min · 25 boosters libres, prêts à démarrer · Rejoignez 3 000 joueurs sur notre Discord",
       "Games": "Jeux",
       "Live": "En direct",
       "Boosters": "Boosters",
@@ -181,8 +182,8 @@
       /* marquee */
       "92,400 boosts delivered": "92 400 boosts livrés",
       "4.8 / 5 on Trustpilot — 3,140 reviews": "4,8 / 5 sur Trustpilot — 3 140 avis",
-      "18 min median time to a claimed order": "18 min de délai médian avant prise en charge",
-      "41,000 players in the Discord": "41 000 joueurs sur le Discord",
+      "Most orders claimed within 18 min": "La plupart des commandes prises en 18 min",
+      "3,000 players in the Discord": "3 000 joueurs sur le Discord",
       "100% recovery rate on account reviews": "100 % de récupération sur les examens de compte",
 
       /* section heads / home */
@@ -554,11 +555,12 @@
       /* util bar / nav */
       "Currency": "Währung",
       "Language": "Sprache",
-      "34 boosters on shift": "34 Booster im Dienst",
-      "median claim 18 min": "mediane Annahme 18 Min.",
-      "11 boosters free right now": "11 Booster jetzt frei",
-      "34 boosters on shift · median claim 18 min · 11 boosters free right now · 41,000 players in the Discord":
-        "34 Booster im Dienst · mediane Annahme 18 Min. · 11 Booster jetzt frei · 41.000 Spieler im Discord",
+      "34 verified boosters on shift right now": "34 verifizierte Booster jetzt im Dienst",
+      "Most orders claimed within 18 min": "Meiste Aufträge in 18 Min. angenommen",
+      "25 boosters free and ready to start now": "25 Booster frei und sofort startbereit",
+      "Join 3,000 players in our Discord community": "Komm zu 3.000 Spielern in unseren Discord",
+      "34 verified boosters on shift right now · Most orders claimed within 18 min · 25 boosters free and ready to start now · Join 3,000 players in our Discord community":
+        "34 verifizierte Booster jetzt im Dienst · Meiste Aufträge in 18 Min. angenommen · 25 Booster frei und sofort startbereit · Komm zu 3.000 Spielern in unseren Discord",
       "Games": "Spiele",
       "Live": "Live",
       "Boosters": "Booster",
@@ -651,8 +653,8 @@
       /* marquee */
       "92,400 boosts delivered": "92.400 Boosts geliefert",
       "4.8 / 5 on Trustpilot — 3,140 reviews": "4,8 / 5 auf Trustpilot — 3.140 Bewertungen",
-      "18 min median time to a claimed order": "18 Min. mediane Zeit bis zur Annahme",
-      "41,000 players in the Discord": "41.000 Spieler im Discord",
+      "Most orders claimed within 18 min": "Meiste Aufträge in 18 Min. angenommen",
+      "3,000 players in the Discord": "3.000 Spieler im Discord",
       "100% recovery rate on account reviews": "100 % Erfolgsquote bei Konto-Prüfungen",
 
       /* section heads / home */

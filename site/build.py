@@ -133,10 +133,10 @@ def chrome(current):
     )
     # Rotating live-status ticker; last item repeats the first for a seamless loop.
     live_items = [
-        "%s boosters on shift" % D.STATS["online"],
-        "median claim %s" % esc(D.STATS["median_claim"]),
-        "%s boosters free right now" % D.STATS["free_now"],
-        "%s players in the Discord" % esc(D.STATS["discord"]),
+        "%s verified boosters on shift right now" % D.STATS["online"],
+        "Most orders claimed within %s" % esc(D.STATS["median_claim"]),
+        "%s boosters free and ready to start now" % D.STATS["free_now"],
+        "Join %s players in our Discord community" % esc(D.STATS["discord"]),
     ]
     live_track = "".join('<span class="live-item">%s</span>' % m
                          for m in live_items + live_items[:1])
