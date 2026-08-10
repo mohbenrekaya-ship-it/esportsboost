@@ -170,7 +170,7 @@
         "Toujours actif. Vos amis vous voient hors ligne durant toute la commande — jamais en option payante.",
 
       /* hero (home) */
-      "Verified boosters — 9 games — since 2019": "Boosters vérifiés — 9 jeux — depuis 2019",
+      "Verified boosters — since 2019": "Boosters vérifiés — depuis 2019",
       "The rank is yours.": "Le rang est à vous.",
       "The grind isn't.": "Le grind, non.",
       "Set two ranks. See the final price before you make an account. Then watch every match land from the dashboard — no bots, no shared logins, no invoice that moves after checkout.":
@@ -641,7 +641,7 @@
         "Immer aktiv. Freunde sehen dich während der gesamten Bestellung offline — nie ein Aufpreis.",
 
       /* hero (home) */
-      "Verified boosters — 9 games — since 2019": "Verifizierte Booster — 9 Spiele — seit 2019",
+      "Verified boosters — since 2019": "Verifizierte Booster — seit 2019",
       "The rank is yours.": "Der Rang gehört dir.",
       "The grind isn't.": "Der Grind nicht.",
       "Set two ranks. See the final price before you make an account. Then watch every match land from the dashboard — no bots, no shared logins, no invoice that moves after checkout.":

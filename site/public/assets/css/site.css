@@ -710,6 +710,13 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
   .cards-3, .gamegrid { grid-template-columns: repeat(2, 1fr); }
   .summary-card { position: static; }
   .band { height: 340px; }
+  /* Single-column hero: text now spans full width, so the desktop scrim's
+     transparent right zone would wash it out over the key art. Switch to a
+     uniform vertical darken that keeps full-width copy legible. */
+  .hero-a .fx-scrim {
+    background:
+      linear-gradient(to bottom, rgba(6, 6, 10, .82) 0%, rgba(6, 6, 10, .66) 40%, rgba(6, 6, 10, .92) 100%);
+  }
 }
 @media (max-width: 760px) {
   :root { --gutter: 20px; }

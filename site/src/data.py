@@ -227,7 +227,7 @@ BOOSTERS = [
 
 # ── v2 "Ashfall" page content ─────────────────────────────────────────────
 HERO = dict(
-    kicker="Verified boosters — 9 games — since 2019",
+    kicker="Verified boosters — since 2019",
     line1="The rank is yours.",
     line2="The grind isn't.",
     lede="Set two ranks. See the final price before you make an account. Then watch every match "
