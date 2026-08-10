@@ -535,6 +535,17 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 }
 @media (max-width: 560px) {
   .foot-grid { grid-template-columns: 1fr; }
+  /* Rank ladder: wrap to max 4 per line instead of a horizontal scroll.
+     Long single-word ranks (Grandmaster, Challenger) hyphenate onto a second
+     line rather than overflowing the narrow cell; a shared min-height keeps
+     every chip the same size. */
+  .ladder-scroll { overflow-x: visible; padding: 0; margin: 0; }
+  .ladder { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; min-width: 0; }
+  .tier { flex: none; min-width: 0; padding: 10px 3px; min-height: 62px; justify-content: center; }
+  .tier .tier-name {
+    font-size: 11px; letter-spacing: 0; line-height: 1.08;
+    white-space: normal; overflow-wrap: anywhere; hyphens: auto;
+  }
 }
 
 /* Trustpilot badge */
