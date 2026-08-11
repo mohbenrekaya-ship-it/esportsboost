@@ -216,6 +216,19 @@
       if (v !== undefined) el.textContent = v;
     });
 
+    // guided two-step prompt — names what the next ladder tap will set, so the
+    // first tap can't feel wrong. state.next flips "from" → "to" as you pick.
+    each("[data-step-prompt]", function (el) {
+      if (state.guided) { el.hidden = true; return; }
+      el.hidden = false;
+      var toStep = state.next === "to";
+      el.setAttribute("data-step", toStep ? "2" : "1");
+      var n = el.querySelector("[data-step-num]"), t = el.querySelector("[data-step-txt]");
+      if (n) n.textContent = toStep ? "2" : "1";
+      if (t) t.textContent = toStep ? T("Now tap the rank you want to reach")
+                                    : T("Tap the rank you’re on now");
+    });
+
     // tier chips (main divisions) — highlighted by the tier each endpoint sits in
     each("[data-ladder]", function (root) {
       var tiers = tiersOf(state.game);
@@ -368,12 +381,14 @@
       var toRank = up === t ? top : divsOf(state.game, up)[0];
       set({ from: lo, to: toRank, next: "to" }, "select_item");
     } else if (idx > fromIdx) {
-      // target sits in a higher tier → aim at that tier's entry division
-      set({ to: lo, next: "from" }, "add_to_cart");
+      // target sits in a higher tier → aim at that tier's entry division.
+      // A completed current→target pick means the two-step guide has done its
+      // job — guided:true retires the prompt for good (persisted).
+      set({ to: lo, next: "from", guided: true }, "add_to_cart");
     } else if (idx === fromIdx && top !== state.from) {
       // same tier as current → a within-tier climb (e.g. Bronze IV → Bronze I),
       // then the Target Division segment refines the exact division
-      set({ to: top, next: "from" }, "add_to_cart");
+      set({ to: top, next: "from", guided: true }, "add_to_cart");
     } else {
       // clicked at/below the current tier → restart the pick from here
       var up2 = tiers[Math.min(idx + 1, tiers.length - 1)];

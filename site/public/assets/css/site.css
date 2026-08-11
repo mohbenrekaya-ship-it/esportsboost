@@ -8,6 +8,21 @@
 .stack { display: flex; flex-direction: column; }
 .sec-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 30px; }
 .sec-head-copy { display: flex; flex-direction: column; gap: 12px; }
+/* section eyebrow — big display number + refined mono label ("01 / Games") */
+.sec-kicker { display: inline-flex; align-items: baseline; gap: 12px; }
+.sec-kicker-n {
+  font-family: var(--display); font-weight: 500; font-size: 30px; line-height: 1;
+  letter-spacing: .01em; color: var(--ember-warm);
+}
+.sec-kicker-n::after {
+  content: ""; display: inline-block; width: 1px; height: .78em; margin-left: 12px;
+  background: var(--hairline-2); vertical-align: baseline;
+}
+.sec-kicker-l {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .26em;
+  text-transform: uppercase; color: var(--ember-warm);
+}
+@media (max-width: 640px) { .sec-kicker-n { font-size: 24px; } }
 .sec-note { font-size: 14px; color: var(--text-5); max-width: 40ch; text-align: right; margin: 0; }
 
 /* ── utility bar + nav ─────────────────────────────────────────────────── */
@@ -284,6 +299,22 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 .calc-route { display: flex; align-items: baseline; gap: 12px; }
 .calc-route-lab { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-6); }
 .calc-route-val { font-family: var(--display); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--amber-pale); }
+
+/* guided two-step prompt — tells the user what the next ladder tap will set */
+.calc-step[hidden] { display: none; }
+.calc-step {
+  display: flex; align-items: center; gap: 10px; align-self: flex-start;
+  padding: 7px 12px 7px 8px; border-radius: var(--radius);
+  border: 1px solid rgba(255, 74, 31, .4);
+  background: linear-gradient(180deg, rgba(255, 74, 31, .14), rgba(255, 74, 31, .045));
+}
+.calc-step-num {
+  width: 18px; height: 18px; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  background: var(--ember-grad); color: #06060a;
+}
+.calc-step-txt { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--amber-pale); }
 
 .ladder-scroll { overflow-x: auto; padding: 2px; margin: -2px; }
 .ladder { display: flex; gap: 3px; min-width: 100%; }

@@ -78,6 +78,8 @@
       "YOU": "VOUS",
       "TARGET": "CIBLE",
       "YOU · TGT": "VOUS · CIBLE",
+      "Tap the rank you’re on now": "Touchez le rang où vous êtes",
+      "Now tap the rank you want to reach": "Touchez le rang que vous visez",
       "No divisions": "Aucune division",
       "None": "Aucune",
 

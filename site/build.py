@@ -399,7 +399,7 @@ def sec_head(num, label, heading, note=None, right=None):
         aside = '<span class="kicker kicker-dim">%s</span>' % esc(right)
     return f"""<div class="sec-head">
     <div class="sec-head-copy">
-      <span class="kicker">{num} / {esc(label)}</span>
+      <span class="sec-kicker"><span class="sec-kicker-n">{num}</span><span class="sec-kicker-l">{esc(label)}</span></span>
       <h2 class="h-sec">{heading}</h2>
     </div>
     {aside}
@@ -837,6 +837,10 @@ def page_home():
           <span class="calc-route-lab">Your climb</span>
           <span class="calc-route-val" data-out="summary">—</span>
         </div>
+        <div class="calc-step" data-step-prompt data-step="1" aria-live="polite">
+          <span class="calc-step-num" data-step-num>1</span>
+          <span class="calc-step-txt" data-step-txt>Tap the rank you’re on now</span>
+        </div>
         <div class="ladder-scroll">
           <div class="ladder" data-ladder role="group" aria-label="Rank tier"></div>
         </div>
@@ -900,7 +904,7 @@ def page_home():
       {sec_head("02", "Live", "Delivered today")}
       {live_feed()}
       <div class="safety" id="safety">
-        <span class="kicker" style="padding-top:6px">03 / Safety</span>
+        <span class="sec-kicker" style="padding-top:6px"><span class="sec-kicker-n">03</span><span class="sec-kicker-l">Safety</span></span>
         <div class="stack" style="gap:14px">
           <h3>{esc(D.SAFETY['title'])}</h3>
           {safety_p}
@@ -1059,7 +1063,7 @@ def page_game(g):
     <div class="stack" style="gap:20px">
       <div class="sec-head">
         <div class="sec-head-copy">
-          <span class="kicker">02 / Boosters</span>
+          <span class="sec-kicker"><span class="sec-kicker-n">02</span><span class="sec-kicker-l">Boosters</span></span>
           <h2 class="h-sec" style="font-size:clamp(24px,2.6vw,32px)">On shift now</h2>
         </div>
         <span class="tag tag-neutral">{D.STATS['online']} online</span>
@@ -1283,7 +1287,7 @@ def page_guarantee():
 
 <section class="wrap section">
   <div class="split">
-    <span class="kicker" style="padding-top:6px">03 / Safety</span>
+    <span class="sec-kicker" style="padding-top:6px"><span class="sec-kicker-n">03</span><span class="sec-kicker-l">Safety</span></span>
     <div class="stack" style="gap:14px">
       <h2 class="h-sec">{esc(D.SAFETY['title'])}</h2>
       {"".join('<p style="font-size:14.5px;line-height:1.75;color:var(--text-3);max-width:68ch;margin:0">%s</p>' % esc(p) for p in D.SAFETY['body'])}
@@ -1403,7 +1407,7 @@ def page_reviews():
         fill = 1.0
     body = f"""<section class="wrap section rev-hero">
   <div class="rev-hero-copy">
-    <span class="kicker">04 / Reviews</span>
+    <span class="sec-kicker"><span class="sec-kicker-n">04</span><span class="sec-kicker-l">Reviews</span></span>
     <h1 class="h-sec">{esc(score)} / 5 across<br>{esc(D.STATS['reviews'])} reviews</h1>
     <p class="rev-lede">Every review below is attached to a paid, completed order — pulled from
     Trustpilot and the order-page rating, then deduplicated. We don't filter by score, so one-star
