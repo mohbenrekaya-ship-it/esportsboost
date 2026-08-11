@@ -13,6 +13,7 @@ Every generator is deterministic: same game, same picture, every build.
 import base64
 import math
 import os
+import re
 
 LOGO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets-in", "_logos")
 _LOGO_CACHE = {}
@@ -34,6 +35,56 @@ def logo_uri(slug):
             break
     _LOGO_CACHE[slug] = uri
     return uri
+
+
+_LOGO_SVG_CACHE = {}
+
+
+def _logo_svg(slug):
+    """(viewBox, inner_markup) for a vector logo in assets-in/_logos/<slug>.svg,
+    or None when no SVG source exists. Lets callers inline the logo as a nested
+    <svg> instead of an <image> data-URI — a nested vector renders at the device's
+    pixel density, where an <image> of an SVG gets rasterised once (blurry when
+    scaled up, e.g. the feed thumbnails on a high-DPR phone)."""
+    if slug in _LOGO_SVG_CACHE:
+        return _LOGO_SVG_CACHE[slug]
+    out = None
+    path = os.path.join(LOGO_DIR, slug + ".svg")
+    if os.path.isfile(path) and os.path.getsize(path) > 0:
+        with open(path, "r", encoding="utf-8") as f:
+            txt = f.read()
+        m = re.search(r'<svg\b([^>]*)>', txt, re.S)
+        if m:
+            attrs = m.group(1)
+            vbm = re.search(r'viewBox\s*=\s*"([^"]+)"', attrs)
+            if vbm:
+                vb = vbm.group(1)
+            else:
+                wm = re.search(r'\bwidth\s*=\s*"([\d.]+)', attrs)
+                hm = re.search(r'\bheight\s*=\s*"([\d.]+)', attrs)
+                vb = "0 0 %s %s" % (wm.group(1), hm.group(1)) if wm and hm else "0 0 100 100"
+            inner = txt[m.end():]
+            inner = re.sub(r'</svg\s*>\s*$', '', inner.rstrip(), flags=re.S)
+            out = (vb, inner)
+    _LOGO_SVG_CACHE[slug] = out
+    return out
+
+
+def logo_layer(slug, x, y, w, h, filter_id=None, preserve="xMidYMid meet"):
+    """A game logo placed in a box, kept vector-crisp. Inlines the source SVG as a
+    nested <svg> when one exists (no rasterisation, sharp at any DPR); falls back
+    to an <image> data-URI for raster logos. Returns '' when no logo is present."""
+    filt = ' filter="url(#%s)"' % filter_id if filter_id else ""
+    svg = _logo_svg(slug)
+    if svg:
+        vb, inner = svg
+        return (f'<svg x="{x:.0f}" y="{y:.0f}" width="{w:.0f}" height="{h:.0f}" '
+                f'viewBox="{vb}" preserveAspectRatio="{preserve}"{filt}>{inner}</svg>')
+    uri = logo_uri(slug)
+    if not uri:
+        return ""
+    return (f'<image href="{uri}" x="{x:.0f}" y="{y:.0f}" width="{w:.0f}" height="{h:.0f}" '
+            f'preserveAspectRatio="{preserve}"{filt}/>')
 
 
 def _logo_image(uri, x, y, bw, bh):
@@ -272,10 +323,11 @@ def _foreground(r, w, h):
             % (" ".join(pts), " ".join(edge), max(1.2, h / 340.0)))
 
 
-def scene(uid, kind, hue, w, h, seed, label=None, heat=(0.62, 0.44), ha=0.85, hb=0.28, logo=None):
-    """A full Ashfall composition at any aspect ratio. When `logo` (a data-URI)
-    is supplied, the real game mark sits in the upper field over the glow and
-    the mono caption is dropped."""
+def scene(uid, kind, hue, w, h, seed, label=None, heat=(0.62, 0.44), ha=0.85, hb=0.28, logo_slug=None):
+    """A full Ashfall composition at any aspect ratio. When `logo_slug` names a
+    game with a logo in assets-in/_logos/, the real mark sits in the upper field
+    over the glow (inlined vector, crisp at any DPR) and the mono caption is
+    dropped."""
     r = Rng(seed)
     hx, hy = heat
     depth = _depth(r, w, h, hue).replace("hazeH", "haze" + uid)
@@ -283,7 +335,7 @@ def scene(uid, kind, hue, w, h, seed, label=None, heat=(0.62, 0.44), ha=0.85, hb
     mono = "ui-monospace, SFMono-Regular, Menlo, monospace"
     cap = ""
     overlay = ""
-    if logo:
+    if logo_slug and logo_uri(logo_slug):
         bw = w * 0.46
         bh = h * 0.34
         lx = (w - bw) / 2
@@ -299,8 +351,8 @@ def scene(uid, kind, hue, w, h, seed, label=None, heat=(0.62, 0.44), ha=0.85, hb
     <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 0.5  0 0 0 0 0.16  0 0 0 0.85 0"/>
     <feGaussianBlur stdDeviation="{blur}"/>
   </filter>
-  <image href="{logo}" x="{lx:.0f}" y="{ly + 8:.0f}" width="{bw:.0f}" height="{bh:.0f}" preserveAspectRatio="xMidYMid meet" filter="url(#lg{uid})"/>
-  <image href="{logo}" x="{lx:.0f}" y="{ly:.0f}" width="{bw:.0f}" height="{bh:.0f}" preserveAspectRatio="xMidYMid meet" filter="url(#lw{uid})"/>"""
+  {logo_layer(logo_slug, lx, ly + 8, bw, bh, filter_id="lg" + uid)}
+  {logo_layer(logo_slug, lx, ly, bw, bh, filter_id="lw" + uid)}"""
     elif label:
         cap = (f'<text x="{w * 0.035:.0f}" y="{h - h * 0.055:.0f}" font-family="{mono}" '
                f'font-size="{max(9, w // 78)}" letter-spacing="{max(2, w // 260)}" '
@@ -336,7 +388,7 @@ def keyart(slug, name, w=1200, h=700):
     if lg:
         heat = (0.5, 0.32)
     return scene("k" + slug.replace("-", ""), kind, hue, w, h, seed_of(slug),
-                 label=name.upper(), heat=heat, ha=0.72, hb=0.24, logo=lg)
+                 label=name.upper(), heat=heat, ha=0.72, hb=0.24, logo_slug=slug)
 
 
 def hero(w=1600, h=900):
@@ -404,6 +456,7 @@ def emblem(slug, short, size=160):
     lg = logo_uri(slug)
     if lg:
         b = s * 0.66
+        logo_el = logo_layer(slug, (s - b) / 2, (s - b) / 2, b, b, filter_id="lw" + uid)
         return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {s} {s}" width="{s}" height="{s}" role="img" aria-hidden="true" preserveAspectRatio="xMidYMid slice">
 <defs>
   <linearGradient id="b{uid}" x1="0" y1="0" x2="0.7" y2="1">
@@ -415,7 +468,7 @@ def emblem(slug, short, size=160):
 </defs>
   <rect width="{s}" height="{s}" fill="url(#b{uid})"/>
   <circle cx="{s * 0.78:.0f}" cy="{s * 0.2:.0f}" r="{s * 0.42:.0f}" fill="{EMBER}" fill-opacity="0.18"/>
-  <image href="{lg}" x="{(s - b) / 2:.0f}" y="{(s - b) / 2:.0f}" width="{b:.0f}" height="{b:.0f}" preserveAspectRatio="xMidYMid meet" filter="url(#lw{uid})"/>
+  {logo_el}
 </svg>
 """
     marks = {
