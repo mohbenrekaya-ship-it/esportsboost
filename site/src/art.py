@@ -41,11 +41,17 @@ _LOGO_SVG_CACHE = {}
 
 
 def _logo_svg(slug):
-    """(viewBox, inner_markup) for a vector logo in assets-in/_logos/<slug>.svg,
-    or None when no SVG source exists. Lets callers inline the logo as a nested
-    <svg> instead of an <image> data-URI — a nested vector renders at the device's
-    pixel density, where an <image> of an SVG gets rasterised once (blurry when
-    scaled up, e.g. the feed thumbnails on a high-DPR phone)."""
+    """(viewBox, ns_decls, inner_markup) for a vector logo in
+    assets-in/_logos/<slug>.svg, or None when no SVG source exists. Lets callers
+    inline the logo as a nested <svg> instead of an <image> data-URI — a nested
+    vector renders at the device's pixel density, where an <image> of an SVG gets
+    rasterised once (blurry when scaled up, e.g. the feed thumbnails on a high-DPR
+    phone).
+
+    `ns_decls` re-applies the source root's `xmlns:*` prefixes (xlink, and the
+    inkscape/sodipodi/rdf cruft editors leave behind) onto the nested <svg>, so
+    inlining an editor-authored logo can't leave an unbound prefix that would make
+    the whole host SVG invalid XML. Editor metadata that never renders is dropped."""
     if slug in _LOGO_SVG_CACHE:
         return _LOGO_SVG_CACHE[slug]
     out = None
@@ -63,9 +69,14 @@ def _logo_svg(slug):
                 wm = re.search(r'\bwidth\s*=\s*"([\d.]+)', attrs)
                 hm = re.search(r'\bheight\s*=\s*"([\d.]+)', attrs)
                 vb = "0 0 %s %s" % (wm.group(1), hm.group(1)) if wm and hm else "0 0 100 100"
+            ns = " ".join(mm.group(0) for mm in re.finditer(r'xmlns:[\w.-]+\s*=\s*"[^"]*"', attrs))
             inner = txt[m.end():]
             inner = re.sub(r'</svg\s*>\s*$', '', inner.rstrip(), flags=re.S)
-            out = (vb, inner)
+            # Drop non-rendering editor cruft that only bloats every host SVG.
+            inner = re.sub(r'<metadata\b.*?</metadata\s*>', '', inner, flags=re.S)
+            inner = re.sub(r'<sodipodi:namedview\b[^>]*/>', '', inner, flags=re.S)
+            inner = re.sub(r'<sodipodi:namedview\b.*?</sodipodi:namedview\s*>', '', inner, flags=re.S)
+            out = (vb, ns, inner)
     _LOGO_SVG_CACHE[slug] = out
     return out
 
@@ -77,9 +88,10 @@ def logo_layer(slug, x, y, w, h, filter_id=None, preserve="xMidYMid meet"):
     filt = ' filter="url(#%s)"' % filter_id if filter_id else ""
     svg = _logo_svg(slug)
     if svg:
-        vb, inner = svg
+        vb, ns, inner = svg
+        ns = (" " + ns) if ns else ""
         return (f'<svg x="{x:.0f}" y="{y:.0f}" width="{w:.0f}" height="{h:.0f}" '
-                f'viewBox="{vb}" preserveAspectRatio="{preserve}"{filt}>{inner}</svg>')
+                f'viewBox="{vb}" preserveAspectRatio="{preserve}"{ns}{filt}>{inner}</svg>')
     uri = logo_uri(slug)
     if not uri:
         return ""
