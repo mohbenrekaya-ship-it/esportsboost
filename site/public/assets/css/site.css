@@ -140,6 +140,9 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 }
 .nav-sep { width: 1px; height: 18px; background: var(--hairline-3); }
 .nav-toggle { display: none; }
+/* Currency + language live in the top utility bar on desktop; this in-menu copy
+   is only revealed on mobile (see the ≤760px block), where the util bar drops it. */
+.nav-locale { display: none; }
 
 /* ── hero ──────────────────────────────────────────────────────────────── */
 .hero { position: relative; min-height: 800px; overflow: hidden; isolation: isolate; }
@@ -175,7 +178,7 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
   position: relative; z-index: 3; min-height: 800px;
   display: grid; grid-template-columns: 1fr 400px; align-items: center;
   /* clears the docked calculator: its height + the 26px it sits off the floor */
-  padding-block: 40px 424px; pointer-events: none;
+  padding-block: 40px 500px; pointer-events: none;
 }
 .hero-copy { display: flex; flex-direction: column; gap: 22px; max-width: 760px; }
 .hero-copy .btn-row { pointer-events: auto; }
@@ -245,19 +248,37 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 }
 @media (prefers-reduced-motion: reduce) { .calc-live { animation: none; } }
 
-.chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 64%; }
-.chip {
-  font-family: var(--mono); font-size: 10px; letter-spacing: .1em; padding: 7px 11px;
-  border-radius: var(--radius); border: 1px solid var(--hairline-3);
-  color: var(--text-6); background: rgba(255, 255, 255, .015); cursor: pointer; line-height: 1.4;
-  transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+/* ── game selector · angled "cut box" tiles (homepage configurator) ─────── */
+/* Grid of 5 equal columns that shrink together — minmax(0,1fr) guarantees the
+   row always fits its container, so no game box can ever overflow or be clipped. */
+.gsel { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; width: 100%; }
+.gsel-box {
+  position: relative; min-width: 0; padding: 0; cursor: pointer;
+  clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+  background: var(--hairline-3); transition: background .22s ease;
 }
-.chip:hover { color: var(--text); border-color: rgba(255, 255, 255, .3); }
-.chip[aria-pressed="true"] {
-  border-color: var(--ember); color: #ffd9c9;
-  background: linear-gradient(150deg, rgba(255, 74, 31, .24), rgba(255, 74, 31, .08));
-  box-shadow: 0 0 0 1px rgba(255, 74, 31, .3), 0 8px 22px -12px rgba(255, 74, 31, .8);
+/* Inset panel fill leaves the clip-path edge showing as a 1px angled frame. */
+.gsel-box::before {
+  content: ""; position: absolute; inset: 1px; z-index: 1;
+  clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+  background: var(--panel); transition: background .22s ease;
 }
+.gsel-in {
+  position: relative; z-index: 2; display: flex; flex-direction: column; gap: 5px;
+  padding: 15px 22px; text-align: left;
+}
+.gsel-code { font-family: var(--mono); font-size: 9.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--text-6); }
+.gsel-name { font-family: var(--display); font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: .01em; color: var(--text-2); line-height: 1.1; }
+.gsel-box:hover { background: var(--ember-warm); }
+.gsel-box:hover .gsel-name { color: var(--text); }
+/* Focus follows the parallelogram: a thicker ember frame (outline would be clipped). */
+.gsel-box:focus-visible { outline: none; background: var(--ember-lit); }
+.gsel-box:focus-visible::before { inset: 2px; }
+.gsel-box[aria-pressed="true"] { background: var(--ember-grad); }
+.gsel-box[aria-pressed="true"]::before { background: linear-gradient(150deg, rgba(255, 74, 31, .22), var(--panel)); }
+.gsel-box[aria-pressed="true"] .gsel-code { color: var(--ember-warm); }
+.gsel-box[aria-pressed="true"] .gsel-name { color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .gsel-box, .gsel-box::before { transition: none; } }
 
 .calc-ladder { display: flex; flex-direction: column; gap: 10px; }
 .calc-route { display: flex; align-items: baseline; gap: 12px; }
@@ -632,7 +653,10 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 
 /* Carousel shell — JS sizes the slides and paginates; degrades to a scroller. */
 .rev-carousel { position: relative; }
-.rev-carousel-viewport { overflow: hidden; }
+/* Clip horizontally to hide off-screen slides, but pad the block axis (cancelled
+   by the negative margin) so the reveal offset, hover lift and card shadow have
+   room instead of being clipped at the bottom edge. */
+.rev-carousel-viewport { overflow: hidden; padding-block: 24px; margin-block: -24px; }
 .rev-carousel-track {
   display: flex; gap: 12px; will-change: transform; touch-action: pan-y;
 }
@@ -648,7 +672,8 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 }
 .rev-arrow:hover { border-color: var(--hairline); color: var(--text); transform: translateY(-1px); }
 .rev-arrow:active { transform: translateY(0); }
-.rev-arrow:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+/* Focus ring hugs the circle (soft ember glow) instead of a detached halo. */
+.rev-arrow:focus-visible { outline: none; border-color: var(--ember); box-shadow: 0 0 0 3px rgba(255, 74, 31, .28); }
 .rev-dots { display: flex; align-items: center; gap: 8px; }
 .rev-dot {
   width: 7px; height: 7px; flex: none; padding: 0; cursor: pointer; border: 0; border-radius: 999px;
@@ -656,7 +681,7 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 }
 .rev-dot:hover { background: var(--text-6); }
 .rev-dot.is-active { background: var(--ember-lit); width: 22px; }
-.rev-dot:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+.rev-dot:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(255, 74, 31, .3); }
 /* No-JS fallback: the untouched track scrolls horizontally. */
 .rev-carousel:not([data-ready]) .rev-carousel-viewport { overflow-x: auto; }
 
@@ -810,7 +835,6 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
   .calc-dock { position: relative; z-index: 5; margin-inline: var(--gutter); margin-top: 10px; }
   .calc-dock .calc { background: var(--panel); box-shadow: none; backdrop-filter: none; border-color: var(--hairline-3); }
   .calc-glow { display: none; }
-  .chips { max-width: none; }
   .mosaic { grid-template-columns: repeat(2, 1fr); }
   .statband .wrap { grid-template-columns: repeat(2, 1fr); }
   .live-grid, .split, .split-9-11, .checkout { grid-template-columns: 1fr; gap: 40px; }
@@ -829,20 +853,16 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 @media (max-width: 760px) {
   :root { --gutter: 20px; }
   .section { padding-block: 56px; }
-  /* Utility bar: the 3-col grid can't fit on a phone, so switch to a wrapping
-     flex layout — promo + locale share the top line, the live ticker takes a
-     full-width line below. Everything stays visible, nothing overflows. */
+  /* Utility bar on a phone: no room for the 3-col grid. Currency + language move
+     into the hamburger menu, and the promo/coupon is dropped too — that leaves a
+     single calm centered line: just the orange live ticker. */
   .util {
-    display: flex; flex-wrap: wrap; align-items: center;
-    column-gap: 10px; row-gap: 7px; font-size: 10px; letter-spacing: 0;
+    display: flex; flex-direction: column; align-items: center;
+    row-gap: 5px; padding: 8px 0; font-size: 10px; letter-spacing: 0;
   }
-  .util .promo { order: 1; min-width: 0; flex: 1 1 auto; justify-self: auto; }
-  .util .promo-text { display: inline; }
-  .util .locale { order: 2; flex: none; justify-self: auto; }
-  .util .live {
-    order: 3; flex-basis: 100%; justify-content: center; font-size: 11px;
-    letter-spacing: .01em; justify-self: auto;
-  }
+  .util .promo { display: none; }
+  .util .locale { display: none; }
+  .util .live { justify-content: center; font-size: 11.5px; letter-spacing: .01em; }
   .nav-links {
     display: none; position: absolute; left: 0; right: 0; top: 100%;
     flex-direction: column; align-items: stretch; gap: 0;
@@ -852,6 +872,16 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
   .nav-links > a { padding-block: 12px; }
   .nav-sep { display: none; }
   .nav-toggle { display: inline-flex; margin-left: auto; }
+  /* Currency + language, relocated into the open menu as a labelled footer row. */
+  .nav-locale {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin-top: 14px; padding-top: 16px; border-top: 1px solid var(--hairline-2);
+  }
+  .nav-locale-label {
+    font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-6);
+  }
+  .nav-locale .locale { gap: 8px; }
+  .nav-locale .loc-btn { padding: 7px 10px; }
   .mosaic { grid-template-columns: 1fr; grid-auto-rows: 190px; }
   .tile-span-2x2, .tile-span-2 { grid-column: span 1; grid-row: span 1; }
   .tile-big .tile-title { font-size: 26px; }
@@ -870,8 +900,9 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
   .calc-quote-info { flex-direction: row; align-items: baseline; justify-content: space-between; text-align: left; }
   .calc-price { font-size: 40px; }
   .calc-figs { gap: 22px; }
-  .chips { justify-content: flex-start; max-width: none; }
   .calc-head { flex-direction: column; align-items: flex-start; gap: 12px; }
+  /* Two per row on a phone so the game names stay readable (5 columns would be too narrow). */
+  .gsel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .gamerow { grid-template-columns: 44px 1fr auto; gap: 12px; }
   .gamerow img { width: 44px; height: 44px; }
   .gamerow .cfg { display: none; }

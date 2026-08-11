@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Esportsboost — V3</title>
+<meta name="description" content="Rank boosting, net wins, placements and coaching across six titles. Verified boosters, fixed quotes, refundable orders.">
+<link rel="stylesheet" href="classical.css">
+<style>
+  html, body { background: #171613; margin: 0; }
+  #app { background:#171613; color:#f3f2f2; font-family:var(--font-body); min-height:100vh; }
+  a { color: var(--color-accent-400); text-decoration: none; }
+  a:hover { color: var(--color-accent-300); }
+  button { font: inherit; }
+  ::selection { background: color-mix(in srgb, var(--color-accent) 34%, transparent); }
+  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  @keyframes eb-pulse { 0%,100% { opacity: 1; } 50% { opacity: .28; } }
+  @keyframes eb-creep { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+
+  /* image placeholder — stands in for unshipped key art (see handoff "Assets") */
+  .eb-slot { position:absolute; inset:0; display:grid; place-items:center;
+    background:
+      repeating-linear-gradient(-45deg, rgba(243,242,242,.03) 0 10px, transparent 10px 20px),
+      radial-gradient(120% 120% at 50% 0%, #201f1b, #131210);
+    color:rgba(243,242,242,.34); font-family:var(--font-heading); font-size:12px;
+    letter-spacing:.18em; text-transform:uppercase; }
+
+  @media (prefers-reduced-motion: reduce) {
+    [style*="eb-pulse"], [style*="eb-creep"] { animation: none !important; }
+  }
+
+  /* Responsive — the handoff ships desktop-only; these are the recommended collapses. */
+  @media (max-width: 900px) {
+    .eb-2col { grid-template-columns: 1fr !important; }
+    .eb-2col--rev > :first-child { order: 2; }
+    .eb-grid-3 { grid-template-columns: 1fr 1fr !important; }
+    .eb-grid-4 { grid-template-columns: 1fr 1fr !important; }
+    .eb-order-grid { grid-template-columns: 1fr !important; }
+    .eb-rail { position: static !important; }
+    .eb-h1 { font-size: 46px !important; }
+    .eb-h2 { font-size: 34px !important; }
+    .eb-row { grid-template-columns: 1fr !important; gap: 12px !important; }
+    .eb-nav-links { display: none !important; }
+  }
+  @media (max-width: 560px) {
+    .eb-grid-3, .eb-grid-4, .eb-grid-5 { grid-template-columns: 1fr !important; }
+    .eb-h1 { font-size: 38px !important; }
+    .eb-tiers { grid-template-columns: repeat(3, 1fr) !important; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="app.js"></script>
+</body>
+</html>

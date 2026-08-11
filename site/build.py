@@ -164,6 +164,10 @@ def chrome(current):
         <span class="nav-sep" aria-hidden="true"></span>
         <a href="/track.html">Track my order</a>
         <a class="btn btn-primary btn-sm" href="/games/">Start an order</a>
+        <div class="nav-locale" aria-hidden="false">
+          <span class="nav-locale-label">Currency &amp; language</span>
+          {locale_switcher()}
+        </div>
       </div>
     </nav>
   </div>
@@ -775,11 +779,15 @@ def wizard(game=None):
 # ══════════════════════════════════════════════════════════════════════════
 def page_home():
     # Homepage selector shows a curated subset of games (order preserved).
+    # Rendered as angled "cut box" tiles — see .gsel in site.css; still wired
+    # through data-game-tag so app.js drives the aria-pressed selection.
     chip_slugs = {"league-of-legends", "valorant", "teamfight-tactics",
-                  "marvel-rivals", "overwatch-2"}
+                  "marvel-rivals"}
     chip_games = [g for g in D.GAMES if g["slug"] in chip_slugs]
-    chips = "".join('<button class="chip" type="button" data-game-tag="%s">%s</button>'
-                    % (esc(g["name"]), esc(g["name"])) for g in chip_games)
+    chips = "".join(
+        '<button class="gsel-box" type="button" data-game-tag="%s"><span class="gsel-in">'
+        '<span class="gsel-code">%s</span><span class="gsel-name">%s</span></span></button>'
+        % (esc(g["name"]), esc(g["short"]), esc(g["name"])) for g in chip_games)
     H = D.HERO
     safety_p = "".join("<p>%s</p>" % esc(p) for p in D.SAFETY["body"])
     dash = "".join(f"""<div>
@@ -821,8 +829,8 @@ def page_home():
           <span class="calc-kicker">Fast Checkout</span>
           <span class="calc-tag"><i class="calc-live" aria-hidden="true"></i>Live pricing</span>
         </div>
-        <div class="chips" role="group" aria-label="Choose a game">{chips}</div>
       </div>
+      <div class="gsel" role="group" aria-label="Choose a game">{chips}</div>
 
       <div class="calc-ladder">
         <div class="calc-route">

@@ -665,7 +665,7 @@
           b.className = "rev-dot";
           b.setAttribute("role", "tab");
           b.setAttribute("aria-label", "Review set " + (i + 1) + " of " + pages);
-          (function (n) { b.addEventListener("click", function () { go(n); restart(); }); })(i);
+          (function (n) { b.addEventListener("click", function (e) { go(n); restart(); if (e.detail) this.blur(); }); })(i);
           dotsWrap.appendChild(b);
         }
       }
@@ -687,8 +687,8 @@
       function start() { if (reduce || pages <= 1 || document.hidden) return; stop(); timer = setInterval(function () { go(index + 1); }, 4800); }
       function stop() { if (timer) { clearInterval(timer); timer = null; } }
 
-      if (next) next.addEventListener("click", function () { go(index + 1); restart(); });
-      if (prev) prev.addEventListener("click", function () { go(index - 1); restart(); });
+      if (next) next.addEventListener("click", function (e) { go(index + 1); restart(); if (e.detail) this.blur(); });
+      if (prev) prev.addEventListener("click", function (e) { go(index - 1); restart(); if (e.detail) this.blur(); });
       root.addEventListener("mouseenter", stop);
       root.addEventListener("mouseleave", start);
       root.addEventListener("focusin", stop);

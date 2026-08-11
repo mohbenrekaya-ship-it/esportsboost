@@ -5,6 +5,11 @@
       "name": "esportsboost",
       "url": "http://localhost:4321",
       "port": 4321
+    },
+    {
+      "name": "esportsboost-v3",
+      "url": "http://localhost:4322",
+      "port": 4322
     }
   ]
 }
