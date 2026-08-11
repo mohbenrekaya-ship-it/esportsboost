@@ -32,6 +32,21 @@ def _addon_pct(addons):
     return sum(ADDON[a]["pct"] for a in (addons or []) if a in ADDON)
 
 
+def resolve_promo(code=None):
+    """Pick the one discount that applies to an order.
+
+    The auto promo applies with nothing typed; a typed code replaces it only
+    when it is worth more. Discounts never stack, and an unknown or weaker code
+    can never make the buyer's price worse. Returns (code, promo) or (None, None).
+    """
+    best_code, best = D.auto_promo()
+    if code:
+        typed = D.PROMOS.get(str(code).strip().upper())
+        if typed and (best is None or typed["pct"] > best["pct"]):
+            best_code, best = str(code).strip().upper(), typed
+    return best_code, best
+
+
 def quote(state):
     """`state` is the client order dict: game, service, from, to, mode, wins,
     placements, addons. Returns price fields plus `total` (whole USD) and
@@ -88,9 +103,20 @@ def quote(state):
         summary = "%s → %s · %s" % (frm, to, mode)
 
     extra = base * _addon_pct(state.get("addons"))
-    total = _jsround(base + extra)
+    subtotal = _jsround(base + extra)
+
+    # Discount comes off the computed price, so the strikethrough shown to the
+    # buyer is a real reduction from what the order would otherwise cost —
+    # never a grossed-up reference price.
+    pcode, promo = resolve_promo(state.get("promo"))
+    discount = _jsround(subtotal * promo["pct"]) if promo else 0
+    total = subtotal - discount
+
     return dict(
         invalid=False, total=total, total_cents=total * 100,
+        subtotal=subtotal, discount=discount,
+        promo_code=pcode or "", promo_label=(promo or {}).get("label", ""),
+        promo_pct=(promo or {}).get("pct", 0), promo_ends=(promo or {}).get("ends", ""),
         base=_jsround(base), addons=_jsround(extra), days=days,
         summary=summary,
         eta="about 1 day" if days == 1 else "%d days" % days,
@@ -122,5 +148,6 @@ def _clamp(n):
 
 
 def _invalid(msg):
-    return dict(invalid=True, total=0, total_cents=0, base=0, addons=0,
-                days=0, summary=msg, eta="—")
+    return dict(invalid=True, total=0, total_cents=0, subtotal=0, discount=0,
+                promo_code="", promo_label="", promo_pct=0, promo_ends="",
+                base=0, addons=0, days=0, summary=msg, eta="—")

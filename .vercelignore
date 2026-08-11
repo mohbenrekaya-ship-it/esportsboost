@@ -9,6 +9,18 @@ site/dist/
 site/orders.log
 orders.log
 
+# Secrets live in Vercel's own env-var settings, never in the upload
+.env
+.env.*
+site/.env
+
+# Local analytics store — production writes to Upstash, never to a file
+site/analytics.ndjson
+analytics.ndjson
+
+# Developer scripts, not part of the build or the runtime
+site/tools/
+
 # Docs not needed at runtime
 CRO-AUDIT.md
 CRO-AUDIT.fr.md

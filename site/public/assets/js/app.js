@@ -61,7 +61,7 @@
   var DEFAULT = {
     game: "League of Legends", service: "division",
     from: "Gold IV", to: "Diamond I", mode: "Solo",
-    wins: 5, placements: 5, region: "EUW", addons: [], next: "from"
+    wins: 5, placements: 5, region: "EUW", addons: [], next: "from", promo: ""
   };
 
   function load() {
@@ -118,14 +118,34 @@
     return p ? (p[tierOf(game, rank)] || 0) : null;
   }
 
-  function addonPct() {
+  /* Reads the add-ons off the state it is given, not the live page state —
+     pricing.py's _addon_pct() takes them from its argument, so a quote() over
+     any state other than the current one used to silently disagree with the
+     amount the server charges. */
+  function addonPct(s) {
     var pct = 0;
-    (state.addons || []).forEach(function (id) {
+    ((s || state).addons || []).forEach(function (id) {
       var a = D.addons.filter(function (x) { return x.id === id; })[0];
       if (a) pct += a.pct;
     });
     return pct;
   }
+
+  /* Pick the one discount that applies. Mirrors resolve_promo() in
+     ../../../src/pricing.py — the auto promo applies with nothing typed, a
+     typed code replaces it only when worth more, and discounts never stack. */
+  function resolvePromo(code) {
+    var promos = D.promos || {}, bestCode = null, best = null;
+    for (var k in promos) { if (promos[k].auto) { bestCode = k; best = promos[k]; break; } }
+    if (code) {
+      var typed = promos[String(code).trim().toUpperCase()];
+      if (typed && (!best || typed.pct > best.pct)) {
+        bestCode = String(code).trim().toUpperCase(); best = typed;
+      }
+    }
+    return { code: bestCode, promo: best };
+  }
+  window.esbPromo = resolvePromo;
 
   function quote(s) {
     var per = D.perDivision;
@@ -155,7 +175,9 @@
         return {
           invalid: true, price: "—", eta: "—", total: 0,
           summary: T("Target must sit above your current rank"),
-          base: 0, addons: 0, days: 0
+          base: 0, addons: 0, days: 0,
+          subtotal: 0, discount: 0, wasPrice: "", discountPrice: "",
+          promoCode: "", promoLabel: "", promoEnds: ""
         };
       }
       if (D.prices && D.prices[s.game]) {
@@ -173,11 +195,23 @@
       summary = s.from + " → " + s.to + " · " + T(s.mode);
     }
 
-    var extra = base * addonPct();
-    var total = Math.round(base + extra);
+    var extra = base * addonPct(s);
+    var subtotal = Math.round(base + extra);
+
+    // Discount comes off the computed price — the strikethrough is a real
+    // reduction, never a grossed-up reference price. Mirrors pricing.py.
+    var r = resolvePromo(s.promo);
+    var discount = r.promo ? Math.round(subtotal * r.promo.pct) : 0;
+    var total = subtotal - discount;
+
     return {
       invalid: invalid, total: total, base: Math.round(base), addons: Math.round(extra),
-      price: usd(total), summary: summary, days: days,
+      subtotal: subtotal, discount: discount,
+      price: usd(total), wasPrice: discount ? usd(subtotal) : "",
+      discountPrice: discount ? "−" + usd(discount) : "",
+      promoCode: r.code || "", promoLabel: r.promo ? r.promo.label : "",
+      promoEnds: r.promo ? (r.promo.ends || "") : "",
+      summary: summary, days: days,
       eta: days === 1 ? T("about 1 day") : days + " " + T("days")
     };
   }
@@ -209,12 +243,21 @@
         price: q.price, eta: q.eta, summary: q.summary, game: state.game,
         mode: T(state.mode), region: state.region,
         free: D.boostersFree, total: q.price,
+        was: q.wasPrice, discount: q.discountPrice,
+        promoCode: q.promoCode, promoLabel: q.promoLabel, promoEnds: q.promoEnds,
+        saveLine: q.discount ? T("You save") + " " + usd(q.discount)
+                             + (q.promoEnds ? " · " + T("sale ends") + " " + q.promoEnds : "")
+                             : "",
         summaryUpper: q.summary.toUpperCase(),
         headline: q.invalid ? T("Pick a target above your current rank")
                             : q.summary + " — " + q.price
       }[k];
       if (v !== undefined) el.textContent = v;
     });
+
+    // Discount-only nodes collapse entirely when no promo applies, so an order
+    // with no discount never shows an empty row or a bare strikethrough.
+    each("[data-when-discount]", function (el) { el.hidden = !q.discount; });
 
     // guided two-step prompt — names what the next ladder tap will set, so the
     // first tap can't feel wrong. state.next flips "from" → "to" as you pick.
@@ -295,7 +338,12 @@
 
     // addons
     each("input[data-addon]", function (el) {
-      el.checked = (state.addons || []).indexOf(el.getAttribute("data-addon")) >= 0;
+      var id = el.getAttribute("data-addon");
+      var a = D.addons.filter(function (x) { return x.id === id; })[0];
+      // A zero-cost add-on is always on, and is never carried in state.addons —
+      // it has to render ticked or "Included" sits next to an empty box and
+      // reads as the opposite of what it says.
+      el.checked = (a && a.pct === 0) || (state.addons || []).indexOf(id) >= 0;
     });
 
     // continue buttons disabled on an impossible pair
@@ -311,12 +359,30 @@
         base: usd(q.base), addons: q.addons ? "+ " + usd(q.addons) : "—",
         total: usd(q.total), eta: q.eta, summary: q.summary,
         game: state.game, region: state.region, mode: T(state.mode),
+        was: q.wasPrice, discount: q.discountPrice,
+        discountLabel: q.promoLabel
+          ? T(q.promoLabel) + (q.promoCode ? " · " + q.promoCode : "") : "",
         addonlist: (state.addons || []).map(function (id) {
           var a = D.addons.filter(function (x) { return x.id === id; })[0];
           return a ? T(a.label) : id;
         }).join(", ") || T("None")
       };
       if (map[k] !== undefined) el.textContent = map[k];
+    });
+
+    // Money rows that only exist when they carry a number.
+    each("[data-when-addons]", function (el) { el.hidden = !q.addons; });
+
+    /* Add-on prices in dollars: what having this option actually costs on this
+       order, all else equal. Quoting the difference rather than base × pct means
+       the figure already accounts for the discount, so it matches the change the
+       buyer sees in the total when they tick the box. */
+    each("[data-addon-price]", function (el) {
+      var id = el.getAttribute("data-addon-price");
+      var without = (state.addons || []).filter(function (x) { return x !== id; });
+      var off = quote(Object.assign({}, state, { addons: without })).total;
+      var on = quote(Object.assign({}, state, { addons: without.concat([id]) })).total;
+      el.textContent = q.invalid ? "—" : "+" + usd(on - off);
     });
 
     document.dispatchEvent(new CustomEvent("esb:render", { detail: { state: state, quote: q } }));
@@ -423,10 +489,56 @@
     save();
   }
 
+  /* Discount code. The auto promo is already in the price, so this only ever
+     reports something the buyer can act on: a better code took effect, or the
+     one they typed isn't valid. A weaker code is accepted silently rather than
+     downgrading a price they were already quoted. */
+  function wirePromo() {
+    var input = document.querySelector("[data-promo]");
+    if (!input) return;
+    var msg = document.querySelector("[data-promo-msg]");
+    var apply = document.querySelector("[data-promo-apply]");
+
+    if (state.promo) input.value = state.promo;
+
+    function say(text, ok) {
+      if (!msg) return;
+      msg.textContent = text;
+      msg.setAttribute("data-ok", ok ? "1" : "0");
+    }
+
+    function submit() {
+      var typed = input.value.trim().toUpperCase();
+      if (!typed) { set({ promo: "" }); say("", true); return; }
+
+      var before = quote(state).total;
+      set({ promo: typed });
+      var q = quote(state);
+
+      if (q.promoCode === typed) {
+        say(T("Code applied") + " — " + T("you save") + " " + usd(q.discount), true);
+      } else if (D.promos && D.promos[typed]) {
+        say(T("Your current price is already better than that code."), true);
+      } else {
+        set({ promo: "" });
+        say(T("That code isn't valid. Your price is unchanged."), false);
+      }
+      if (before !== quote(state).total) track("select_promotion", itemParams());
+    }
+
+    if (apply) apply.addEventListener("click", submit);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); submit(); }
+    });
+    input.addEventListener("blur", submit);
+  }
+
   function wire() {
     // page-scoped game (game detail pages)
     var cfg = document.querySelector("[data-configurator]");
     if (cfg && cfg.getAttribute("data-game")) ensureGame(cfg.getAttribute("data-game"));
+
+    wirePromo();
 
     each("[data-ladder]", buildLadder);
 

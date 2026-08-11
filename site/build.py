@@ -68,6 +68,14 @@ NAV = [
     ("/guarantee.html", "Safety"),
     ("/reviews.html", "Reviews"),
 ]
+# Only when HIDE_PLACEHOLDER_CLAIMS drops the pages behind them — never link
+# to a destination the build didn't produce.
+if not D.LIVE_FEED:
+    NAV.remove(("/#live", "Live"))
+if not D.BOOSTERS:
+    NAV.remove(("/boosters.html", "Boosters"))
+if not D.REVIEWS:
+    NAV.remove(("/reviews.html", "Reviews"))
 
 FOOT = [
     ("/legal/terms.html", "Terms"),
@@ -131,25 +139,30 @@ def chrome(current):
         '<a href="%s"%s>%s</a>' % (href, ' aria-current="page"' if current == href else "", esc(label))
         for href, label in NAV
     )
-    # Rotating live-status ticker; last item repeats the first for a seamless loop.
-    live_items = [
-        "%s verified boosters on shift right now" % D.STATS["online"],
-        "Most orders claimed within %s" % esc(D.STATS["median_claim"]),
-        "%s boosters free and ready to start now" % D.STATS["free_now"],
-        "Join %s players in our Discord community" % esc(D.STATS["discord"]),
-    ]
-    live_track = "".join('<span class="live-item">%s</span>' % m
-                         for m in live_items + live_items[:1])
-    live_sr = " · ".join(live_items)
+    # Rotating live-status ticker; last item repeats the first for a seamless
+    # loop. Every line is a factual claim about the roster, so each one is
+    # dropped unless STATS actually carries the number — with none of them the
+    # whole ticker goes, rather than rotating through blanks.
+    live_items = [text for value, text in (
+        (D.STATS["online"], "%s verified boosters on shift right now" % D.STATS["online"]),
+        (D.STATS["median_claim"], "Most orders claimed within %s" % esc(D.STATS["median_claim"])),
+        (D.STATS["free_now"], "%s boosters free and ready to start now" % D.STATS["free_now"]),
+        (D.STATS["discord"], "Join %s players in our Discord community" % esc(D.STATS["discord"])),
+    ) if value]
+    ticker = ""
+    if live_items:
+        live_track = "".join('<span class="live-item">%s</span>' % m
+                             for m in live_items + live_items[:1])
+        ticker = f"""<span class="live">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span class="live-rot" aria-hidden="true"><span class="live-track">{live_track}</span></span>
+        <span class="sr-only">{" · ".join(live_items)}</span>
+      </span>"""
     return f"""<div class="util-outer">
   <div class="wrap">
     <div class="util">
       {promo_slot()}
-      <span class="live">
-        <span class="live-dot" aria-hidden="true"></span>
-        <span class="live-rot" aria-hidden="true"><span class="live-track">{live_track}</span></span>
-        <span class="sr-only">{live_sr}</span>
-      </span>
+      {ticker}
       {locale_switcher()}
     </div>
   </div>
@@ -205,8 +218,38 @@ def _tp_stars_svg(fill, cid):
             f'</svg>')
 
 
+# Reply-time clauses. Identical copy to before; they only shorten when
+# HIDE_PLACEHOLDER_CLAIMS removes the measured figure, so the sentence stays
+# grammatical rather than reading "median  last month".
+reply_claim = (" — median %s last month" % esc(D.STATS["reply"])
+               if D.STATS.get("reply") else "")
+reply_month = (": %s" % esc(D.STATS["reply"])) if D.STATS.get("reply") else ""
+
+
+def rating_ld():
+    """`aggregateRating` for JSON-LD — `{}` unless a real rating exists.
+
+    Search engines render this as star ratings in results, so an invented value
+    here is a fabricated review signal published to every crawler. Returning an
+    empty dict lets callers `update()` unconditionally.
+    """
+    if not D.STATS.get("trustpilot") or not D.STATS.get("reviews"):
+        return {}
+    return {"aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": D.STATS["trustpilot"].split("/")[0].strip(),
+        "reviewCount": D.STATS["reviews"].replace(",", ""), "bestRating": "5"}}
+
+
 def trustpilot_badge(label="Excellent"):
-    """Clickable Trustpilot rating badge linking to the external review page."""
+    """Clickable Trustpilot rating badge linking to the external review page.
+
+    Renders nothing without a real rating in STATS — the badge puts Trustpilot's
+    name and logo behind whatever score it is given, so it must never be built
+    from a placeholder.
+    """
+    if not D.STATS.get("trustpilot") or not D.STATS.get("reviews"):
+        return ""
     rating = D.STATS["trustpilot"].split("/")[0].strip()
     try:
         fill = float(rating) / 5.0
@@ -332,7 +375,7 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
     if mobile_bar:
         bar = """<div class="mobile-bar" role="region" aria-label="Live quote">
   <div>
-    <div class="p" data-out="price">—</div>
+    <div class="p"><span class="mobile-was" data-when-discount data-out="was" hidden></span><span data-out="price">—</span></div>
     <div class="s" data-out="summary">—</div>
   </div>
   <a class="btn btn-primary btn-sm" href="/checkout.html" data-continue>Continue</a>
@@ -373,6 +416,7 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
 <script src="/assets/js/data.js"></script>
 <script src="/assets/js/i18n.js"></script>
 <script src="/assets/js/app.js"></script>
+<script src="/assets/js/analytics.js" defer></script>
 {extra_js}</body>
 </html>
 """
@@ -436,6 +480,8 @@ def cta_band(live=False, title=None, sub=None, cta=("Start an order", "/games/")
 
 
 def marquee():
+    if not D.MARQUEE:
+        return ""
     run = "".join('<span>%s</span><i aria-hidden="true">◆</i>' % esc(m) for m in D.MARQUEE)
     return f"""<div class="marquee" aria-hidden="true">
   <div class="marquee-track">
@@ -452,6 +498,9 @@ def statband():
         (D.STATS["median_claim"], "Median time to claim"),
         (D.STATS["discord"], "Players in the Discord"),
     ]
+    stats = [(v, l) for v, l in stats if v]
+    if not stats:
+        return ""
     cells = "".join('<div><div class="v">%s</div><div class="l">%s</div></div>' % (esc(v), esc(l))
                     for v, l in stats)
     return '<section class="statband"><div class="wrap">%s</div></section>' % cells
@@ -532,6 +581,8 @@ def game_rows():
 
 
 def live_feed():
+    if not D.LIVE_FEED:
+        return ""
     cards = "".join(f"""<div class="feed-card">
       <img src="{img('/assets/img/emblem-%s.svg' % f['slug'])}" alt="" width="78" height="78" loading="lazy">
       <div class="stack" style="gap:4px;min-width:0">
@@ -545,6 +596,8 @@ def live_feed():
 
 def roster_panel(rows=None):
     rows = rows or D.BOOSTERS[:5]
+    if not rows:
+        return ""
     body = "".join(f"""<div class="roster-row">
       <img src="{img('/assets/img/avatar-%s.svg' % b['handle'])}" alt="" width="44" height="44" loading="lazy">
       <div class="stack" style="gap:1px;min-width:0">
@@ -568,6 +621,8 @@ def roster_panel(rows=None):
 
 
 def booster_table(rows, note=True):
+    if not rows:
+        return ""
     body = "".join(f"""<tr>
         <td class="handle">{esc(b['handle'])}</td>
         <td style="color:var(--text-5)">{esc(b['game'])}</td>
@@ -587,6 +642,8 @@ def booster_table(rows, note=True):
 
 
 def reviews_grid(items):
+    if not items:
+        return ""
     cards = "".join(f"""<div class="card">
       <span class="card-kicker">{esc(r['rank'])}</span>
       <p class="card-body">{esc(r['text'])}</p>
@@ -624,6 +681,8 @@ def _reviews_one_per_game():
 def review_carousel(items):
     """Auto-advancing review carousel — JS (`initCarousel`) sizes the slides,
     paginates and rotates. With JS off it degrades to a horizontal scroller."""
+    if not items:
+        return ""
     tiles = "".join(_review_tile(r, i) for i, r in enumerate(items))
     return f"""<div class="rev-carousel" data-carousel>
       <div class="rev-carousel-viewport" data-carousel-viewport>
@@ -660,18 +719,80 @@ def mode_seg(name):
       </div>"""
 
 
-def addons_block():
+def _addons_sorted():
+    """Free inclusions first. Leading with what costs nothing establishes the
+    block as generous before it asks for money — and the free one (offline
+    appearance) is a trust proof that was previously buried."""
+    return sorted(D.ADDONS, key=lambda a: (a["pct"] != 0, D.ADDONS.index(a)))
+
+
+def addons_block(money=False):
+    """Add-on picker. `money` renders each price as the dollars it actually adds
+    to this order rather than a percentage — used at checkout, where buyers
+    price in currency, not maths."""
     rows = []
-    for a in D.ADDONS:
-        price = "Included" if a["pct"] == 0 else "+%d%%" % round(a["pct"] * 100)
-        checked = " checked disabled" if a["pct"] == 0 else ""
-        rows.append(f"""<label class="opt">
-        <input type="checkbox" data-addon="{a['id']}"{checked} autocomplete="off">
+    for a in _addons_sorted():
+        free = a["pct"] == 0
+        if free:
+            price = '<span class="price price-free">Included</span>'
+        elif money:
+            price = '<span class="price" data-addon-price="%s">—</span>' % esc(a["id"])
+        else:
+            price = '<span class="price">+%d%%</span>' % round(a["pct"] * 100)
+        checked = " checked disabled" if free else ""
+        rows.append(f"""<label class="opt{' opt-free' if free else ''}">
+        <input type="checkbox" data-addon="{esc(a['id'])}"{checked} autocomplete="off">
         <span><span style="display:block">{esc(a['label'])}</span>
         <span class="note">{esc(a['note'])}</span></span>
-        <span class="price">{price}</span>
+        {price}
       </label>""")
     return '<div class="opts">%s</div>' % "".join(rows)
+
+
+def pay_marks():
+    """Accepted-payment strip for the pay step.
+
+    These are typographic stand-ins, not the card networks' official artwork —
+    the real Visa/Mastercard/Amex marks are trademarked and have to come from
+    Stripe's brand kit before launch (see README). They carry the same signal
+    ("we take normal cards, a real processor holds them") without shipping
+    someone else's logo.
+    """
+    lock = ('<svg width="9" height="11" viewBox="0 0 9 11" aria-hidden="true" focusable="false">'
+            '<rect x=".5" y="4.5" width="8" height="6" rx="1" fill="none" stroke="currentColor"/>'
+            '<path d="M2.6 4.5V3a1.9 1.9 0 0 1 3.8 0v1.5" fill="none" stroke="currentColor"/></svg>')
+    mc = ('<svg width="17" height="11" viewBox="0 0 17 11" aria-hidden="true" focusable="false">'
+          '<circle cx="5.5" cy="5.5" r="5" fill="currentColor" opacity=".85"/>'
+          '<circle cx="11.5" cy="5.5" r="5" fill="currentColor" opacity=".45"/></svg>')
+    return f"""<ul class="paymarks">
+      <li class="paymark">Visa</li>
+      <li class="paymark">{mc}Mastercard</li>
+      <li class="paymark">Amex</li>
+      <li class="paymark">Apple&nbsp;Pay</li>
+      <li class="paymark">Google&nbsp;Pay</li>
+      <li class="paymark paymark-secure">{lock}Secured by Stripe</li>
+    </ul>"""
+
+
+def promo_field():
+    """Discount-code row for the checkout summary.
+
+    The auto promo (D.PROMOS) is already applied before anyone types anything,
+    so this field exists for affiliate and win-back codes — and, just as much,
+    so a buyer who read the top bar has somewhere obvious to put the code
+    instead of abandoning the order looking for one.
+    """
+    auto_code, auto = D.auto_promo()
+    hint = ("%s already applied" % auto_code) if auto else "Have a code?"
+    return f"""<div class="promo-field">
+      <label class="fig-lab" for="k-promo">Discount code</label>
+      <div class="promo-row">
+        <input class="input" id="k-promo" data-promo type="text" inputmode="latin"
+               autocomplete="off" spellcheck="false" placeholder="{esc(hint)}">
+        <button class="btn btn-secondary btn-sm" type="button" data-promo-apply>Apply</button>
+      </div>
+      <span class="promo-msg" data-promo-msg role="status" aria-live="polite"></span>
+    </div>"""
 
 
 def wizard(game=None):
@@ -751,23 +872,23 @@ def wizard(game=None):
         </div>
       </div>
 
-      <details>
-        <summary class="kicker kicker-dim" style="cursor:pointer">Options</summary>
-        <div style="padding-top:12px">{addons_block()}</div>
-      </details>
-
       <div class="wizard-div"></div>
 
       <div class="quote-row" aria-live="polite">
         <div class="stack" style="gap:4px">
           <span class="fig-lab" data-out="summary">—</span>
-          <span class="quote-price" data-out="price">—</span>
+          <span class="price-pair">
+            <span class="quote-was" data-when-discount data-out="was" hidden></span>
+            <span class="quote-price" data-out="price">—</span>
+          </span>
         </div>
         <div class="stack" style="gap:4px;text-align:right">
           <span class="fig-lab">Delivered in</span>
           <span class="quote-eta" data-out="eta">—</span>
         </div>
       </div>
+
+      <span class="save-line" data-when-discount data-out="saveLine" hidden></span>
 
       <a class="btn btn-primary btn-block" href="/checkout.html" data-continue>Continue to checkout</a>
       <span class="fine">No account needed · Money-back until a booster is assigned · VPN matched to your region</span>
@@ -794,6 +915,57 @@ def page_home():
         <div class="step-t" style="font-size:16px">{esc(t)}</div>
         <p class="t-14" style="margin:0;color:var(--text-3)">{esc(b)}</p>
       </div>""" for t, b in D.DASHBOARD_POINTS)
+
+    free_now_metric = f"""<div class="calc-metric">
+              <span class="fig-lab">Boosters free now</span>
+              <span class="fig-mid" data-live-stat><i class="calc-live calc-live-sm" aria-hidden="true"></i><span data-live="free">{D.STATS['free_now']}</span></span>
+            </div>""" if D.STATS["free_now"] else ""
+
+    # The "Live · Delivered today" section is a feed of completed orders beside
+    # the on-shift roster. With neither, Safety is all that is left — and it
+    # deserves its own heading rather than sitting under a "Live" one that no
+    # longer describes anything on the page.
+    feed, roster = live_feed(), roster_panel()
+    safety_block = f"""<div class="stack" style="gap:14px">
+          <h3>{esc(D.SAFETY['title'])}</h3>
+          {safety_p}
+        </div>"""
+    if feed or roster:
+        live_section = f"""<section class="wrap section" id="live" style="padding-bottom:0">
+  <div class="live-grid">
+    <div class="stack" style="gap:26px">
+      {sec_head("02", "Live", "Delivered today")}
+      {feed}
+      <div class="safety" id="safety">
+        <span class="sec-kicker" style="padding-top:6px"><span class="sec-kicker-n">03</span><span class="sec-kicker-l">Safety</span></span>
+        {safety_block}
+      </div>
+    </div>
+    {roster}
+  </div>
+</section>"""
+    else:
+        live_section = f"""<section class="wrap section" id="safety" style="padding-bottom:0">
+  <div class="stack" style="gap:26px">
+    {sec_head("02", "Safety", esc(D.SAFETY['title']))}
+    <div class="safety">{safety_block}</div>
+  </div>
+</section>"""
+
+    # The reviews strip is the Trustpilot badge plus one testimonial per game.
+    # With no real reviews the whole section goes — a "What they said after"
+    # heading over an empty carousel is worse than no section at all.
+    carousel = review_carousel(_reviews_one_per_game())
+    reviews_section = f"""<section class="wrap section" id="reviews">
+  <div class="stack" style="gap:24px">
+    {sec_head("04", "Reviews", "What they said after", right="Verified orders only")}
+    <div class="rev-strip">
+      {trustpilot_badge()}
+      <span class="rev-strip-note">Every review is tied to a paid, completed order — nothing incentivised. One per game, across the roster.</span>
+    </div>
+    {carousel}
+  </div>
+</section>""" if carousel else ""
 
     body = f"""<section class="hero" id="top">
   <img class="hero-art" src="{img("/assets/img/hero.svg")}" alt="" width="1600" height="900" fetchpriority="high">
@@ -867,16 +1039,16 @@ def page_home():
               <span class="fig-lab">Delivered in</span>
               <span class="fig-mid" data-out="eta">—</span>
             </div>
-            <div class="calc-metric">
-              <span class="fig-lab">Boosters free now</span>
-              <span class="fig-mid"><i class="calc-live calc-live-sm" aria-hidden="true"></i><span data-out="free">—</span></span>
-            </div>
+            {free_now_metric}
           </div>
         </div>
         <div class="calc-quote" aria-live="polite">
           <div class="calc-quote-info">
             <span class="fig-lab">Total price</span>
-            <span class="calc-price" data-out="price">—</span>
+            <span class="price-pair">
+              <span class="calc-was" data-when-discount data-out="was" hidden></span>
+              <span class="calc-price" data-out="price">—</span>
+            </span>
           </div>
           <a class="btn btn-primary calc-cta" href="/checkout.html" data-continue>Continue <span class="calc-cta-arrow" aria-hidden="true">&rarr;</span></a>
         </div>
@@ -898,22 +1070,7 @@ def page_home():
 
 {statband()}
 
-<section class="wrap section" id="live" style="padding-bottom:0">
-  <div class="live-grid">
-    <div class="stack" style="gap:26px">
-      {sec_head("02", "Live", "Delivered today")}
-      {live_feed()}
-      <div class="safety" id="safety">
-        <span class="sec-kicker" style="padding-top:6px"><span class="sec-kicker-n">03</span><span class="sec-kicker-l">Safety</span></span>
-        <div class="stack" style="gap:14px">
-          <h3>{esc(D.SAFETY['title'])}</h3>
-          {safety_p}
-        </div>
-      </div>
-    </div>
-    {roster_panel()}
-  </div>
-</section>
+{live_section}
 
 <section class="wrap section" style="padding-bottom:0">
   <div class="split-9-11">
@@ -934,26 +1091,17 @@ def page_home():
   </div>
 </section>
 
-<section class="wrap section" id="reviews">
-  <div class="stack" style="gap:24px">
-    {sec_head("04", "Reviews", "What they said after", right="Verified orders only")}
-    <div class="rev-strip">
-      {trustpilot_badge()}
-      <span class="rev-strip-note">Every review is tied to a paid, completed order — nothing incentivised. One per game, across the roster.</span>
-    </div>
-    {review_carousel(_reviews_one_per_game())}
-  </div>
-</section>
+{reviews_section}
 
 {cta_band(live=True, cta=("Continue your order", "/checkout.html"))}"""
 
-    ld = [
-        {"@context": "https://schema.org", "@type": "Organization",
-         "name": D.BRAND, "url": D.SITE, "logo": D.SITE + "/assets/img/favicon.svg",
-         "aggregateRating": {"@type": "AggregateRating", "ratingValue": "4.8",
-                             "reviewCount": D.STATS["reviews"].replace(",", ""), "bestRating": "5"}},
-        {"@context": "https://schema.org", "@type": "WebSite", "name": D.BRAND, "url": D.SITE},
-    ]
+    org = {"@context": "https://schema.org", "@type": "Organization",
+           "name": D.BRAND, "url": D.SITE, "logo": D.SITE + "/assets/img/favicon.svg"}
+    # An aggregateRating in JSON-LD is a machine-readable claim that search
+    # engines surface as review stars. Only ever emit it from a real rating.
+    org.update(rating_ld())
+    ld = [org, {"@context": "https://schema.org", "@type": "WebSite",
+                "name": D.BRAND, "url": D.SITE}]
     return layout("/", "Rank boosting with the price up front — %s" % D.BRAND,
                   "Set two ranks and see the exact price and delivery window before you make an "
                   "account. Verified boosters, guest checkout, pro-rated refunds. 9 games, every region.",
@@ -1010,17 +1158,49 @@ def page_game(g):
             "phone number, no password change. For duo, nothing at all; you keep the account and "
             "queue with the booster.")] + D.FAQ[:6]
 
+    product = {
+        "@context": "https://schema.org", "@type": "Product",
+        "name": "%s rank boosting" % g["name"], "description": g["meta"],
+        "image": "%s/assets/img/keyart-%s.svg" % (D.SITE, g["slug"]),
+        "brand": {"@type": "Brand", "name": D.BRAND},
+        "offers": {"@type": "AggregateOffer", "priceCurrency": "USD",
+                   "lowPrice": from_price(g),
+                   "highPrice": quote(g["name"], g["ladder"][0], g["ladder"][-1])["total"],
+                   "offerCount": len(g["ladder"]) * 2, "availability": "https://schema.org/InStock"},
+    }
+    product.update(rating_ld())
+
+    # Hero stat row and the booster column are both pure claims about the
+    # business. Each cell appears only if its number is real; with none of them
+    # the row and the column vanish and the section falls back to one column.
+    cells = [c for c in (
+        (f'<div class="stat"><b>{esc(D.STATS["trustpilot"])}</b>'
+         f'<span>Trustpilot · {esc(D.STATS["reviews"])} reviews</span></div>')
+        if D.STATS["trustpilot"] and D.STATS["reviews"] else "",
+        (f'<div class="stat"><b>{esc(D.STATS["median_claim"])}</b>'
+         f'<span>Median time to claim</span></div>') if D.STATS["median_claim"] else "",
+        (f'<div class="stat" data-live-stat><b data-live="free">{D.STATS["free_now"]}</b>'
+         f'<span><span class="live-dot" aria-hidden="true"></span>{esc(g["short"])} '
+         f'boosters free now</span></div>') if D.STATS["free_now"] else "",
+    ) if c]
+    stat_row = ('<div class="stat-row">%s</div>' % "".join(cells)) if cells else ""
+
+    table = booster_table(roster)
+    online = (f'<span class="tag tag-neutral">{D.STATS["online"]} online</span>'
+              if D.STATS["online"] else "")
+    booster_col = f"""<div class="stack" style="gap:20px">
+      <div class="sec-head">
+        <div class="sec-head-copy">
+          <span class="sec-kicker"><span class="sec-kicker-n">02</span><span class="sec-kicker-l">Boosters</span></span>
+          <h2 class="h-sec" style="font-size:clamp(24px,2.6vw,32px)">On shift now</h2>
+        </div>
+        {online}
+      </div>
+      {table}
+    </div>""" if table else ""
+
     ld = [
-        {"@context": "https://schema.org", "@type": "Product",
-         "name": "%s rank boosting" % g["name"], "description": g["meta"],
-         "image": "%s/assets/img/keyart-%s.svg" % (D.SITE, g["slug"]),
-         "brand": {"@type": "Brand", "name": D.BRAND},
-         "offers": {"@type": "AggregateOffer", "priceCurrency": "USD",
-                    "lowPrice": from_price(g),
-                    "highPrice": quote(g["name"], g["ladder"][0], g["ladder"][-1])["total"],
-                    "offerCount": len(g["ladder"]) * 2, "availability": "https://schema.org/InStock"},
-         "aggregateRating": {"@type": "AggregateRating", "ratingValue": "4.8",
-                             "reviewCount": D.STATS["reviews"].replace(",", ""), "bestRating": "5"}},
+        product,
         faq_ld(faq),
         {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
             {"@type": "ListItem", "position": 1, "name": "Home", "item": D.SITE + "/"},
@@ -1041,11 +1221,7 @@ def page_game(g):
       <span class="kicker">{esc(g['services'])}</span>
       <h1 class="h-lg" style="font-size:clamp(38px,5.4vw,76px)">{esc(g['name'])}<br><span class="grad-text">from {fp}.</span></h1>
       <p class="lede">{esc(g['blurb'])}</p>
-      <div class="stat-row">
-        <div class="stat"><b>{esc(D.STATS['trustpilot'])}</b><span>Trustpilot · {esc(D.STATS['reviews'])} reviews</span></div>
-        <div class="stat"><b>{esc(D.STATS['median_claim'])}</b><span>Median time to claim</span></div>
-        <div class="stat" data-live-stat><b data-live="free">{D.STATS['free_now']}</b><span><span class="live-dot" aria-hidden="true"></span>{esc(g['short'])} boosters free now</span></div>
-      </div>
+      {stat_row}
       <p class="t-12" style="margin:0;color:var(--text-5);max-width:52ch">{esc(g['note'])}</p>
     </div>
     <div id="configure">{wizard(game=g['name'])}</div>
@@ -1055,21 +1231,12 @@ def page_game(g):
 {marquee()}
 
 <section class="wrap section">
-  <div class="split">
+  <div class="{'split' if booster_col else 'stack'}">
     <div class="stack" style="gap:26px">
       {sec_head("01", "How it runs", "Three steps, then<br>it's out of your hands")}
       {steps_block()}
     </div>
-    <div class="stack" style="gap:20px">
-      <div class="sec-head">
-        <div class="sec-head-copy">
-          <span class="sec-kicker"><span class="sec-kicker-n">02</span><span class="sec-kicker-l">Boosters</span></span>
-          <h2 class="h-sec" style="font-size:clamp(24px,2.6vw,32px)">On shift now</h2>
-        </div>
-        <span class="tag tag-neutral">{D.STATS['online']} online</span>
-      </div>
-      {booster_table(roster)}
-    </div>
+    {booster_col}
   </div>
 </section>
 
@@ -1087,7 +1254,7 @@ def page_game(g):
     <div class="stack" style="gap:14px">
       {sec_head("04", "FAQ", "Questions people<br>ask before paying")}
       <p class="t-14" style="max-width:36ch;color:var(--text-5)">If the answer isn't here, Discord
-      replies in minutes — median {esc(D.STATS['reply'])} last month.</p>
+      replies in minutes{reply_claim}.</p>
       <a class="btn btn-secondary" href="/support.html" style="align-self:flex-start">Ask us instead</a>
     </div>
     {faq_block(faq)}
@@ -1177,7 +1344,7 @@ def page_how():
     <div class="stack" style="gap:12px">
       <h2 class="h-sec">Everything else<br>people ask</h2>
       <p class="t-14" style="max-width:36ch;color:var(--text-5)">Median first reply on Discord last
-      month: {esc(D.STATS['reply'])}.</p>
+      month{reply_month}.</p>
     </div>
     {faq_block(D.FAQ)}
   </div>
@@ -1211,12 +1378,12 @@ def page_boosters():
 
 {rule()}
 
-<section class="wrap section">
+{f'''<section class="wrap section">
   <div class="stack" style="gap:24px">
     {sec_head("01", "Roster", "Everyone on shift", right="Updated live")}
     {booster_table(D.BOOSTERS)}
   </div>
-</section>
+</section>''' if D.BOOSTERS else ''}
 
 <section class="wrap section" style="padding-top:0">
   <div class="stack" style="gap:24px">
@@ -1316,6 +1483,14 @@ def page_guarantee():
 
 
 def page_support():
+    cells = [c for c in (
+        (f'<div class="stat"><b>{esc(D.STATS["reply"])}</b>'
+         f'<span>Median first reply last month</span></div>') if D.STATS["reply"] else "",
+        (f'<div class="stat"><b>{esc(D.STATS["discord"])}</b>'
+         f'<span>Players in the Discord</span></div>') if D.STATS["discord"] else "",
+    ) if c]
+    support_stats = ('<div class="stat-row">%s</div>' % "".join(cells)) if cells else ""
+
     body = f"""<section class="wrap section">
   <div class="split">
     <div class="stack" style="gap:22px">
@@ -1323,10 +1498,7 @@ def page_support():
       <h1 class="h-md">Two ways in.<br>Both are read<br>by people.</h1>
       <p class="lede">No ticket robot, no "we'll get back to you within 48 hours". Discord is the
       fast one — that's where this market already lives, and it's where our staff sit all day.</p>
-      <div class="stat-row">
-        <div class="stat"><b>{esc(D.STATS['reply'])}</b><span>Median first reply last month</span></div>
-        <div class="stat"><b>{esc(D.STATS['discord'])}</b><span>Players in the Discord</span></div>
-      </div>
+      {support_stats}
     </div>
     <div class="stack" style="gap:12px">
       <div class="card" id="discord">
@@ -1575,13 +1747,10 @@ def page_checkout():
 
       <div class="field">
         <label>Pay with</label>
-        <div class="seg seg-full" role="group" aria-label="Payment method">
-          <label class="seg-opt"><input type="radio" name="pay" value="card" checked> Card</label>
-          <label class="seg-opt is-disabled"><input type="radio" name="pay" value="crypto" disabled> Crypto <span class="t-11" style="color:var(--text-6)">— coming soon</span></label>
-        </div>
-        <p class="t-11" style="margin:8px 0 0;color:var(--text-6)">Card details are entered on
-        Stripe's secure checkout — we never see or store them. Statements read as a neutral
-        merchant name.</p>
+        {pay_marks()}
+        <p class="t-11" style="margin:10px 0 0;color:var(--text-6)">Card, Apple Pay and Google Pay are
+        all on the next screen — details are entered on Stripe's secure checkout, so we never see or
+        store them. Statements read as a neutral merchant name.</p>
       </div>
 
       <label class="opt" style="border-color:transparent;padding:0">
@@ -1595,7 +1764,7 @@ def page_checkout():
                 background:rgba(255,74,31,.1);border:1px solid rgba(255,74,31,.4);
                 color:var(--ember-lit)"></p>
 
-      <button class="btn btn-primary btn-block" type="submit">Place the order</button>
+      <button class="btn btn-primary btn-block" type="submit"><span data-btn-label>Place the order · </span><span data-sum="total">—</span></button>
       <p class="fine">Refunded in full until a booster claims it · <a href="/guarantee.html">Read the guarantee</a></p>
     </form>
 
@@ -1618,15 +1787,31 @@ def page_checkout():
       <div class="sum-line"><span class="text-muted">Game</span><span data-sum="game">—</span></div>
       <div class="sum-line"><span class="text-muted">Climb</span><span data-sum="summary">—</span></div>
       <div class="sum-line"><span class="text-muted">Server</span><span data-sum="region">—</span></div>
-      <div class="sum-line"><span class="text-muted">Options</span><span data-sum="addonlist">—</span></div>
       <div class="wizard-div"></div>
       <div class="sum-line"><span class="text-muted">Boost</span><span data-sum="base">—</span></div>
-      <div class="sum-line"><span class="text-muted">Options</span><span data-sum="addons">—</span></div>
+      <div class="sum-line" data-when-addons hidden>
+        <span class="text-muted" data-sum="addonlist">—</span><span data-sum="addons">—</span>
+      </div>
+      <div class="sum-line sum-line-off" data-when-discount hidden>
+        <span data-sum="discountLabel">—</span><span data-sum="discount">—</span>
+      </div>
     </div>
+
+    <div class="wizard-div"></div>
+    <div class="addon-group addon-bump">
+      <span class="fig-lab">Last chance to add</span>
+      {addons_block(money=True)}
+    </div>
+
+    {promo_field()}
+
     <div class="sum-total">
       <div class="stack" style="gap:4px">
         <span class="fig-lab">Total, tax included</span>
-        <span class="quote-price" data-sum="total">—</span>
+        <span class="price-pair">
+          <span class="quote-was" data-when-discount data-sum="was" hidden></span>
+          <span class="quote-price" data-sum="total">—</span>
+        </span>
       </div>
       <div class="stack" style="gap:4px;text-align:right">
         <span class="fig-lab">Delivered in</span>
@@ -1651,15 +1836,25 @@ def page_checkout():
   window.esbTrack('add_payment_info', window.esbItemParams());
 
   if (/[?&]canceled=1/.test(location.search)) showError(
-    'Payment canceled — nothing was charged. Your order is still here when you\\'re ready.');
+    'Payment canceled — nothing was charged. Your order is still here when you\\'re ready.',
+    'canceled');
 
-  function showError(msg) {
+  function showError(msg, code) {
     errBox.textContent = msg;
     errBox.hidden = false;
+    // One place for every way payment can fail, so cancellations, API refusals
+    // and network drops all reach analytics without extra plumbing.
+    if (window.esbEmit) window.esbEmit('checkout_error', {
+      meta: { code: code || 'error', message: String(msg).slice(0, 160) }
+    });
   }
   function busy(on) {
     btn.disabled = on;
-    btn.textContent = on ? 'Contacting payment…' : 'Place the order';
+    // Rewrite only the label, never the button's innerHTML — the amount lives
+    // in a [data-sum="total"] span that render() owns.
+    var label = btn.querySelector('[data-btn-label]');
+    if (label) label.textContent = on ? 'Contacting payment…' : 'Place the order · ';
+    btn.classList.toggle('is-busy', !!on);
   }
 
   // No account, no wallet stored — we hand the order to Stripe Checkout, which
@@ -1685,6 +1880,7 @@ def page_checkout():
     var payload = {
       game: s.game, service: s.service, from: s.from, to: s.to, mode: s.mode,
       wins: s.wins, placements: s.placements, region: s.region, addons: s.addons,
+      promo: s.promo || '',
       email: (form.querySelector('#k-email') || {}).value || '',
       hours: (form.querySelector('#k-hours') || {}).value || '',
       notes: (form.querySelector('#k-notes') || {}).value || ''
@@ -1703,10 +1899,11 @@ def page_checkout():
         return;
       }
       busy(false);
-      showError(res.body.error || 'Payment could not be started. Please try again.');
+      showError(res.body.error || 'Payment could not be started. Please try again.',
+                'api_' + res.status);
     }).catch(function () {
       busy(false);
-      showError('Network error reaching payment. Please try again.');
+      showError('Network error reaching payment. Please try again.', 'network');
     });
   });
 })();
@@ -1735,7 +1932,7 @@ def page_checkout_success():
       <div class="stack" style="gap:8px" data-receipt hidden>
         <div class="sum-line"><span class="text-muted">Order</span><span data-r="order">—</span></div>
         <div class="sum-line"><span class="text-muted">Paid</span><span data-r="amount">—</span></div>
-        <div class="sum-line"><span class="text-muted">Order</span><span data-r="detail">—</span></div>
+        <div class="sum-line"><span class="text-muted">Service</span><span data-r="detail">—</span></div>
         <div class="sum-line"><span class="text-muted">Delivered in</span><span data-r="eta">—</span></div>
       </div>
       <a class="btn btn-primary btn-sm" href="/track.html" style="align-self:flex-start">Track this order</a>
@@ -1948,6 +2145,103 @@ def page_404():
 
 
 # ══════════════════════════════════════════════════════════════════════════
+#  /ops — the analytics console (deliberately NOT part of the shop)
+# ══════════════════════════════════════════════════════════════════════════
+OPS_TABS = [
+    ("overview", "Overview"), ("funnel", "Funnel"), ("configurator", "Configurator"),
+    ("journey", "Journey"), ("sessions", "Sessions"), ("acquisition", "Acquisition"),
+    ("friction", "Friction"), ("abandoned", "Abandoned"), ("live", "Live"),
+]
+
+
+def page_ops():
+    """The dashboard shell.
+
+    Everything here is chrome — not one number is server-rendered. The page is
+    public (anyone can load the HTML) and empty until /api/ops accepts a
+    password, which is what makes it safe to ship on the shop's own domain.
+
+    It shares nothing with layout(): no nav, no footer, no ashfall.css, and
+    critically no analytics.js — an ops tool that logged its own pageviews
+    would pollute the very funnel it exists to measure.
+    """
+    tabs = "".join(
+        '<button type="button" role="tab" data-tab="%s" aria-selected="%s">%s</button>'
+        % (key, "true" if i == 0 else "false", esc(label))
+        for i, (key, label) in enumerate(OPS_TABS))
+
+    ranges = "".join(
+        '<button type="button" data-days="%d" aria-pressed="%s">%s</button>'
+        % (days, "true" if days == 30 else "false", esc(label))
+        for days, label in ((7, "7 days"), (30, "30 days"), (90, "90 days"), (365, "1 year")))
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analytics — {esc(D.BRAND)}</title>
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0a0a0f">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/css/ops.css">
+</head>
+<body class="ops">
+
+<div class="wrap" data-gate>
+  <div class="gate">
+    <h2>Analytics</h2>
+    <p>{esc(D.BRAND)} — internal. This console is not linked from the site.</p>
+    <form>
+      <label class="field" style="display:none" for="ops-pw">Password</label>
+      <input class="field" id="ops-pw" type="password" autocomplete="current-password"
+             placeholder="Password" aria-label="Dashboard password" required>
+      <button class="btn btn-primary" type="submit">Sign in</button>
+    </form>
+    <div class="err" data-gate-err role="alert"></div>
+    <!-- Setup help, shown ONLY when the API reports it has no password configured.
+         Left always-visible it reads as "the password isn't set" to someone who
+         simply mistyped one, which is the opposite of helpful. -->
+    <div class="note" data-gate-setup hidden>
+      Set <code>OPS_PASSWORD</code> (12+ characters) in the environment and restart the
+      server to enable this dashboard. Until then the API refuses every request.
+    </div>
+  </div>
+</div>
+
+<div class="wrap" data-app hidden>
+  <header class="top">
+    <h1>Analytics</h1>
+    <span class="sub">{esc(D.BRAND)}</span>
+    <span class="spacer"></span>
+    <span data-meta></span>
+    <button class="btn btn-sm" type="button" data-refresh>Refresh</button>
+    <button class="btn btn-sm" type="button" data-signout>Sign out</button>
+  </header>
+
+  <div class="filters">
+    <label for="ops-game">Period</label>
+    <span class="seg" data-range>{ranges}</span>
+    <select class="field" id="ops-game" data-game aria-label="Filter by game">
+      <option value="">All games</option>
+    </select>
+  </div>
+
+  <div class="banner synthetic" data-synthetic hidden></div>
+
+  <nav class="tabs" role="tablist" aria-label="Dashboard sections">{tabs}</nav>
+
+  <div data-panels></div>
+</div>
+
+<script src="/assets/js/ops.js"></script>
+</body>
+</html>
+"""
+
+
+# ══════════════════════════════════════════════════════════════════════════
 #  emit
 # ══════════════════════════════════════════════════════════════════════════
 def img(rel):
@@ -1979,6 +2273,7 @@ def client_data():
         "slugs": {g["name"]: g["slug"] for g in D.GAMES},
         "regions": {g["name"]: g["regions"] for g in D.GAMES},
         "addons": D.ADDONS,
+        "promos": D.PROMOS,
         "boostersFree": D.STATS["free_now"],
     }
     return ("/* generated by build.py — do not edit */\nwindow.ESB_DATA = %s;\n"
@@ -2069,16 +2364,21 @@ def main():
         ("/index.html", page_home()),
         ("/games/index.html", page_games_index()),
         ("/how-it-works.html", page_how()),
-        ("/boosters.html", page_boosters()),
         ("/guarantee.html", page_guarantee()),
         ("/support.html", page_support()),
-        ("/reviews.html", page_reviews()),
         ("/track.html", page_track()),
         ("/checkout.html", page_checkout()),
         ("/checkout/success.html", page_checkout_success()),
         ("/become-a-booster.html", page_become_booster()),
         ("/404.html", page_404()),
     ]
+    # Both of these pages are nothing but the placeholder roster and the
+    # placeholder testimonials, so they are not built at all until that content
+    # is real — an empty "Reviews" page ranks and reads worse than no page.
+    if D.BOOSTERS:
+        pages.insert(3, ("/boosters.html", page_boosters()))
+    if D.REVIEWS:
+        pages.insert(6, ("/reviews.html", page_reviews()))
     pages += [("/legal/%s.html" % s, page_legal(s)) for s in LEGAL]
     pages += [("/games/%s.html" % g["slug"], page_game(g)) for g in D.GAMES]
 
@@ -2092,9 +2392,15 @@ def main():
     write("/sitemap.xml",
           '<?xml version="1.0" encoding="UTF-8"?>\n'
           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n%s</urlset>\n' % sm)
-    write("/robots.txt", "User-agent: *\nAllow: /\nSitemap: %s/sitemap.xml\n" % D.SITE)
+    write("/robots.txt",
+          "User-agent: *\nAllow: /\nDisallow: /ops\nSitemap: %s/sitemap.xml\n" % D.SITE)
 
-    print("built %d pages + %d images → %s" % (len(pages), images, DIST))
+    # The console is written after the sitemap loop on purpose: it is not a page
+    # of the shop, carries no canonical tag, and must never reach the sitemap,
+    # robots.txt or any link on the site. Its own <meta robots> is noindex.
+    write("/ops/index.html", page_ops())
+
+    print("built %d pages + %d images → %s  (+ /ops console)" % (len(pages), images, DIST))
 
 
 if __name__ == "__main__":

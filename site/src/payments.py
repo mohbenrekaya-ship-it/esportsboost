@@ -87,6 +87,10 @@ def new_order_id():
     return "ESB-" + base64.b32encode(os.urandom(4)).decode().rstrip("=")[:6]
 
 
+def _usd(n):
+    return "$%s" % format(int(n), ",d")
+
+
 def build_session(order, base_url):
     """Turn a validated order into Stripe Checkout Session params. The amount
     comes from pricing.quote() — the client-supplied total is ignored."""
@@ -99,6 +103,10 @@ def build_session(order, base_url):
     order_id = new_order_id()
     name = "%s boost" % game
     desc = "%s · %s" % (q["summary"], region) if region else q["summary"]
+    if q["discount"]:
+        # The line item is charged at the discounted amount, so name the
+        # reduction here or the Stripe receipt won't explain the price.
+        desc += " · %s %s off" % (q["promo_label"], _usd(q["discount"]))
 
     params = {
         "mode": "payment",
@@ -119,6 +127,9 @@ def build_session(order, base_url):
         "metadata[hours]": (order.get("hours") or "")[:490],
         "metadata[notes]": (order.get("notes") or "")[:490],
         "metadata[eta]": q["eta"],
+        "metadata[promo]": q["promo_code"],
+        "metadata[discount]": str(q["discount"]),
+        "metadata[subtotal]": str(q["subtotal"]),
     }
     email = order.get("email", "").strip()
     if email:
@@ -224,6 +235,14 @@ def base_url_from(get_header, fallback_host):
     env = os.environ.get("PUBLIC_BASE_URL", "").strip()
     if env:
         return env.rstrip("/")
-    proto = (get_header("x-forwarded-proto") or "https").split(",")[0].strip()
     host = get_header("host") or fallback_host
+    fwd = get_header("x-forwarded-proto")
+    if fwd:
+        proto = fwd.split(",")[0].strip()
+    else:
+        # No proxy header → a direct connection. The local dev server speaks
+        # plain HTTP, so localhost must not be handed an https redirect or Stripe
+        # sends the browser back to https://localhost → ERR_SSL_PROTOCOL_ERROR.
+        # Any real host reached directly still defaults to https.
+        proto = "http" if host.split(":")[0] in ("localhost", "127.0.0.1", "0.0.0.0") else "https"
     return "%s://%s" % (proto, host)

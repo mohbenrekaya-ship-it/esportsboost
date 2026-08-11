@@ -247,14 +247,52 @@ HERO = dict(
     portrait_meta="Challenger 1042 LP · 78% WR · EUW · 214 orders",
 )
 
+# ── Discount codes ─────────────────────────────────────────────────────────
+# The single source of truth for every code the site honours. `pricing.py`
+# resolves against this and applies the discount to the *charged* amount, so a
+# code advertised here always works at checkout — never advertise one that
+# isn't in this dict.
+#
+#   pct   fraction off the computed price (0.15 = 15% off)
+#   label appears as the discount line item in the order summary
+#   auto  True → applied to every order with nothing to type
+#   ends  ISO date shown to the buyer; purely informational, not enforced
+#
+# Only one code applies to an order — discounts never stack. A typed code
+# replaces the auto promo when it is worth more, and is otherwise ignored, so a
+# buyer can never make their price worse by entering one.
+PROMOS = {
+    "SPLIT15": dict(pct=0.15, label="Summer sale", auto=True, ends="31 Aug"),
+    # Affiliate and win-back codes go here, e.g.
+    # "COMEBACK20": dict(pct=0.20, label="Welcome back", auto=False, ends=""),
+}
+
 # ── Top-bar promo slot ─────────────────────────────────────────────────────
-# The left cell of the utility bar on every page. Edit this one place to change
-# the site-wide promo. Set text="" to hide the slot. `tag` is the little ember
-# chip (drop it to ""); `href` (optional) makes the whole line a link.
+# The left cell of the utility bar on every page. Derived from the auto promo
+# above so the bar can never advertise a discount the checkout doesn't honour.
+# Set PROMO_TEXT="" to hide the slot; `href` (optional) makes the line a link.
+PROMO_TEXT = "Summer sale — %s off with code %s"
+PROMO_HREF = "/games/"
+
+
+def auto_promo():
+    """The code applied to every order with nothing to type, or (None, None).
+    First `auto` entry wins — keep at most one."""
+    for code, p in PROMOS.items():
+        if p.get("auto"):
+            return code, p
+    return None, None
+
+
+def promo_pct_label(p):
+    return "%g%%" % round(p["pct"] * 100, 2)
+
+
+_AUTO_CODE, _AUTO = auto_promo()
 PROMO = dict(
-    tag="-15%",
-    text="Summer sale — code SPLIT15",
-    href="/games/",
+    tag=("-" + promo_pct_label(_AUTO)) if _AUTO else "",
+    text=(PROMO_TEXT % (promo_pct_label(_AUTO), _AUTO_CODE)) if _AUTO else "",
+    href=PROMO_HREF,
 )
 
 MARQUEE = [

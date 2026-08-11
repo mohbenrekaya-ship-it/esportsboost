@@ -2,6 +2,18 @@
 # Remove this line if you deploy to GitHub Pages from the repo itself.
 site/dist/
 
+# Secrets. serve.py reads these at startup (STRIPE_SECRET_KEY, OPS_PASSWORD,
+# UPSTASH_*). A committed .env is a leaked key — keep this rule.
+.env
+.env.*
+!.env.example
+site/.env
+
+# Local analytics store — real visitor behaviour in dev, seeded noise otherwise.
+# Never committed; production writes to Upstash instead (see DEPLOY.md).
+site/analytics.ndjson
+analytics.ndjson
+
 # Python
 __pycache__/
 *.py[cod]

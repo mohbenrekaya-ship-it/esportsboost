@@ -160,7 +160,7 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 .nav-locale { display: none; }
 
 /* ── hero ──────────────────────────────────────────────────────────────── */
-.hero { position: relative; min-height: 800px; overflow: hidden; isolation: isolate; }
+.hero { position: relative; min-height: 800px; overflow: hidden; isolation: isolate; display: flex; flex-direction: column; padding-bottom: 26px; }
 .hero-art, .band-art { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: cover; }
 .fx { position: absolute; pointer-events: none; }
 .fx-glow {
@@ -190,10 +190,12 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 .fx-sparks span:nth-child(4) { left: 330px; width: 3px; height: 3px; background: #ffd39a; box-shadow: 0 0 9px 3px rgba(255, 211, 154, .55); animation: rise 8.5s linear infinite 2.2s; }
 
 .hero-inner {
-  position: relative; z-index: 3; min-height: 800px;
-  display: grid; grid-template-columns: 1fr 400px; align-items: center;
-  /* clears the docked calculator: its height + the 26px it sits off the floor */
-  padding-block: 40px 500px; pointer-events: none;
+  position: relative; z-index: 3; flex: 1 1 auto;
+  display: grid; grid-template-columns: 1fr 400px; align-items: center; align-content: center;
+  /* flex:1 lets the copy sit above the in-flow calc and vertically center in the
+     space that's left; the section grows to fit both, so the card can never
+     overlap the CTA buttons no matter how far the headline wraps. */
+  padding-block: 40px 28px; pointer-events: none;
 }
 .hero-copy { display: flex; flex-direction: column; gap: 22px; max-width: 760px; }
 .hero-copy .btn-row { pointer-events: auto; }
@@ -209,7 +211,7 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 .portrait-name { font-family: var(--display); font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: .04em; }
 
 /* ── docked calculator ─────────────────────────────────────────────────── */
-.calc-dock { position: absolute; left: var(--gutter); right: var(--gutter); bottom: 26px; z-index: 4; }
+.calc-dock { position: relative; z-index: 4; margin-inline: var(--gutter); }
 .calc {
   background: var(--glass); backdrop-filter: blur(18px);
   border: 1px solid rgba(255, 255, 255, .1); border-radius: var(--radius-lg);
@@ -374,6 +376,12 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
   background: var(--ember-grad); -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
 }
+/* struck pre-discount price — plain text, so the ember gradient stays reserved
+   for the number the buyer actually pays */
+.calc-was {
+  font-family: var(--display); font-weight: 600; font-size: 24px; line-height: .82;
+  color: var(--text-6); text-decoration: line-through; text-decoration-thickness: 1.5px;
+}
 .calc-cta {
   display: inline-flex; align-items: center; gap: 10px; font-size: 14px; padding: 16px 30px;
   box-shadow: 0 12px 32px -12px rgba(255, 74, 31, .7);
@@ -472,6 +480,9 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 .stat .live-dot { display: inline-block; margin-right: 7px; vertical-align: 1px; }
 .stat[data-live-stat] b { transition: color .3s ease; }
 .stat[data-live-stat].bump b { color: var(--ember-lit); }
+/* same live drift on the homepage calc's "boosters free now" figure */
+.fig-mid[data-live-stat] [data-live] { transition: color .3s ease; }
+.fig-mid[data-live-stat].bump [data-live] { color: var(--ember-lit); }
 
 /* stat count-up + rise-in (JS adds .reveal, then .is-in on scroll) */
 .statband .v { font-variant-numeric: tabular-nums; }
@@ -771,11 +782,16 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 .hero-a .hero-a-inner {
   position: relative; z-index: 3;
   display: grid; grid-template-columns: 1.1fr 440px; gap: 56px;
-  padding-block: 72px 76px; align-items: start;
+  /* centre the shorter hero copy against the taller checkout card so the two
+     sides finish level instead of the card dangling into empty space below */
+  padding-block: 72px 76px; align-items: center;
 }
-.crumbs { font-family: var(--mono); font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--text-6); }
-.crumbs a { color: var(--text-6); }
+.crumbs { font-family: var(--body); font-size: 12.5px; letter-spacing: .01em; color: var(--text-4); }
+.crumbs a { color: var(--text-4); }
 .crumbs a:hover { color: var(--ember-lit); }
+/* eyebrow labels were 10px and read faint over the hero art — a touch larger
+   and heavier keeps the clean sans look but is far easier to read */
+.kicker { font-size: 12.5px; font-weight: 500; line-height: 1.45; }
 
 .wizard {
   display: flex; flex-direction: column; gap: 16px;
@@ -788,6 +804,34 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 .quote-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
 .quote-price { font-family: var(--display); font-weight: 700; font-size: 40px; line-height: .9; }
 .quote-eta { font-family: var(--display); font-weight: 600; font-size: 19px; text-transform: uppercase; }
+/* struck price sits beside the live one — the discount is real money off the
+   computed total, so the pair is only rendered when a promo actually applies. */
+.price-pair { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.quote-was {
+  font-family: var(--display); font-weight: 600; font-size: 21px; line-height: .9;
+  color: var(--text-6); text-decoration: line-through; text-decoration-thickness: 1.5px;
+}
+.save-line {
+  display: block; margin-top: 10px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--amber);
+}
+
+/* discount code — sits above the total, where buyers look for it */
+.promo-field { display: flex; flex-direction: column; gap: 7px; padding: 16px 0 4px; }
+.promo-row { display: flex; gap: 8px; align-items: stretch; }
+.promo-row .input { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: .08em; }
+.promo-row .input::placeholder { text-transform: none; letter-spacing: 0; }
+.promo-row .btn { flex: none; }
+.promo-msg {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text-6); min-height: 1em;
+}
+.promo-msg[data-ok="1"] { color: var(--amber); }
+.promo-msg[data-ok="0"] { color: var(--ember-lit); }
+/* a money row that takes money off */
+.sum-line-off { color: var(--amber); }
+.sum-line-off .text-muted { color: inherit; }
 .fine { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; text-align: center; color: var(--text-7); line-height: 1.7; }
 .seg-full { display: flex; width: 100%; }
 .seg-full .seg-opt { flex: 1; }
@@ -815,6 +859,42 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 .opt .price { margin-left: auto; font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--ember-warm); white-space: nowrap; }
 .opt .note { display: block; color: var(--text-6); font-size: 11px; line-height: 1.5; }
 
+/* The always-on inclusion. It leads the list, so it has to read as something
+   you get rather than a control that has been switched off — full-strength
+   text, and a price that says Included instead of a percentage. */
+.opt-free { border-color: rgba(255, 176, 70, .28); background: rgba(255, 176, 70, .05); }
+.opt-free:hover { background: rgba(255, 176, 70, .07); }
+.opt-free input { accent-color: var(--amber); opacity: 1; }
+.opt-free .price-free {
+  margin-left: auto; font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
+  color: var(--amber); white-space: nowrap;
+}
+.addon-group { display: flex; flex-direction: column; gap: 9px; }
+.addon-group .fig-lab { margin-bottom: 0; }
+.addon-bump { padding: 16px 0 4px; }
+
+/* Collapsed add-on drawer on the game-page wizard. The card is ~440px wide, so
+   the rows stay single-column in here — two columns only fit by wrapping every
+   label onto three lines. (Superseded the earlier two-column rule: that existed
+   to stop the open list towering beside the hero, which collapsing now solves.) */
+.addon-drawer > summary:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; }
+.addon-drawer > summary:hover { color: var(--text-2); }
+
+/* accepted-payment strip — scanned, not read, so it sits as a row of quiet
+   chips rather than prose. Typographic stand-ins until the real brand marks
+   are dropped in (see pay_marks() in build.py). */
+.paymarks { display: flex; flex-wrap: wrap; gap: 7px; list-style: none; margin: 0; padding: 0; }
+.paymark {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid var(--hairline); border-radius: var(--radius); padding: 6px 9px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .11em; text-transform: uppercase;
+  color: var(--text-5); white-space: nowrap;
+}
+.paymark svg { display: block; flex: none; }
+.paymark-secure { color: var(--amber); border-color: rgba(255, 176, 70, .3); }
+/* the amount rides on the submit button; hide it while the label says "contacting" */
+.btn.is-busy [data-sum] { display: none; }
+
 /* ── checkout ──────────────────────────────────────────────────────────── */
 .checkout { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; align-items: start; padding-block: 48px 84px; }
 .summary-card { position: sticky; top: 110px; }
@@ -837,6 +917,10 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
   align-items: center; justify-content: space-between; gap: 16px;
 }
 .mobile-bar .p { font-family: var(--display); font-weight: 700; font-size: 24px; line-height: 1; }
+.mobile-was {
+  font-size: 15px; font-weight: 600; color: var(--text-6); margin-right: 7px;
+  text-decoration: line-through; text-decoration-thickness: 1.5px;
+}
 .mobile-bar .s { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-6); }
 
 

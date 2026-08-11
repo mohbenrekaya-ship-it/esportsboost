@@ -12,8 +12,14 @@ Stripe payment API the checkout page calls:
     GET  /api/session    → look up a completed session (success page)
     POST /api/webhook    → receive Stripe events (fulfilment)
 
-The payment logic itself lives in src/payments.py, shared verbatim with the
-Vercel serverless functions in /api — this file is just the local HTTP shell.
+…and the first-party analytics pipeline behind /ops:
+
+    POST /api/collect    → store beacon events (public, anonymous, 204)
+    POST /api/ops        → password-gated dashboard JSON
+
+The payment logic itself lives in src/payments.py, the analytics logic in
+src/analytics.py + src/insights.py + src/ops.py — all shared verbatim with the
+Vercel serverless functions in /api. This file is just the local HTTP shell.
 Stays true to the project's rule of no third-party packages. Nothing charges
 until you configure a key:
 
@@ -36,8 +42,30 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "dist")
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 4321
 
+
+def _load_dotenv():
+    """Dependency-free .env support so secrets (STRIPE_SECRET_KEY, …) survive
+    restarts without being passed on the command line. A real environment
+    variable always wins over the file. Looked for in the repo root and site/."""
+    for path in (os.path.join(os.path.dirname(HERE), ".env"), os.path.join(HERE, ".env")):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        except FileNotFoundError:
+            pass
+
+
+_load_dotenv()
+
 sys.path.insert(0, os.path.join(HERE, "src"))
-import payments  # noqa: E402  — shared Stripe/pricing logic (also used by /api)
+import analytics  # noqa: E402  — first-party event ingest (also used by /api)
+import ops        # noqa: E402  — gated dashboard API (also used by /api)
+import payments   # noqa: E402  — shared Stripe/pricing logic (also used by /api)
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -81,6 +109,15 @@ class Handler(SimpleHTTPRequestHandler):
             status, payload = payments.process_webhook(
                 self._read_body(), self.headers.get("Stripe-Signature", ""))
             return self._json(status, payload)
+        if route == "/api/collect":
+            analytics.process_collect(self._read_body(), self.headers.get)
+            self.send_response(204)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if route == "/api/ops":
+            status, payload = ops.process_ops(self._read_body())
+            return self._json(status, payload)
         self.send_error(404)
 
     def do_GET(self):
@@ -120,4 +157,8 @@ if __name__ == "__main__":
         "test payments" if key else "payments OFF (set STRIPE_SECRET_KEY)"
     srv = HTTPServer(("127.0.0.1", PORT), partial(Handler, directory=ROOT))
     print("esportsboost preview → http://localhost:%d  [%s]" % (PORT, mode))
+    print("  analytics → %s store, %d events · /ops %s"
+          % (analytics.store_name(), analytics.count(),
+             "unlocked with OPS_PASSWORD" if ops.configured()
+             else "locked (set OPS_PASSWORD to open the dashboard)"))
     srv.serve_forever()

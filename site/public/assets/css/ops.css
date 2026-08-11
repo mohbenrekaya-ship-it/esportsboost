@@ -1,0 +1,352 @@
+/* eSports Boost — /ops analytics console.
+   -------------------------------------------------------------------------
+   Deliberately NOT the shop's stylesheet. This is an internal tool: it wants
+   density, tabular numbers and a chart palette, none of which the marketing
+   system provides, and it must never drag ashfall.css / site.css into a page
+   that would then need to stay in sync with them. Self-contained by design.
+
+   Colors are the data-viz reference palette's DARK column, validated against
+   this file's own --surface (#14141b) rather than assumed: 8 categorical slots
+   pass the lightness band, chroma floor, adjacent CVD ΔE (worst 8.4), the
+   normal-vision floor (worst 19.3) and 3:1 contrast; the 6-step blue ordinal
+   ramp passes monotonicity, ΔL >= 0.06 and the 2:1 light-end floor. Changing a
+   hex here means re-running those checks — the whole point is that they were
+   computed, not eyeballed.
+
+   Single committed dark look: an ops console on a dark-branded product, read
+   in one place by one team. No light variant to keep honest.
+*/
+
+.ops {
+  color-scheme: dark;
+
+  /* surfaces & ink */
+  --plane:      #0a0a0f;
+  --surface:    #14141b;
+  --raised:     #1b1b24;
+  --ink:        #f2f2f7;
+  --ink-2:      #b9b9c6;
+  --muted:      #84848f;
+  --grid:       #26262f;
+  --axis:       #34343f;
+  --hairline:   rgba(255, 255, 255, 0.10);
+
+  /* categorical slots — fixed order, never cycled */
+  --s1: #3987e5;  --s2: #d95926;  --s3: #199e70;  --s4: #c98500;
+  --s5: #d55181;  --s6: #008300;  --s7: #9085e9;  --s8: #e66767;
+
+  /* ordinal ramp, dark→light (magnitude runs toward the light end on a dark
+     surface, so high values never sink into the background) */
+  --r1: #184f95;  --r2: #256abf;  --r3: #3987e5;
+  --r4: #6da7ec;  --r5: #9ec5f4;  --r6: #cde2fb;
+
+  /* status — reserved, never reused as a series color */
+  --good:     #0ca30c;
+  --warning:  #fab219;
+  --serious:  #ec835a;
+  --critical: #d03b3b;
+
+  --radius: 10px;
+  --pad: 18px;
+
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--plane);
+  color: var(--ink);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ops *, .ops *::before, .ops *::after { box-sizing: border-box; }
+.ops h1, .ops h2, .ops h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+.ops a { color: var(--s1); }
+
+.ops :focus-visible {
+  outline: 2px solid var(--s1);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.wrap { max-width: 1440px; margin: 0 auto; padding: 0 24px 72px; }
+
+/* ── top bar ─────────────────────────────────────────────────────────── */
+.top {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 18px 0 16px; border-bottom: 1px solid var(--hairline); margin-bottom: 20px;
+}
+.top h1 { font-size: 16px; }
+.top .sub { color: var(--muted); font-size: 13px; }
+.top .spacer { flex: 1 1 auto; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border-radius: 999px; font-size: 12px;
+  border: 1px solid var(--hairline); color: var(--ink-2); background: var(--surface);
+  white-space: nowrap;
+}
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
+.pill.warn { border-color: color-mix(in srgb, var(--warning) 45%, transparent); }
+.pill.warn .dot { background: var(--warning); }
+
+/* ── buttons & controls ──────────────────────────────────────────────── */
+.btn {
+  font: inherit; font-size: 13px; cursor: pointer;
+  padding: 7px 13px; border-radius: 8px;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--hairline);
+}
+.btn:hover { background: var(--raised); }
+.btn[disabled] { opacity: 0.5; cursor: default; }
+.btn-primary { border-color: color-mix(in srgb, var(--s1) 60%, transparent); color: var(--s1); }
+.btn-sm { padding: 4px 9px; font-size: 12px; }
+
+.field {
+  font: inherit; font-size: 13px;
+  padding: 7px 11px; border-radius: 8px;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--hairline);
+}
+select.field { padding-right: 26px; }
+
+/* ── login gate ──────────────────────────────────────────────────────── */
+.gate { max-width: 380px; margin: 14vh auto; text-align: center; }
+.gate h2 { font-size: 18px; margin-bottom: 6px; }
+.gate p { color: var(--muted); margin: 0 0 22px; font-size: 13px; }
+.gate form { display: flex; gap: 8px; }
+.gate .field { flex: 1 1 auto; }
+.gate .err { color: var(--critical); font-size: 13px; margin-top: 14px; min-height: 19px; }
+.gate .note {
+  margin-top: 26px; padding: 14px; text-align: left; font-size: 12px;
+  color: var(--muted); background: var(--surface);
+  border: 1px solid var(--hairline); border-radius: var(--radius);
+}
+.gate code { color: var(--ink-2); }
+
+/* ── filter row — one row, above everything it scopes ────────────────── */
+.filters {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.filters label { color: var(--muted); font-size: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--hairline); border-radius: 8px; overflow: hidden; }
+.seg button {
+  font: inherit; font-size: 13px; cursor: pointer;
+  padding: 6px 12px; border: 0; background: var(--surface); color: var(--ink-2);
+  border-right: 1px solid var(--hairline);
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--raised); color: var(--ink); }
+
+/* ── banners ─────────────────────────────────────────────────────────── */
+.banner {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 12px 14px; border-radius: var(--radius); margin-bottom: 18px;
+  font-size: 13px; border: 1px solid; line-height: 1.45;
+}
+/* `display:flex` beats the browser's [hidden] rule, so an emptied banner would
+   otherwise sit there as a coloured bar with nothing in it. */
+.banner[hidden] { display: none; }
+.banner.synthetic {
+  border-color: color-mix(in srgb, var(--warning) 40%, transparent);
+  background: color-mix(in srgb, var(--warning) 9%, var(--surface));
+  color: var(--ink-2);
+}
+.banner strong { color: var(--ink); }
+.banner .ico { flex: 0 0 auto; font-size: 14px; }
+
+/* ── tabs ────────────────────────────────────────────────────────────── */
+.tabs {
+  display: flex; gap: 2px; overflow-x: auto; margin-bottom: 20px;
+  border-bottom: 1px solid var(--hairline);
+}
+.tabs button {
+  font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
+  padding: 9px 14px; border: 0; background: none; color: var(--muted);
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tabs button:hover { color: var(--ink-2); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--s1); }
+
+.panel[hidden] { display: none; }
+
+/* ── cards ───────────────────────────────────────────────────────────── */
+/* align-items:start — cards size to their own content. Stretching a short
+   chart to match a tall neighbour leaves a lake of dead space under it. */
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); align-items: start; }
+.card {
+  grid-column: span 12;
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--radius); padding: var(--pad);
+  min-width: 0;                     /* let wide children scroll, not stretch */
+}
+.card.half { grid-column: span 6; }
+.card.third { grid-column: span 4; }
+.card.twothirds { grid-column: span 8; }
+
+.card-hd { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+.card-hd h3 { font-size: 14px; }
+.card-hd .spacer { flex: 1 1 auto; }
+.card-sub { color: var(--muted); font-size: 12px; margin: 0 0 16px; max-width: 68ch; }
+.toggle {
+  font: inherit; font-size: 11px; cursor: pointer; color: var(--muted);
+  background: none; border: 1px solid var(--hairline); border-radius: 6px; padding: 2px 8px;
+}
+.toggle:hover { color: var(--ink-2); }
+
+/* Wide content scrolls inside its own card; the page never scrolls sideways. */
+.scroll-x { overflow-x: auto; }
+
+/* ── KPI row & stat tiles ────────────────────────────────────────────── */
+.kpis { display: grid; gap: 16px; grid-template-columns: repeat(6, 1fr); margin-bottom: 16px; }
+.kpi {
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--radius); padding: 14px 16px; min-width: 0;
+}
+.kpi .lab { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+/* Proportional figures — tabular-nums makes a standalone number look loose. */
+.kpi .val { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.kpi.hero .val { font-size: 40px; }
+.kpi .delta { font-size: 12px; margin-top: 5px; color: var(--muted); }
+.kpi .delta .up { color: var(--good); }
+.kpi .delta .down { color: var(--critical); }
+.kpi .spark { margin-top: 10px; display: block; }
+
+/* ── tables ──────────────────────────────────────────────────────────── */
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th, .tbl td { text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--grid); }
+.tbl th { color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; }
+.tbl td.num, .tbl th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tbl tbody tr:last-child td { border-bottom: 0; }
+.tbl tbody tr:hover { background: var(--raised); }
+.tbl .mono { font-variant-numeric: tabular-nums; }
+.tbl .dim { color: var(--muted); }
+.tbl .wrap-cell { max-width: 40ch; overflow-wrap: anywhere; }
+
+.swatch {
+  display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+  margin-right: 7px; vertical-align: baseline;
+}
+
+/* ── legend ──────────────────────────────────────────────────────────── */
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 12px; font-size: 12px; color: var(--ink-2); }
+.legend .key { display: inline-flex; align-items: center; gap: 7px; }
+.legend .key i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.legend .key i.line { height: 2px; width: 14px; border-radius: 1px; }
+
+/* ── charts ──────────────────────────────────────────────────────────── */
+.chart { display: block; width: 100%; overflow: visible; }
+.chart text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+.chart .tick { font-variant-numeric: tabular-nums; }
+.chart .lbl { fill: var(--ink-2); }
+.chart .val { fill: var(--ink); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .axis { stroke: var(--axis); stroke-width: 1; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .mark { transition: opacity 0.12s ease; }
+.chart g.on .mark { opacity: 1; }
+.chart .dim-mark { opacity: 0.35; }
+
+/* Overlapping dots and end-markers carry a surface ring, never a border. */
+.chart .ring { stroke: var(--surface); stroke-width: 2; }
+
+.cell { stroke: var(--surface); stroke-width: 2; }   /* the 2px surface gap */
+
+/* ── tooltip ─────────────────────────────────────────────────────────── */
+.tip {
+  position: fixed; z-index: 50; pointer-events: none; opacity: 0;
+  transform: translate(-50%, -120%); transition: opacity 0.1s ease;
+  background: var(--raised); color: var(--ink);
+  border: 1px solid var(--hairline); border-radius: 8px;
+  padding: 8px 11px; font-size: 12px; line-height: 1.45;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55); max-width: 280px;
+}
+.tip[data-show="1"] { opacity: 1; }
+.tip .t-hd { font-weight: 600; margin-bottom: 3px; }
+.tip .t-row { color: var(--ink-2); white-space: nowrap; }
+.tip .t-row b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ── sessions: list, facts grid, event timeline ──────────────────────── */
+.link-btn {
+  font: inherit; font-size: 13px; cursor: pointer; padding: 0;
+  background: none; border: 0; color: var(--s1);
+  font-variant-numeric: tabular-nums; text-decoration: underline;
+  text-underline-offset: 2px; text-decoration-color: color-mix(in srgb, var(--s1) 40%, transparent);
+}
+.link-btn:hover { text-decoration-color: var(--s1); }
+
+.chip {
+  display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: 999px;
+  font-size: 11px; color: var(--muted); border: 1px solid var(--hairline);
+  vertical-align: middle; white-space: nowrap;
+}
+.chip.good {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 45%, transparent);
+}
+
+.back-btn { margin-bottom: 16px; }
+
+.facts {
+  display: grid; gap: 1px; margin-top: 4px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  background: var(--hairline); border: 1px solid var(--hairline); border-radius: 8px;
+  overflow: hidden;
+}
+.fact { background: var(--surface); padding: 10px 13px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fact-l { color: var(--muted); font-size: 11px; }
+.fact-v { font-size: 13px; overflow-wrap: anywhere; }
+
+.timeline { list-style: none; margin: 0; padding: 0 0 0 4px; }
+.ev {
+  display: grid; grid-template-columns: 62px 14px 1fr; gap: 10px;
+  padding: 0 0 16px; position: relative;
+}
+/* The spine: a hairline joining the dots, stopping at the last event. */
+.ev::before {
+  content: ""; position: absolute; left: 78px; top: 14px; bottom: -2px;
+  width: 1px; background: var(--grid);
+}
+.ev:last-child { padding-bottom: 0; }
+.ev:last-child::before { display: none; }
+
+.ev-t {
+  color: var(--muted); font-size: 11px; text-align: right;
+  font-variant-numeric: tabular-nums; padding-top: 2px;
+}
+.ev-dot {
+  width: 9px; height: 9px; border-radius: 50%; margin-top: 5px;
+  background: var(--s1); box-shadow: 0 0 0 2px var(--surface); z-index: 1;
+}
+/* Status hues only where the event genuinely is a state, never as identity. */
+.ev-dot[data-e="purchase"] { background: var(--good); }
+.ev-dot[data-e="checkout_error"], .ev-dot[data-e="js_error"] { background: var(--critical); }
+.ev-dot[data-e="begin_checkout"], .ev-dot[data-e="add_payment_info"] { background: var(--s2); }
+.ev-dot[data-e="scroll"], .ev-dot[data-e="page_view"] { background: var(--axis); }
+
+.ev-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; }
+.ev-body b { font-weight: 600; }
+.ev-path { color: var(--ink-2); font-size: 12px; overflow-wrap: anywhere; }
+.ev-note { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.ev-clock { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+/* ── misc ────────────────────────────────────────────────────────────── */
+.empty { color: var(--muted); font-size: 13px; padding: 22px 0; text-align: center; }
+.loading { opacity: 0.45; }        /* hold the old render — never a skeleton flash */
+.bar-inline {
+  display: inline-block; height: 6px; border-radius: 3px;
+  background: var(--s1); vertical-align: middle; min-width: 2px;
+}
+.note { color: var(--muted); font-size: 12px; margin-top: 12px; }
+
+@media (max-width: 1080px) {
+  .kpis { grid-template-columns: repeat(3, 1fr); }
+  .card.half, .card.third, .card.twothirds { grid-column: span 12; }
+}
+@media (max-width: 640px) {
+  .wrap { padding: 0 14px 56px; }
+  .kpis { grid-template-columns: repeat(2, 1fr); }
+  .kpi.hero .val { font-size: 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ops *, .ops *::before, .ops *::after { transition: none !important; }
+}

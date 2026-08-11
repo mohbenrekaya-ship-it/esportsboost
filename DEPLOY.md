@@ -22,8 +22,9 @@ All three are thin shells over `site/src/payments.py`, the same module the local
 | --- | --- |
 | `vercel.json` | Build command, output dir (`site/dist`), clean URLs, bundles `site/src/**` into the functions |
 | `.vercelignore` | Keeps the reference `redesign_zip*/` dirs and local logs out of the upload |
-| `api/*.py` | The three serverless functions |
+| `api/*.py` | The five serverless functions (three payment, two analytics) |
 | `site/src/payments.py` | Shared Stripe + pricing logic |
+| `site/src/analytics.py`, `insights.py`, `ops.py` | Shared analytics logic behind `/ops` |
 
 You do **not** need to run the build yourself — Vercel runs it on every deploy.
 
@@ -101,6 +102,48 @@ vercel --prod # production deploy
    future expiry, any CVC. You should land on `/checkout/success` with a receipt,
    and see a `paid order → ESB-…` line in the function logs (Vercel → Project →
    Logs).
+
+---
+
+## Turn on the analytics console (/ops)
+
+The dashboard lives at `https://<your-domain>/ops`. It ships on every deploy but
+**refuses to show anything until you configure it** — no password, no data.
+
+1. **Create a free Upstash Redis database** at <https://console.upstash.com>
+   (Vercel → Integrations → Upstash also works and injects the variables for
+   you). This is where events are stored. It is needed because Vercel's
+   filesystem is ephemeral: without it, every event is lost the moment the
+   function freezes.
+
+2. In **Vercel → Project → Settings → Environment Variables**, add:
+
+   | Name | Value | Notes |
+   | --- | --- | --- |
+   | `OPS_PASSWORD` | a long random string | **Required.** Minimum 12 characters or the API stays off. This is the only thing standing between the public internet and your business numbers — use a password manager, not a word. |
+   | `UPSTASH_REDIS_REST_URL` | `https://…upstash.io` | From the Upstash console. |
+   | `UPSTASH_REDIS_REST_TOKEN` | the REST token | From the Upstash console. |
+   | `ANALYTICS_MAX_EVENTS` | `50000` | Optional. Caps the stored event list. |
+
+   **Redeploy** after adding — env vars only apply to new deployments.
+
+3. **Check it.** Load a couple of pages on the live site, then open `/ops`, sign
+   in, and look at the **Live** tab. Your own visit should be at the top. If the
+   store badge in the header says `file` rather than `upstash`, the Upstash
+   variables did not reach the function.
+
+Notes worth keeping in mind:
+
+- **Nothing is linked to `/ops`.** It is `noindex`, `Disallow`-ed in robots.txt
+  and absent from the sitemap, but the URL is still guessable — the password is
+  the actual security boundary, so treat it like one. Failed logins are
+  throttled (10 per 15 minutes) once Upstash is configured.
+- **The data is anonymous and cookieless** — no IP, no email, no name — which is
+  why the site needs no consent banner for it. Adding an identifying field would
+  change that.
+- **Clear seeded data before launch.** If you ever ran
+  `site/tools/seed_analytics.py` against the production store, wipe it — `/ops`
+  will warn you with a banner for as long as synthetic events are present.
 
 ---
 
