@@ -252,9 +252,9 @@ def star_row(fill, size=22, gap=7):
             f'<g clip-path="url(#{cid})">{stars(f"url(#{gid})")}</g></svg>')
 
 
-# Footer link columns. Games are pulled from data; Legal is hand-curated.
-FOOT_GAMES = ["League of Legends", "Valorant", "Rocket League", "Marvel Rivals",
-              "Teamfight Tactics", "Overwatch 2"]
+# Footer link columns. Games follow the site-wide order (first six); Legal is
+# hand-curated. Re-rank in data.py's _ORDER, not here.
+FOOT_GAMES = [g["name"] for g in D.GAMES[:6]]
 FOOT_LEGAL = [
     ("/legal/privacy.html", "Privacy Policy"),
     ("/legal/terms.html", "Terms of Service"),
@@ -356,6 +356,7 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="/assets/css/ashfall.css">
 <link rel="stylesheet" href="/assets/css/site.css">
+<link rel="stylesheet" href="/assets/css/type-b-sans.css">
 {ld}</head>
 <body>
 <a class="btn btn-secondary btn-sm" href="#main" style="position:absolute;left:-9999px" onfocus="this.style.left='12px';this.style.top='12px';this.style.zIndex='99'" onblur="this.style.left='-9999px'">Skip to content</a>
@@ -590,6 +591,48 @@ def reviews_grid(items):
     return '<div class="cards-3">%s</div>' % cards
 
 
+def _review_tile(r, i):
+    """One review card — ember star row, quote mark, and a staggered
+    scroll-reveal (JS arms `[data-reveal]`; degrades to static)."""
+    return f"""<figure class="rev-tile" data-reveal style="--rev-i:{i}">
+      <div class="rev-tile-head">
+        <span class="rev-tile-stars">{star_row(1.0, size=15, gap=5)}</span>
+        <span class="rev-tile-flag">Verified</span>
+      </div>
+      <span class="rev-tile-rank">{esc(r['rank'])}</span>
+      <blockquote class="rev-tile-quote">{esc(r['text'])}</blockquote>
+      <figcaption class="rev-tile-meta">Verified order · {esc(r['game'])}</figcaption>
+    </figure>"""
+
+
+def _reviews_one_per_game():
+    """First review from each distinct game, in data order — so the homepage
+    feed reads across the whole roster instead of nine League quotes."""
+    seen, out = set(), []
+    for r in D.REVIEWS:
+        key = r["game"].split("·")[0].strip()
+        if key not in seen:
+            seen.add(key)
+            out.append(r)
+    return out
+
+
+def review_carousel(items):
+    """Auto-advancing review carousel — JS (`initCarousel`) sizes the slides,
+    paginates and rotates. With JS off it degrades to a horizontal scroller."""
+    tiles = "".join(_review_tile(r, i) for i, r in enumerate(items))
+    return f"""<div class="rev-carousel" data-carousel>
+      <div class="rev-carousel-viewport" data-carousel-viewport>
+        <div class="rev-carousel-track" data-carousel-track>{tiles}</div>
+      </div>
+      <div class="rev-carousel-controls">
+        <button class="rev-arrow" type="button" data-carousel-prev aria-label="Previous reviews">&#8249;</button>
+        <div class="rev-dots" data-carousel-dots role="tablist" aria-label="Review pages"></div>
+        <button class="rev-arrow" type="button" data-carousel-next aria-label="Next reviews">&#8250;</button>
+      </div>
+    </div>"""
+
+
 def faq_block(items):
     rows = "".join(f"""<details>
       <summary>{esc(q)}</summary>
@@ -636,7 +679,7 @@ def wizard(game=None):
     attr = ' data-game="%s"' % esc(g["name"]) if game else ""
     return f"""<div class="wizard" data-configurator{attr}>
       <div class="wizard-head">
-        <span class="calc-kicker">Fast Checkout</span>
+        <span class="calc-kicker">Checkout</span>
         <span class="tag tag-accent">Live</span>
       </div>
 
@@ -731,8 +774,12 @@ def wizard(game=None):
 #  pages
 # ══════════════════════════════════════════════════════════════════════════
 def page_home():
+    # Homepage selector shows a curated subset of games (order preserved).
+    chip_slugs = {"league-of-legends", "valorant", "teamfight-tactics",
+                  "marvel-rivals", "overwatch-2"}
+    chip_games = [g for g in D.GAMES if g["slug"] in chip_slugs]
     chips = "".join('<button class="chip" type="button" data-game-tag="%s">%s</button>'
-                    % (esc(g["name"]), esc(g["name"])) for g in D.GAMES)
+                    % (esc(g["name"]), esc(g["name"])) for g in chip_games)
     H = D.HERO
     safety_p = "".join("<p>%s</p>" % esc(p) for p in D.SAFETY["body"])
     dash = "".join(f"""<div>
@@ -878,7 +925,11 @@ def page_home():
 <section class="wrap section" id="reviews">
   <div class="stack" style="gap:24px">
     {sec_head("04", "Reviews", "What they said after", right="Verified orders only")}
-    {reviews_grid(D.REVIEWS[:3])}
+    <div class="rev-strip">
+      {trustpilot_badge()}
+      <span class="rev-strip-note">Every review is tied to a paid, completed order — nothing incentivised. One per game, across the roster.</span>
+    </div>
+    {review_carousel(_reviews_one_per_game())}
   </div>
 </section>
 
@@ -1911,6 +1962,7 @@ def client_data():
         "tiers": {g["name"]: g["tiers"] for g in D.GAMES},
         "divmap": {g["name"]: g["divmap"] for g in D.GAMES},
         "factors": {g["name"]: g["factor"] for g in D.GAMES},
+        "prices": {g["name"]: g["prices"] for g in D.GAMES if g.get("prices")},
         "services": {g["name"]: g["services"] for g in D.GAMES},
         "slugs": {g["name"]: g["slug"] for g in D.GAMES},
         "regions": {g["name"]: g["regions"] for g in D.GAMES},

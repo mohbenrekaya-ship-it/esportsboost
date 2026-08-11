@@ -30,6 +30,12 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
   border: 1px solid var(--ember); color: var(--ember-lit); font-weight: 500; letter-spacing: .1em;
 }
 .promo-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Promo + live ticker read as friendly sentences, not tracked mono caps. */
+.promo, .promo-text, .util .live, .live-item {
+  font-family: var(--body); text-transform: none; letter-spacing: 0;
+}
+.promo, .promo-text { font-size: 11.5px; }
+.util .live, .live-item { font-size: 12.5px; letter-spacing: .005em; }
 .live-dot {
   width: 6px; height: 6px; border-radius: 50%; background: var(--ember); flex: none;
   animation: live-pulse 2.2s ease-out infinite;
@@ -463,6 +469,8 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 
 /* ── footer ────────────────────────────────────────────────────────────── */
 .site-footer {
+  /* Classic, readable footer — a clean sans instead of the tracked mono default. */
+  font-family: var(--body); letter-spacing: 0; text-transform: none;
   background:
     radial-gradient(120% 140% at 50% 118%, rgba(255, 74, 31, .10), transparent 60%),
     var(--bg-2);
@@ -613,6 +621,95 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
   .rev-card { padding: 24px; }
 }
 
+/* ── homepage review feed: Trustpilot strip + animated quote tiles ─────── */
+.rev-strip {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 12px; padding-bottom: 8px;
+}
+.rev-strip .tp-badge { flex-direction: row; align-items: center; gap: 12px; padding: 10px 16px; }
+.rev-strip .tp-badge .star-row { height: 16px; }
+.rev-strip-note { font-size: 12.5px; color: var(--text-5); letter-spacing: 0; max-width: 56ch; line-height: 1.55; }
+
+/* Carousel shell — JS sizes the slides and paginates; degrades to a scroller. */
+.rev-carousel { position: relative; }
+.rev-carousel-viewport { overflow: hidden; }
+.rev-carousel-track {
+  display: flex; gap: 12px; will-change: transform; touch-action: pan-y;
+}
+.rev-carousel-track > .rev-tile { flex: 0 0 auto; }
+.rev-carousel-controls {
+  display: flex; align-items: center; justify-content: center; gap: 18px; margin-top: 24px;
+}
+.rev-arrow {
+  width: 40px; height: 40px; flex: none; display: grid; place-items: center; cursor: pointer;
+  border: 1px solid var(--hairline-3); border-radius: 50%; background: var(--bg-3);
+  color: var(--text-3); font-size: 20px; line-height: 1; padding: 0;
+  transition: border-color .16s ease, color .16s ease, background .16s ease, transform .16s ease;
+}
+.rev-arrow:hover { border-color: var(--hairline); color: var(--text); transform: translateY(-1px); }
+.rev-arrow:active { transform: translateY(0); }
+.rev-arrow:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+.rev-dots { display: flex; align-items: center; gap: 8px; }
+.rev-dot {
+  width: 7px; height: 7px; flex: none; padding: 0; cursor: pointer; border: 0; border-radius: 999px;
+  background: var(--hairline); transition: background .2s ease, width .2s ease;
+}
+.rev-dot:hover { background: var(--text-6); }
+.rev-dot.is-active { background: var(--ember-lit); width: 22px; }
+.rev-dot:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+/* No-JS fallback: the untouched track scrolls horizontally. */
+.rev-carousel:not([data-ready]) .rev-carousel-viewport { overflow-x: auto; }
+
+.rev-tile {
+  position: relative; overflow: hidden; isolation: isolate; margin: 0;
+  display: flex; flex-direction: column; gap: 14px; padding: 26px 26px 24px;
+  border: 1px solid var(--hairline-3); border-radius: var(--radius-lg);
+  background:
+    radial-gradient(130% 120% at 90% -20%, rgba(255, 74, 31, .10), transparent 58%),
+    var(--bg-3);
+  box-shadow: 0 24px 64px -46px rgba(0, 0, 0, .9);
+  transition: opacity .55s ease, transform .5s cubic-bezier(.2, .7, .2, 1),
+              border-color .28s ease, box-shadow .28s ease;
+}
+.rev-tile::before {
+  content: ""; position: absolute; inset: 0 0 auto; height: 1px; z-index: 1;
+  background: linear-gradient(90deg, transparent, rgba(255, 138, 76, 0), transparent);
+  transition: background .3s ease;
+}
+.rev-tile:hover {
+  transform: translateY(-4px);
+  border-color: var(--hairline);
+  box-shadow: 0 34px 80px -44px rgba(0, 0, 0, .95);
+}
+.rev-tile:hover::before { background: linear-gradient(90deg, transparent, rgba(255, 138, 76, .75), transparent); }
+.rev-tile-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rev-tile-stars .star-row { height: 15px; }
+.rev-tile-flag {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ember-warm); border: 1px solid var(--hairline-3); border-radius: 999px; padding: 3px 9px;
+}
+.rev-tile-rank {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase;
+  color: var(--amber-pale);
+}
+.rev-tile-quote {
+  position: relative; margin: 0; font-size: 14.5px; line-height: 1.7; color: var(--text-3);
+}
+.rev-tile-quote::before {
+  content: "\201C"; position: absolute; top: -22px; left: -4px;
+  font-family: var(--display); font-size: 54px; line-height: 1; color: rgba(255, 138, 76, .18);
+  pointer-events: none; z-index: -1;
+}
+.rev-tile-meta {
+  margin-top: auto; padding-top: 4px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--text-5);
+}
+/* staggered scroll-reveal — JS arms .reveal, then adds .is-in in view.
+   Hover keeps a higher-specificity transform so the lift always wins. */
+.rev-tile.reveal { opacity: 0; transform: translateY(16px); transition-delay: calc(var(--rev-i, 0) * .1s); }
+.rev-tile.reveal.is-in { opacity: 1; transform: none; }
+.rev-tile.reveal.is-in:hover { transform: translateY(-4px); transition-delay: 0s; }
+
 /* ── inner-page hero + wizard ──────────────────────────────────────────── */
 .hero-a { position: relative; overflow: hidden; isolation: isolate; }
 .hero-a .hero-a-inner {
@@ -732,10 +829,20 @@ a.promo:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; bo
 @media (max-width: 760px) {
   :root { --gutter: 20px; }
   .section { padding-block: 56px; }
-  .util { font-size: 9px; letter-spacing: .12em; }
-  .util .live { display: none; }
-  .util .promo-text { display: none; }
-  .util { justify-content: flex-end; }
+  /* Utility bar: the 3-col grid can't fit on a phone, so switch to a wrapping
+     flex layout — promo + locale share the top line, the live ticker takes a
+     full-width line below. Everything stays visible, nothing overflows. */
+  .util {
+    display: flex; flex-wrap: wrap; align-items: center;
+    column-gap: 10px; row-gap: 7px; font-size: 10px; letter-spacing: 0;
+  }
+  .util .promo { order: 1; min-width: 0; flex: 1 1 auto; justify-self: auto; }
+  .util .promo-text { display: inline; }
+  .util .locale { order: 2; flex: none; justify-self: auto; }
+  .util .live {
+    order: 3; flex-basis: 100%; justify-content: center; font-size: 11px;
+    letter-spacing: .01em; justify-self: auto;
+  }
   .nav-links {
     display: none; position: absolute; left: 0; right: 0; top: 100%;
     flex-direction: column; align-items: stretch; gap: 0;

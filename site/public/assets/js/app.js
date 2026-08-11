@@ -112,6 +112,11 @@
     return rank;
   }
   function hasDivs(game, tier) { return divsOf(game, tier).length > 1; }
+  // per-division tier price for a rank, from the game's price table (or null)
+  function rungPrice(game, rank) {
+    var p = D.prices && D.prices[game];
+    return p ? (p[tierOf(game, rank)] || 0) : null;
+  }
 
   function addonPct() {
     var pct = 0;
@@ -153,9 +158,18 @@
           base: 0, addons: 0, days: 0
         };
       }
-      var climb = Math.max(1, i - 1);
-      base = steps * (D.perStep || per) * factor * (1 + climb * 0.045) * duo;
-      days = Math.max(1, Math.round(steps * 0.35 + climb * 0.08));
+      if (D.prices && D.prices[s.game]) {
+        // per-division tier table: sum the price of each rung climbed. No
+        // factor/climb bonus — the table already makes higher tiers cost more.
+        base = 0;
+        for (var k = i + 1; k <= j; k++) base += rungPrice(s.game, ladder[k]);
+        base *= duo;
+        days = Math.max(1, Math.round(steps * 0.35));
+      } else {
+        var climb = Math.max(1, i - 1);
+        base = steps * (D.perStep || per) * factor * (1 + climb * 0.045) * duo;
+        days = Math.max(1, Math.round(steps * 0.35 + climb * 0.08));
+      }
       summary = s.from + " → " + s.to + " · " + T(s.mode);
     }
 
@@ -494,6 +508,8 @@
 
     render();
     initStats();
+    initReveal();
+    initCarousel();
     initLiveStats();
 
     if (document.querySelector("[data-configurator]")) track("view_item", itemParams());
@@ -570,6 +586,139 @@
     window.addEventListener("resize", onScroll);
     sweep();                             // synchronous first pass — reveals above-the-fold now
     window.addEventListener("load", sweep);
+  }
+
+  /* ── generic scroll-reveal for [data-reveal] (e.g. homepage review tiles) ─
+     Same scroll/rAF sweep as initStats, so items above the fold reveal on the
+     first frame. Arms .reveal (hidden), then adds .is-in when in view. */
+  function initReveal() {
+    var els = [].slice.call(document.querySelectorAll("[data-reveal]"));
+    if (!els.length) return;
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) { els.forEach(function (el) { el.classList.add("is-in"); }); return; }
+    els.forEach(function (el) { el.classList.add("reveal"); });    // arm the hidden start state
+
+    var pending = els.slice();
+    function sweep() {
+      var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      for (var i = pending.length - 1; i >= 0; i--) {
+        var r = pending[i].getBoundingClientRect();
+        if (r.top < vh * 0.9 && r.bottom > 0) { pending[i].classList.add("is-in"); pending.splice(i, 1); }
+      }
+      if (!pending.length) {
+        window.removeEventListener("scroll", onScroll);
+        window.removeEventListener("resize", onScroll);
+      }
+    }
+    var ticking = false;
+    function onScroll() {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(function () { ticking = false; sweep(); });
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    sweep();
+    window.addEventListener("load", sweep);
+  }
+
+  /* ── review carousel: responsive per-view, paginate, auto-rotate ──────────
+     Sizes slides to the viewport, builds one dot per page, auto-advances
+     (paused on hover/focus/hidden tab), and supports pointer-swipe. Honors
+     prefers-reduced-motion by dropping the auto-rotation. */
+  function initCarousel() {
+    var roots = [].slice.call(document.querySelectorAll("[data-carousel]"));
+    if (!roots.length) return;
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    roots.forEach(function (root) {
+      var viewport = root.querySelector("[data-carousel-viewport]");
+      var track = root.querySelector("[data-carousel-track]");
+      var dotsWrap = root.querySelector("[data-carousel-dots]");
+      var prev = root.querySelector("[data-carousel-prev]");
+      var next = root.querySelector("[data-carousel-next]");
+      var slides = track ? [].slice.call(track.children) : [];
+      if (!viewport || !track || !slides.length) return;
+
+      var GAP = 12, index = 0, perView = 1, pages = 1, timer = null, offset = 0;
+      root.setAttribute("data-ready", "");   // flips off the no-JS scroll fallback
+
+      function perViewFor(w) { return w >= 860 ? 3 : w >= 560 ? 2 : 1; }
+
+      function layout() {
+        var w = viewport.clientWidth;
+        perView = perViewFor(w);
+        var slideW = (w - GAP * (perView - 1)) / perView;
+        slides.forEach(function (s) { s.style.flex = "0 0 " + slideW + "px"; s.style.maxWidth = slideW + "px"; });
+        pages = Math.max(1, Math.ceil(slides.length / perView));
+        if (index > pages - 1) index = pages - 1;
+        buildDots();
+        go(index, true);
+      }
+
+      function buildDots() {
+        if (!dotsWrap) return;
+        dotsWrap.textContent = "";
+        for (var i = 0; i < pages; i++) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "rev-dot";
+          b.setAttribute("role", "tab");
+          b.setAttribute("aria-label", "Review set " + (i + 1) + " of " + pages);
+          (function (n) { b.addEventListener("click", function () { go(n); restart(); }); })(i);
+          dotsWrap.appendChild(b);
+        }
+      }
+
+      function go(i, instant) {
+        index = (i % pages + pages) % pages;
+        var w = viewport.clientWidth;
+        var maxOffset = Math.max(0, track.scrollWidth - w);
+        offset = Math.min(index * (w + GAP), maxOffset);
+        track.style.transition = instant ? "none" : "transform .55s cubic-bezier(.4,0,.2,1)";
+        track.style.transform = "translateX(" + (-offset) + "px)";
+        if (dotsWrap) [].slice.call(dotsWrap.children).forEach(function (d, di) {
+          d.classList.toggle("is-active", di === index);
+          d.setAttribute("aria-selected", di === index ? "true" : "false");
+        });
+      }
+
+      function restart() { stop(); start(); }
+      function start() { if (reduce || pages <= 1 || document.hidden) return; stop(); timer = setInterval(function () { go(index + 1); }, 4800); }
+      function stop() { if (timer) { clearInterval(timer); timer = null; } }
+
+      if (next) next.addEventListener("click", function () { go(index + 1); restart(); });
+      if (prev) prev.addEventListener("click", function () { go(index - 1); restart(); });
+      root.addEventListener("mouseenter", stop);
+      root.addEventListener("mouseleave", start);
+      root.addEventListener("focusin", stop);
+      root.addEventListener("focusout", start);
+      document.addEventListener("visibilitychange", function () { if (document.hidden) stop(); else start(); });
+
+      // pointer swipe
+      var startX = null, dragging = false, startOffset = 0;
+      viewport.addEventListener("pointerdown", function (e) {
+        dragging = true; startX = e.clientX; startOffset = offset; stop();
+        track.style.transition = "none";
+      });
+      window.addEventListener("pointermove", function (e) {
+        if (!dragging) return;
+        track.style.transform = "translateX(" + (-(startOffset - (e.clientX - startX))) + "px)";
+      });
+      window.addEventListener("pointerup", function (e) {
+        if (!dragging) return;
+        dragging = false;
+        var dx = e.clientX - startX;
+        if (dx < -40) go(index + 1); else if (dx > 40) go(index - 1); else go(index);
+        start();
+      });
+
+      var rt;
+      window.addEventListener("resize", function () { clearTimeout(rt); rt = setTimeout(layout, 150); });
+
+      layout();
+      start();
+    });
   }
 
   /* ── "boosters free now": wander the count so the band reads live ─────── */

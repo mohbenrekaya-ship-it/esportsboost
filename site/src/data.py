@@ -64,30 +64,34 @@ GAMES = [
     dict(
         name="League of Legends", slug="league-of-legends", short="LoL", factor=1.0, hue=262,
         ladder=subdivide(["Iron", "Bronze", "Silver", "Gold", "Platinum", "Emerald",
-                          "Diamond", "Master", "Grandmaster", "Challenger"],
+                          "Diamond", "Master"],
                          ["IV", "III", "II", "I"],
-                         apex=("Master", "Grandmaster", "Challenger")),
+                         apex=("Master",)),
+        prices={"Iron": 6, "Bronze": 8, "Silver": 9, "Gold": 12, "Platinum": 19,
+                "Emerald": 30, "Diamond": 48, "Master": 60},
         services="Elo boost · placements · net wins · duo · coaching",
         regions=["EUW", "EUNE", "NA", "OCE", "BR", "LAN", "TR", "KR"],
         blurb="Solo/duo and flex, EUW to KR. Your booster plays your account inside your "
               "normal hours with a regional VPN, or queues beside you in duo and never "
               "touches the login at all.",
-        meta="LoL elo boost from Iron to Challenger. Live price before you sign in, "
+        meta="LoL elo boost from Iron to Master. Live price before you sign in, "
              "verified boosters, pro-rated refunds. Solo or duo, every region.",
-        note="Every division from Iron IV to Diamond I is on the ladder; Master, "
-             "Grandmaster and Challenger are LP-based and quoted per order.",
+        note="Every division from Iron IV to Diamond I is on the ladder; Master is "
+             "LP-based and priced as a single step above Diamond I.",
     ),
     dict(
         name="Valorant", slug="valorant", short="VAL", factor=1.15, hue=352,
         ladder=subdivide(["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond",
-                          "Ascendant", "Immortal", "Radiant"],
-                         ["1", "2", "3"], apex=("Radiant",)),
+                          "Ascendant", "Immortal"],
+                         ["1", "2", "3"], apex=("Immortal",)),
+        prices={"Iron": 4, "Bronze": 4, "Silver": 5, "Gold": 7, "Platinum": 9,
+                "Diamond": 18, "Ascendant": 35, "Immortal": 100},
         services="Rank boost · placements · unrated wins · duo · coaching",
         regions=["EU", "NA", "AP", "KR", "BR", "LATAM"],
         blurb="Radiant-level boosters with your own crosshair and sensitivity loaded in. "
               "Agent pool on request, and duo runs with voice if you want the coaching "
               "on the way up.",
-        meta="Valorant rank boost, Iron to Radiant. Transparent live pricing, duo or "
+        meta="Valorant rank boost, Iron to Immortal. Transparent live pricing, duo or "
              "solo, agent pool on request.",
         note="Act rank and episode resets shift the price; the quote is locked at "
              "checkout either way.",
@@ -180,6 +184,13 @@ GAMES = [
         note="Each playlist has its own rank; the quote covers one playlist per order.",
     ),
 ]
+
+# Site-wide display order (games index, footer, dropdowns, client data). Change
+# this one list to re-rank the games everywhere. The homepage mosaic has its own
+# hand-tuned layout — see TILE_ORDER.
+_ORDER = ["league-of-legends", "valorant", "marvel-rivals", "teamfight-tactics",
+          "overwatch-2", "rocket-league", "dota-2", "apex-legends", "counter-strike-2"]
+GAMES.sort(key=lambda g: _ORDER.index(g["slug"]))
 
 for _g in GAMES:
     _attach_structure(_g)
@@ -279,15 +290,17 @@ SAFETY = dict(
     ],
 )
 
-# Mosaic: the six titles that get a tile, plus their span. The rest fold into
-# the "+ 3 more" cell.
+# Mosaic: the six titles that get a tile, plus their span. Order mirrors the
+# first six of GAMES so the homepage sorts games the same way the games index
+# does; the remaining three fold into the "+ 3 more" cell. The spans are
+# positional (big first tile, two wide tiles) — reassign by slot, not by game.
 TILE_ORDER = [
     ("league-of-legends", "tile-span-2x2 tile-big"),
     ("valorant", "tile-span-2"),
-    ("counter-strike-2", ""),
     ("marvel-rivals", ""),
-    ("dota-2", "tile-span-2"),
     ("teamfight-tactics", ""),
+    ("overwatch-2", "tile-span-2"),
+    ("rocket-league", ""),
 ]
 
 # ⚠ Placeholder reviews — invented, not real customer testimony (see top of file).

@@ -74,9 +74,17 @@ def quote(state):
         steps = j - i
         if steps <= 0:
             return _invalid("Target must sit above your current rank")
-        climb = _climb(g, frm)
-        base = steps * D.PER_STEP * factor * (1 + climb * 0.045) * duo
-        days = max(1, _jsround(steps * 0.35 + climb * 0.08))
+        prices = g.get("prices")
+        if prices:
+            # per-division tier table: each rung climbed costs the price of the
+            # tier it lands in. No factor/climb bonus — the table already makes
+            # higher tiers pricier.
+            base = sum(_rung_price(g, ladder[k]) for k in range(i + 1, j + 1)) * duo
+            days = max(1, _jsround(steps * 0.35))
+        else:
+            climb = _climb(g, frm)
+            base = steps * D.PER_STEP * factor * (1 + climb * 0.045) * duo
+            days = max(1, _jsround(steps * 0.35 + climb * 0.08))
         summary = "%s → %s · %s" % (frm, to, mode)
 
     extra = base * _addon_pct(state.get("addons"))
@@ -87,6 +95,16 @@ def quote(state):
         summary=summary,
         eta="about 1 day" if days == 1 else "%d days" % days,
     )
+
+
+def _rung_price(g, rank):
+    """Price of a single division rung, from the game's per-tier table: the
+    price of the tier the destination rank belongs to."""
+    prices = g.get("prices") or {}
+    for tier, ranks in g["divmap"].items():
+        if rank in ranks:
+            return prices.get(tier, 0)
+    return 0
 
 
 def _climb(g, frm):

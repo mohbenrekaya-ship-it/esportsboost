@@ -1,0 +1,43 @@
+/* Site typeface — "Clean": one neutral humanist sans (Inter) everywhere.
+   The committed default; loaded AFTER ashfall.css + site.css so it wins. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --display: "Inter", system-ui, -apple-system, sans-serif;
+  --body: "Inter", system-ui, -apple-system, sans-serif;
+  /* --mono stays IBM Plex Mono for the small spec labels */
+}
+
+h1, h2, h3, h4, h5 {
+  text-transform: none;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  line-height: 1.06;
+}
+h1, .h-lg { font-weight: 700; letter-spacing: -0.03em; }
+
+.tile-title, .card-title, .step-t, .fig-mid, .tier .tier-name,
+.calc-route-val, .portrait-name, .feed-climb, .roster-handle,
+.gamerow .name, .rev-score-word, .quote-eta, .table .handle,
+.table .wr, .tile-more .big, .h-sec, .fig-price, .quote-price,
+.statband .v, .stat b {
+  text-transform: none;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+
+/* Small orange labels read as clean Inter sentences, matching the live ticker
+   — not tracked mono caps. Plus the currency/language switcher, same look.
+   (The active-tab and current-step highlights are left mono so they stay
+   consistent with their inactive siblings in the same control.) */
+.kicker, .card-kicker, .calc-kicker,
+.tile-from, .gamerow .from, .opt .price,
+.roster-head, .rev-tile-flag, .feed-meta,
+.tier .tier-tag, .step-n,
+.btn-ghost, .tag-outline,
+.foot-head-accent, .foot-email,
+.loc-btn, .loc-opt {
+  font-family: var(--body);
+  text-transform: none;
+  letter-spacing: 0;
+}
