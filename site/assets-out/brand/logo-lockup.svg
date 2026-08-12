@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 190 30" width="190" height="30" font-family="'Chakra Petch','Rajdhani',sans-serif">
+  <defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffb046"/><stop offset="1" stop-color="#ff3d0f"/></linearGradient></defs>
+  <path d="M4 4 L14 7.96 L10.2 26 L5.8 17.64 Z" fill="url(#s)"/>
+  <text x="24" y="21" font-size="18" letter-spacing="0.2">
+    <tspan fill="#efeae4" font-weight="500">esports</tspan><tspan fill="#ffffff" font-weight="700">boost</tspan>
+  </text>
+</svg>

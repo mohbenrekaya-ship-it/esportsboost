@@ -14,6 +14,19 @@ site/.env
 site/analytics.ndjson
 analytics.ndjson
 
+# Local sign-up store (the header auth panel). Real emails in dev — PII, never
+# committed. Production writes to Upstash, same as analytics (see accounts.py).
+site/accounts.ndjson
+accounts.ndjson
+
+# Local fulfilment log (Stripe webhook → orders). Order/customer data, never
+# committed. Production fulfilment writes elsewhere (see payments.py).
+site/orders.log
+orders.log
+
+# Vercel CLI project link (project/org ids). Local-only, never committed.
+.vercel
+
 # Python
 __pycache__/
 *.py[cod]
@@ -23,3 +36,7 @@ __pycache__/
 
 # Design-handoff prototype runtime state (image-slot.js drop-in placeholders)
 .image-slots.state.json
+
+# Logo sources downloaded from the live site by tools/export_ad_logos.py.
+# Re-fetched on demand; the exported ad assets in site/assets-out/ are kept.
+site/tools/.assetcache/

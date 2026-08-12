@@ -63,7 +63,9 @@ def _load_dotenv():
 _load_dotenv()
 
 sys.path.insert(0, os.path.join(HERE, "src"))
+import accounts   # noqa: E402  — header sign-up list (also used by /api)
 import analytics  # noqa: E402  — first-party event ingest (also used by /api)
+import oauth      # noqa: E402  — social sign-in (Google/Discord), also used by /api
 import ops        # noqa: E402  — gated dashboard API (also used by /api)
 import payments   # noqa: E402  — shared Stripe/pricing logic (also used by /api)
 
@@ -115,9 +117,23 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
+        if route == "/api/account":
+            # Public, like /api/collect: the auth form is on every page. The store
+            # is separate from analytics and holds only a salted password hash
+            # (see accounts.py). Sign-up / sign-in return a small JSON status so
+            # the client can act on it; an unknown mode returns an empty 204.
+            status, payload = accounts.process_signup(self._read_body(), self.headers.get)
+            if payload is None:
+                self.send_response(status)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            return self._json(status, payload)
         if route == "/api/ops":
             status, payload = ops.process_ops(self._read_body())
             return self._json(status, payload)
+        if route == "/api/auth/logout":
+            return self._auth(route)
         self.send_error(404)
 
     def do_GET(self):
@@ -127,9 +143,34 @@ class Handler(SimpleHTTPRequestHandler):
                 urllib.parse.urlsplit(self.path).query).get("id", [""])[0]
             status, payload = payments.process_session(sid)
             return self._json(status, payload)
+        if route.startswith("/api/auth/"):
+            return self._auth(route)
         if route.startswith("/api/"):
             return self.send_error(404)
         return super().do_GET()
+
+    # ── social sign-in (Google / Discord) — see src/oauth.py ───────────────
+    def _auth(self, route):
+        """Render an oauth.dispatch() descriptor: a JSON body or a 302 redirect,
+        plus any Set-Cookie headers. All the flow logic lives in oauth so this
+        server and the /api Vercel shells stay identical."""
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        cookies = oauth.parse_cookies(self.headers.get("Cookie"))
+        r = oauth.dispatch(route, query, cookies, self._base_url(), self.headers.get)
+        if r["not_found"]:
+            return self.send_error(404)
+        body = b"" if r["json"] is None else json.dumps(r["json"]).encode()
+        self.send_response(r["status"])
+        if r["location"] is not None:
+            self.send_header("Location", r["location"])
+        if r["json"] is not None:
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+        for c in r["set_cookie"]:
+            self.send_header("Set-Cookie", c)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if body and self.command != "HEAD":
+            self.wfile.write(body)
 
     def _read_body(self):
         length = int(self.headers.get("Content-Length") or 0)
@@ -161,4 +202,8 @@ if __name__ == "__main__":
           % (analytics.store_name(), analytics.count(),
              "unlocked with OPS_PASSWORD" if ops.configured()
              else "locked (set OPS_PASSWORD to open the dashboard)"))
+    on = [p for p, ok in oauth.enabled().items() if ok]
+    print("  social sign-in → %s"
+          % (", ".join(on) + " enabled" if on
+             else "OFF (set GOOGLE_/DISCORD_CLIENT_ID + _SECRET to enable)"))
     srv.serve_forever()

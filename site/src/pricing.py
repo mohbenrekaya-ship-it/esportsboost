@@ -21,6 +21,11 @@ ADDON = {a["id"]: a for a in D.ADDONS}
 # before it can reach the charge amount.
 UNIT_MIN, UNIT_MAX = 1, 40
 
+# Duo queue multiplier. Named so the order card can label the option with the
+# real percentage instead of a hand-typed one that drifts. Mirrored literally in
+# app.js — change one, change the other.
+DUO_MULT = 1.55
+
 
 def _jsround(x):
     """Match JavaScript's Math.round (round-half-up) so the price the browser
@@ -59,7 +64,7 @@ def quote(state):
     per = D.PER_DIVISION
     factor = g["factor"]
     mode = state.get("mode", "Piloted")
-    duo = 1.55 if mode == "Duo queue" else 1.0
+    duo = DUO_MULT if mode == "Duo queue" else 1.0
     service = state.get("service", "division")
 
     if service == "wins":

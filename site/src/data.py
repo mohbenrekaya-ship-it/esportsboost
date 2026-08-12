@@ -9,6 +9,13 @@ never drift apart.
 the game list beyond League of Legends, every statistic, the booster handles
 and the reviews are PLACEHOLDERS. Wire STATS to Trustpilot / the orders table
 / the Discord widget and BOOSTERS to the real roster before launch.
+
+That now covers a whole page per booster: BOOSTERS carries the ratings,
+on-time rates, dispute counts, climb breakdowns and testimonials the profile
+pages render, VETTING carries the funnel figures the boosters hero argues
+from, and build.py's booster_history() derives a completed-orders table from
+the booster's own ladder. All of it is invented. A profile reads like a
+personnel record, which is exactly why none of it can go live unverified.
 """
 
 SITE = "http://localhost:4321"
@@ -62,7 +69,7 @@ def _attach_structure(g):
 
 GAMES = [
     dict(
-        name="League of Legends", slug="league-of-legends", short="LoL", factor=1.0, hue=262,
+        name="League of Legends", slug="league-of-legends", short="LoL", tab="League", factor=1.0, hue=262,
         ladder=subdivide(["Iron", "Bronze", "Silver", "Gold", "Platinum", "Emerald",
                           "Diamond", "Master"],
                          ["IV", "III", "II", "I"],
@@ -97,7 +104,7 @@ GAMES = [
              "checkout either way.",
     ),
     dict(
-        name="Counter-Strike 2", slug="counter-strike-2", short="CS2", factor=1.45, hue=32,
+        name="Counter-Strike 2", slug="counter-strike-2", short="CS2", tab="CS2", factor=1.45, hue=32,
         ladder=["5k", "10k", "13k", "15k", "17k", "19k", "21k", "25k", "30k"],
         services="Premier rating · Faceit levels · Wingman · wins",
         regions=["EU", "NA", "SA", "Asia", "Oceania"],
@@ -108,7 +115,7 @@ GAMES = [
         note="Ratings are shown in thousands of CS Rating points.",
     ),
     dict(
-        name="Teamfight Tactics", slug="teamfight-tactics", short="TFT", factor=0.8, hue=198,
+        name="Teamfight Tactics", slug="teamfight-tactics", short="TFT", tab="TFT", factor=0.8, hue=198,
         ladder=subdivide(["Iron", "Bronze", "Silver", "Gold", "Platinum", "Emerald",
                           "Diamond", "Master", "Challenger"],
                          ["IV", "III", "II", "I"], apex=("Master", "Challenger")),
@@ -120,7 +127,7 @@ GAMES = [
         note="Ranked and Double Up share the ladder; Hyper Roll is quoted on request.",
     ),
     dict(
-        name="Marvel Rivals", slug="marvel-rivals", short="RIV", factor=0.95, hue=8,
+        name="Marvel Rivals", slug="marvel-rivals", short="RIV", tab="Rivals", factor=0.95, hue=8,
         ladder=subdivide(["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Grandmaster",
                           "Celestial", "Eternity", "One Above All"],
                          ["III", "II", "I"], apex=("Eternity", "One Above All")),
@@ -195,56 +202,447 @@ GAMES.sort(key=lambda g: _ORDER.index(g["slug"]))
 for _g in GAMES:
     _attach_structure(_g)
 
+# ── tier colours ──────────────────────────────────────────────────────────
+# The rank marks in the order card are tinted by the tier they name, so the
+# ladder reads as distance travelled and not just as two dropdowns. Named
+# entries cover the metal tiers every game shares plus the apex tiers of the
+# games that have their own; anything unnamed falls back to a positional ramp
+# (cool grey at the floor → ember at the top), so a new game never needs a
+# colour added here before it looks right.
+#
+# These are our own approximations on a dark ground, deliberately *not* lifted
+# from the publishers' rank emblems — see the asset note in the handoff.
+TIER_COLORS = {
+    "Iron": "#8e8f94", "Bronze": "#b1764c", "Silver": "#a3adb8",
+    "Gold": "#e0ac3e", "Platinum": "#4fb0aa", "Emerald": "#3fa06c",
+    "Diamond": "#5f93de", "Master": "#a56fd0", "Grandmaster": "#e0574f",
+    "Challenger": "#f0c674", "Ascendant": "#2fa88a", "Immortal": "#d24a5e",
+    "Champion": "#7d6fe0", "Grand Champ": "#b45ad6", "Supersonic": "#ff7a3d",
+    "Radiant": "#ffe07a", "Predator": "#e0574f", "Rookie": "#8e8f94",
+    # Rivals' apex tier sits one rung above Grandmaster and the positional ramp
+    # lands both on near-identical reds — two marks a rung apart have to be
+    # tellable apart at 24px, which is the whole point of colouring them.
+    "Celestial": "#c8577a",
+}
+
+# Positional ramp for tiers with no named colour: L*-even stops from cool grey
+# to ember, so any ladder length lands on a legible mark on the card ground.
+_TIER_RAMP = ["#8e8f94", "#8f9ba8", "#6f9dc4", "#5f93de", "#7d84d8",
+              "#a56fd0", "#d0699c", "#e0765a", "#f09a45", "#ffb046"]
+
+
+def tier_color(game, tier):
+    """Mark colour for one tier of one game. Named first, then the ramp."""
+    if tier in TIER_COLORS:
+        return TIER_COLORS[tier]
+    tiers = game["tiers"]
+    i = tiers.index(tier) if tier in tiers else 0
+    span = max(1, len(tiers) - 1)
+    return _TIER_RAMP[min(len(_TIER_RAMP) - 1,
+                          round(i / span * (len(_TIER_RAMP) - 1)))]
+
+
+def tier_colors(game):
+    return {t: tier_color(game, t) for t in game["tiers"]}
+
+
+# Notes are deliberately one line each: the order card draws them under the
+# add-on name in an 11px row, and the handoff's layout budgets a single line
+# there. A second line pushes the CTA below the fold — see CLAUDE.md.
 ADDONS = [
-    dict(id="priority", label="Priority queue", pct=0.15,
-         note="Pushed to the top of the board. Median claim drops to about 6 minutes."),
-    dict(id="champ", label="Specific champions, agents or heroes", pct=0.10,
-         note="Your booster plays a pool you choose, so the match history stays plausible."),
-    dict(id="stream", label="Streamed to you", pct=0.12,
-         note="A private stream link for every game, replayable for 14 days."),
+    dict(id="priority", label="Priority order", pct=0.15,
+         note="First in the claim queue, claimed in about 6 minutes."),
+    dict(id="champ", label="Champions, agents & roles", pct=0.10,
+         note="Your booster plays the picks you choose."),
+    dict(id="stream", label="Live game stream", pct=0.12,
+         note="Watch every game from your dashboard."),
     dict(id="offline", label="Offline appearance", pct=0.0,
-         note="Always on. Friends see you offline for the whole order — never an extra."),
+         note="Always on. Friends see you offline for the whole order."),
 ]
 
 # ── placeholder statistics ────────────────────────────────────────────────
+# `trustpilot` and `reviews` are not written here — they are computed from
+# REVIEW_DIST just below, which is the one place the rating lives.
 STATS = dict(
-    trustpilot="4.8 / 5", reviews="3,140", boosts="92,400",
+    boosts="92,400",
     discord="3,000", median_claim="18 min",
     online=34, free_now=25, reply="3m 40s",
+    # Footer line under the delivery feed. Counts the whole 24h window, not the
+    # four rows above it — the feed is capped, the figure is not.
+    closed_24h="41",
 )
 
+# ── the rating, and the only place it is written ──────────────────────────
+# ⚠ Placeholder like everything else in this block: an invented count of
+# reviews per star, not the review table.
+#
+# The site asserts this rating in five places — the reviews page's H1, its
+# summary card, its distribution filter, the Trustpilot badge, and the checkout
+# summary — and the reviews page draws three of them within one screen of each
+# other. So none of them is typed: these counts are the only figures, the
+# percentages are computed from them, and the average and the total below are
+# too. Replace this dict with the real corpus and all five move together.
+#
+# Note what is NOT here: the reviews the page actually prints. REVIEWS below is
+# a 58-entry sample of these 3,140 — the distribution describes the corpus, the
+# feed shows a slice of it, and the count line on the page says which.
+REVIEW_DIST = {5: 2612, 4: 372, 3: 94, 2: 34, 1: 28}
+
+_RATED = sum(REVIEW_DIST.values())
+STATS["reviews"] = "{:,}".format(_RATED) if _RATED else ""
+STATS["trustpilot"] = ("%.1f / 5" % (sum(s * n for s, n in REVIEW_DIST.items()) / _RATED)
+                       if _RATED else "")
+
+# ── the roster ────────────────────────────────────────────────────────────
+# `slug` names the game in GAMES: the roster chip renders that game's `short`,
+# so a booster can never advertise a ladder the catalogue doesn't sell, and the
+# chip can't drift from the game page it sits beside. `queue` is the source of
+# truth for availability — "free" (the literal string) is what the free/busy
+# status pill reads, everything else is an order count.
+#
+# `tier` is the peak's rank tier, written out rather than parsed off the front
+# of `peak`. The roster table and the profile header tint their mark with
+# tier_color(game, tier), so this has to be a rank that colour table resolves —
+# a rung of that game's ladder, or a named apex above it (a peak is a career
+# high, not something you can order, so Challenger is legal on a LoL ladder
+# that stops selling at Master). The handoff parses the first word of the peak
+# string and says outright that production should carry the field; this is it.
+#
+# `wr_n` is the same figure as `wr`, as an int, because the roster's win-rate
+# bar is positional (normalised across WR_FLOOR..85) and a page that argues it
+# doesn't self-report cannot render its one comparable figure off a string.
+#
+# ⚠ Every handle, figure and rank below is a PLACEHOLDER (see top of file) —
+# including everything the profile pages render: `since`, `role`, `rating`,
+# `ontime`, `disputes`, `reviews_n`, `climbs` and `review`.
+WR_FLOOR = 62   # the win-rate floor the boosters page states out loud. Asserted
+                # against every wr_n at import: a roster row under the floor
+                # would contradict the headline three inches above it.
+
 BOOSTERS = [
-    dict(handle="vantaa", game="LoL · EUW", peak="Challenger 1042 LP", wr="78%", queue="1 order",
-         peak_full="Challenger 1042 LP · EUW", hue=20, orders=214),
-    dict(handle="kx_reid", game="Valorant · NA", peak="Radiant #211", wr="74%", queue="free",
-         peak_full="Radiant #211 · NA", hue=352, orders=168),
-    dict(handle="sable", game="CS2 · EU", peak="FPL, 27k Premier", wr="71%", queue="2 orders",
-         peak_full="FPL · 27k Premier · EU", hue=32, orders=141),
-    dict(handle="orvo", game="LoL · NA", peak="Grandmaster 640 LP", wr="69%", queue="free",
-         peak_full="Grandmaster 640 LP · NA", hue=210, orders=97),
-    dict(handle="nine", game="Dota 2 · SEA", peak="Immortal 8.4k", wr="73%", queue="1 order",
-         peak_full="Immortal 8.4k · SEA", hue=16, orders=203),
-    dict(handle="petrichor", game="Valorant · EU", peak="Radiant 610 RR", wr="72%", queue="free",
-         peak_full="Radiant 610 RR · EU", hue=280, orders=88),
-    dict(handle="mera", game="TFT · EUW", peak="Challenger 980 LP", wr="Top-4 61%", queue="free",
-         peak_full="Challenger 980 LP · EUW", hue=196, orders=76),
-    dict(handle="cobalt_ix", game="OW2 · NA", peak="Champion, 4520 SR", wr="70%", queue="1 order",
-         peak_full="Champion 4520 SR · NA", hue=212, orders=132),
-    dict(handle="halden", game="Rocket League · EU", peak="SSL 1885 MMR", wr="76%", queue="free",
-         peak_full="SSL 1885 MMR · EU", hue=224, orders=119),
-    dict(handle="tsuro", game="Apex · EU", peak="Predator #740", wr="68%", queue="2 orders",
-         peak_full="Predator #740 · EU", hue=6, orders=64),
+    # ── League of Legends ──────────────────────────────────────────────────
+    dict(handle="vantaa", slug="league-of-legends", region="EUW", hue=20,
+         peak="Challenger 1042 LP", tier="Challenger", wr_n=78, queue="1 order",
+         orders=214, role="Mid lane", since="Mar 2023",
+         rating="4.9", ontime="98%", disputes="0",
+         review=("Played my champs, kept to evenings like I asked, and finished two days "
+                 "early. Second order with him.", "MK", 5.0, 3)),
+    dict(handle="korrin", slug="league-of-legends", region="EUW", hue=34,
+         peak="Challenger 1180 LP", tier="Challenger", wr_n=79, queue="free",
+         orders=241, role="Jungle", since="Feb 2022",
+         rating="4.9", ontime="98%", disputes="0"),
+    dict(handle="myrra", slug="league-of-legends", region="KR", hue=286,
+         peak="Challenger 1310 LP", tier="Challenger", wr_n=80, queue="2 orders",
+         orders=262, role="Mid lane", since="Nov 2021",
+         rating="4.9", ontime="97%", disputes="1"),
+    dict(handle="shiroe", slug="league-of-legends", region="KR", hue=210,
+         peak="Challenger 1120 LP", tier="Challenger", wr_n=78, queue="2 orders",
+         orders=233, role="Jungle", since="Aug 2021",
+         rating="4.8", ontime="96%", disputes="1"),
+    dict(handle="adze", slug="league-of-legends", region="NA", hue=46,
+         peak="Challenger 990 LP", tier="Challenger", wr_n=77, queue="free",
+         orders=176, role="ADC", since="Apr 2023",
+         rating="4.9", ontime="99%", disputes="0"),
+    dict(handle="ilva", slug="league-of-legends", region="EUW", hue=320,
+         peak="Challenger 1055 LP", tier="Challenger", wr_n=76, queue="free",
+         orders=205, role="Support", since="Jun 2022",
+         rating="5.0", ontime="99%", disputes="0"),
+    dict(handle="mireo", slug="league-of-legends", region="KR", hue=196,
+         peak="Challenger 980 LP", tier="Challenger", wr_n=76, queue="free",
+         orders=205, role="Mid lane", since="May 2022",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="odain", slug="league-of-legends", region="NA", hue=12,
+         peak="Challenger 1010 LP", tier="Challenger", wr_n=75, queue="free",
+         orders=189, role="Top", since="Dec 2022",
+         rating="4.8", ontime="96%", disputes="1"),
+    dict(handle="lysander", slug="league-of-legends", region="EUW", hue=262,
+         peak="Grandmaster 720 LP", tier="Grandmaster", wr_n=75, queue="1 order",
+         orders=198, role="Mid lane", since="Jul 2022",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="solvei", slug="league-of-legends", region="KR", hue=172,
+         peak="Grandmaster 745 LP", tier="Grandmaster", wr_n=76, queue="free",
+         orders=181, role="ADC", since="Sep 2022",
+         rating="4.9", ontime="98%", disputes="0"),
+    dict(handle="veyra", slug="league-of-legends", region="EUW", hue=300,
+         peak="Grandmaster 705 LP", tier="Grandmaster", wr_n=74, queue="free",
+         orders=167, role="Mid lane", since="May 2023",
+         rating="4.8", ontime="96%", disputes="0"),
+    dict(handle="tenzo", slug="league-of-legends", region="EUW", hue=58,
+         peak="Grandmaster 640 LP", tier="Grandmaster", wr_n=73, queue="free",
+         orders=152, role="Top", since="Mar 2023",
+         rating="4.7", ontime="95%", disputes="1"),
+    dict(handle="quill", slug="league-of-legends", region="EUW", hue=140,
+         peak="Grandmaster 660 LP", tier="Grandmaster", wr_n=73, queue="free",
+         orders=158, role="Jungle", since="Nov 2022",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="norrik", slug="league-of-legends", region="TR", hue=8,
+         peak="Grandmaster 690 LP", tier="Grandmaster", wr_n=72, queue="free",
+         orders=141, role="Top", since="Oct 2023",
+         rating="4.7", ontime="94%", disputes="1"),
+    dict(handle="sova_lt", slug="league-of-legends", region="EUNE", hue=228,
+         peak="Master 480 LP", tier="Master", wr_n=71, queue="free",
+         orders=134, role="Support", since="Sep 2023",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="calder", slug="league-of-legends", region="NA", hue=94,
+         peak="Master 520 LP", tier="Master", wr_n=70, queue="1 order",
+         orders=118, role="Jungle", since="Jan 2024",
+         rating="4.7", ontime="95%", disputes="0"),
+    dict(handle="arven", slug="league-of-legends", region="NA", hue=246,
+         peak="Master 500 LP", tier="Master", wr_n=70, queue="free",
+         orders=112, role="Mid lane", since="Mar 2024",
+         rating="4.8", ontime="98%", disputes="0"),
+    dict(handle="paveu", slug="league-of-legends", region="BR", hue=110,
+         peak="Master 610 LP", tier="Master", wr_n=69, queue="1 order",
+         orders=96, role="ADC", since="Feb 2024",
+         rating="4.7", ontime="94%", disputes="0"),
+    dict(handle="eiro", slug="league-of-legends", region="EUW", hue=184,
+         peak="Master 515 LP", tier="Master", wr_n=69, queue="free",
+         orders=103, role="Jungle", since="Jun 2024",
+         rating="4.8", ontime="96%", disputes="0"),
+    dict(handle="kestrel_9", slug="league-of-legends", region="EUNE", hue=274,
+         peak="Master 445 LP", tier="Master", wr_n=68, queue="free",
+         orders=87, role="ADC", since="Apr 2024",
+         rating="4.7", ontime="95%", disputes="0"),
+    dict(handle="bram", slug="league-of-legends", region="OCE", hue=22,
+         peak="Master 560 LP", tier="Master", wr_n=67, queue="1 order",
+         orders=74, role="Support", since="Jul 2024",
+         rating="4.6", ontime="93%", disputes="1"),
+    dict(handle="tarn", slug="league-of-legends", region="EUW", hue=352,
+         peak="Master 470 LP", tier="Master", wr_n=66, queue="2 orders",
+         orders=92, role="Top", since="Jan 2025",
+         rating="4.7", ontime="94%", disputes="0"),
+
+    # ── Valorant ───────────────────────────────────────────────────────────
+    dict(handle="kx_reid", slug="valorant", region="NA", hue=352,
+         peak="Radiant #211", tier="Immortal", wr_n=74, queue="free",
+         orders=168, role="Duelist", since="Aug 2022",
+         rating="4.9", ontime="97%", disputes="0",
+         review=("Asked for Jett and Raze only and that's exactly what the match history "
+                 "shows. Four days, no drama.", "TV", 5.0, 6)),
+    dict(handle="juno_k", slug="valorant", region="KR", hue=338,
+         peak="Radiant #98", tier="Radiant", wr_n=78, queue="free",
+         orders=212, role="Initiator", since="Apr 2022",
+         rating="4.9", ontime="98%", disputes="0"),
+    dict(handle="nyx_ro", slug="valorant", region="EU", hue=6,
+         peak="Radiant #144", tier="Radiant", wr_n=76, queue="free",
+         orders=187, role="Initiator", since="Jan 2023",
+         rating="4.9", ontime="98%", disputes="0"),
+    dict(handle="amaya", slug="valorant", region="AP", hue=302,
+         peak="Radiant #302", tier="Radiant", wr_n=75, queue="free",
+         orders=163, role="Duelist", since="Mar 2023",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="wren", slug="valorant", region="NA", hue=160,
+         peak="Radiant 700 RR", tier="Radiant", wr_n=75, queue="free",
+         orders=171, role="Sentinel", since="Dec 2022",
+         rating="4.8", ontime="96%", disputes="1"),
+    dict(handle="sculp", slug="valorant", region="NA", hue=42,
+         peak="Radiant 720 RR", tier="Radiant", wr_n=74, queue="1 order",
+         orders=154, role="Sentinel", since="Aug 2022",
+         rating="4.8", ontime="96%", disputes="0"),
+    dict(handle="sennet", slug="valorant", region="EU", hue=214,
+         peak="Radiant #221", tier="Radiant", wr_n=74, queue="free",
+         orders=158, role="Controller", since="Sep 2022",
+         rating="4.9", ontime="98%", disputes="0"),
+    dict(handle="tovi", slug="valorant", region="NA", hue=78,
+         peak="Radiant 655 RR", tier="Radiant", wr_n=73, queue="2 orders",
+         orders=141, role="Duelist", since="Jun 2022",
+         rating="4.7", ontime="95%", disputes="1"),
+    dict(handle="pell", slug="valorant", region="AP", hue=190,
+         peak="Radiant #276", tier="Radiant", wr_n=73, queue="2 orders",
+         orders=146, role="Initiator", since="Jan 2023",
+         rating="4.8", ontime="96%", disputes="0"),
+    dict(handle="mave", slug="valorant", region="BR", hue=120,
+         peak="Radiant 590 RR", tier="Radiant", wr_n=72, queue="free",
+         orders=133, role="Duelist", since="Jul 2023",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="petrichor", slug="valorant", region="EU", hue=280,
+         peak="Radiant 610 RR", tier="Immortal", wr_n=72, queue="free",
+         orders=88, role="Controller", since="Nov 2023",
+         rating="4.9", ontime="98%", disputes="0",
+         review=("Duo runs with voice — I actually learned the smokes instead of just "
+                 "getting the rank.", "SN", 5.0, 4)),
+    dict(handle="estra", slug="valorant", region="EU", hue=330,
+         peak="Radiant 635 RR", tier="Radiant", wr_n=71, queue="free",
+         orders=124, role="Sentinel", since="Aug 2023",
+         rating="4.8", ontime="96%", disputes="0"),
+    dict(handle="drev", slug="valorant", region="EU", hue=256,
+         peak="Immortal 3 · 480 RR", tier="Immortal", wr_n=71, queue="free",
+         orders=128, role="Controller", since="Oct 2023",
+         rating="4.7", ontime="95%", disputes="0"),
+    dict(handle="rilke", slug="valorant", region="NA", hue=16,
+         peak="Immortal 3 · 505 RR", tier="Immortal", wr_n=70, queue="1 order",
+         orders=119, role="Controller", since="Nov 2023",
+         rating="4.7", ontime="94%", disputes="1"),
+    dict(handle="laska", slug="valorant", region="EU", hue=100,
+         peak="Immortal 3 · 410 RR", tier="Immortal", wr_n=69, queue="free",
+         orders=106, role="Sentinel", since="Feb 2024",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="kova", slug="valorant", region="EU", hue=204,
+         peak="Immortal 3 · 460 RR", tier="Immortal", wr_n=68, queue="free",
+         orders=97, role="Duelist", since="Mar 2024",
+         rating="4.7", ontime="95%", disputes="0"),
+    dict(handle="arbo", slug="valorant", region="LATAM", hue=64,
+         peak="Immortal 3 · 395 RR", tier="Immortal", wr_n=67, queue="1 order",
+         orders=84, role="Initiator", since="May 2024",
+         rating="4.6", ontime="93%", disputes="1"),
+    dict(handle="hollo", slug="valorant", region="NA", hue=236,
+         peak="Immortal 3 · 440 RR", tier="Immortal", wr_n=66, queue="free",
+         orders=79, role="Controller", since="Jun 2024",
+         rating="4.7", ontime="94%", disputes="0"),
+
+    # ── the other seven ladders ────────────────────────────────────────────
+    # One booster covers one game, and `slug` is what the roster chip reads —
+    # so a booster can never advertise a ladder the catalogue doesn't sell.
+    dict(handle="sable", slug="counter-strike-2", region="EU", hue=32,
+         peak="FPL, 27k Premier", peak_full="FPL · 27k Premier · EU", tier="30k",
+         wr_n=71, queue="2 orders", orders=141, role="AWP", since="Jan 2022",
+         rating="4.8", ontime="96%", disputes="1",
+         review=("Rating went up in a straight line, no forty-hour days that get you "
+                 "flagged. Worth the wait for a slot.", "JD", 4.8, 5)),
+    dict(handle="dvor", slug="counter-strike-2", region="NA", hue=48,
+         peak="FPL-C, 25k Premier", peak_full="FPL-C · 25k Premier · NA", tier="25k",
+         wr_n=69, queue="free", orders=108, role="IGL", since="Mar 2023",
+         rating="4.7", ontime="95%", disputes="0"),
+    # Rivals, not LoL: orvo delivers the Marvel Rivals order in LIVE_FEED below,
+    # and a roster that calls the same person a League booster contradicts the
+    # feed two columns away.
+    dict(handle="orvo", slug="marvel-rivals", region="NA", hue=210,
+         peak="Grandmaster 640 LP", tier="Grandmaster", wr_n=69, queue="free",
+         orders=97, role="Vanguard", since="Feb 2025",
+         rating="4.9", ontime="99%", disputes="0",
+         review=("Kept to my hero pool and still closed it in three days. The stream "
+                 "add-on is worth it with him.", "RP", 5.0, 2)),
+    dict(handle="kaisen", slug="marvel-rivals", region="EU", hue=344,
+         peak="Celestial 410 LP", tier="Celestial", wr_n=71, queue="free",
+         orders=118, role="Strategist", since="Jan 2025",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="nine", slug="dota-2", region="SEA", hue=16,
+         peak="Immortal 8.4k", tier="Immortal", wr_n=73, queue="1 order",
+         orders=203, role="Mid / carry", since="Jun 2021",
+         rating="4.8", ontime="95%", disputes="1",
+         review=("Behaviour score untouched and the MMR stuck. He plays the bracket, "
+                 "not the smurf.", "AL", 5.0, 8)),
+    dict(handle="obrun", slug="dota-2", region="EU West", hue=136,
+         peak="Divine 5", tier="Divine", wr_n=66, queue="1 order",
+         orders=91, role="Offlane", since="Sep 2023",
+         rating="4.6", ontime="93%", disputes="0"),
+    # TFT has no head-to-head win: its equivalent metric is the top-4 rate, so
+    # the row prints that and `wr_n` is the figure inside its own string. Both
+    # sides of the column have to say the same number — the bar is normalised on
+    # one span, and a label that disagrees with the bar is the "win rate is
+    # comparable" fix undone.
+    dict(handle="mera", slug="teamfight-tactics", region="EUW", hue=196,
+         peak="Challenger 980 LP", tier="Challenger", wr="Top-4 68%", wr_n=68,
+         queue="free", orders=76, role="Flex / tempo", since="Apr 2024",
+         rating="4.9", ontime="99%", disputes="0",
+         review=("Current-set comps, not last patch's. Double-up runs were the best part.",
+                 "EO", 5.0, 1)),
+    dict(handle="cobalt_ix", slug="overwatch-2", region="NA", hue=212,
+         peak="Champion, 4520 SR", peak_full="Champion 4520 SR · NA", tier="Champion",
+         wr_n=70, queue="1 order", orders=132, role="Main tank", since="Sep 2022",
+         rating="4.7", ontime="94%", disputes="1",
+         review=("Tank rank only, exactly as ordered, and the profile still looks like "
+                 "mine afterwards.", "BR", 4.5, 7)),
+    dict(handle="halden", slug="rocket-league", region="EU", hue=224,
+         peak="SSL 1885 MMR", tier="Supersonic", wr_n=76, queue="free",
+         orders=119, role="2v2 / 3v3", since="May 2021",
+         rating="4.9", ontime="98%", disputes="0",
+         review=("Called rotations on voice the whole way up. I can hold the rank he "
+                 "left me at, which is the point.", "FK", 5.0, 3)),
+    dict(handle="tsuro", slug="apex-legends", region="EU", hue=6,
+         peak="Predator #740", tier="Predator", wr_n=68, queue="2 orders",
+         orders=64, role="Fragger", since="Oct 2024",
+         rating="4.8", ontime="96%", disputes="0",
+         review=("Badge order, delivered in two days with the clips to prove it.",
+                 "MT", 5.0, 9)),
 ]
+
+# The page states a floor out loud; a row under it would make the page argue
+# against itself. Cheaper to fail the build than to ship the contradiction.
+for _b in BOOSTERS:
+    assert _b["wr_n"] >= WR_FLOOR, (
+        "%s is under the %d%% floor the boosters page states" % (_b["handle"], WR_FLOOR))
+assert len({_b["handle"] for _b in BOOSTERS}) == len(BOOSTERS), "duplicate booster handle"
+
+# The two roster figures the whole site quotes are COUNTED, not typed. They used
+# to be hand-written and disagreed with the list underneath them the moment a
+# booster was added — "34 on the board" over ten rows. Everything that says a
+# number of boosters (the utility bar, the order card's "N of M free now", the
+# rail's "All N boosters", the roster footer) reads these two, so counting them
+# is what keeps that one claim true everywhere at once.
+STATS["online"] = len(BOOSTERS)
+STATS["free_now"] = sum(1 for _b in BOOSTERS if _b["queue"] == "free")
+
+# ── the vetting funnel (boosters hero) ────────────────────────────────────
+# The right rail of the boosters page: the evidence for the H1's claim, in the
+# shape of last month's intake. It replaced a card that previewed the same five
+# rows as the table 300px below it.
+#
+# ⚠ These three figures are CLAIMS, not decoration — same status as STATS.
+# Wire them to the applications queue before launch, and if the real numbers
+# are less flattering ship the real numbers: the entire argument of this page
+# is that it doesn't self-report. The three rule lines under them restate
+# commitments the hero paragraph already makes; a fourth line means writing the
+# sentence that backs it into the paragraph first.
+VETTING = dict(
+    title="How someone gets on this page",
+    window="30 days",
+    steps=[
+        ("1,840", "applied last month"),
+        ("96", "trialled live on our account — five games, watched"),
+        ("11", "added to the board"),
+    ],
+    rules=[
+        ("chart-up", "%d%% win-rate floor, checked monthly" % WR_FLOOR),
+        ("plug", "Ranks read from the game API"),
+        ("camera", "Trial games recorded and reviewed"),
+    ],
+    # The application channel, stated as a strip rather than a card: on this
+    # page Discord is a supporting detail, not a headline offer. Four fragments
+    # rather than one sentence because the member count sits in the middle of
+    # it and i18n.js matches whole text nodes — build.py assembles them around
+    # the figure's own <b>.
+    strip=("Applications open in the", "Discord", "queue", "players in there."),
+    strip_cta="Join",
+)
 
 # ── v2 "Ashfall" page content ─────────────────────────────────────────────
 HERO = dict(
-    kicker="Verified boosters — since 2019",
+    kicker="",   # empty hides the slot entirely — build.py drops the element
     line1="The rank is yours.",
     line2="The grind isn't.",
     lede="Set two ranks. See the final price before you make an account. Then watch every match "
          "land from the dashboard — no bots, no shared logins, no invoice that moves after checkout.",
-    portrait_name="This month's #1 — vantaa",
-    portrait_meta="Challenger 1042 LP · 78% WR · EUW · 214 orders",
+)
+
+# ── home-hero booster spotlight ───────────────────────────────────────────
+# The right column of the home hero (design_handoff_home_hero). It used to be
+# floating text on the gradient; it is now the same card shell as every other
+# module on the site, so it needs a booster to be about.
+#
+# `handle` names one of BOOSTERS above — the name, the order count and the
+# portrait are all read off that entry, so this card can never disagree with
+# the roster panel or the boosters page about the same person. Only the two
+# labelled figures are written here: the handoff splits one dot-separated
+# string ("Challenger 1042 LP · 78% WR · EUW") into two figures with their own
+# labels, and peak_full is written differently per game ("Radiant #211",
+# "FPL · 27k Premier · EU"), so there is no split rule to derive.
+#
+# A handle that is not on the roster hides the card — the handoff's fallback
+# for a month with no qualifying booster is no card, never an empty one.
+#
+# `cta` carries the booster's name and i18n.js matches whole text nodes, so
+# changing `handle` means adding the new sentence to fr and de in i18n.js.
+SPOTLIGHT = dict(
+    handle="vantaa",
+    eyebrow="This month's #1",
+    # (figure, label, label suffix) — the suffix is data (a region), kept out
+    # of the label's own text node so the label still translates.
+    stats=[("1042 LP", "Challenger", ""), ("78%", "Win rate", "EUW")],
+    cta="See vantaa profile",
+    # Left blank: build.py points it at that handle's own profile page, so the
+    # link can't survive a change of SPOTLIGHT["handle"] pointing somewhere else.
+    href="",
 )
 
 # ── Discount codes ─────────────────────────────────────────────────────────
@@ -268,10 +666,15 @@ PROMOS = {
 }
 
 # ── Top-bar promo slot ─────────────────────────────────────────────────────
-# The left cell of the utility bar on every page. Derived from the auto promo
-# above so the bar can never advertise a discount the checkout doesn't honour.
-# Set PROMO_TEXT="" to hide the slot; `href` (optional) makes the line a link.
-PROMO_TEXT = "Summer sale — %s off with code %s"
+# The left cell of the utility bar on every page. Every part of it — label,
+# percentage, code, end date — is read off the auto promo above, so the bar can
+# never advertise a discount the checkout doesn't honour.
+#
+# PROMO_TEXT is the lead-in only ("<label> — <pct> off with code"): build.py
+# renders the code and the end date as their own spans so it can highlight the
+# code and mute the date. Set PROMO_TEXT="" to hide the slot; `href` (optional)
+# makes the line a link.
+PROMO_TEXT = "%s — %s off with code"
 PROMO_HREF = "/games/"
 
 
@@ -289,11 +692,25 @@ def promo_pct_label(p):
 
 
 _AUTO_CODE, _AUTO = auto_promo()
+_HAS_PROMO = bool(_AUTO and PROMO_TEXT)
 PROMO = dict(
-    tag=("-" + promo_pct_label(_AUTO)) if _AUTO else "",
-    text=(PROMO_TEXT % (promo_pct_label(_AUTO), _AUTO_CODE)) if _AUTO else "",
+    tag=("-" + promo_pct_label(_AUTO)) if _HAS_PROMO else "",
+    text=(PROMO_TEXT % (_AUTO.get("label", "Sale"), promo_pct_label(_AUTO))) if _HAS_PROMO else "",
+    code=_AUTO_CODE if _HAS_PROMO else "",
+    ends=("ends %s" % _AUTO["ends"]) if (_HAS_PROMO and _AUTO.get("ends")) else "",
     href=PROMO_HREF,
 )
+
+# ── Trustpilot ─────────────────────────────────────────────────────────────
+# eSports Boost's OWN Trustpilot profile. Left empty on purpose: the badge used
+# to link to trustpilot.com/review/lolepicshop.com — a different brand name than
+# the one on the page — which CRO-AUDIT #3 flags as reading like a copied
+# template or a scam at the highest-intent moment in the funnel.
+#
+# While this is empty the badge still renders, showing the rating and review
+# count, but as plain text with nothing to click. Set it to the real profile and
+# every badge on the site becomes a link again, in one place.
+TRUSTPILOT_URL = ""
 
 MARQUEE = [
     "92,400 boosts delivered",
@@ -303,18 +720,45 @@ MARQUEE = [
     "100% recovery rate on account reviews",
 ]
 
+# ── delivered-today feed ──────────────────────────────────────────────────
+# ⚠ PLACEHOLDER, like everything else in this block: these are four invented
+# orders, not the orders table. Nothing here generates traffic — build.py
+# renders exactly these rows and app.js only re-labels their clocks, so the
+# feed can never show a delivery that did not happen.
+#
+# Wire to the real source by replacing this list with the last N closed orders
+# and giving each row `ts` (epoch seconds, UTC) instead of `mins`; build.py and
+# app.js both prefer `ts` when it is present. Keep the list capped — the footer
+# figure (STATS["closed_24h"]) carries the rest.
+#
+#   slug     the game in GAMES — supplies the name, and the ladder the tier
+#            marks take their colour from, so the feed and the game page can
+#            never tint the same rank differently
+#   initial  the lettermark. Chosen, not derived: Counter-Strike 2 is "C" and
+#            Marvel Rivals is "R"
+#   frm/to   (tier, division) — the tier must be a rung of that game's ladder,
+#            because that is what tier_color() resolves against. Division is
+#            what the mark prints; "" falls back to the tier's first 2 letters
+#   rating   MMR-based ladders (CS2 Premier): the mark prints the rating number
+#            in a wide mark and the tier name is written out beside it instead
+#   mins     minutes before now. Only a placeholder stand-in for `ts`
 LIVE_FEED = [
-    dict(climb="Platinum II → Diamond IV", game="League of Legends · EUW",
-         slug="league-of-legends", time="2M ago", booster="vantaa"),
-    dict(climb="Silver 3 → Ascendant 1", game="Valorant · NA",
-         slug="valorant", time="14M ago", booster="kx_reid"),
-    dict(climb="13,400 → 19,100 Premier", game="Counter-Strike 2 · EU",
-         slug="counter-strike-2", time="38M ago", booster="sable"),
-    dict(climb="Grandmaster → Celestial", game="Marvel Rivals · NA",
-         slug="marvel-rivals", time="1H ago", booster="orvo"),
+    dict(slug="league-of-legends", initial="L", region="EUW",
+         frm=("Platinum", "II"), to=("Diamond", "IV"), mins=2, booster="vantaa"),
+    dict(slug="valorant", initial="V", region="NA",
+         frm=("Silver", "3"), to=("Ascendant", "1"), mins=14, booster="kx_reid"),
+    dict(slug="counter-strike-2", initial="C", region="EU", rating="Premier",
+         frm=("13k", "13,400"), to=("19k", "19,100"), mins=38, booster="sable"),
+    dict(slug="marvel-rivals", initial="R", region="NA",
+         frm=("Grandmaster", ""), to=("Celestial", ""), mins=60, booster="orvo"),
 ]
 
 # ⚠ Marketing claims about your own operations — legal review before shipping.
+#
+# `body` is signed-off copy and must not be edited or split. `callout` and
+# `mechanisms` restate it as scannable proof beside the prose — they are
+# labels for claims the paragraphs already make, never new claims. Adding a
+# fifth mechanism means adding the sentence that backs it to `body` first.
 SAFETY = dict(
     title="Why this doesn't get you banned",
     body=[
@@ -326,6 +770,57 @@ SAFETY = dict(
         "triggers one, support files the appeal and the order is refunded in full while it runs. "
         "Your name, email and payment details are never shared with the booster.",
     ],
+    callout=("100%", "Recovery rate on account reviews"),
+    # (glyph, stroke?, label) — same shape as build.py's DASHBOARD_CHIPS.
+    # "globe" is a filled glyph; the other three are linework.
+    mechanisms=[
+        ("globe", False, "VPN matched to your region"),
+        ("crosshair", True, "Your sensitivity and crosshair"),
+        ("clock", True, "Played in your normal hours"),
+        ("eye-off", True, "Offline the whole order"),
+    ],
+    # The same list again, with a note per row and the fifth mechanism `body`
+    # already backs ("Duo orders never touch your login at all"). The homepage
+    # gets `mechanisms` — four labels beside the prose; the guarantee page gets
+    # this — prose for readers, list for scanners, per the handoff.
+    #
+    # ⚠ The NOTES are the one place here that says more than `body` does. Each
+    # is an operational commitment falsifiable by a single bad order, and the
+    # handoff flags them as needing ops sign-off before launch: confirm the VPN
+    # estate really is enterprise (not consumer, not datacentre IP), that
+    # settings are mirrored then restored, and that the checkout play-window is
+    # actually honoured in scheduling. If one isn't true, cut that note — the
+    # name alone still works, and it is `body` that carries the argument.
+    measures=[
+        ("globe", False, "Enterprise VPN, matched to your region",
+         "Not a consumer VPN and not a datacentre IP — the login location never changes."),
+        ("crosshair", True, "Your sensitivity and crosshair",
+         "The booster mirrors your settings before the first game."),
+        ("clock", True, "Played inside your normal hours",
+         "You set the window at checkout; sessions are scheduled inside it."),
+        ("eye-off", True, "Offline appearance, whole order",
+         "Friends see you offline until the order closes."),
+        ("users", True, "Duo never touches your login",
+         "You play your own account. Nobody signs in but you."),
+    ],
+    # Verbatim, and not to be softened: a page arguing for honesty cannot bury
+    # the one paragraph that admits the risk is not zero. Rendered as a framed
+    # plate on /guarantee.html so it reads as placed rather than left over.
+    disclaimer=("Boosting is against the terms of service of every game listed here. We reduce "
+                "the risk as far as it can be reduced and we will not pretend it is zero, "
+                "because it isn't — any competitor telling you otherwise is lying to you."),
+    link=("Read the full safety policy", "/guarantee.html"),
+)
+
+# ── Discord card (right rail) ─────────────────────────────────────────────
+# The headline counts the same STATS["discord"] the stat band does. The mark is
+# deliberately a generic chat glyph, not Discord's logo — same trademark rule
+# as the payment marks and the Trustpilot star.
+DISCORD = dict(
+    label="Free to join",
+    body="Free VOD reviews on Sundays, scrim pickups, and the booster application queue.",
+    cta="Join the server",
+    href="/support.html#discord",
 )
 
 # Mosaic: the six titles that get a tile, plus their span. Order mirrors the
@@ -344,6 +839,17 @@ TILE_ORDER = [
 # ⚠ Placeholder reviews — invented, not real customer testimony (see top of file).
 # At least six per game so every game page fills its reviews grid. The League of
 # Legends block stays first so the homepage feed reads LoL, as designed.
+#
+# Four entries are rated below four, and they are load-bearing: /reviews.html
+# says out loud that nothing is filtered by score, offers a "3★ or less" filter
+# and a "Lowest rated" sort, and an empty result behind either of those reads as
+# suppression — the exact thing the sentence denies. One of them (the League 3★)
+# sits inside the first twelve so the default feed is not a wall of fives. Keep
+# that property when this list is replaced by the real corpus.
+#
+# They complain about delay, silence and a booster swap, never about a ban or a
+# stolen account: an invented review must not allege a harm the service claims
+# never happens.
 REVIEWS = [
     # ── League of Legends ──────────────────────────────────────────────────
     dict(rank="Gold IV → Platinum II", game="LoL · EUW",
@@ -361,6 +867,9 @@ REVIEWS = [
     dict(rank="Emerald III → Diamond II", game="LoL · EUW",
          text="Paused it for a weekend because I wanted to play, and it was back on the board "
               "within minutes when I un-paused."),
+    dict(rank="Gold III → Platinum IV", game="LoL · EUW", stars=3,
+         text="Sat unclaimed for two days after I paid and I had to chase it in Discord. Quick "
+              "once someone picked it up, but I'd already asked for the refund by then."),
     dict(rank="Diamond IV → Master", game="LoL · KR",
          text="They queued in my normal evening hours on a regional VPN. No login change, no "
               "weird IP flags, no drama."),
@@ -377,14 +886,14 @@ REVIEWS = [
     dict(rank="Platinum 3 → Diamond 1", game="Valorant · BR",
          text="Booster was clearly Radiant-level. Watched two of the games on the stream link "
               "and it wasn't close."),
-    dict(rank="Diamond 2 → Ascendant 1", game="Valorant · EU",
+    dict(rank="Diamond 2 → Ascendant 1", game="Valorant · EU", stars=4,
          text="Ran past the ETA by a day and they refunded the difference before I even opened "
               "a ticket about it."),
     dict(rank="Ascendant 3 → Immortal 1", game="Valorant · KR",
          text="Third order with the same booster now. He knows my setup and it just gets done "
               "on the nights I book."),
     # ── Counter-Strike 2 ───────────────────────────────────────────────────
-    dict(rank="13k → 19k Premier", game="CS2 · EU",
+    dict(rank="13k → 19k Premier", game="CS2 · EU", stars=4,
          text="Price on the calculator was the price I paid. That's the only reason I came back "
               "a third time."),
     dict(rank="10k → 15k Premier", game="CS2 · NA",
@@ -399,9 +908,13 @@ REVIEWS = [
     dict(rank="17k → 25k Premier", game="CS2 · Asia",
          text="Anti-cheat-safe patterns the whole way, no bans, no overwatch flags. Rating "
               "stuck after the boost ended."),
-    dict(rank="Faceit 6 → Faceit 9", game="CS2 · EU",
+    dict(rank="Faceit 6 → Faceit 9", game="CS2 · EU", stars=4,
          text="Refund was pro-rated to the levels I actually gained when one match went sideways. "
               "Fair about it, no argument."),
+    dict(rank="13k → 17k Premier", game="CS2 · EU", stars=2,
+         text="The second booster finished it, but the first one dropped it after two days and "
+              "nobody told me — I found out by opening a ticket. The refund was fair. The "
+              "silence wasn't."),
     # ── Teamfight Tactics ──────────────────────────────────────────────────
     dict(rank="10 placement games", game="TFT · EUW",
          text="Placements came back Diamond IV. Ordered at 1am, claimed before I woke up."),
@@ -436,11 +949,14 @@ REVIEWS = [
     dict(rank="Diamond II → Grandmaster", game="Marvel Rivals · EU",
          text="Price locked at checkout even though I ordered right before a season reset. Didn't "
               "move a cent after."),
+    dict(rank="Gold III → Platinum I", game="Marvel Rivals · EU", stars=3,
+         text="Got the rank, didn't get the role. I booked support only and half the games are "
+              "on a duelist, so the profile doesn't read like mine any more."),
     dict(rank="Grandmaster III → Celestial", game="Marvel Rivals · NA",
          text="Celestial push was hand-matched to someone who mains my roles. Felt like the "
               "account was in the right hands the whole time."),
     # ── Dota 2 ─────────────────────────────────────────────────────────────
-    dict(rank="Archon 3 → Legend 2", game="Dota 2 · SEA",
+    dict(rank="Archon 3 → Legend 2", game="Dota 2 · SEA", stars=4,
          text="Behaviour score untouched, no reports, no weird hours. They played my usual "
               "evening slot and that was that."),
     dict(rank="Crusader 1 → Archon 4", game="Dota 2 · EU West",
@@ -458,6 +974,9 @@ REVIEWS = [
     dict(rank="Divine 2 → Immortal", game="Dota 2 · China",
          text="Duo the last stretch and the rotations he called were a different game entirely. "
               "Behaviour score actually went up."),
+    dict(rank="Legend 1 → Ancient 1", game="Dota 2 · EU West", stars=1,
+         text="Four days, no progress, then they cancelled it on me. Full refund the same day, "
+              "which is the only thing that went right. Nothing was delivered."),
     # ── Apex Legends ───────────────────────────────────────────────────────
     dict(rank="Gold → Diamond", game="Apex · NA",
          text="Refund on the last two divisions when they ran past the ETA, without me having "
@@ -517,6 +1036,121 @@ REVIEWS = [
               "nowhere near mine — in a good way."),
 ]
 
+# Every review card carries a rating and a date. Both are placeholder like the
+# copy above.
+#
+# `stars` defaults to 5 and is spelled out above only on the reviews that read
+# as a four — a wall of identical five-star cards reads as fabricated, which is
+# the opposite of what the section is for. `days` is how long ago the order
+# closed; build.py turns it into a real date, so the feed ages with the build
+# instead of freezing on whatever month it was written in. Newest first, one
+# day apart, in the order the list is written.
+for _i, _r in enumerate(REVIEWS):
+    _r.setdefault("stars", 5)
+    _r.setdefault("days", _i + 1)
+
+
+# ── roster: the derived half ──────────────────────────────────────────────
+# Fifty boosters written out longhand would be a thousand lines of fields that
+# repeat a pattern, and every one of them a place for the roster to contradict
+# itself. Only the irreducible facts about a person are typed above; everything
+# below is computed from them, so it cannot drift:
+#
+#   game / peak_full   the game's own `short` and the booster's region
+#   wr                 the same figure as wr_n (TFT writes its own, see mera)
+#   reviews_n          orders × the sampled review rate
+#   climbs             the four ladder bands below their peak, splitting
+#                      `orders` — so the profile's "Climbs delivered" card and
+#                      its completed-orders table are made of the same climbs,
+#                      and the card's counts add up to the stat card above it
+#   review             one of this game's REVIEWS entries, picked by handle
+#
+# Deriving the testimonial is deliberate: the alternative is fifty *more*
+# invented quotes, and these are already the site's placeholder reviews. It
+# stays a placeholder either way — see the warning at the top of this file.
+_BOOSTER_BY_SLUG = {g["slug"]: g for g in GAMES}
+
+# 187 reviews against 214 delivered orders — the ratio the hand-written pair
+# implied, kept so the derived figure reproduces it exactly.
+_REVIEW_RATE = 187 / 214
+
+# Descending share of a booster's orders across the four bands they work. The
+# last band takes the remainder, so the four always sum to `orders` exactly.
+_BAND_SHARE = (0.332, 0.294, 0.224)
+
+
+def _handle_seed(handle, salt=0):
+    h = 2166136261
+    for c in "%s#%d" % (handle, salt):
+        h = (h * 16777619 + ord(c)) & 0xFFFFFFFF
+    return h
+
+
+def _climb_bands(g, b):
+    """The rank bands a booster actually works: the four rungs below their peak.
+
+    A peak is a career high, so the bands END at it — a Challenger player sells
+    the climbs up to Master, not the ones above their own rank. A peak above
+    the ladder we sell (Challenger on a League ladder that stops at Master)
+    lands on the top of the ladder, which is the same thing.
+    """
+    tiers = g["tiers"]
+    hi = tiers.index(b["tier"]) if b["tier"] in tiers else len(tiers) - 1
+    hi = max(1, hi)
+    pairs = [("%s → %s" % (tiers[i], tiers[i + 1])) for i in range(max(0, hi - 4), hi)]
+    if not pairs:
+        return []
+    total, out, spent = b["orders"], [], 0
+    for i, name in enumerate(pairs[:-1]):
+        n = max(1, round(total * _BAND_SHARE[min(i, len(_BAND_SHARE) - 1)]))
+        out.append((name, n))
+        spent += n
+    out.append((pairs[-1], max(1, total - spent)))
+    return out
+
+
+def _pick_review(b):
+    """One of this game's placeholder reviews, as (text, initials, stars, days).
+
+    Same pool the reviews page draws from, matched on the booster's own game so
+    a League profile never quotes a Valorant order. No game copy → no card:
+    review_card_rail() drops it rather than rendering an empty one.
+
+    Four stars and up, which is not score-filtering in the sense /reviews.html
+    denies — that page shows every one of these. It is attribution: the low
+    fixtures are complaints about an order changing hands or never being
+    claimed, so printing one on a named booster's profile as *their* latest
+    review invents a specific accusation against a specific person.
+    """
+    g = _BOOSTER_BY_SLUG.get(b["slug"])
+    if not g:
+        return None
+    token = g["short"].lower()
+    pool = [r for r in REVIEWS
+            if r["stars"] >= 4
+            and r["game"].split(" · ")[0].strip().lower() in (token, g["name"].lower())]
+    if not pool:
+        return None
+    seed = _handle_seed(b["handle"])
+    r = pool[seed % len(pool)]
+    letters = [c for c in b["handle"].upper() if c.isalpha()][:2] or ["B"]
+    return (r["text"], "".join(letters), float(r["stars"]), 1 + seed % 9)
+
+
+for _b in BOOSTERS:
+    _g = _BOOSTER_BY_SLUG.get(_b["slug"])
+    _b.setdefault("wr", "%d%%" % _b["wr_n"])
+    if _g:
+        _b.setdefault("game", "%s · %s" % (_g["short"], _b["region"]))
+        _b.setdefault("peak_full", "%s · %s" % (_b["peak"], _b["region"]))
+        _b.setdefault("climbs", _climb_bands(_g, _b))
+    _b.setdefault("reviews_n", max(1, round(_b["orders"] * _REVIEW_RATE)))
+    if not _b.get("review"):
+        _b["review"] = _pick_review(_b)
+    assert sum(n for _, n in _b["climbs"]) == _b["orders"], (
+        "%s: climb bands must add up to the order count the stat card shows" % _b["handle"])
+
+
 STEPS = [
     ("01", "Configure and pay",
      "Ranks, mode, champion or agent preferences, offline appear, scheduled hours. "
@@ -529,26 +1163,180 @@ STEPS = [
      "the account is yours again in minutes."),
 ]
 
+# (glyph, stroke?, kicker, title, body, proof) — the three promises, twice:
+# bare kicker/title/body in the `cards-3` shell on /games/ and the game pages,
+# and with the icon tile and the proof line on /guarantee.html, which is where
+# the handoff draws them. One entry per promise so the two can never disagree.
+#
+# The proof line is the card's receipt: a single checkable fact under a claim.
+# Support's is read off STATS["reply"] rather than typed — the handoff's own
+# "Median first reply 4 minutes" is flagged there as an invented figure, and
+# this site already measures one.
 GUARANTEES = [
-    ("Guarantee", "Finished or refunded",
-     "If a boost stalls past its ETA you get the unfinished portion back, pro-rated, "
-     "without opening a ticket war."),
-    ("Privacy", "Nobody sees your name",
-     "Regional VPN, your own sensitivity and crosshair, offline appearance, and sessions "
-     "inside your normal play hours."),
-    ("Support", "Answered in minutes, not days",
-     "Discord and email, 24/7, staffed by people who play the game. Median first reply "
-     "last month: 3m 40s."),
+    ("shield-check", True, "Guarantee", "Finished or refunded",
+     "Every order ends in the rank you paid for or the money back for the part that never "
+     "arrived. There is no third outcome.",
+     "Refunded in full until a booster claims it"),
+    ("ghost", False, "Privacy", "Nobody sees your name",
+     "Boosters get a rank, a server and your play window. Your name, email and payment "
+     "details never reach them, and the order needs no account.",
+     "Card details stay with Stripe"),
+    ("headset", True, "Support", "Answered in minutes, not days",
+     "One thread per order, staffed around the clock. If an account review lands, support "
+     "files the appeal for you rather than pointing you at a form.",
+     "Median first reply %s" % STATS["reply"]),
 ]
 
+# ── /guarantee.html — the refund policy itself ────────────────────────────
+# ⚠ POLICY TEXT, not marketing copy. Every number below is a commitment the
+# business is held to: 5 business days to refund, 24 hours to an automatic
+# refund on an unclaimed order, 15% credit past the ETA, and the pro-rata rule.
+# Legal review before shipping, and version this block rather than editing it
+# in place — the checkout page's refund line must stay word-for-word with it.
+#
+# `{n}` in a stat label marks the one figure inside the sentence: build.py
+# splits there and wraps the number in its own node, so the words around it
+# stay whole translatable text nodes (see CLAUDE.md's i18n rule).
+GUARANTEE = dict(
+    stats=[
+        ("100%", "Recovery rate on account reviews, across {n} completed orders",
+         STATS["boosts"]),
+        ("5 days", "Refunds land back on the original payment method, no ticket needed", ""),
+        ("24 hrs", "Unclaimed after payment? Refunded in full, automatically", ""),
+    ],
+    # (glyph, stroke?, stage, title, body). The order is the order an order
+    # moves through — before a booster claims it, mid-climb, past the ETA — and
+    # the first card takes the accent border because it is where most refunds
+    # land. Reordering these breaks the argument.
+    cases=[
+        ("undo", True, "Before a booster claims it", "100% back, no reason asked",
+         "One button in the order page. The money is back on the original payment method "
+         "within 5 business days, and nobody will email you to ask why."),
+        ("pie", True, "Started but unfinished", "Pro-rated on what wasn't delivered",
+         "Divisions not climbed and wins not won are refunded at the same rate you paid for "
+         "them. Gold → Diamond stopped at Platinum returns the Platinum → Diamond portion, "
+         "calculated by the same formula that quoted you."),
+        ("bell", True, "Past the ETA", "Your choice, and we tell you first",
+         "If an order runs past its delivery window we message you before you notice: keep "
+         "going with a 15% credit, swap the booster, or take the unfinished portion back."),
+    ],
+    # (id, question, answer). The id is a deep-link target — support sends
+    # people to a specific answer ("see the ban question"), so these are a
+    # public contract: rename one and the links in old tickets stop landing.
+    #
+    # ⚠ Three answers contradict the sales pitch on purpose: don't queue ranked
+    # alongside an unpaused solo order, naming a booster means a slower start,
+    # and the ToS risk is real. They are why the page is credible. Keep them.
+    #
+    # `{duo}` is filled from pricing.DUO_MULT in build.py — data.py cannot
+    # import pricing (pricing imports data), and a typed percentage here would
+    # drift from the formula the way the handoff's "35%" already has.
+    faq=[
+        ("play-along", "Can I play my own account while an order runs?",
+         "Yes, and it costs nothing. Pause the order from the order page and the booster "
+         "stops at the end of the current game; unpause and it resumes the same night if a "
+         "slot is open. Playing ranked yourself while a solo order is unpaused is the one "
+         "thing to avoid — two people queuing the same account is what looks abnormal, not "
+         "the boost."),
+        ("review-or-ban", "What happens if my account gets a review or a ban?",
+         "Support files the appeal for you and the order is refunded in full while it runs, "
+         "so you are never paying for an account you cannot use. Across %s completed orders "
+         "the recovery rate on reviews is 100%%. Boosting still breaks every listed game's "
+         "terms of service — the risk is reduced as far as it can be, not removed."
+         % STATS["boosts"]),
+        ("password-and-settings", "Will the booster change my password or my settings?",
+         "No. Login details are used to sign in and nothing else — no password changes, no "
+         "email changes, no purchases, no rune or loadout edits beyond the champions and "
+         "roles you asked for. Sensitivity and crosshair are mirrored to yours, then "
+         "restored. Change your password once the order closes anyway; the order page tells "
+         "you when."),
+        ("price", "How is the price calculated, and can it change after I pay?",
+         "The price is per division crossed, so a longer climb costs more per step than a "
+         "short one. It is fixed at checkout: the number on the button is the number "
+         "charged, and nothing is added later. Duo adds {duo}% because the booster carries a "
+         "second player, and add-ons are priced individually before you pay."),
+        ("no-account", "Do I have to make an account to order?",
+         "No. Orders are created against your email and you get a one-click link to follow "
+         "them. Set a password afterwards if you want the dashboard to remember your orders; "
+         "skip it and the link still works. Your name, email and card details are never "
+         "shared with the booster."),
+        ("named-booster", "Can I pick a specific booster?",
+         "Yes — name one at checkout from their profile and the order waits for them instead "
+         "of going to the open board. That means a slower start, so we show their current "
+         "queue and slots before you commit. Leave it open and the first free booster in "
+         "your bracket claims it, usually inside %s." % STATS["median_claim"]),
+    ],
+    # The handoff's FAQ intro claims the six are "ranked by volume over the last
+    # 90 days" and flags it as invented. This order is editorial, so the
+    # sentence says so instead of borrowing authority it hasn't got.
+    faq_note=("The six support answers most. If yours isn't here, the thread on your order "
+              "reaches a person, not a bot."),
+)
+
+# (icon, title, body) — same shape as SAFETY["mechanisms"]: the glyph belongs
+# with the line it labels, so a reordered list can't hand a claim the wrong
+# icon. Every one of these is a promise the shipped dashboard is held to — if
+# pause takes an hour rather than minutes, this copy changes.
 DASHBOARD_POINTS = [
-    ("Match-by-match history",
+    ("list-search", "Match-by-match history",
      "Every game your booster plays, with the LP swing, KDA and replay link."),
-    ("Pause on one click",
+    ("pause-circle", "Pause on one click",
      "Want to play tonight? Pause, and the account is free within minutes."),
-    ("Chat with the booster, not a queue",
+    ("chat", "Chat with the booster, not a queue",
      "Ask for a champion pool, a schedule, or a swap. Support reads the same thread."),
 ]
+
+# ── The demo order ─────────────────────────────────────────────────────────
+# One invented order, rendered twice: as the dashboard mock on the homepage and
+# as the resolved order on /demo.html. It lives here rather than in either page
+# because the homepage section links straight at the demo page — a buyer who
+# follows "Open the demo dashboard" has to land on the same ESB-3F92K1, with the
+# same five games on it, or the mock stops being evidence of anything.
+#
+# Same standing as STATS and REVIEWS: a placeholder, not a real order. Which is
+# why the page it fills is called Demo and both renderings carry an "Example"
+# pill — an order code on a page called "Track my order" reads as *your* order.
+#
+# Deliberately NOT stored here, because build.py derives them and they must stay
+# true if these ranks move: the completion percentage (ladder distance covered),
+# the days left, the W-L record, the price, and the timeline's live event.
+DEMO_ORDER = dict(
+    id="ESB-3F92K1",
+    game="League of Legends", region="EUW", mode="Solo", booster="vantaa",
+    start=("Gold", "IV"),            # where the order was bought
+    at=("Platinum", "II"), lp=62,    # where the booster has got to
+    target=("Diamond", "IV"),
+    games=38, lp_net=412,
+    # LP across the order: 13 authored points on the chart's 104-unit box, where
+    # 94 is the baseline and smaller is higher. A dip early, then the climb.
+    # Hand-plotted to match the story above — re-plot them if it changes.
+    chart=(88, 82, 90, 74, 77, 62, 55, 64, 44, 35, 40, 22, 12),
+    # The last five games, newest first. `when` is minutes ago. `champ` is the
+    # tint of the portrait slot, not a tier colour: Riot's champion art is
+    # licensed, so the slot ships as an abstract marker sized for a real 30px
+    # portrait to drop into.
+    matches=[
+        dict(result="Win",  kda="11 / 2 / 9", lp="+24", when=21,  champ="#b1764c"),
+        dict(result="Win",  kda="7 / 4 / 14", lp="+22", when=58,  champ="#a37ad6"),
+        dict(result="Loss", kda="3 / 6 / 7",  lp="−18", when=64,  champ="#5f93de"),
+        dict(result="Win",  kda="15 / 3 / 5", lp="+25", when=120, champ="#3fa06c"),
+        dict(result="Win",  kda="9 / 1 / 11", lp="+21", when=181, champ="#4fb0aa"),
+    ],
+    # ── the order-details rail (design_handoff_track_order) ────────────────
+    # Add-ons are ADDONS ids, not typed labels, and build.py prices the order
+    # with them — a details row naming an upsell the quote didn't charge for is
+    # the same class of bug as a hand-typed price.
+    addons=("champ",),
+    window="Evenings",
+    # Timeline, oldest last. The live event on top is NOT stored: build.py
+    # derives it from `at` and the newest match, so the first row can never
+    # contradict the card beside it. `milestones` are the rank rows below it,
+    # newest first — the rank is separate from the wording so it can be drawn
+    # as a tier mark and the sentence around it stays translatable.
+    milestones=[("Platinum", "IV", "Yesterday, 23:10")],
+    claimed="4 Aug, 21:32", claim_lag=11,   # minutes between payment and claim
+    placed="4 Aug, 21:21", paid_on="4 Aug",
+)
 
 FAQ = [
     ("Do I need an account to see the price?",

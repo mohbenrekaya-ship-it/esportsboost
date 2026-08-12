@@ -35,6 +35,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import data as D  # noqa: E402  — the roster a named booster is resolved against
 import pricing  # noqa: E402  — authoritative price, never trust the client
 
 STRIPE_API = "https://api.stripe.com/v1"
@@ -100,6 +101,13 @@ def build_session(order, base_url):
 
     game = order.get("game", "")
     region = order.get("region", "")
+    # A booster the customer named on the roster or a profile page. Resolved
+    # against the real roster, never taken as written — the browser POSTs it,
+    # and an unrecognised handle must not reach fulfilment as an assignment.
+    # It carries no charge: there is no named-booster fee in quote(), so this
+    # cannot move the amount and the profile page says so out loud.
+    named = str(order.get("booster") or "").strip()
+    booster = named if any(b["handle"] == named for b in D.BOOSTERS) else ""
     order_id = new_order_id()
     name = "%s boost" % game
     desc = "%s · %s" % (q["summary"], region) if region else q["summary"]
@@ -124,6 +132,7 @@ def build_session(order, base_url):
         "metadata[service]": order.get("service", ""),
         "metadata[detail]": q["summary"][:490],
         "metadata[region]": region,
+        "metadata[booster]": booster,
         "metadata[hours]": (order.get("hours") or "")[:490],
         "metadata[notes]": (order.get("notes") or "")[:490],
         "metadata[eta]": q["eta"],

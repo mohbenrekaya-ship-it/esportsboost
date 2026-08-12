@@ -124,6 +124,12 @@ The dashboard lives at `https://<your-domain>/ops`. It ships on every deploy but
    | `UPSTASH_REDIS_REST_URL` | `https://…upstash.io` | From the Upstash console. |
    | `UPSTASH_REDIS_REST_TOKEN` | the REST token | From the Upstash console. |
    | `ANALYTICS_MAX_EVENTS` | `50000` | Optional. Caps the stored event list. |
+   | `ACCOUNTS_MAX` | `20000` | Optional. Caps the stored sign-up list. |
+
+   The sign-up list (the header's auth panel) uses the **same** Upstash
+   credentials as analytics — a separate Redis key, no extra variables. Without
+   Upstash it writes `accounts.ndjson` next to `analytics.ndjson`, both
+   gitignored.
 
    **Redeploy** after adding — env vars only apply to new deployments.
 
@@ -138,12 +144,85 @@ Notes worth keeping in mind:
   and absent from the sitemap, but the URL is still guessable — the password is
   the actual security boundary, so treat it like one. Failed logins are
   throttled (10 per 15 minutes) once Upstash is configured.
-- **The data is anonymous and cookieless** — no IP, no email, no name — which is
-  why the site needs no consent banner for it. Adding an identifying field would
-  change that.
+- **The analytics data is anonymous and cookieless** — no IP, no email, no name
+  — which is why the site needs no consent banner for it. Adding an identifying
+  field to *that* store would change that. The **sign-up list is the deliberate
+  exception**: it holds the name and email people submit through the header, so
+  it is personal data. It lives in its own store precisely to keep the analytics
+  guarantee intact, and it needs the usual treatment for PII — a lawful basis to
+  collect it, a privacy-policy line that says you do, and a way to delete on
+  request. **No password is ever stored** (the auth flow drops it in the
+  browser); do not add one, this codebase does no hashing.
+- **The account system is a facade until a real backend lands.** The header lets
+  someone "create an account", but there is no session, verification or login —
+  the sign-up list is a lead list, and `/ops` labels it as one. Wiring a real
+  backend is blocking for treating these as accounts.
 - **Clear seeded data before launch.** If you ever ran
   `site/tools/seed_analytics.py` against the production store, wipe it — `/ops`
   will warn you with a banner for as long as synthetic events are present.
+
+---
+
+## Turn on social sign-in (Google + Discord)
+
+The header's "Continue with Google / Discord" buttons run a real OAuth
+authorization-code flow (`site/src/oauth.py`). Until you register an app for a
+provider and set its two keys, that provider's button stays a facade — it shows
+"Social sign-in isn't connected yet" instead of a dead redirect. So you can turn
+on one, both, or neither. **No card or game credentials are involved**; the flow
+only reads the person's name and verified email and mints a session.
+
+1. **Register a Google app.** Google Cloud Console → **APIs & Services →
+   Credentials → Create credentials → OAuth client ID → Web application**. Under
+   **Authorized redirect URIs** add, exactly:
+   - `https://esportsboost.com/api/auth/google/callback` (production)
+   - `http://localhost:4321/api/auth/google/callback` (local dev, optional)
+
+   Copy the **Client ID** and **Client secret**. (You'll also fill in the OAuth
+   consent screen — user type *External*, scopes `email` + `profile`.)
+
+2. **Register a Discord app.** Discord Developer Portal → **New Application →
+   OAuth2**. Under **Redirects** add:
+   - `https://esportsboost.com/api/auth/discord/callback`
+   - `http://localhost:4321/api/auth/discord/callback` (optional)
+
+   Copy the **Client ID** and **Client Secret**. Scopes used are `identify` +
+   `email` — no bot, no server permissions.
+
+3. In **Vercel → Project → Settings → Environment Variables**, add the pairs for
+   whichever providers you registered, plus one shared signing key:
+
+   | Name | Value | Notes |
+   | --- | --- | --- |
+   | `GOOGLE_CLIENT_ID` | `…apps.googleusercontent.com` | Enables the Google button. |
+   | `GOOGLE_CLIENT_SECRET` | the client secret | Never committed; server-side only. |
+   | `DISCORD_CLIENT_ID` | the application ID | Enables the Discord button. |
+   | `DISCORD_CLIENT_SECRET` | the client secret | Never committed; server-side only. |
+   | `SESSION_SECRET` | a long random string (≥ 16 chars) | **Required for sessions to persist.** Signs the session + CSRF-state cookies. Without it, logins work but every server restart/redeploy signs everyone out. Use a password manager. |
+   | `PUBLIC_BASE_URL` | `https://esportsboost.com` | The redirect-URI origin. Shared with Stripe. If unset it's inferred from the request host — set it so the callback URL matches what you registered above. |
+
+   **Redeploy** after adding.
+
+4. **Check it.** On the live site, open the header's Log in panel and click
+   **Continue with Google**. You should land on Google's consent screen, then
+   return signed in — the header shows your account chip. The verified email
+   appears in the `/ops` **Accounts** tab tagged `oauth:google`.
+
+Notes worth keeping in mind:
+
+- **The client secret never reaches the browser.** The code exchange happens
+  server-side (`/api/auth/<provider>/callback`); the browser only ever carries a
+  signed, `HttpOnly` session cookie it cannot read. `/api/auth/me` is what the
+  page reads to know who is signed in.
+- **The redirect URI must match byte-for-byte** what you registered, or the
+  provider refuses the callback. That's driven by `PUBLIC_BASE_URL` — if the
+  callback fails with a redirect-URI-mismatch, that variable and the registered
+  URI disagree.
+- **OAuth accounts and email/password accounts are separate rows by email** in
+  this build. Someone who signed up with a password and later uses "Continue with
+  Google" on the same address is a known unlinked edge — account linking is
+  listed as follow-up in `build.py`'s `AUTH_PLACEHOLDER`, alongside replacing the
+  simplified brand marks with each provider's licensed sign-in button.
 
 ---
 

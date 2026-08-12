@@ -100,6 +100,15 @@
 .btn-primary { border-color: color-mix(in srgb, var(--s1) 60%, transparent); color: var(--s1); }
 .btn-sm { padding: 4px 9px; font-size: 12px; }
 
+/* Auto-refresh toggle. Its dot pulses only while live, so the state is legible
+   at a glance rather than depending on the label alone. */
+.live-toggle { display: inline-flex; align-items: center; gap: 7px; }
+.live-toggle .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.live-toggle[aria-pressed="true"] { border-color: color-mix(in srgb, var(--good) 45%, transparent); color: var(--good); }
+.live-toggle[aria-pressed="true"] .live-dot { background: var(--good); animation: ops-live 2s ease-in-out infinite; }
+@keyframes ops-live { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .live-toggle .live-dot { animation: none; } }
+
 .field {
   font: inherit; font-size: 13px;
   padding: 7px 11px; border-radius: 8px;
@@ -283,6 +292,14 @@ select.field { padding-right: 26px; }
   color: var(--good);
   border-color: color-mix(in srgb, var(--good) 45%, transparent);
 }
+
+/* Sign-up method (Accounts table "Via" column) — a brand-coloured dot so the
+   method reads at a glance down the column. */
+.via { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.via-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.via-dot.via-google { background: #4285f4; }
+.via-dot.via-discord { background: #5865f2; }
+.via-dot.via-email { background: var(--muted); }
 
 .back-btn { margin-bottom: 16px; }
 

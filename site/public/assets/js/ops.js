@@ -99,6 +99,29 @@
            esc(countryName(code)) + "</span>";
   }
 
+  // How the person arrived. `mode` is the account store's field: "oauth:<p>" for
+  // a social sign-in, "signup"/"signin" for the email form. Both OAuth and email
+  // are grouped by method (Google / Discord / Email); the email rows keep the
+  // sign-up vs log-in nuance as a dim note so nothing the old column showed is
+  // lost. A brand-coloured dot makes the method scannable down the column.
+  function viaMeta(mode) {
+    if (mode === "oauth:google") return { label: "Google", cls: "via-google" };
+    if (mode === "oauth:discord") return { label: "Discord", cls: "via-discord" };
+    if (mode === "signup") return { label: "Email", cls: "via-email", note: "sign-up" };
+    if (mode === "signin") return { label: "Email", cls: "via-email", note: "log in" };
+    return null;
+  }
+  function viaCell(mode) {
+    var m = viaMeta(mode);
+    if (!m) return '<span class="dim">—</span>';
+    return '<span class="via"><i class="via-dot ' + m.cls + '"></i>' + esc(m.label) +
+      (m.note ? ' <span class="dim">· ' + esc(m.note) + "</span>" : "") + "</span>";
+  }
+  function viaText(mode) {          // plain-text form for the CSV export
+    var m = viaMeta(mode);
+    return m ? m.label + (m.note ? " (" + m.note + ")" : "") : "";
+  }
+
   function dur(s) {
     s = Math.max(0, Math.round(s || 0));
     if (s < 60) return s + "s";
@@ -571,7 +594,13 @@
      state & API
      ══════════════════════════════════════════════════════════════════════ */
   var state = { token: null, days: 30, game: "", tab: "overview", data: null, busy: false,
-                sessionId: null, sessionDetail: null };
+                sessionId: null, sessionDetail: null,
+                // The sign-up list is fetched on demand (it is PII, kept off the
+                // main payload) and cached until the period changes.
+                accounts: null, accountsLoading: false, accountsError: null,
+                // Auto-refresh: poll the dashboard so the numbers stay live
+                // without a manual Refresh. Default on.
+                live: true };
 
   try { state.token = sessionStorage.getItem("esb.ops.token") || null; } catch (e) {}
 
@@ -601,6 +630,7 @@
         gate.hidden = true;
         app.hidden = false;
         render();
+        startLive();
         return;
       }
       // Distinguish "no password is configured" (a server-side setup problem the
@@ -618,25 +648,67 @@
     });
   }
 
-  function refresh() {
+  // `silent` skips the dim-hold, so a background live poll refreshes the numbers
+  // in place instead of strobing the whole dashboard to 45% every interval.
+  function refresh(silent) {
     if (!state.token || state.busy) return Promise.resolve();
     state.busy = true;
-    app.classList.add("loading");        // hold the old render, never a skeleton flash
+    if (!silent) app.classList.add("loading");   // hold the old render, never a skeleton flash
     return api({ action: "data", token: state.token, days: state.days, game: state.game || null })
       .then(function (res) {
         state.busy = false;
         app.classList.remove("loading");
-        if (res.status === 200) { state.data = res.body.data; render(); return; }
-        // token expired → back to the gate
-        state.token = null;
-        try { sessionStorage.removeItem("esb.ops.token"); } catch (e) {}
-        app.hidden = true;
-        gate.hidden = false;
+        if (res.status === 200) {
+          state.data = res.body.data;
+          render();
+          // The Accounts panel has its own store, so a data refresh does not
+          // carry it — reload it alongside so "Live" keeps it fresh too.
+          if (state.tab === "accounts") loadAccounts();
+          return;
+        }
+        toGate();
       }).catch(function () {
         state.busy = false;
         app.classList.remove("loading");
       });
   }
+
+  function toGate() {
+    state.token = null;
+    try { sessionStorage.removeItem("esb.ops.token"); } catch (e) {}
+    stopLive();
+    app.hidden = true;
+    gate.hidden = false;
+  }
+
+  /* ── auto-refresh ─────────────────────────────────────────────────────────
+     "Real time" here is a short client poll, not a socket: the store is read
+     and every figure recomputed server-side per request (insights.py), and the
+     Vercel functions are stateless, so a poll is the honest fit. It pauses when
+     the tab is hidden — a backgrounded dashboard should not hammer the store —
+     and skips a tick whenever a fetch is still in flight (refresh guards on
+     state.busy). */
+  var LIVE_MS = 10000;
+  var liveTimer = null;
+
+  function liveTick() {
+    if (!state.live || document.hidden || state.busy) return;
+    refresh(true);           // silent — no dim-hold on a background poll
+  }
+
+  function startLive() {
+    stopLive();
+    if (state.live) liveTimer = setInterval(liveTick, LIVE_MS);
+  }
+
+  function stopLive() {
+    if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  }
+
+  document.addEventListener("visibilitychange", function () {
+    // Coming back to the tab should feel current, not one interval stale.
+    if (!document.hidden && state.live && state.token) refresh();
+  });
 
   /* ══════════════════════════════════════════════════════════════════════
      panels
@@ -1432,6 +1504,195 @@
     });
   }
 
+  /* ── Accounts — the header sign-up list ───────────────────────────────────
+     A separate store from the analytics events, fetched on demand because it
+     is the one place emails live. There is no password here — the sign-up flow
+     drops it in the browser (see app.js). Right now this is effectively a lead
+     list: the site has no real account system yet, so every row is someone who
+     asked to make one. */
+  function loadAccounts() {
+    if (state.accountsLoading) return;
+    state.accountsLoading = true;
+    state.accountsError = null;
+    api({ action: "accounts", token: state.token, days: state.days }).then(function (res) {
+      state.accountsLoading = false;
+      if (res.status === 200 && res.body.accounts) {
+        state.accounts = res.body.accounts;         // swaps in place; no loading flash
+      } else if (res.status === 401) {
+        toGate();
+        return;
+      } else if (res.status === 200) {
+        // 200 without an `accounts` payload means the server is running older
+        // code that doesn't know this action — the exact symptom of a serve.py
+        // started before /api/account existed. Say so instead of spinning.
+        state.accountsError = "This server doesn't serve the sign-up list yet — it is running an " +
+          "older build. Restart serve.py (the /api routes only reload on restart), then Refresh.";
+      } else {
+        state.accountsError = "Couldn't load sign-ups — the server returned " + res.status + ".";
+      }
+      if (state.tab === "accounts") render();
+    }).catch(function () {
+      state.accountsLoading = false;
+      state.accountsError = "Couldn't reach the server. Is it running?";
+      if (state.tab === "accounts") render();
+    });
+  }
+
+  function panelAccounts() {
+    var f = document.createDocumentFragment();
+    var a = state.accounts;
+
+    // Error, and nothing cached to fall back on: show what went wrong plus a
+    // retry, never an endless spinner.
+    if (state.accountsError && !a) {
+      var er = document.createElement("div");
+      er.className = "card";
+      er.innerHTML = '<p class="empty">' + esc(state.accountsError) + "</p>";
+      var retry = document.createElement("button");
+      retry.className = "btn btn-sm";
+      retry.type = "button";
+      retry.textContent = "Try again";
+      retry.style.margin = "0 auto 16px";
+      retry.style.display = "block";
+      retry.addEventListener("click", function () { state.accountsError = null; loadAccounts(); render(); });
+      er.appendChild(retry);
+      f.appendChild(er);
+      return f;
+    }
+
+    if (!a) {
+      loadAccounts();
+      var wait = document.createElement("div");
+      wait.className = "card";
+      wait.innerHTML = '<p class="empty">Loading sign-ups…</p>';
+      f.appendChild(wait);
+      return f;
+    }
+
+    // Placeholder banner — the account system is a facade, so these leads are
+    // real emails against an auth flow that does not create a real account yet.
+    // Say so, the same way the synthetic-data banner does.
+    var note = document.createElement("div");
+    note.className = "banner synthetic";
+    note.innerHTML = '<span class="ico">▲</span><div><strong>Sign-up list, not an account system.</strong> ' +
+      "The header auth panel is a facade — there is no session, verification or password store yet " +
+      "(passwords never leave the browser). These are the names and emails people submitted, kept so " +
+      "the list survives until a real backend lands. Treat them as leads, and as personal data.</div>";
+    f.appendChild(note);
+
+    if (a.synthetic > 0) {
+      var syn = document.createElement("div");
+      syn.className = "banner synthetic";
+      syn.innerHTML = '<span class="ico">▲</span><div><strong>Includes synthetic sign-ups.</strong> ' +
+        num(a.synthetic) + " row(s) were seeded for testing. Clear the store before launch.</div>";
+      f.appendChild(syn);
+    }
+
+    var kr = document.createElement("div");
+    kr.className = "kpis";
+    kr.appendChild(kpi("Sign-ups (all time)", num(a.total), undefined, "", true));
+    kr.appendChild(kpi("In this period", num(a.in_window)));
+    kr.appendChild(kpi("Last 24 hours", num(a.last_24h)));
+    kr.appendChild(kpi("Last 7 days", num(a.last_7d)));
+    // Emails are unique by construction (accounts.py dedupes on ingest), so a
+    // count here would just echo the total. Surface a repeat only if one ever
+    // slips through — it would mean the store's uniqueness broke.
+    if (a.repeat > 0) kr.appendChild(kpi("Duplicate emails ⚠", num(a.repeat)));
+    f.appendChild(kr);
+
+    var g = document.createElement("div");
+    g.className = "grid";
+
+    // Sign-ups per day across the window.
+    var series = a.series || [];
+    g.appendChild(card({
+      cls: "half", title: "Sign-ups per day",
+      sub: "New submissions in the selected period, one bar per day.",
+      chart: function (w) {
+        return columns(w, {
+          rows: series.map(function (r) { return { label: shortDate(r.date), value: r.count }; }),
+          color: SERIES[0], alt: "Sign-ups per day", valueName: "Sign-ups", xTall: series.length > 20
+        });
+      },
+      table: {
+        head: ["Day", "Sign-ups"], num: [1],
+        rows: series.map(function (r) { return [r.date, num(r.count)]; })
+      }
+    }));
+
+    // Country split — same resolution the sessions use (edge / timezone / locale).
+    var countries = a.countries || [];
+    g.appendChild(card({
+      cls: "half", title: "Where they signed up",
+      sub: "Country is resolved server-side, never from an IP — see how each was inferred in the table.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: countries.slice(0, 10).map(function (c) {
+            return { label: (flag(c.code) + " " + countryName(c.code)).trim(), value: c.count };
+          }),
+          color: SERIES[2], alt: "Sign-ups by country"
+        });
+      },
+      table: {
+        head: ["Country", "Sign-ups"], num: [1],
+        rows: countries.map(function (c) { return [countryName(c.code), num(c.count)]; })
+      }
+    }));
+    f.appendChild(g);
+
+    // The list itself.
+    var recent = a.recent || [];
+    var el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML =
+      '<div class="card-hd"><h3>Sign-ups</h3><span class="spacer"></span>' +
+      '<button class="btn btn-sm" type="button" data-export-accounts>Export CSV</button></div>' +
+      '<p class="card-sub">Newest first' +
+      (a.total > recent.length ? ", most recent " + num(recent.length) + " of " + num(a.total) : "") +
+      ". Name and email only — no password is ever stored.</p>";
+
+    if (!recent.length) {
+      el.insertAdjacentHTML("beforeend",
+        '<p class="empty">No sign-ups yet. Open the header, create an account, and hit Refresh.</p>');
+      f.appendChild(el);
+      return f;
+    }
+
+    var head = ["When", "Name", "Email", "Country", "Via"];
+    var html = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+      head.map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") + "</tr></thead><tbody>";
+    recent.forEach(function (r) {
+      html += "<tr>" +
+        '<td class="dim">' + esc(ago(r.ts)) + "</td>" +
+        "<td>" + esc(r.name || "—") + (r.syn ? ' <span class="chip">synthetic</span>' : "") + "</td>" +
+        "<td>" + esc(r.email) + "</td>" +
+        "<td>" + countryCell(r.co, r.cosrc) + "</td>" +
+        "<td>" + viaCell(r.mode) + "</td>" +
+        "</tr>";
+    });
+    el.insertAdjacentHTML("beforeend", html + "</tbody></table></div>");
+
+    el.querySelector("[data-export-accounts]").addEventListener("click", function () {
+      var cols = ["signed_up", "name", "email", "country_code", "country", "country_source", "via", "synthetic"];
+      var lines = [cols.join(",")];
+      recent.forEach(function (r) {
+        lines.push([new Date(r.ts * 1000).toISOString(), r.name, r.email, r.co, countryName(r.co),
+                    r.cosrc, viaText(r.mode), r.syn ? "yes" : "no"]
+          .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; })
+          .join(","));
+      });
+      var blob = new Blob([lines.join("\n")], { type: "text/csv" });
+      var link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "esb-signups-" + new Date().toISOString().slice(0, 10) + ".csv";
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+    });
+
+    f.appendChild(el);
+    return f;
+  }
+
   function panelAbandoned(d) {
     var rows = d.abandoned;
     var f = document.createDocumentFragment();
@@ -1525,8 +1786,9 @@
      ══════════════════════════════════════════════════════════════════════ */
   var PANELS = {
     overview: panelOverview, funnel: panelFunnel, configurator: panelConfigurator,
-    journey: panelJourney, sessions: panelSessions, acquisition: panelAcquisition,
-    friction: panelFriction, abandoned: panelAbandoned, live: panelLive
+    journey: panelJourney, sessions: panelSessions, accounts: panelAccounts,
+    acquisition: panelAcquisition, friction: panelFriction, abandoned: panelAbandoned,
+    live: panelLive
   };
 
   function render() {
@@ -1600,7 +1862,17 @@
 
   document.querySelector("[data-refresh]").addEventListener("click", refresh);
 
+  var liveBtn = document.querySelector("[data-live]");
+  if (liveBtn) liveBtn.addEventListener("click", function () {
+    state.live = !state.live;
+    liveBtn.setAttribute("aria-pressed", state.live ? "true" : "false");
+    var lab = liveBtn.querySelector("[data-live-label]");
+    if (lab) lab.textContent = state.live ? "Live" : "Paused";
+    if (state.live) { startLive(); refresh(); } else { stopLive(); }
+  });
+
   document.querySelector("[data-signout]").addEventListener("click", function () {
+    stopLive();
     state.token = null;
     try { sessionStorage.removeItem("esb.ops.token"); } catch (e) {}
     app.hidden = true;
@@ -1619,6 +1891,8 @@
         o.setAttribute("aria-selected", o === b ? "true" : "false");
       });
       render();
+      // Entering Accounts pulls its store fresh (it rides its own request).
+      if (state.tab === "accounts") loadAccounts();
     });
   });
 
@@ -1627,5 +1901,6 @@
     app.hidden = false;
     gate.hidden = true;
     refresh();
+    startLive();
   }
 })();

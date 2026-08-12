@@ -83,40 +83,149 @@
       "No divisions": "Aucune division",
       "None": "Aucune",
 
-      /* util bar / nav */
+      /* site header — design_handoff_site_header */
       "Currency": "Devise",
       "Language": "Langue",
-      "34 verified boosters on shift right now": "34 boosters vérifiés en service maintenant",
-      "Most orders claimed within 18 min": "La plupart des commandes prises en 18 min",
-      "25 boosters free and ready to start now": "25 boosters libres, prêts à démarrer",
-      "Join 3,000 players in our Discord community": "Rejoignez 3 000 joueurs sur notre Discord",
-      "34 verified boosters on shift right now · Most orders claimed within 18 min · 25 boosters free and ready to start now · Join 3,000 players in our Discord community":
-        "34 boosters vérifiés en service maintenant · La plupart des commandes prises en 18 min · 25 boosters libres, prêts à démarrer · Rejoignez 3 000 joueurs sur notre Discord",
+      "Summer sale": "Soldes d'été",
+      "ends 31 Aug": "jusqu'au 31 août",
+      "Copied": "Copié",
+      "verified boosters": "boosters vérifiés",
       "Games": "Jeux",
       "Live": "En direct",
       "Boosters": "Boosters",
       "Safety": "Sécurité",
       "Reviews": "Avis",
-      "Track my order": "Suivre ma commande",
-      "Start an order": "Commander",
+      "Log in": "Connexion",
       "Menu": "Menu",
       "Skip to content": "Aller au contenu",
+      /* mega menus */
+      "Pick a ladder": "Choisissez un classement",
+      "Who plays your order": "Qui joue votre commande",
+      "Before you buy": "Avant d'acheter",
+      "Right now": "En ce moment",
+      "Top": "N° 1",
+      "Hiring": "Recrute",
+      "are live too": "sont aussi en ligne",
+      "boosters on shift": "boosters en service",
+      "Median claim": "Prise en charge médiane",
+      "Watch orders land live": "Voir les commandes arriver en direct",
+      "All nine ladders": "Les neuf classements",
+      "Browse the roster": "Parcourir l'équipe",
+      "verified boosters, one game each": "boosters vérifiés, un jeu chacun",
+      "Hire a specific booster": "Choisir un booster précis",
+      "Name one at checkout, no extra fee": "Nommez-le au paiement, sans supplément",
+      "How we verify": "Comment nous vérifions",
+      "Rank proof, trial orders, review floor": "Preuve de rang, commandes d'essai, note plancher",
+      "Master+ with a clean account": "Master+ avec un compte sans historique",
+      "Read their reviews": "Lire leurs avis",
+      "reviews, filterable by game and score": "avis, filtrables par jeu et par note",
+      "The guarantee": "La garantie",
+      "Refunded until a booster claims it": "Remboursé tant qu'aucun booster n'a pris la commande",
+      "Account safety": "Sécurité du compte",
+      "Regional VPN, your hours, offline": "VPN régional, vos horaires, hors ligne",
+      "What we never do": "Ce que nous ne faisons jamais",
+      "No bots, no password changes": "Pas de bots, aucun changement de mot de passe",
+      "Pro-rated, in five business days": "Au prorata, sous cinq jours ouvrés",
+      "FAQ": "FAQ",
+      "The six questions support gets most": "Les six questions les plus posées au support",
+      "Track an order": "Suivre une commande",
+      "No password — the link is the login": "Sans mot de passe — le lien est la connexion",
+      /* auth panel */
+      "Create account": "Créer un compte",
+      "Create your account": "Créez votre compte",
+      "An account is optional. It keeps every order, thread and saved configuration in one place — you can still buy as a guest.":
+        "Le compte est facultatif. Il rassemble vos commandes, vos échanges et vos configurations enregistrées au même endroit — vous pouvez tout de même acheter en tant qu'invité.",
+      "Bought as a guest? You don't need an account. Use the link we emailed you, or resend it from the order tracker.":
+        "Vous avez acheté en tant qu'invité ? Aucun compte n'est nécessaire. Utilisez le lien reçu par e-mail, ou renvoyez-le depuis le suivi de commande.",
+      "Continue with Discord": "Continuer avec Discord",
+      "Continue with Google": "Continuer avec Google",
+      "Sign up with Discord": "S'inscrire avec Discord",
+      "Sign up with Google": "S'inscrire avec Google",
+      "or with email": "ou par e-mail",
+      "Display name": "Nom affiché",
+      "What your booster calls you": "Le nom que votre booster utilisera",
+      "Password": "Mot de passe",
+      "Your password": "Votre mot de passe",
+      "At least 6 characters": "Au moins 6 caractères",
+      "Forgot it?": "Oublié ?",
+      "Show password": "Afficher le mot de passe",
+      "Hide password": "Masquer le mot de passe",
+      "Six characters or more. A passphrase beats a symbol soup.":
+        "Six caractères ou plus. Une phrase de passe vaut mieux qu'une soupe de symboles.",
+      "Too short to be worth having.": "Trop court pour servir à quelque chose.",
+      "Getting there — add a few more words.": "On y arrive — ajoutez quelques mots.",
+      "Strong enough.": "Assez solide.",
+      "I've read the": "J'ai lu les",
+      "terms": "conditions",
+      "privacy policy": "politique de confidentialité",
+      "and the": "et la",
+      ", including how boosting relates to each game's rules.":
+        ", y compris ce que le boosting implique au regard des règles de chaque jeu.",
+      "We'll keep you signed in on this device for 30 days.":
+        "Vous resterez connecté sur cet appareil pendant 30 jours.",
+      "That email and password don't match. Check the address, or reset the password.":
+        "Cet e-mail et ce mot de passe ne correspondent pas. Vérifiez l'adresse, ou réinitialisez le mot de passe.",
+      "An account with this email already exists. Log in instead.": "Un compte avec cet e-mail existe déjà. Connectez-vous plutôt.",
+      "Enter a valid email address.": "Saisissez une adresse e-mail valide.",
+      "Choose a password of at least 6 characters.": "Choisissez un mot de passe d'au moins 6 caractères.",
+      "Re-enter your password": "Ressaisissez votre mot de passe.",
+      "The passwords don't match.": "Les mots de passe ne correspondent pas.",
+      "Please accept the terms to create your account.": "Veuillez accepter les conditions pour créer votre compte.",
+      "Enter your password.": "Saisissez votre mot de passe.",
+      "Couldn't reach the server. Check your connection and try again.": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.",
+      "Couldn't create the account. Try again.": "Impossible de créer le compte. Réessayez.",
+      "Sign-in didn't complete. Please try again.": "La connexion n'a pas abouti. Veuillez réessayer.",
+      "That email and password don't match. Check them, or create an account.": "Cet e-mail et ce mot de passe ne correspondent pas. Vérifiez-les, ou créez un compte.",
+      "Social sign-in isn't connected yet. Use your email, or buy as a guest — checkout needs no account.":
+        "La connexion via un réseau n'est pas encore active. Utilisez votre e-mail, ou achetez en invité — le paiement ne demande aucun compte.",
+      "This is your store account, never your game login.":
+        "C'est votre compte boutique, jamais votre identifiant de jeu.",
+      "We never ask for your game password here.":
+        "Nous ne demandons jamais votre mot de passe de jeu ici.",
+      "New here?": "Nouveau ici ?",
+      "Already have an account?": "Vous avez déjà un compte ?",
+      "Create an account": "Créer un compte",
+      /* account menu */
+      "My orders": "Mes commandes",
+      "Messages": "Messages",
+      "Log out": "Se déconnecter",
+      "live": "en cours",
+      "Account": "Compte",
+      "Your orders": "Vos commandes",
+      "Every boost you've ordered \u2014 the one in progress, and the ones already delivered.": "Chaque boost que vous avez commandé — celui en cours et ceux déjà livrés.",
+      "Signed in as": "Connecté en tant que",
+      "You're viewing a sample history.": "Vous consultez un historique d\u2019exemple.",
+      "to keep your orders in one place \u2014 or track a single order by the link we emailed you. Checkout never needs an account.": "pour garder vos commandes au même endroit — ou suivez une commande via le lien reçu par e-mail. Le paiement ne demande jamais de compte.",
+      "This order history is a preview. Until an account backend is live, the orders shown are example data, priced with the real quote \u2014 the same standing as the demo dashboard.": "Cet historique de commandes est un aperçu. Tant qu'un backend de comptes n'est pas actif, les commandes affichées sont des données d'exemple, tarifées avec le vrai devis — au même titre que le tableau de bord de démo.",
+      "Track by link": "Suivre via le lien",
+      "Orders": "Commandes",
+      "Lifetime spent": "Total dépensé",
+      "Open dashboard": "Ouvrir le tableau de bord",
+      "Status": "Statut",
+      "now": "actuel",
 
       /* footer */
       "We are not affiliated with Riot Games, Inc., Blizzard Entertainment, Valve, or any of their subsidiaries. All trademarks, game titles, logos, and brand names are the property of their respective owners. eSports Boost provides independent gaming services and is not endorsed by or associated with any game publisher.":
         "Nous ne sommes affiliés ni à Riot Games, Inc., ni à Blizzard Entertainment, ni à Valve, ni à aucune de leurs filiales. Toutes les marques, titres de jeux, logos et noms de marque appartiennent à leurs propriétaires respectifs. eSports Boost fournit des services de jeu indépendants et n'est ni approuvé ni associé à un quelconque éditeur de jeux.",
       "Questions? Email us at": "Des questions ? Écrivez-nous à",
+      "Follow along": "Suivez-nous",
+      "games": "jeux",
+      "Help center": "Centre d'aide",
       "Legal": "Mentions légales",
       "24/7 Customer Support": "Support client 24/7",
+      "Online now": "En ligne",
+      "Typical reply": "Réponse habituelle en",
       "Need help? Our support team is available anytime to assist you with your orders and questions.":
         "Besoin d'aide ? Notre équipe de support est disponible à tout moment pour vos commandes et vos questions.",
-      "Let's Chat": "Discutons",
-      "Visit Help Center": "Centre d'aide",
+      "Let's chat": "Discutons",
+      "Visit help center": "Centre d'aide",
       "Privacy Policy": "Politique de confidentialité",
       "Terms of Service": "Conditions d'utilisation",
       "Refunds & Cancellations": "Remboursements et annulations",
       "Become a booster": "Devenir booster",
       "Discord": "Discord",
+      "Card, Apple Pay and Google Pay accepted — payments secured by Stripe":
+        "Carte, Apple Pay et Google Pay acceptés — paiements sécurisés par Stripe",
       "© 2026 eSports Boost. All Rights Reserved.": "© 2026 eSports Boost. Tous droits réservés.",
 
       /* calculator / wizard */
@@ -128,6 +237,21 @@
       "Current division": "Division actuelle",
       "Target division": "Division cible",
       "How it's played": "Mode de jeu",
+      /* order card — the "Ladder card" hero on the game pages */
+      "Build your boost": "Composez votre boost",
+      "of": "sur",
+      "boosters free now": "boosters libres",
+      "Add-ons": "Options",
+      "to climb": "à gravir",
+      "division": "division",
+      "divisions": "divisions",
+      "Cheapest single division": "Division la moins chère",
+      "You save": "Vous économisez",
+      "with": "avec",
+      "Money-back until a booster is assigned": "Remboursé tant qu'aucun booster n'est assigné",
+      "No account needed": "Aucun compte requis",
+      "VPN matched to your region": "VPN adapté à votre région",
+      "on Trustpilot": "sur Trustpilot",
       "Delivered in": "Livré en",
       "Boosters free now": "Boosters libres",
       "Total price": "Prix total",
@@ -155,6 +279,18 @@
       "Configure your boost": "Configurez votre boost",
       "Watch a live boost": "Voir un boost en direct",
       "Continue your order": "Continuer votre commande",
+
+      /* home hero — the utility bar's roster count and the spotlight card.
+         Numbers stay outside these nodes (build.py wraps them in <b>/<span>),
+         so the sentences keep matching. "See vantaa profile" carries the
+         booster's handle: changing data.py's SPOTLIGHT means adding the new
+         sentence here too. */
+      "verified boosters on shift right now": "boosters vérifiés en service maintenant",
+      "This month's #1": "N°1 du mois",
+      "Verified": "Vérifié",
+      "orders delivered": "commandes livrées",
+      "boosts delivered": "boosts livrés",
+      "See vantaa profile": "Voir le profil de vantaa",
       "Included": "Inclus",
 
       /* add-ons */
@@ -190,27 +326,70 @@
 
       /* section heads / home */
       "Nine ladders.": "Neuf ladders.",
-      "Forty services.": "Quarante services.",
+      "Thirty-seven services.": "Trente-sept services.",
+      "Most ordered": "Le plus commandé",
+      "Configure": "Configurer",
+      "All games": "Tous les jeux",
+      "ladders are live too.": "sont aussi en ligne.",
+      "Elo boost": "Boost d'elo",
+      "Rank boost": "Boost de rang",
+      "MMR boost": "Boost de MMR",
+      "Unrated wins": "Victoires non classées",
+      "Tournament wins": "Victoires en tournoi",
+      "Double-up": "Double-up",
+      "Calibration": "Calibrage",
+      "Badges": "Badges",
+      "Kills": "Éliminations",
+      "Premier rating": "Classement Premier",
+      "Faceit levels": "Niveaux Faceit",
+      "Wingman": "Wingman",
+      "Wins": "Victoires",
+      "Duo": "Duo",
+      "Coaching": "Coaching",
       "Every service is priced per division and shown before you sign in. Placements, net wins, coaching and duo on every title.":
         "Chaque service est facturé à la division et affiché avant toute connexion. Placements, victoires nettes, coaching et duo sur chaque jeu.",
       "Delivered today": "Livré aujourd'hui",
       "Why this doesn't get you banned": "Pourquoi cela ne vous fait pas bannir",
+      /* 04 Dashboard — the section and the mock inside it. Every figure in the
+         mock sits outside these nodes (see dash_mock()), so the words match. */
+      "Dashboard": "Tableau de bord",
       "You watch the whole thing": "Vous suivez tout du début à la fin",
       "Regional VPN": "VPN régional",
       "Pro-rated refunds": "Remboursements au prorata",
       "No account sharing on duo": "Aucun partage de compte en duo",
+      "Open the demo dashboard": "Voir le tableau de bord de démo",
+      "Preview of the order dashboard": "Aperçu du tableau de bord de commande",
+      "complete": "terminé",
+      "days left": "jours restants",
+      "LP across the order": "LP sur toute la commande",
+      "LP net": "LP net",
+      "Order start": "Début de la commande",
+      "Now": "Maintenant",
+      "Match history": "Historique des parties",
+      "K / D / A": "K / M / A",
+      "LP": "LP",
+      "Order dashboard · live": "Tableau de bord · en direct",
+      "Pause": "Pause",
       "Order dashboard — live": "Tableau de bord de commande — en direct",
       "Order tracking dashboard with live match history": "Tableau de bord de suivi avec historique en direct",
       "What they said after": "Ce qu'ils ont dit après",
+      "Every review is tied to a paid, completed order — nothing incentivised. One per game, across the roster.":
+        "Chaque avis est lié à une commande payée et terminée — rien n'est incité. Un par jeu, sur tout le roster.",
+      "Read all reviews": "Lire tous les avis",
+      "Read all on Trustpilot": "Tout lire sur Trustpilot",
+      "Verified order": "Commande vérifiée",
+      "Page": "Page",
       "Verified orders only": "Commandes vérifiées uniquement",
       "Your climb starts at": "Votre montée commence à",
       "Final at checkout. Refunded in full until a booster claims it, pro-rated after that.":
         "Fixé au paiement. Remboursé intégralement jusqu'à la prise en charge, au prorata ensuite.",
-      "Ready when you are": "Prêt quand vous l'êtes",
-      "Know your price before you sign up.": "Connaissez votre prix avant de vous inscrire.",
-      "The calculator is on every page. No account needed to see it.":
-        "Le calculateur est sur chaque page. Aucun compte requis pour le voir.",
+      "Set two ranks and the price is on screen before you sign up. No account, no quote request.":
+        "Choisissez deux rangs et le prix s'affiche avant toute inscription. Sans compte, sans devis.",
       "Talk to support": "Contacter le support",
+      "Your configuration": "Votre configuration",
+      "Change": "Modifier",
+      "Queue · Server": "File · Serveur",
+      "Money-back": "Satisfait ou remboursé",
 
       /* stat band + roster */
       "Boosts delivered": "Boosts livrés",
@@ -224,6 +403,30 @@
       "Join the server →": "Rejoindre le serveur →",
       "All games →": "Tous les jeux →",
       "more": "de plus",
+
+      /* 02 Live / 03 Safety — the delivery feed, the rail and the safety proof.
+         Numbers sit outside these nodes (<b>34</b> boosters), so the sentence
+         still matches whole. "min ago" is shared with the track page. */
+      "Updates as orders close": "Mis à jour dès qu'une commande est livrée",
+      "Delivered": "Livré",
+      "hr ago": "h",
+      "d ago": "j",
+      "orders closed in the last 24 hours": "commandes livrées ces 24 dernières heures",
+      "All": "Tous les",
+      "win rate": "de victoires",
+      "Free": "Libre",
+      /* Availability comes off BOOSTERS[].queue — the status pill and the
+         roster table's Queue column render the same strings. */
+      "free": "libre",
+      "1 order": "1 commande",
+      "2 orders": "2 commandes",
+      "Free to join": "Gratuit",
+      "Join the server": "Rejoindre le serveur",
+      "Recovery rate on account reviews": "Taux de récupération sur les vérifications de compte",
+      "Your sensitivity and crosshair": "Votre sensibilité et votre viseur",
+      "Played in your normal hours": "Joué à vos heures habituelles",
+      "Offline the whole order": "Hors ligne pendant toute la commande",
+      "Read the full safety policy": "Lire la politique de sécurité complète",
 
       /* steps */
       "Configure and pay": "Configurez et payez",
@@ -239,16 +442,16 @@
       /* guarantees */
       "Guarantee": "Garantie",
       "Finished or refunded": "Terminé ou remboursé",
-      "If a boost stalls past its ETA you get the unfinished portion back, pro-rated, without opening a ticket war.":
-        "Si un boost dépasse son délai, la partie non réalisée vous est remboursée au prorata, sans bataille de tickets.",
+      "Every order ends in the rank you paid for or the money back for the part that never arrived. There is no third outcome.":
+        "Chaque commande se termine au rang que vous avez payé, ou par le remboursement de la partie qui n'est jamais arrivée. Il n'y a pas de troisième issue.",
       "Privacy": "Confidentialité",
       "Nobody sees your name": "Personne ne voit votre nom",
-      "Regional VPN, your own sensitivity and crosshair, offline appearance, and sessions inside your normal play hours.":
-        "VPN régional, votre propre sensibilité et viseur, mode hors ligne, et sessions pendant vos horaires de jeu habituels.",
+      "Boosters get a rank, a server and your play window. Your name, email and payment details never reach them, and the order needs no account.":
+        "Les boosters reçoivent un rang, un serveur et vos horaires de jeu. Votre nom, votre e-mail et vos données de paiement ne leur parviennent jamais, et la commande ne nécessite aucun compte.",
       "Support": "Support",
       "Answered in minutes, not days": "Réponse en minutes, pas en jours",
-      "Discord and email, 24/7, staffed by people who play the game. Median first reply last month: 3m 40s.":
-        "Discord et e-mail, 24/7, gérés par des joueurs. Première réponse médiane le mois dernier : 3 min 40 s.",
+      "One thread per order, staffed around the clock. If an account review lands, support files the appeal for you rather than pointing you at a form.":
+        "Un fil par commande, suivi 24h/24. Si une vérification de compte tombe, le support dépose le recours à votre place au lieu de vous renvoyer vers un formulaire.",
 
       /* dashboard points */
       "Match-by-match history": "Historique partie par partie",
@@ -338,6 +541,72 @@
       "Everything else": "Tout ce que",
       "people ask": "les gens demandent",
 
+      /* boosters roster + profile — design_handoff_boosters_roster */
+      "Verified from match history, not self-reported.":
+        "Vérifié depuis l'historique, pas déclaré.",
+      "How someone gets on this page": "Comment on arrive sur cette page",
+      "30 days": "30 jours",
+      "applied last month": "candidatures le mois dernier",
+      "trialled live on our account — five games, watched":
+        "testés en direct sur notre compte — cinq parties, observées",
+      "added to the board": "ajoutés à l'effectif",
+      "62% win-rate floor, checked monthly": "Plancher de 62 % de victoires, vérifié chaque mois",
+      "Ranks read from the game API": "Rangs lus depuis l'API du jeu",
+      "Trial games recorded and reviewed": "Parties d'essai enregistrées et revues",
+      "Applications open in the": "Les candidatures sont ouvertes dans la file",
+      "queue": "d'attente",
+      "players in there.": "joueurs y sont.",
+      "Join": "Rejoindre",
+      "on the board": "dans l'effectif",
+      "free right now": "libres en ce moment",
+      "Availability": "Disponibilité",
+      "Everyone": "Tout le monde",
+      "Free now": "Libres",
+      "Sort by": "Trier par",
+      "Free first": "Libres d'abord",
+      "Game · Server": "Jeu · Serveur",
+      "Peak this season": "Sommet cette saison",
+      "Win rate · 30d": "Taux de victoire · 30 j",
+      "Hire": "Engager",
+      "Nobody free on": "Personne de libre sur",
+      "right now": "en ce moment",
+      "Nobody free right now": "Personne de libre en ce moment",
+      "on the board — start the order and the first one free claims it.":
+        "dans l'effectif — lancez la commande et le premier libre la prend.",
+      "Order anyway": "Commander quand même",
+      "Show everyone": "Voir tout le monde",
+      "Showing": "Affichage de",
+      "free now": "libres",
+      "Load more": "Voir plus",
+      "Boosting since": "Booster depuis",
+      "in the queue": "dans la file",
+      "Orders delivered": "Commandes livrées",
+      "Average rating": "Note moyenne",
+      "On-time rate": "Livraisons à l'heure",
+      "Disputes": "Litiges",
+      "Completed orders": "Commandes terminées",
+      "Completed": "Terminée",
+      "Rating": "Note",
+      "day": "jour",
+      "Request": "Demander",
+      "Name them at checkout and your order waits for them instead of going to the open board.":
+        "Nommez-le au paiement et votre commande l'attend au lieu de partir sur l'effectif ouvert.",
+      "Named booster": "Booster nommé",
+      "No extra fee": "Sans supplément",
+      "ahead of you": "avant vous",
+      "Order with": "Commander avec",
+      "Climbs delivered": "Montées livrées",
+      /* "Showing the last N of M orders" — "of" is a shared key, so leaving
+         these two out produced a half-translated sentence. Both languages take
+         the figures in English order here; the French is slightly stiff and
+         the German is idiomatic. */
+      "Showing the last": "Affichage de",
+      "orders": "dernières commandes",
+      "Latest review": "Dernier avis",
+      "day ago": "jour",
+      "days ago": "jours",
+      "Ordering with": "Commande avec",
+
       /* boosters page */
       "The roster": "L'effectif",
       "Verified from": "Vérifié depuis",
@@ -363,13 +632,21 @@
       "Credentials never leave the order. A booster caught passing an account to anyone else is removed the same day and paid out nothing.":
         "Les identifiants ne quittent jamais la commande. Un booster surpris à transmettre un compte à un tiers est retiré le jour même et n'est pas payé.",
 
-      /* guarantee page */
+      /* guarantee page — design_handoff_safety_guarantee */
       "Safety & guarantee": "Sécurité et garantie",
-      "Written down,": "Écrit noir sur blanc,",
-      "not \"depends on": "pas « ça dépend",
-      "the order\".": "de la commande ».",
+      "Written down, not \"depends on the order\".":
+        "Écrit noir sur blanc, pas « ça dépend de la commande ».",
       "A refund policy that needs a support ticket to explain isn't a policy. Here is the whole thing, in the three cases that actually happen.":
         "Une politique de remboursement qui nécessite un ticket de support pour être expliquée n'est pas une politique. La voici en entier, dans les trois cas qui arrivent réellement.",
+      /* hero figures — the number is data, the unit is a word */
+      "5 days": "5 jours",
+      "24 hrs": "24 h",
+      "Recovery rate on account reviews, across": "Taux de récupération sur les vérifications de compte, sur",
+      "completed orders": "commandes terminées",
+      "Refunds land back on the original payment method, no ticket needed":
+        "Les remboursements reviennent sur le moyen de paiement d'origine, sans ticket",
+      "Unclaimed after payment? Refunded in full, automatically":
+        "Non prise en charge après paiement ? Remboursée intégralement, automatiquement",
       "Before a booster claims it": "Avant la prise en charge",
       "100% back, no reason asked": "100 % remboursé, sans justification",
       "One button in the order page. The money is back on the original payment method within 5 business days, and nobody will email you to ask why.":
@@ -380,12 +657,71 @@
         "Les divisions non gravies et les victoires non obtenues sont remboursées au tarif que vous avez payé. Un Gold → Diamant arrêté au Platine rembourse la portion Platine → Diamant, calculée par la formule qui vous a coté.",
       "Past the ETA": "Au-delà du délai",
       "Your choice, and we tell you first": "À vous de choisir, et nous vous prévenons d'abord",
-      "If an order runs past its delivery window we message you before you notice: keep going with a 15% credit, swap the booster, or take the unfinished portion back. Not claimed within 24 hours of payment? Refunded in full, automatically.":
-        "Si une commande dépasse son délai de livraison, nous vous prévenons avant que vous le remarquiez : continuer avec un crédit de 15 %, changer de booster, ou récupérer la portion inachevée. Non prise en charge dans les 24 heures suivant le paiement ? Remboursée intégralement, automatiquement.",
-      "Refund": "Remboursement",
-      "questions": "questions",
+      "If an order runs past its delivery window we message you before you notice: keep going with a 15% credit, swap the booster, or take the unfinished portion back.":
+        "Si une commande dépasse son délai de livraison, nous vous prévenons avant que vous le remarquiez : continuer avec un crédit de 15 %, changer de booster, ou récupérer la portion inachevée.",
+
+      /* band 02 — the safety prose, the disclaimer plate, the measure card */
+      "Anti-cheat looks for software, not skill. Every solo order runs behind an enterprise VPN matched to your region, the booster mirrors your sensitivity and crosshair, and sessions are scheduled inside the hours you normally play — so the activity pattern on the account never changes. Duo orders never touch your login at all.":
+        "L'anti-triche cherche des logiciels, pas du talent. Chaque commande solo passe par un VPN professionnel dans votre région, le booster reproduit votre sensibilité et votre viseur, et les sessions sont planifiées pendant vos horaires de jeu habituels — le schéma d'activité du compte ne change donc jamais. Les commandes duo ne touchent jamais à vos identifiants.",
+      "Across 92,400 completed orders the recovery rate on account reviews is 100%. If a boost triggers one, support files the appeal and the order is refunded in full while it runs. Your name, email and payment details are never shared with the booster.":
+        "Sur 92 400 commandes terminées, le taux de récupération sur les vérifications de compte est de 100 %. Si un boost en déclenche une, le support dépose le recours et la commande est remboursée intégralement pendant la procédure. Votre nom, votre e-mail et vos données de paiement ne sont jamais communiqués au booster.",
       "Boosting is against the terms of service of every game listed here. We reduce the risk as far as it can be reduced and we will not pretend it is zero, because it isn't — any competitor telling you otherwise is lying to you.":
         "Le boosting va à l'encontre des conditions d'utilisation de chaque jeu listé ici. Nous réduisons le risque autant que possible et ne prétendrons pas qu'il est nul, car il ne l'est pas — tout concurrent qui affirme le contraire vous ment.",
+      "What that means per order": "Ce que cela signifie par commande",
+      "Every order": "Chaque commande",
+      "Enterprise VPN, matched to your region": "VPN professionnel, adapté à votre région",
+      "Not a consumer VPN and not a datacentre IP — the login location never changes.":
+        "Ni un VPN grand public ni une IP de centre de données — le lieu de connexion ne change jamais.",
+      "The booster mirrors your settings before the first game.":
+        "Le booster reproduit vos réglages avant la première partie.",
+      "Played inside your normal hours": "Joué pendant vos horaires habituels",
+      "You set the window at checkout; sessions are scheduled inside it.":
+        "Vous fixez la plage horaire au paiement ; les sessions y sont planifiées.",
+      "Offline appearance, whole order": "Apparence hors ligne, toute la commande",
+      "Friends see you offline until the order closes.":
+        "Vos amis vous voient hors ligne jusqu'à la clôture de la commande.",
+      "Duo never touches your login": "Le duo ne touche jamais à vos identifiants",
+      "You play your own account. Nobody signs in but you.":
+        "Vous jouez sur votre propre compte. Personne ne s'y connecte à part vous.",
+
+      /* band 03 — three promises */
+      "In short": "En bref",
+      "Three promises, plainly": "Trois promesses, clairement",
+      "Read the full terms": "Lire les conditions complètes",
+      /* The Guarantee card's proof line is the same sentence the checkout page
+         states — one entry, in the checkout block below, for both. The handoff
+         requires the two to match word for word. */
+      "Card details stay with Stripe": "Les données de carte restent chez Stripe",
+      "Median first reply 3m 40s": "Première réponse médiane 3 min 40 s",
+
+      /* band 04 — FAQ */
+      "The questions support gets most": "Les questions que le support reçoit le plus",
+      "The six support answers most. If yours isn't here, the thread on your order reaches a person, not a bot.":
+        "Les six auxquelles le support répond le plus. Si la vôtre n'y est pas, le fil de votre commande atteint une personne, pas un bot.",
+      "Ask support": "Contacter le support",
+      "Can I play my own account while an order runs?":
+        "Puis-je jouer sur mon propre compte pendant une commande ?",
+      "Yes, and it costs nothing. Pause the order from the order page and the booster stops at the end of the current game; unpause and it resumes the same night if a slot is open. Playing ranked yourself while a solo order is unpaused is the one thing to avoid — two people queuing the same account is what looks abnormal, not the boost.":
+        "Oui, et cela ne coûte rien. Mettez la commande en pause depuis sa page et le booster s'arrête à la fin de la partie en cours ; relancez-la et elle reprend le soir même si un créneau est libre. La seule chose à éviter est de jouer en classé vous-même pendant qu'une commande solo est active — c'est le fait que deux personnes lancent des files sur le même compte qui paraît anormal, pas le boost.",
+      "What happens if my account gets a review or a ban?":
+        "Que se passe-t-il si mon compte fait l'objet d'une vérification ou d'un bannissement ?",
+      "Support files the appeal for you and the order is refunded in full while it runs, so you are never paying for an account you cannot use. Across 92,400 completed orders the recovery rate on reviews is 100%. Boosting still breaks every listed game's terms of service — the risk is reduced as far as it can be, not removed.":
+        "Le support dépose le recours à votre place et la commande est remboursée intégralement pendant la procédure : vous ne payez jamais pour un compte inutilisable. Sur 92 400 commandes terminées, le taux de récupération sur les vérifications est de 100 %. Le boosting enfreint toujours les conditions d'utilisation de chaque jeu listé — le risque est réduit autant que possible, pas supprimé.",
+      "Will the booster change my password or my settings?":
+        "Le booster va-t-il changer mon mot de passe ou mes réglages ?",
+      "No. Login details are used to sign in and nothing else — no password changes, no email changes, no purchases, no rune or loadout edits beyond the champions and roles you asked for. Sensitivity and crosshair are mirrored to yours, then restored. Change your password once the order closes anyway; the order page tells you when.":
+        "Non. Les identifiants servent à se connecter et à rien d'autre — aucun changement de mot de passe, d'e-mail, aucun achat, aucune modification de runes ou d'équipement au-delà des champions et rôles demandés. La sensibilité et le viseur sont alignés sur les vôtres, puis rétablis. Changez tout de même votre mot de passe à la clôture ; la page de commande vous indique quand.",
+      "How is the price calculated, and can it change after I pay?":
+        "Comment le prix est-il calculé, et peut-il changer après paiement ?",
+      "The price is per division crossed, so a longer climb costs more per step than a short one. It is fixed at checkout: the number on the button is the number charged, and nothing is added later. Duo adds 55% because the booster carries a second player, and add-ons are priced individually before you pay.":
+        "Le prix est calculé par division franchie : une longue montée coûte donc plus cher par palier qu'une courte. Il est fixé au paiement : le montant sur le bouton est celui qui est débité, et rien n'est ajouté ensuite. Le duo ajoute 55 % parce que le booster porte un second joueur, et les options sont facturées individuellement avant le paiement.",
+      "Do I have to make an account to order?":
+        "Dois-je créer un compte pour commander ?",
+      "No. Orders are created against your email and you get a one-click link to follow them. Set a password afterwards if you want the dashboard to remember your orders; skip it and the link still works. Your name, email and card details are never shared with the booster.":
+        "Non. Les commandes sont créées à partir de votre e-mail et vous recevez un lien en un clic pour les suivre. Définissez un mot de passe ensuite si vous voulez que le tableau de bord retienne vos commandes ; sinon, le lien fonctionne quand même. Votre nom, votre e-mail et vos données de carte ne sont jamais communiqués au booster.",
+      "Can I pick a specific booster?": "Puis-je choisir un booster précis ?",
+      "Yes — name one at checkout from their profile and the order waits for them instead of going to the open board. That means a slower start, so we show their current queue and slots before you commit. Leave it open and the first free booster in your bracket claims it, usually inside 18 min.":
+        "Oui — désignez-en un au paiement depuis son profil et la commande l'attend au lieu de partir sur le tableau ouvert. Cela signifie un démarrage plus lent, c'est pourquoi nous affichons sa file et ses créneaux avant que vous ne validiez. Laissez-la ouverte et le premier booster libre de votre palier la prend, généralement en moins de 18 min.",
 
       /* support page */
       "Two ways in.": "Deux moyens de nous joindre.",
@@ -415,31 +751,88 @@
       "Local preview — this form doesn't send anything.": "Aperçu local — ce formulaire n'envoie rien.",
       "Before you write in": "Avant de nous écrire",
 
-      /* reviews page */
+      /* reviews page. The figures ride in their own nodes, so "4.8 / 5 across
+         3,140 reviews" is three translatable words around two numbers. The
+         rating segment says "Any" rather than the handoff's "All" because
+         "All" is already taken by the roster rail's "All 187 reviews". */
       "reviews": "avis",
       "Every review below is attached to a paid, completed order — pulled from Trustpilot and the order-page rating, then deduplicated. We don't filter by score, so one-star reviews sit in the same feed.":
         "Chaque avis ci-dessous est rattaché à une commande payée et terminée — extrait de Trustpilot et de la note en page de commande, puis dédupliqué. Nous ne filtrons pas par note, les avis une étoile figurent dans le même flux.",
-      "Unfiltered · 1★ reviews included": "Non filtré · avis 1★ inclus",
-      "Overall rating summary": "Résumé de la note globale",
+      "across": "sur",
+      "Read the worst first": "Voir les pires d'abord",
+      "Read on Trustpilot": "Lire sur Trustpilot",
       "Overall rating": "Note globale",
+      "Verified only": "Vérifiés uniquement",
+      "Click a row to filter the feed by that rating.":
+        "Cliquez sur une ligne pour filtrer le flux par cette note.",
+      "Any": "Toutes",
+      "or less": "ou moins",
+      "Most recent": "Plus récents",
+      "Highest rated": "Mieux notés",
+      "Lowest rated": "Moins bien notés",
+      "Clear filters": "Effacer les filtres",
+      "Nothing matches that yet": "Aucun avis ne correspond",
+      "No review in the feed has that rating for this game. Widen the filters to see the rest.":
+        "Aucun avis du flux n'a cette note pour ce jeu. Élargissez les filtres pour voir le reste.",
+      "Load 30 more": "Charger 30 de plus",
+      "Show the rest": "Afficher le reste",
       "Excellent": "Excellent",
       "Where the score": "D'où vient",
       "comes from": "la note",
       "A review request goes out once, on delivery, and never again. Nothing is incentivised — no discount for reviewing, no reward for a five. That keeps the volume lower than competitors who buy them, and it's the reason the score is worth reading at all.":
         "Une demande d'avis est envoyée une fois, à la livraison, et jamais plus. Rien n'est incité — pas de remise pour un avis, pas de récompense pour un cinq. Cela maintient un volume inférieur à celui des concurrents qui les achètent, et c'est pourquoi la note vaut la peine d'être lue.",
 
-      /* track page */
-      "Track an order": "Suivre une commande",
-      "Your link works": "Votre lien fonctionne",
-      "without a": "sans",
-      "password.": "mot de passe.",
+      /* the demo page (was "track my order") — design_handoff_track_order */
+      "Demo": "Démo",
+      "Demo dashboard": "Tableau de bord démo",
+      "Your link works without a password.": "Votre lien fonctionne sans mot de passe.",
       "Guest orders are tracked by the link we emailed you. Lost it? Put the address you paid with below and we'll send it again. Nothing to remember, nothing to reset.":
         "Les commandes invité se suivent via le lien que nous vous avons envoyé par e-mail. Perdu ? Indiquez ci-dessous l'adresse utilisée pour payer et nous le renverrons. Rien à retenir, rien à réinitialiser.",
+      "No account, no password — the link is the login":
+        "Pas de compte, pas de mot de passe — le lien est la connexion",
+      "It never expires and works on any device":
+        "Il n'expire jamais et fonctionne sur tous les appareils",
+      "Find your order": "Retrouvez votre commande",
+      "Guest safe": "Sans compte",
       "Order number": "Numéro de commande",
-      "or the email you paid with": "ou l'e-mail utilisé pour payer",
+      /* the two states of the helper line under the order-number field, and the
+         two submit labels — page_demo()'s own script owns these nodes and asks
+         for them through esbT, because they swap at runtime. */
+      "On your confirmation email, under the total.":
+        "Sur votre e-mail de confirmation, sous le total.",
+      "We can't find that order number. Check the confirmation email, or use the address you paid with below.":
+        "Nous ne trouvons pas ce numéro de commande. Vérifiez l'e-mail de confirmation, ou utilisez ci-dessous l'adresse ayant servi au paiement.",
+      "or": "ou",
+      "The email you paid with": "L'e-mail utilisé pour payer",
+      "We resend the link to that address. It never expires and it works on any device.":
+        "Nous renvoyons le lien à cette adresse. Il n'expire jamais et fonctionne sur tous les appareils.",
       "Find my order": "Trouver ma commande",
-      "Local preview — try order number ESB-3F92K1.": "Aperçu local — essayez le numéro de commande ESB-3F92K1.",
+      "Email me the link": "M'envoyer le lien",
+      "Demo — no email was sent.": "Démo — aucun e-mail n'a été envoyé.",
+      "On the live site the link reaches": "Sur le site en ligne, le lien parvient à",
+      "inside a minute, it never expires, and it opens the dashboard below on any device.":
+        "en moins d'une minute, il n'expire jamais et il ouvre le tableau de bord ci-dessous sur tous les appareils.",
+      "The order number is in your confirmation email, on the line under the total.":
+        "Le numéro de commande figure dans votre e-mail de confirmation, sur la ligne sous le total.",
+
+      /* the resolved order */
+      "Back to the order lookup": "Retour à la recherche de commande",
       "In progress": "En cours",
+      "Paused": "En pause",
+      "Example": "Exemple",
+      "Pause order": "Mettre en pause",
+      "Resume order": "Reprendre",
+      "Order paused.": "Commande en pause.",
+      "The account is free within minutes and the delivery clock stops. Resume whenever you're done playing.":
+        "Le compte est libre en quelques minutes et le délai de livraison s'arrête. Reprenez quand vous avez fini de jouer.",
+      "last game": "dernière partie",
+      "Play window": "Créneau de jeu",
+      "Timeline": "Chronologie",
+      "reached": "atteint",
+      "claimed the order": "a pris la commande",
+      "after payment": "après le paiement",
+      "Yesterday, 23:10": "Hier, 23:10",
+      "— any time this order is open.": "— à tout moment tant que cette commande est ouverte.",
       "Progress": "Progression",
       "Match": "Partie",
       "Result": "Résultat",
@@ -448,11 +841,35 @@
       "Win": "Victoire",
       "Loss": "Défaite",
       "min ago": "min",
-      "Pause the order": "Mettre la commande en pause",
-      "Request a different booster": "Demander un autre booster",
-      "Message support": "Contacter le support",
 
       /* checkout */
+      "Secure checkout": "Paiement sécurisé",
+      "Need a hand?": "Besoin d'aide ?",
+      "Required": "Obligatoire",
+      "Optional": "Facultatif",
+      "Anything the booster should know": "Ce que le booster doit savoir",
+      "Enter an email we can send the order link to.":
+        "Saisissez un e-mail auquel envoyer le lien de commande.",
+      "Mornings": "Matins",
+      "Afternoons": "Après-midis",
+      "Evenings": "Soirées",
+      "Nights": "Nuits",
+      "Card, Apple Pay and Google Pay are all on the next screen — details are entered on Stripe's secure checkout, so we never see or store them. Statements read as a neutral merchant name.":
+        "Carte, Apple Pay et Google Pay sont tous sur l'écran suivant — les données sont saisies sur le paiement sécurisé de Stripe, nous ne les voyons ni ne les stockons jamais. Les relevés affichent un nom de marchand neutre.",
+      "Secured by Stripe": "Sécurisé par Stripe",
+      "Contacting payment…": "Connexion au paiement…",
+      "Refunded in full until a booster claims it":
+        "Remboursé intégralement jusqu'à la prise en charge par un booster",
+      "included — friends see you offline for the whole order.":
+        "inclus — vos amis vous voient hors ligne pendant toute la commande.",
+      "Last chance to add": "Dernière chance d'ajouter",
+      "Discount code": "Code de réduction",
+      "applied": "appliqué",
+      "No code applied": "Aucun code appliqué",
+      "Have a code?": "Vous avez un code ?",
+      "Have another code?": "Vous avez un autre code ?",
+      "Enter a code": "Saisir un code",
+      "Close": "Fermer",
       "Your email": "Votre e-mail",
       "Order details": "Détails de la commande",
       "Payment": "Paiement",
@@ -484,7 +901,7 @@
       "This is a local preview, so no payment was taken and no email was sent. In production this is the point where the order goes on the booster board, the confirmation email leaves, and":
         "Ceci est un aperçu local : aucun paiement n'a été prélevé et aucun e-mail envoyé. En production, c'est ici que la commande rejoint le tableau des boosters, que l'e-mail de confirmation part, et que",
       "fires to GA4 and to the Meta CAPI gateway.": "est envoyé à GA4 et à la passerelle Meta CAPI.",
-      "Track this order": "Suivre cette commande",
+      "See what the dashboard looks like": "Voir à quoi ressemble le tableau de bord",
       "Order summary": "Récapitulatif de commande",
       "Locked at checkout": "Verrouillé au paiement",
       "Climb": "Montée",
@@ -554,40 +971,149 @@
       "No divisions": "Keine Divisionen",
       "None": "Keine",
 
-      /* util bar / nav */
+      /* site header — design_handoff_site_header */
       "Currency": "Währung",
       "Language": "Sprache",
-      "34 verified boosters on shift right now": "34 verifizierte Booster jetzt im Dienst",
-      "Most orders claimed within 18 min": "Meiste Aufträge in 18 Min. angenommen",
-      "25 boosters free and ready to start now": "25 Booster frei und sofort startbereit",
-      "Join 3,000 players in our Discord community": "Komm zu 3.000 Spielern in unseren Discord",
-      "34 verified boosters on shift right now · Most orders claimed within 18 min · 25 boosters free and ready to start now · Join 3,000 players in our Discord community":
-        "34 verifizierte Booster jetzt im Dienst · Meiste Aufträge in 18 Min. angenommen · 25 Booster frei und sofort startbereit · Komm zu 3.000 Spielern in unseren Discord",
+      "Summer sale": "Sommer-Sale",
+      "ends 31 Aug": "bis 31. Aug.",
+      "Copied": "Kopiert",
+      "verified boosters": "verifizierte Booster",
       "Games": "Spiele",
       "Live": "Live",
       "Boosters": "Booster",
       "Safety": "Sicherheit",
       "Reviews": "Bewertungen",
-      "Track my order": "Bestellung verfolgen",
-      "Start an order": "Bestellung starten",
+      "Log in": "Anmelden",
       "Menu": "Menü",
       "Skip to content": "Zum Inhalt springen",
+      /* mega menus */
+      "Pick a ladder": "Wähle eine Rangliste",
+      "Who plays your order": "Wer deine Bestellung spielt",
+      "Before you buy": "Bevor du kaufst",
+      "Right now": "Gerade jetzt",
+      "Top": "Nr. 1",
+      "Hiring": "Sucht Verstärkung",
+      "are live too": "sind ebenfalls live",
+      "boosters on shift": "Booster im Dienst",
+      "Median claim": "Übernahme im Median",
+      "Watch orders land live": "Bestellungen live eintreffen sehen",
+      "All nine ladders": "Alle neun Ranglisten",
+      "Browse the roster": "Das Team ansehen",
+      "verified boosters, one game each": "verifizierte Booster, je ein Spiel",
+      "Hire a specific booster": "Einen bestimmten Booster buchen",
+      "Name one at checkout, no extra fee": "Beim Bezahlen benennen, ohne Aufpreis",
+      "How we verify": "Wie wir prüfen",
+      "Rank proof, trial orders, review floor": "Rangnachweis, Probebestellungen, Bewertungsgrenze",
+      "Master+ with a clean account": "Master+ mit sauberem Account",
+      "Read their reviews": "Ihre Bewertungen lesen",
+      "reviews, filterable by game and score": "Bewertungen, filterbar nach Spiel und Note",
+      "The guarantee": "Die Garantie",
+      "Refunded until a booster claims it": "Erstattet, bis ein Booster übernimmt",
+      "Account safety": "Account-Sicherheit",
+      "Regional VPN, your hours, offline": "Regionales VPN, deine Zeiten, offline",
+      "What we never do": "Was wir nie tun",
+      "No bots, no password changes": "Keine Bots, keine Passwortänderungen",
+      "Pro-rated, in five business days": "Anteilig, in fünf Werktagen",
+      "FAQ": "FAQ",
+      "The six questions support gets most": "Die sechs häufigsten Fragen an den Support",
+      "Track an order": "Bestellung verfolgen",
+      "No password — the link is the login": "Kein Passwort — der Link ist der Login",
+      /* auth panel */
+      "Create account": "Konto erstellen",
+      "Create your account": "Erstelle dein Konto",
+      "An account is optional. It keeps every order, thread and saved configuration in one place — you can still buy as a guest.":
+        "Ein Konto ist optional. Es bündelt jede Bestellung, jeden Verlauf und jede gespeicherte Konfiguration an einem Ort — du kannst weiterhin als Gast kaufen.",
+      "Bought as a guest? You don't need an account. Use the link we emailed you, or resend it from the order tracker.":
+        "Als Gast gekauft? Du brauchst kein Konto. Nutze den Link aus unserer E-Mail oder lass ihn dir in der Bestellverfolgung erneut schicken.",
+      "Continue with Discord": "Weiter mit Discord",
+      "Continue with Google": "Weiter mit Google",
+      "Sign up with Discord": "Mit Discord registrieren",
+      "Sign up with Google": "Mit Google registrieren",
+      "or with email": "oder per E-Mail",
+      "Display name": "Anzeigename",
+      "What your booster calls you": "Wie dein Booster dich nennt",
+      "Password": "Passwort",
+      "Your password": "Dein Passwort",
+      "At least 6 characters": "Mindestens 6 Zeichen",
+      "Forgot it?": "Vergessen?",
+      "Show password": "Passwort anzeigen",
+      "Hide password": "Passwort verbergen",
+      "Six characters or more. A passphrase beats a symbol soup.":
+        "Sechs Zeichen oder mehr. Ein Passsatz schlägt einen Zeichensalat.",
+      "Too short to be worth having.": "Zu kurz, um etwas zu taugen.",
+      "Getting there — add a few more words.": "Fast — häng noch ein paar Wörter an.",
+      "Strong enough.": "Stark genug.",
+      "I've read the": "Ich habe die",
+      "terms": "Nutzungsbedingungen",
+      "privacy policy": "Datenschutzerklärung",
+      "and the": "und die",
+      ", including how boosting relates to each game's rules.":
+        " gelesen, einschließlich dessen, wie sich Boosting zu den Regeln des jeweiligen Spiels verhält.",
+      "We'll keep you signed in on this device for 30 days.":
+        "Du bleibst auf diesem Gerät 30 Tage angemeldet.",
+      "That email and password don't match. Check the address, or reset the password.":
+        "E-Mail und Passwort passen nicht zusammen. Prüfe die Adresse oder setze das Passwort zurück.",
+      "An account with this email already exists. Log in instead.": "Ein Konto mit dieser E-Mail existiert bereits. Melde dich stattdessen an.",
+      "Enter a valid email address.": "Gib eine gültige E-Mail-Adresse ein.",
+      "Choose a password of at least 6 characters.": "Wähle ein Passwort mit mindestens 6 Zeichen.",
+      "Re-enter your password": "Passwort erneut eingeben",
+      "The passwords don't match.": "Die Passwörter stimmen nicht überein.",
+      "Please accept the terms to create your account.": "Bitte akzeptiere die Bedingungen, um dein Konto zu erstellen.",
+      "Enter your password.": "Gib dein Passwort ein.",
+      "Couldn't reach the server. Check your connection and try again.": "Server nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.",
+      "Couldn't create the account. Try again.": "Konto konnte nicht erstellt werden. Versuche es erneut.",
+      "Sign-in didn't complete. Please try again.": "Die Anmeldung wurde nicht abgeschlossen. Bitte versuche es erneut.",
+      "That email and password don't match. Check them, or create an account.": "E-Mail und Passwort passen nicht zusammen. Prüfe sie oder erstelle ein Konto.",
+      "Social sign-in isn't connected yet. Use your email, or buy as a guest — checkout needs no account.":
+        "Die Anmeldung über soziale Konten ist noch nicht angebunden. Nutze deine E-Mail oder kaufe als Gast — die Kasse braucht kein Konto.",
+      "This is your store account, never your game login.":
+        "Das ist dein Shop-Konto, nie dein Spiel-Login.",
+      "We never ask for your game password here.":
+        "Wir fragen hier nie nach deinem Spiel-Passwort.",
+      "New here?": "Neu hier?",
+      "Already have an account?": "Du hast schon ein Konto?",
+      "Create an account": "Konto erstellen",
+      /* account menu */
+      "My orders": "Meine Bestellungen",
+      "Messages": "Nachrichten",
+      "Log out": "Abmelden",
+      "live": "aktiv",
+      "Account": "Konto",
+      "Your orders": "Deine Bestellungen",
+      "Every boost you've ordered \u2014 the one in progress, and the ones already delivered.": "Jeder Boost, den du bestellt hast — der laufende und die bereits gelieferten.",
+      "Signed in as": "Angemeldet als",
+      "You're viewing a sample history.": "Du siehst einen Beispielverlauf.",
+      "to keep your orders in one place \u2014 or track a single order by the link we emailed you. Checkout never needs an account.": "um deine Bestellungen an einem Ort zu behalten — oder verfolge eine Bestellung über den Link aus unserer E-Mail. Die Kasse braucht nie ein Konto.",
+      "This order history is a preview. Until an account backend is live, the orders shown are example data, priced with the real quote \u2014 the same standing as the demo dashboard.": "Dieser Bestellverlauf ist eine Vorschau. Solange kein Konto-Backend aktiv ist, sind die gezeigten Bestellungen Beispieldaten, mit dem echten Angebot berechnet — im selben Status wie das Demo-Dashboard.",
+      "Track by link": "Über Link verfolgen",
+      "Orders": "Bestellungen",
+      "Lifetime spent": "Gesamt ausgegeben",
+      "Open dashboard": "Dashboard öffnen",
+      "Status": "Status",
+      "now": "jetzt",
 
       /* footer */
       "We are not affiliated with Riot Games, Inc., Blizzard Entertainment, Valve, or any of their subsidiaries. All trademarks, game titles, logos, and brand names are the property of their respective owners. eSports Boost provides independent gaming services and is not endorsed by or associated with any game publisher.":
         "Wir sind weder mit Riot Games, Inc., Blizzard Entertainment, Valve noch einer ihrer Tochtergesellschaften verbunden. Alle Marken, Spieltitel, Logos und Markennamen sind Eigentum ihrer jeweiligen Inhaber. eSports Boost bietet unabhängige Gaming-Dienste und wird von keinem Spielehersteller unterstützt oder mit ihm in Verbindung gebracht.",
       "Questions? Email us at": "Fragen? Schreib uns an",
+      "Follow along": "Folge uns",
+      "games": "Spiele",
+      "Help center": "Hilfecenter",
       "Legal": "Rechtliches",
       "24/7 Customer Support": "24/7-Kundensupport",
+      "Online now": "Jetzt online",
+      "Typical reply": "Antwort typischerweise in",
       "Need help? Our support team is available anytime to assist you with your orders and questions.":
         "Brauchst du Hilfe? Unser Support-Team ist jederzeit für deine Bestellungen und Fragen da.",
-      "Let's Chat": "Los, chatten",
-      "Visit Help Center": "Hilfecenter besuchen",
+      "Let's chat": "Los, chatten",
+      "Visit help center": "Hilfecenter besuchen",
       "Privacy Policy": "Datenschutzerklärung",
       "Terms of Service": "Nutzungsbedingungen",
       "Refunds & Cancellations": "Rückerstattungen & Stornierungen",
       "Become a booster": "Booster werden",
       "Discord": "Discord",
+      "Card, Apple Pay and Google Pay accepted — payments secured by Stripe":
+        "Karte, Apple Pay und Google Pay akzeptiert — Zahlungen abgesichert durch Stripe",
       "© 2026 eSports Boost. All Rights Reserved.": "© 2026 eSports Boost. Alle Rechte vorbehalten.",
 
       /* calculator / wizard */
@@ -599,6 +1125,21 @@
       "Current division": "Aktuelle Division",
       "Target division": "Ziel-Division",
       "How it's played": "Spielweise",
+      /* order card — the "Ladder card" hero on the game pages */
+      "Build your boost": "Stell deinen Boost zusammen",
+      "of": "von",
+      "boosters free now": "Booster jetzt frei",
+      "Add-ons": "Extras",
+      "to climb": "zu erklimmen",
+      "division": "Division",
+      "divisions": "Divisionen",
+      "Cheapest single division": "Günstigste einzelne Division",
+      "You save": "Du sparst",
+      "with": "mit",
+      "Money-back until a booster is assigned": "Geld zurück, bis ein Booster zugewiesen ist",
+      "No account needed": "Kein Konto nötig",
+      "VPN matched to your region": "VPN passend zu deiner Region",
+      "on Trustpilot": "auf Trustpilot",
       "Delivered in": "Geliefert in",
       "Boosters free now": "Booster jetzt frei",
       "Total price": "Gesamtpreis",
@@ -626,6 +1167,14 @@
       "Configure your boost": "Konfiguriere deinen Boost",
       "Watch a live boost": "Live-Boost ansehen",
       "Continue your order": "Bestellung fortsetzen",
+
+      /* home hero — see the note on the French block above. */
+      "verified boosters on shift right now": "verifizierte Booster jetzt im Dienst",
+      "This month's #1": "Nr. 1 des Monats",
+      "Verified": "Verifiziert",
+      "orders delivered": "Bestellungen geliefert",
+      "boosts delivered": "Boosts geliefert",
+      "See vantaa profile": "Profil von vantaa ansehen",
       "Included": "Inklusive",
 
       /* add-ons */
@@ -661,27 +1210,70 @@
 
       /* section heads / home */
       "Nine ladders.": "Neun Ladders.",
-      "Forty services.": "Vierzig Services.",
+      "Thirty-seven services.": "Siebenunddreißig Services.",
+      "Most ordered": "Am häufigsten bestellt",
+      "Configure": "Konfigurieren",
+      "All games": "Alle Spiele",
+      "ladders are live too.": "sind ebenfalls live.",
+      "Elo boost": "Elo-Boost",
+      "Rank boost": "Rang-Boost",
+      "MMR boost": "MMR-Boost",
+      "Unrated wins": "Unrated-Siege",
+      "Tournament wins": "Turniersiege",
+      "Double-up": "Double-up",
+      "Calibration": "Kalibrierung",
+      "Badges": "Abzeichen",
+      "Kills": "Kills",
+      "Premier rating": "Premier-Wertung",
+      "Faceit levels": "Faceit-Level",
+      "Wingman": "Wingman",
+      "Wins": "Siege",
+      "Duo": "Duo",
+      "Coaching": "Coaching",
       "Every service is priced per division and shown before you sign in. Placements, net wins, coaching and duo on every title.":
         "Jeder Service wird pro Division berechnet und vor dem Anmelden angezeigt. Platzierungen, Netto-Siege, Coaching und Duo bei jedem Titel.",
       "Delivered today": "Heute geliefert",
       "Why this doesn't get you banned": "Warum du dafür nicht gebannt wirst",
+      /* 04 Dashboard — the section and the mock inside it. Every figure in the
+         mock sits outside these nodes (see dash_mock()), so the words match. */
+      "Dashboard": "Dashboard",
       "You watch the whole thing": "Du siehst alles mit",
       "Regional VPN": "Regionales VPN",
       "Pro-rated refunds": "Anteilige Rückerstattungen",
       "No account sharing on duo": "Kein Kontoteilen im Duo",
+      "Open the demo dashboard": "Demo-Dashboard öffnen",
+      "Preview of the order dashboard": "Vorschau des Bestell-Dashboards",
+      "complete": "abgeschlossen",
+      "days left": "Tage übrig",
+      "LP across the order": "LP über die Bestellung",
+      "LP net": "LP netto",
+      "Order start": "Bestellstart",
+      "Now": "Jetzt",
+      "Match history": "Spielverlauf",
+      "K / D / A": "K / T / A",
+      "LP": "LP",
+      "Order dashboard · live": "Bestell-Dashboard · live",
+      "Pause": "Pause",
       "Order dashboard — live": "Bestell-Dashboard — live",
       "Order tracking dashboard with live match history": "Bestell-Dashboard mit Live-Spielverlauf",
       "What they said after": "Was sie danach sagten",
+      "Every review is tied to a paid, completed order — nothing incentivised. One per game, across the roster.":
+        "Jede Bewertung gehört zu einer bezahlten, abgeschlossenen Bestellung — nichts ist incentiviert. Eine pro Spiel, quer durch den Kader.",
+      "Read all reviews": "Alle Bewertungen lesen",
+      "Read all on Trustpilot": "Alle auf Trustpilot lesen",
+      "Verified order": "Verifizierte Bestellung",
+      "Page": "Seite",
       "Verified orders only": "Nur verifizierte Bestellungen",
       "Your climb starts at": "Dein Aufstieg beginnt bei",
       "Final at checkout. Refunded in full until a booster claims it, pro-rated after that.":
         "Endgültig an der Kasse. Bis zur Annahme voll erstattet, danach anteilig.",
-      "Ready when you are": "Bereit, wenn du es bist",
-      "Know your price before you sign up.": "Kenne deinen Preis, bevor du dich anmeldest.",
-      "The calculator is on every page. No account needed to see it.":
-        "Der Rechner ist auf jeder Seite. Kein Konto nötig, um ihn zu sehen.",
+      "Set two ranks and the price is on screen before you sign up. No account, no quote request.":
+        "Zwei Ränge wählen und der Preis steht da, noch vor jeder Anmeldung. Kein Konto, keine Angebotsanfrage.",
       "Talk to support": "Support kontaktieren",
+      "Your configuration": "Deine Konfiguration",
+      "Change": "Ändern",
+      "Queue · Server": "Warteschlange · Server",
+      "Money-back": "Geld zurück",
 
       /* stat band + roster */
       "Boosts delivered": "Boosts geliefert",
@@ -695,6 +1287,27 @@
       "Join the server →": "Server beitreten →",
       "All games →": "Alle Spiele →",
       "more": "mehr",
+
+      /* 02 Live / 03 Safety — siehe den Kommentar im französischen Block. */
+      "Updates as orders close": "Aktualisiert, sobald Bestellungen abgeschlossen werden",
+      "Delivered": "Geliefert",
+      "hr ago": "Std.",
+      "d ago": "T.",
+      "orders closed in the last 24 hours": "Bestellungen in den letzten 24 Stunden abgeschlossen",
+      "boosters": "Booster",
+      "All": "Alle",
+      "win rate": "Siegrate",
+      "Free": "Frei",
+      "free": "frei",
+      "1 order": "1 Bestellung",
+      "2 orders": "2 Bestellungen",
+      "Free to join": "Kostenlos",
+      "Join the server": "Server beitreten",
+      "Recovery rate on account reviews": "Wiederherstellungsquote bei Kontoprüfungen",
+      "Your sensitivity and crosshair": "Deine Sensitivität und dein Fadenkreuz",
+      "Played in your normal hours": "Gespielt zu deinen üblichen Zeiten",
+      "Offline the whole order": "Die ganze Bestellung offline",
+      "Read the full safety policy": "Vollständige Sicherheitsrichtlinie lesen",
 
       /* steps */
       "Configure and pay": "Konfigurieren und zahlen",
@@ -710,16 +1323,16 @@
       /* guarantees */
       "Guarantee": "Garantie",
       "Finished or refunded": "Fertig oder erstattet",
-      "If a boost stalls past its ETA you get the unfinished portion back, pro-rated, without opening a ticket war.":
-        "Bleibt ein Boost über die ETA hinaus stecken, bekommst du den nicht erledigten Teil anteilig zurück — ohne Ticket-Krieg.",
+      "Every order ends in the rank you paid for or the money back for the part that never arrived. There is no third outcome.":
+        "Jede Bestellung endet im bezahlten Rang oder mit dem Geld zurück für den Teil, der nie ankam. Ein drittes Ergebnis gibt es nicht.",
       "Privacy": "Datenschutz",
       "Nobody sees your name": "Niemand sieht deinen Namen",
-      "Regional VPN, your own sensitivity and crosshair, offline appearance, and sessions inside your normal play hours.":
-        "Regionales VPN, deine eigene Empfindlichkeit und dein Fadenkreuz, Offline-Anzeige und Sitzungen in deinen üblichen Spielzeiten.",
+      "Boosters get a rank, a server and your play window. Your name, email and payment details never reach them, and the order needs no account.":
+        "Booster bekommen einen Rang, einen Server und dein Spielfenster. Dein Name, deine E-Mail und deine Zahlungsdaten erreichen sie nie, und die Bestellung braucht kein Konto.",
       "Support": "Support",
       "Answered in minutes, not days": "Antwort in Minuten, nicht Tagen",
-      "Discord and email, 24/7, staffed by people who play the game. Median first reply last month: 3m 40s.":
-        "Discord und E-Mail, 24/7, betreut von Leuten, die das Spiel spielen. Mediane Erstantwort letzten Monat: 3 Min. 40 Sek.",
+      "One thread per order, staffed around the clock. If an account review lands, support files the appeal for you rather than pointing you at a form.":
+        "Ein Thread pro Bestellung, rund um die Uhr besetzt. Kommt eine Kontoprüfung, legt der Support den Einspruch für dich ein, statt dich auf ein Formular zu verweisen.",
 
       /* dashboard points */
       "Match-by-match history": "Match-für-Match-Verlauf",
@@ -808,6 +1421,68 @@
       "Everything else": "Alles andere,",
       "people ask": "was man fragt",
 
+      /* boosters roster + profile — design_handoff_boosters_roster */
+      "Verified from match history, not self-reported.":
+        "Verifiziert aus dem Spielverlauf, nicht selbst angegeben.",
+      "How someone gets on this page": "Wie man auf diese Seite kommt",
+      "30 days": "30 Tage",
+      "applied last month": "Bewerbungen im letzten Monat",
+      "trialled live on our account — five games, watched":
+        "live auf unserem Konto getestet — fünf Spiele, beobachtet",
+      "added to the board": "in den Kader aufgenommen",
+      "62% win-rate floor, checked monthly": "62 % Mindest-Siegrate, monatlich geprüft",
+      "Ranks read from the game API": "Ränge aus der Spiel-API gelesen",
+      "Trial games recorded and reviewed": "Testspiele aufgezeichnet und ausgewertet",
+      "Applications open in the": "Bewerbungen laufen über die",
+      "queue": "Warteschlange",
+      "players in there.": "Spieler sind dort.",
+      "Join": "Beitreten",
+      "on the board": "im Kader",
+      "free right now": "gerade frei",
+      "Availability": "Verfügbarkeit",
+      "Everyone": "Alle",
+      "Free now": "Jetzt frei",
+      "Sort by": "Sortieren nach",
+      "Free first": "Frei zuerst",
+      "Game · Server": "Spiel · Server",
+      "Peak this season": "Höchstrang diese Saison",
+      "Win rate · 30d": "Siegrate · 30 T",
+      "Hire": "Buchen",
+      "Nobody free on": "Niemand frei bei",
+      "right now": "gerade",
+      "Nobody free right now": "Gerade ist niemand frei",
+      "on the board — start the order and the first one free claims it.":
+        "im Kader — starte die Bestellung und der Erste, der frei wird, nimmt sie.",
+      "Order anyway": "Trotzdem bestellen",
+      "Show everyone": "Alle anzeigen",
+      "Showing": "Angezeigt:",
+      "free now": "jetzt frei",
+      "Load more": "Mehr laden",
+      "Boosting since": "Booster seit",
+      "in the queue": "in der Warteschlange",
+      "Orders delivered": "Gelieferte Bestellungen",
+      "Average rating": "Durchschnittliche Bewertung",
+      "On-time rate": "Pünktlichkeitsquote",
+      "Disputes": "Streitfälle",
+      "Completed orders": "Abgeschlossene Bestellungen",
+      "Completed": "Abgeschlossen",
+      "Rating": "Bewertung",
+      "day": "Tag",
+      "Request": "Anfrage:",
+      "Name them at checkout and your order waits for them instead of going to the open board.":
+        "Nenne ihn an der Kasse, dann wartet deine Bestellung auf ihn statt auf den offenen Kader zu gehen.",
+      "Named booster": "Namentlicher Booster",
+      "No extra fee": "Ohne Aufpreis",
+      "ahead of you": "vor dir",
+      "Order with": "Bestellen mit",
+      "Climbs delivered": "Gelieferte Aufstiege",
+      "Showing the last": "Angezeigt: die letzten",
+      "orders": "Bestellungen",
+      "Latest review": "Neueste Bewertung",
+      "day ago": "Tag her",
+      "days ago": "Tage her",
+      "Ordering with": "Bestellung mit",
+
       /* boosters page */
       "The roster": "Der Kader",
       "Verified from": "Verifiziert aus",
@@ -833,13 +1508,21 @@
       "Credentials never leave the order. A booster caught passing an account to anyone else is removed the same day and paid out nothing.":
         "Zugangsdaten verlassen nie die Bestellung. Ein Booster, der ein Konto an jemand anderen weitergibt, wird noch am selben Tag entfernt und nicht bezahlt.",
 
-      /* guarantee page */
+      /* guarantee page — design_handoff_safety_guarantee */
       "Safety & guarantee": "Sicherheit & Garantie",
-      "Written down,": "Schriftlich festgehalten,",
-      "not \"depends on": "nicht „kommt auf",
-      "the order\".": "die Bestellung an“.",
+      "Written down, not \"depends on the order\".":
+        "Schriftlich festgehalten, nicht „kommt auf die Bestellung an“.",
       "A refund policy that needs a support ticket to explain isn't a policy. Here is the whole thing, in the three cases that actually happen.":
         "Eine Rückerstattungsrichtlinie, die ein Support-Ticket zur Erklärung braucht, ist keine Richtlinie. Hier ist das Ganze, in den drei Fällen, die wirklich vorkommen.",
+      /* hero figures — the number is data, the unit is a word */
+      "5 days": "5 Tage",
+      "24 hrs": "24 Std.",
+      "Recovery rate on account reviews, across": "Wiederherstellungsquote bei Kontoprüfungen, über",
+      "completed orders": "abgeschlossene Bestellungen",
+      "Refunds land back on the original payment method, no ticket needed":
+        "Rückerstattungen landen auf dem ursprünglichen Zahlungsmittel, ohne Ticket",
+      "Unclaimed after payment? Refunded in full, automatically":
+        "Nach der Zahlung nicht angenommen? Voll erstattet, automatisch",
       "Before a booster claims it": "Bevor ein Booster sie annimmt",
       "100% back, no reason asked": "100 % zurück, ohne Begründung",
       "One button in the order page. The money is back on the original payment method within 5 business days, and nobody will email you to ask why.":
@@ -850,12 +1533,70 @@
         "Nicht erklommene Divisionen und nicht errungene Siege werden zum selben Satz erstattet, den du gezahlt hast. Ein bei Platin gestopptes Gold → Diamant erstattet den Teil Platin → Diamant, berechnet mit derselben Formel, die dir den Preis nannte.",
       "Past the ETA": "Nach der ETA",
       "Your choice, and we tell you first": "Deine Wahl, und wir sagen es dir zuerst",
-      "If an order runs past its delivery window we message you before you notice: keep going with a 15% credit, swap the booster, or take the unfinished portion back. Not claimed within 24 hours of payment? Refunded in full, automatically.":
-        "Läuft eine Bestellung über ihr Lieferfenster hinaus, melden wir uns, bevor du es merkst: mit 15 % Gutschrift weitermachen, den Booster tauschen oder den unfertigen Teil zurücknehmen. Nicht innerhalb von 24 Stunden nach Zahlung angenommen? Voll erstattet, automatisch.",
-      "Refund": "Rückerstattungs-",
-      "questions": "fragen",
+      "If an order runs past its delivery window we message you before you notice: keep going with a 15% credit, swap the booster, or take the unfinished portion back.":
+        "Läuft eine Bestellung über ihr Lieferfenster hinaus, melden wir uns, bevor du es merkst: mit 15 % Gutschrift weitermachen, den Booster tauschen oder den unfertigen Teil zurücknehmen.",
+
+      /* band 02 — the safety prose, the disclaimer plate, the measure card */
+      "Anti-cheat looks for software, not skill. Every solo order runs behind an enterprise VPN matched to your region, the booster mirrors your sensitivity and crosshair, and sessions are scheduled inside the hours you normally play — so the activity pattern on the account never changes. Duo orders never touch your login at all.":
+        "Anti-Cheat sucht nach Software, nicht nach Können. Jede Solo-Bestellung läuft hinter einem Enterprise-VPN in deiner Region, der Booster übernimmt deine Empfindlichkeit und dein Fadenkreuz, und Sitzungen werden in deinen üblichen Spielzeiten geplant — das Aktivitätsmuster des Kontos ändert sich also nie. Duo-Bestellungen berühren deine Zugangsdaten überhaupt nicht.",
+      "Across 92,400 completed orders the recovery rate on account reviews is 100%. If a boost triggers one, support files the appeal and the order is refunded in full while it runs. Your name, email and payment details are never shared with the booster.":
+        "Über 92.400 abgeschlossene Bestellungen liegt die Wiederherstellungsquote bei Kontoprüfungen bei 100 %. Löst ein Boost eine aus, legt der Support den Einspruch ein, und die Bestellung wird während des Verfahrens voll erstattet. Dein Name, deine E-Mail und deine Zahlungsdaten werden nie an den Booster weitergegeben.",
       "Boosting is against the terms of service of every game listed here. We reduce the risk as far as it can be reduced and we will not pretend it is zero, because it isn't — any competitor telling you otherwise is lying to you.":
         "Boosting verstößt gegen die Nutzungsbedingungen jedes hier gelisteten Spiels. Wir senken das Risiko so weit wie möglich und tun nicht so, als wäre es null, denn das ist es nicht — jeder Konkurrent, der dir das Gegenteil erzählt, belügt dich.",
+      "What that means per order": "Was das pro Bestellung bedeutet",
+      "Every order": "Jede Bestellung",
+      "Enterprise VPN, matched to your region": "Enterprise-VPN, passend zu deiner Region",
+      "Not a consumer VPN and not a datacentre IP — the login location never changes.":
+        "Kein Consumer-VPN und keine Rechenzentrums-IP — der Anmeldeort ändert sich nie.",
+      "The booster mirrors your settings before the first game.":
+        "Der Booster übernimmt deine Einstellungen vor der ersten Partie.",
+      "Played inside your normal hours": "Gespielt in deinen üblichen Zeiten",
+      "You set the window at checkout; sessions are scheduled inside it.":
+        "Du legst das Zeitfenster an der Kasse fest; Sitzungen werden darin geplant.",
+      "Offline appearance, whole order": "Offline-Anzeige, ganze Bestellung",
+      "Friends see you offline until the order closes.":
+        "Freunde sehen dich offline, bis die Bestellung abgeschlossen ist.",
+      "Duo never touches your login": "Duo berührt deine Zugangsdaten nie",
+      "You play your own account. Nobody signs in but you.":
+        "Du spielst auf deinem eigenen Konto. Niemand meldet sich an außer dir.",
+
+      /* band 03 — three promises */
+      "In short": "Kurz gesagt",
+      "Three promises, plainly": "Drei Versprechen, klar gesagt",
+      "Read the full terms": "Vollständige Bedingungen lesen",
+      /* Same sentence as the checkout page's refund line — one entry, in the
+         checkout block below, for both. The handoff requires them to match. */
+      "Card details stay with Stripe": "Kartendaten bleiben bei Stripe",
+      "Median first reply 3m 40s": "Mediane Erstantwort 3 Min. 40 Sek.",
+
+      /* band 04 — FAQ */
+      "The questions support gets most": "Die Fragen, die der Support am häufigsten bekommt",
+      "The six support answers most. If yours isn't here, the thread on your order reaches a person, not a bot.":
+        "Die sechs, die der Support am häufigsten beantwortet. Ist deine nicht dabei, erreicht der Thread deiner Bestellung einen Menschen, keinen Bot.",
+      "Ask support": "Support fragen",
+      "Can I play my own account while an order runs?":
+        "Kann ich auf meinem eigenen Konto spielen, während eine Bestellung läuft?",
+      "Yes, and it costs nothing. Pause the order from the order page and the booster stops at the end of the current game; unpause and it resumes the same night if a slot is open. Playing ranked yourself while a solo order is unpaused is the one thing to avoid — two people queuing the same account is what looks abnormal, not the boost.":
+        "Ja, und es kostet nichts. Pausiere die Bestellung auf ihrer Seite, und der Booster hört am Ende der laufenden Partie auf; hebst du die Pause auf, geht es noch am selben Abend weiter, sofern ein Slot frei ist. Das Einzige, was du vermeiden solltest: selbst Ranked spielen, während eine Solo-Bestellung nicht pausiert ist — dass zwei Personen mit demselben Konto in die Warteschlange gehen, wirkt auffällig, nicht der Boost.",
+      "What happens if my account gets a review or a ban?":
+        "Was passiert, wenn mein Konto geprüft oder gesperrt wird?",
+      "Support files the appeal for you and the order is refunded in full while it runs, so you are never paying for an account you cannot use. Across 92,400 completed orders the recovery rate on reviews is 100%. Boosting still breaks every listed game's terms of service — the risk is reduced as far as it can be, not removed.":
+        "Der Support legt den Einspruch für dich ein, und die Bestellung wird während des Verfahrens voll erstattet — du zahlst also nie für ein Konto, das du nicht nutzen kannst. Über 92.400 abgeschlossene Bestellungen liegt die Wiederherstellungsquote bei Prüfungen bei 100 %. Boosting verstößt trotzdem gegen die Nutzungsbedingungen jedes gelisteten Spiels — das Risiko ist so weit wie möglich gesenkt, nicht beseitigt.",
+      "Will the booster change my password or my settings?":
+        "Ändert der Booster mein Passwort oder meine Einstellungen?",
+      "No. Login details are used to sign in and nothing else — no password changes, no email changes, no purchases, no rune or loadout edits beyond the champions and roles you asked for. Sensitivity and crosshair are mirrored to yours, then restored. Change your password once the order closes anyway; the order page tells you when.":
+        "Nein. Die Zugangsdaten dienen zum Anmelden und sonst nichts — keine Passwortänderungen, keine E-Mail-Änderungen, keine Käufe, keine Runen- oder Loadout-Änderungen über die gewünschten Champions und Rollen hinaus. Empfindlichkeit und Fadenkreuz werden deinen angeglichen und danach wiederhergestellt. Ändere dein Passwort trotzdem, sobald die Bestellung abgeschlossen ist; die Bestellseite sagt dir wann.",
+      "How is the price calculated, and can it change after I pay?":
+        "Wie wird der Preis berechnet, und kann er sich nach der Zahlung ändern?",
+      "The price is per division crossed, so a longer climb costs more per step than a short one. It is fixed at checkout: the number on the button is the number charged, and nothing is added later. Duo adds 55% because the booster carries a second player, and add-ons are priced individually before you pay.":
+        "Der Preis gilt pro überquerter Division, ein langer Aufstieg kostet also pro Stufe mehr als ein kurzer. Er wird an der Kasse fixiert: Der Betrag auf dem Knopf ist der Betrag, der abgebucht wird, und später kommt nichts dazu. Duo kostet 55 % mehr, weil der Booster einen zweiten Spieler trägt, und Extras werden vor der Zahlung einzeln ausgewiesen.",
+      "Do I have to make an account to order?":
+        "Muss ich ein Konto anlegen, um zu bestellen?",
+      "No. Orders are created against your email and you get a one-click link to follow them. Set a password afterwards if you want the dashboard to remember your orders; skip it and the link still works. Your name, email and card details are never shared with the booster.":
+        "Nein. Bestellungen werden über deine E-Mail angelegt, und du bekommst einen Ein-Klick-Link, um sie zu verfolgen. Vergib danach ein Passwort, wenn das Dashboard deine Bestellungen behalten soll; lässt du es, funktioniert der Link trotzdem. Dein Name, deine E-Mail und deine Kartendaten werden nie an den Booster weitergegeben.",
+      "Can I pick a specific booster?": "Kann ich einen bestimmten Booster wählen?",
+      "Yes — name one at checkout from their profile and the order waits for them instead of going to the open board. That means a slower start, so we show their current queue and slots before you commit. Leave it open and the first free booster in your bracket claims it, usually inside 18 min.":
+        "Ja — nenne an der Kasse einen aus seinem Profil, und die Bestellung wartet auf ihn, statt auf das offene Board zu gehen. Das bedeutet einen späteren Start, deshalb zeigen wir seine aktuelle Warteschlange und Slots, bevor du dich festlegst. Lässt du sie offen, nimmt sie der erste freie Booster in deinem Bereich an, meist innerhalb von 18 Min.",
 
       /* support page */
       "Two ways in.": "Zwei Wege zu uns.",
@@ -885,31 +1626,85 @@
       "Local preview — this form doesn't send anything.": "Lokale Vorschau — dieses Formular sendet nichts.",
       "Before you write in": "Bevor du uns schreibst",
 
-      /* reviews page */
+      /* reviews page — siehe den Kommentar im französischen Block. */
       "reviews": "Bewertungen",
       "Every review below is attached to a paid, completed order — pulled from Trustpilot and the order-page rating, then deduplicated. We don't filter by score, so one-star reviews sit in the same feed.":
         "Jede Bewertung unten gehört zu einer bezahlten, abgeschlossenen Bestellung — aus Trustpilot und der Bewertung auf der Bestellseite gezogen und dedupliziert. Wir filtern nicht nach Sternen, Ein-Stern-Bewertungen stehen im selben Feed.",
-      "Unfiltered · 1★ reviews included": "Ungefiltert · 1★-Bewertungen inklusive",
-      "Overall rating summary": "Zusammenfassung der Gesamtbewertung",
+      "across": "bei",
+      "Read the worst first": "Zuerst die schlechtesten lesen",
+      "Read on Trustpilot": "Auf Trustpilot lesen",
       "Overall rating": "Gesamtbewertung",
+      "Verified only": "Nur verifiziert",
+      "Click a row to filter the feed by that rating.":
+        "Klicke auf eine Zeile, um den Feed nach dieser Bewertung zu filtern.",
+      "Any": "Alle",
+      "or less": "oder weniger",
+      "Most recent": "Neueste",
+      "Highest rated": "Beste Bewertung",
+      "Lowest rated": "Schlechteste Bewertung",
+      "Clear filters": "Filter zurücksetzen",
+      "Nothing matches that yet": "Dazu passt noch nichts",
+      "No review in the feed has that rating for this game. Widen the filters to see the rest.":
+        "Keine Bewertung im Feed hat diese Note für dieses Spiel. Erweitere die Filter, um den Rest zu sehen.",
+      "Load 30 more": "30 weitere laden",
+      "Show the rest": "Rest anzeigen",
       "Excellent": "Ausgezeichnet",
       "Where the score": "Woher die Bewertung",
       "comes from": "kommt",
       "A review request goes out once, on delivery, and never again. Nothing is incentivised — no discount for reviewing, no reward for a five. That keeps the volume lower than competitors who buy them, and it's the reason the score is worth reading at all.":
         "Eine Bewertungsanfrage geht einmal raus, bei Lieferung, und nie wieder. Nichts wird belohnt — kein Rabatt fürs Bewerten, keine Prämie für fünf Sterne. Das hält das Volumen niedriger als bei Konkurrenten, die sie kaufen, und deshalb ist die Bewertung überhaupt lesenswert.",
 
-      /* track page */
-      "Track an order": "Bestellung verfolgen",
-      "Your link works": "Dein Link funktioniert",
-      "without a": "ohne",
-      "password.": "Passwort.",
+      /* the demo page (was "track my order") — design_handoff_track_order */
+      "Demo": "Demo",
+      "Demo dashboard": "Demo-Dashboard",
+      "Your link works without a password.": "Dein Link funktioniert ohne Passwort.",
       "Guest orders are tracked by the link we emailed you. Lost it? Put the address you paid with below and we'll send it again. Nothing to remember, nothing to reset.":
         "Gast-Bestellungen werden über den Link verfolgt, den wir dir gemailt haben. Verloren? Gib unten die Adresse ein, mit der du bezahlt hast, und wir schicken ihn erneut. Nichts zu merken, nichts zurückzusetzen.",
+      "No account, no password — the link is the login":
+        "Kein Konto, kein Passwort — der Link ist der Login",
+      "It never expires and works on any device":
+        "Er läuft nie ab und funktioniert auf jedem Gerät",
+      "Find your order": "Bestellung finden",
+      "Guest safe": "Ohne Konto",
       "Order number": "Bestellnummer",
-      "or the email you paid with": "oder die E-Mail, mit der du bezahlt hast",
+      /* the two states of the helper line under the order-number field, and the
+         two submit labels — page_demo()'s own script owns these nodes and asks
+         for them through esbT, because they swap at runtime. */
+      "On your confirmation email, under the total.":
+        "In deiner Bestätigungs-E-Mail, unter dem Gesamtbetrag.",
+      "We can't find that order number. Check the confirmation email, or use the address you paid with below.":
+        "Diese Bestellnummer finden wir nicht. Prüfe die Bestätigungs-E-Mail oder nutze unten die Adresse, mit der du bezahlt hast.",
+      "or": "oder",
+      "The email you paid with": "Die E-Mail, mit der du bezahlt hast",
+      "We resend the link to that address. It never expires and it works on any device.":
+        "Wir schicken den Link erneut an diese Adresse. Er läuft nie ab und funktioniert auf jedem Gerät.",
       "Find my order": "Meine Bestellung finden",
-      "Local preview — try order number ESB-3F92K1.": "Lokale Vorschau — probiere die Bestellnummer ESB-3F92K1.",
+      "Email me the link": "Link per E-Mail schicken",
+      "Demo — no email was sent.": "Demo — es wurde keine E-Mail gesendet.",
+      "On the live site the link reaches": "Auf der Live-Site erreicht der Link",
+      "inside a minute, it never expires, and it opens the dashboard below on any device.":
+        "innerhalb einer Minute, er läuft nie ab und öffnet das Dashboard unten auf jedem Gerät.",
+      "The order number is in your confirmation email, on the line under the total.":
+        "Die Bestellnummer steht in deiner Bestätigungs-E-Mail, in der Zeile unter dem Gesamtbetrag.",
+
+      /* the resolved order */
+      "Back to the order lookup": "Zurück zur Bestellsuche",
       "In progress": "In Bearbeitung",
+      "Paused": "Pausiert",
+      "Example": "Beispiel",
+      "Pause order": "Bestellung pausieren",
+      "Resume order": "Fortsetzen",
+      "Order paused.": "Bestellung pausiert.",
+      "The account is free within minutes and the delivery clock stops. Resume whenever you're done playing.":
+        "Das Konto ist innerhalb von Minuten frei und die Lieferzeit stoppt. Setze fort, wenn du fertig gespielt hast.",
+      "last game": "letztes Spiel",
+      "Play window": "Spielzeiten",
+      "Timeline": "Verlauf",
+      "reached": "erreicht",
+      "claimed the order": "hat die Bestellung angenommen",
+      "after payment": "nach der Zahlung",
+      "Yesterday, 23:10": "Gestern, 23:10",
+      "— any time this order is open.": "— jederzeit, solange diese Bestellung offen ist.",
       "Progress": "Fortschritt",
       "Match": "Spiel",
       "Result": "Ergebnis",
@@ -918,11 +1713,35 @@
       "Win": "Sieg",
       "Loss": "Niederlage",
       "min ago": "Min.",
-      "Pause the order": "Bestellung pausieren",
-      "Request a different booster": "Anderen Booster anfragen",
-      "Message support": "Support kontaktieren",
 
       /* checkout */
+      "Secure checkout": "Sichere Kasse",
+      "Need a hand?": "Brauchst du Hilfe?",
+      "Required": "Erforderlich",
+      "Optional": "Optional",
+      "Anything the booster should know": "Etwas, das der Booster wissen sollte",
+      "Enter an email we can send the order link to.":
+        "Gib eine E-Mail an, an die wir den Bestell-Link senden können.",
+      "Mornings": "Vormittags",
+      "Afternoons": "Nachmittags",
+      "Evenings": "Abends",
+      "Nights": "Nachts",
+      "Card, Apple Pay and Google Pay are all on the next screen — details are entered on Stripe's secure checkout, so we never see or store them. Statements read as a neutral merchant name.":
+        "Karte, Apple Pay und Google Pay findest du alle auf dem nächsten Bildschirm — die Daten werden auf Stripes sicherer Kasse eingegeben, wir sehen und speichern sie nie. Auszüge zeigen einen neutralen Händlernamen.",
+      "Secured by Stripe": "Gesichert durch Stripe",
+      "Contacting payment…": "Zahlung wird kontaktiert…",
+      "Refunded in full until a booster claims it":
+        "Volle Rückerstattung, bis ein Booster die Bestellung annimmt",
+      "included — friends see you offline for the whole order.":
+        "inklusive — Freunde sehen dich während der ganzen Bestellung offline.",
+      "Last chance to add": "Letzte Gelegenheit zum Hinzufügen",
+      "Discount code": "Rabattcode",
+      "applied": "angewendet",
+      "No code applied": "Kein Code angewendet",
+      "Have a code?": "Hast du einen Code?",
+      "Have another code?": "Noch einen Code?",
+      "Enter a code": "Code eingeben",
+      "Close": "Schließen",
       "Your email": "Deine E-Mail",
       "Order details": "Bestelldetails",
       "Payment": "Zahlung",
@@ -954,7 +1773,7 @@
       "This is a local preview, so no payment was taken and no email was sent. In production this is the point where the order goes on the booster board, the confirmation email leaves, and":
         "Dies ist eine lokale Vorschau, es wurde also keine Zahlung eingezogen und keine E-Mail gesendet. In der Produktion landet hier die Bestellung auf dem Booster-Board, die Bestätigungs-E-Mail geht raus, und",
       "fires to GA4 and to the Meta CAPI gateway.": "wird an GA4 und das Meta-CAPI-Gateway gesendet.",
-      "Track this order": "Diese Bestellung verfolgen",
+      "See what the dashboard looks like": "So sieht das Dashboard aus",
       "Order summary": "Bestellübersicht",
       "Locked at checkout": "An der Kasse fixiert",
       "Climb": "Aufstieg",
@@ -1019,7 +1838,9 @@
   // (e.g. preferred hours) are fine to translate.
   var SKIP = "[data-out],[data-sum],[data-r],[data-order-id],[data-state-kicker]," +
     "[data-state-title],[data-state-body],[data-ladder],[data-subseg],[data-stepper]," +
-    "[data-track-note],[data-apply-note],[data-contact-note],[data-pay-error]," +
+    "[data-demo-note],[data-demo-label],[data-demo-addr],[data-demo-pause-label]," +
+    "[data-demo-status-label]," +
+    "[data-apply-note],[data-contact-note],[data-pay-error]," +
     ".money,.nav-brand,.locale,[data-sel],script,style,code,textarea,output";
   var ATTRS = ["placeholder", "aria-label", "title", "alt"];
 
@@ -1134,7 +1955,10 @@
       var on = opt.getAttribute("data-value") === value;
       opt.setAttribute("aria-selected", on ? "true" : "false");
       if (on) {
-        loc.querySelector("[data-loc-icon]").textContent = opt.querySelector(".loc-flag").textContent;
+        // The language button wears a fixed translate glyph instead of the
+        // selected flag, so it has no [data-loc-icon] to mirror into.
+        var icon = loc.querySelector("[data-loc-icon]");
+        if (icon) icon.textContent = opt.querySelector(".loc-flag").textContent;
         loc.querySelector("[data-loc-label]").textContent = opt.querySelector(".loc-code").textContent;
       }
     });

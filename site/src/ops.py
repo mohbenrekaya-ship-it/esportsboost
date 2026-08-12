@@ -27,6 +27,7 @@ import os
 import time
 from hashlib import sha256
 
+import accounts
 import analytics
 import insights
 
@@ -177,5 +178,12 @@ def process_ops(raw):
         if detail is None:
             return 404, {"error": "not_found"}
         return 200, {"session": detail}
+
+    if action == "accounts":
+        # The header's sign-up list — a separate store from the analytics
+        # events, and the only place emails live. Fetched on demand rather than
+        # bundled into every dashboard refresh: it is PII, so it is read only
+        # when the Accounts tab is actually open.
+        return 200, {"accounts": accounts.summary(days)}
 
     return 200, {"data": dashboard_data(days, game)}

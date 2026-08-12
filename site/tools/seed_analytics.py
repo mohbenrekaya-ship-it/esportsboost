@@ -34,6 +34,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "src"))
 
+import accounts                                     # noqa: E402
 import analytics                                    # noqa: E402
 import data as D                                    # noqa: E402
 import pricing                                      # noqa: E402
@@ -237,6 +238,8 @@ def main():
     ap.add_argument("--force", action="store_true",
                     help="allow writing to a configured Upstash (production) store")
     ap.add_argument("--seed", type=int, default=20260811, help="RNG seed")
+    ap.add_argument("--accounts", type=int, default=0, metavar="N",
+                    help="also seed N synthetic header sign-ups (separate store)")
     args = ap.parse_args()
 
     if analytics.upstash_config()[0] and not args.force:
@@ -249,6 +252,7 @@ def main():
 
     if args.clear:
         analytics.clear()
+        accounts.clear()
 
     # A pool of visitors; some return across several days before buying.
     visitors = []
@@ -294,6 +298,28 @@ def main():
     print("seeded %d synthetic events across %d sessions / %d visitors → %s store"
           % (total, sessions, len(visitors), analytics.store_name()))
     print("every event is flagged syn=1; /ops shows a synthetic-data banner while they are present")
+
+    # Optional: synthetic header sign-ups, into their OWN store. Fake emails, so
+    # each carries syn=1 exactly like the events — the Accounts panel shows its
+    # own banner while any are present, and nothing here is a real address.
+    if args.accounts > 0:
+        if analytics.upstash_config()[0] and not args.force:
+            sys.exit("Refusing to seed the Upstash accounts store without --force.")
+        handles = ["kaydn", "mira", "tovi", "arbo", "nine", "vesk", "orla", "pell",
+                   "juno", "riko", "sable", "wren", "dax", "elio", "nova", "quill"]
+        rows = []
+        for i in range(args.accounts):
+            h = random.choice(handles) + str(random.randrange(10, 99))
+            ts = int(random.uniform(start, now - 120))
+            rows.append({
+                "email": "syn-%06x@example.test" % random.randrange(16 ** 6),
+                "name": h, "ts": ts, "co": pick(COUNTRIES)[0], "cosrc": "edge",
+                "mode": "signup" if random.random() < 0.8 else "signin", "syn": 1,
+            })
+        rows.sort(key=lambda r: r["ts"])
+        accounts.append(rows)
+        print("seeded %d synthetic sign-ups → %s store (flagged syn=1)"
+              % (len(rows), analytics.store_name()))
 
 
 if __name__ == "__main__":

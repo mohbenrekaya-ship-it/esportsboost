@@ -407,10 +407,6 @@ def hero(w=1600, h=900):
     return scene("hero", "ridges", 18, w, h, seed_of("ashfall-hero"), heat=(0.64, 0.36))
 
 
-def closing(w=1600, h=460):
-    return scene("cta", "shards", 12, w, h, seed_of("ashfall-closing"), heat=(0.76, 0.55))
-
-
 def avatar(handle, hue, size=240):
     """Booster portrait: rim-lit silhouette, circle-crop safe."""
     r = Rng(seed_of(handle))

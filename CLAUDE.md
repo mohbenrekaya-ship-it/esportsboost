@@ -6,7 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A static-site generator for the `esportsboost.com` redesign, written in **plain Python 3 with no
 dependencies** (no Node on this machine, no package manager, no lockfile). `python3 site/build.py`
-generates all 23 pages of `site/dist/` from `site/src/data.py`.
+generates every page of `site/dist/` from `site/src/data.py` — 24 pages of shop plus one profile per
+booster (50 today, so 74 in total).
 
 Not a git repository. The README is in French; the site copy and the design handoffs are in English.
 
@@ -20,6 +21,7 @@ python3 site/build.py && python3 site/serve.py 4321
 # analytics console at /ops — needs a password, else the API refuses everything
 OPS_PASSWORD=some-long-password python3 site/serve.py 4321
 python3 site/tools/seed_analytics.py --clear --days 70 --sessions 1600   # synthetic traffic
+python3 site/tools/seed_analytics.py --clear --sessions 900 --accounts 40 # + synthetic header sign-ups
 ```
 
 `.claude/launch.json` defines an `esportsboost` preview server on port 4321 — start it with the
@@ -31,7 +33,7 @@ like production. It also hosts the **Stripe payment API** the checkout page call
 [Payments](#payments-stripe) below. With no `STRIPE_SECRET_KEY` set it stays a plain static preview.
 
 There is **no test suite, linter, or formatter** in this project. Verification is: build succeeds
-(prints `built 24 pages + 34 images … (+ /ops console)`), then load the affected pages and check the
+(prints `built 74 pages + 131 images … (+ /ops console)`), then load the affected pages and check the
 browser console.
 
 ## Architecture
@@ -99,17 +101,41 @@ reuse these rather than inventing new hooks:
 | Attribute | Role |
 | --- | --- |
 | `data-configurator` (+ `data-game`) | Marks a wizard; the optional game pins the page to one game and fires `view_item` |
-| `data-out="price\|eta\|summary\|game\|mode\|region\|free\|headline\|was\|discount\|saveLine\|promoCode\|promoLabel\|promoEnds"` | Text nodes rewritten on every render |
-| `data-sel="game\|from\|to\|region"` | `<select>` bound to state; ladder/region options are refilled per game |
+| `data-out="price\|eta\|summary\|summaryUpper\|game\|mode\|region\|free\|headline\|was\|discount\|saveLine\|saveWith\|configLine\|steps\|stepsWord\|promoCode\|promoLabel\|promoEnds\|fromRank\|toRank"` | Text nodes rewritten on every render. `fromRank`/`toRank` are the whole rank names ("Gold IV") — `data-tiername` is the tier alone |
+| `data-sel="game\|from\|to\|fromTier\|toTier\|region"` | `<select>` bound to state; ladder/tier/region options are refilled per game. The `*Tier` pair moves one endpoint's tier while keeping its division numeral, then clamps through the same rule as every other rank control |
 | `data-service` / `data-panel` | Tab + panel pair for division / wins / placements |
 | `data-mode`, `data-addon`, `data-stepper` (`data-step`, `data-min`, `data-max`) | Radios, checkboxes, ± counters |
-| `data-ladder` | Container whose tier chips are built by JS |
-| `data-sum="base\|addons\|total\|eta\|summary\|game\|region\|mode\|addonlist\|was\|discount\|discountLabel"` | Checkout breakdown |
-| `data-when-discount` / `data-when-addons` | Rows that `hidden` themselves when the number they carry is zero |
+| `data-tiergrid="from\|to"` | Tier buttons for one end, built by JS. Out-of-range tiers render `disabled` |
+| `data-regions` | Region chips, built by JS from the game's region list |
+| `data-rail` / `data-rail-caps` | Best Sellers rail: fill + two handles, and tier names positioned at each tier's centre node |
+| `data-tiername="from\|to"` | Tier name beside a rank mark. **A mark on its own never names a rank** — it is the division numeral, so a pair of them reads "IV → IV". Every climb readout pairs each mark with one of these |
+| `data-subseg="from\|to"` | Container whose division buttons are built by JS — the sub-ranks of that endpoint's tier. Out-of-range divisions render `disabled` |
+| `data-ticks` / `data-tier-caps` | Game-page ladder strip: one tick per rung with the crossed span filled, and the tier names under it. Both are built by JS and rebuilt when the game changes |
+| `data-mark="from\|to"` | Rank mark — division numeral, tinted via `--tier` from `D.tiercolors` (see `data.py`'s `tier_color()`) |
+| `data-sum="base\|addons\|total\|eta\|summary\|game\|region\|mode\|addonlist\|was\|discount\|discountLabel"` | Checkout breakdown, and the closing band's configuration card — the two read the same hooks so one render() fills both and they cannot quote different money. There is no `climb` key: both Climb rows draw the pair as `data-mark` + `data-tiername` and fall back to `summary` on the unit services |
+| `data-when-discount` / `data-when-no-discount` / `data-when-addons` | Rows that `hidden` themselves when the number they carry is zero — or, for `no-discount`, when it isn't |
+| `data-when-service="division\|wins\|placements\|units"` | Element shown only on that service. `units` is wins + placements together — anything drawn as a rank pair needs one node for the pair and one for everything else, not one per service |
+| `data-addon-lines` | Container JS fills with one receipt row per selected add-on. Each row is a **subtotal** delta taken in order, so the column telescopes and `boost + rows − discount = total` exactly. Deliberately *not* the same figure as `data-addon-price` below |
 | `data-addon-price="<id>"` | Dollar cost of one add-on **on this order** — quoted as the difference with and without it, so it already includes the discount |
 | `data-promo`, `data-promo-apply`, `data-promo-msg` | Discount-code input, its button, and its status line |
+| `data-promo-toggle` / `data-promo-box` | The "Have a code?" button and the input it reveals. The button only flips `aria-expanded`; CSS picks the label |
 | `data-continue` | Checkout links: disabled on an invalid pair, fires `begin_checkout` before navigating |
 | `data-game-link`, `data-game-tag` | Links/chips that follow the selected game |
+| `data-ts` / `data-mins` | A relative timestamp, on any `.lf-ago` — the feed's rows and the demo page's order-card footer. `data-ts` (epoch seconds) is what a feed wired to the orders table emits and wins; `data-mins` counts back from page load and is the placeholder stand-in. `initFeed()` selects on the attribute, not on `.lf-row`, and re-derives the relative label and the clock from whichever is present |
+| `data-rst-*` | The roster board. `data-rst-row` carries `data-game` / `data-free` / `data-win` — the filter reads only these, so a server-rendered board keeps working. `data-rst-game\|avail\|sort` are the three controls, `data-rst-body\|shown\|fgame\|ffree\|more\|reset\|empty*` the things `initRoster()` rewrites |
+| `data-bp-*` | A profile's completed orders: `data-bp-row` (+ `data-mode`), `data-bp-filter`, `data-bp-body\|shown\|total\|more` |
+| `data-rv-stars` / `data-rv-game` | The two facts the reviews page filters and sorts a card on, emitted by `review_card(filterable=True)`. The whole feed reads only these, so a server-paged feed keeps working |
+| `data-rvp-*` | The reviews feed's controls: `data-rvp-game\|rating\|sort` (three radio groups) and `data-rvp-dist` (the distribution rows, `aria-pressed` toggles). Both rating controls write one state — `initReviews()` re-marks both whenever either fires. `data-rvp-grid\|shown\|total\|crumb\|clear\|empty\|more\|more-label` are what it rewrites; `data-rvp-worst` is the hero's "Read the worst first" |
+| `data-when-booster` / `data-out="booster"` / `data-sum="booster"` / `data-booster-clear` | The named booster. Rows that `hidden` themselves when none is set; it is an order attribute, never a price input — `quote()` must not read it |
+| `data-hd` | The header root. `initHeader()` returns immediately without it, which is what keeps the pay flow's reduced header inert |
+| `data-hd-copy` | The promo code chip. Copies to the clipboard and flips to "Copied" for 1.5s via `data-copied` |
+| `data-hd-item` / `data-hd-menu` | A nav item that owns a menu, and its trigger. `data-open` on the item is the one open-state hook — desktop draws it as a mega menu, the sheet as an accordion row |
+| `data-hd-sheet` / `data-hd-panel-root` | The burger and the panel it controls. `--hd-top` on `<html>` is the header's live bottom edge, set on open so the fixed sheet meets the bar whether or not the promo band has scrolled away |
+| `data-hd-auth` / `data-hd-auth-panel` / `data-hd-auth-close` / `data-hd-tab` / `data-hd-switch` | The auth panel: what opens it, the panel, its two closers, the tabs and the footer's switch. `data-mode="signin\|signup"` on the panel is what hides one side of every `data-hd-when` pair |
+| `data-hd-when="signin\|signup"` | Copy that belongs to one tab. **Both variants ship in the DOM** — i18n.js matches whole text nodes, so a sentence swapped in by JS would arrive untranslated |
+| `data-hd-dname` / `data-hd-email` / `data-hd-pass` / `data-hd-eye` / `data-hd-terms` / `data-hd-strength{,-note}` / `data-hd-status` | The form. `dname`, not `name`: `data-hd-name` is the account handle, and `paint()` would write the visitor's handle into the sign-up field |
+| `data-hd-account` / `data-hd-account-menu` / `data-hd-logout` | The chip, its popover and the one row that is a button rather than a link |
+| `data-hd-initial` / `data-hd-name` / `data-hd-mail` / `data-hd-meta` / `data-hd-badge` | What a session fills. `meta` and the badges render empty until there is an orders backend — see the auth placeholder note |
 
 Per-page scripts are passed as the `extra_js=` argument to `layout()` (checkout, track, support,
 become-a-booster) and call the exposed `window.esbTrack` / `esbItemParams` / `esbQuote` / `esbState` /
@@ -139,6 +165,716 @@ they only agree by accident otherwise, and `data-addon-price` depends on quoting
   "never past 500" rule from v1 no longer applies; the saturated stat band appears exactly once
   site-wide (the homepage `.statband`); focus is a 2px accent `:focus-visible` ring, never the
   browser default; `prefers-reduced-motion` kills every animation and transition globally.
+- **One filled button per viewport.** The header's one filled action is now **Log in** (see the site
+  header section) — "Start an order" is gone from the chrome, so the rule holds everywhere without a
+  per-page override. `layout(nav_outline=True)` survives as a no-op parameter that callers still
+  pass; it used to drop the nav CTA to an outline on the game pages.
+- **Appended media queries must not out-order the existing ones.** `site.css`'s hero breakpoints are
+  plain `max-width` rules at equal specificity, so a new `@media (max-width: 1200px)` block at the
+  end of the file beats the `max-width: 1000px` block above it on a phone. Bound new blocks with
+  `min-width` (`@media (min-width: 1001px) and (max-width: 1200px)`) or re-state what they override.
+
+## The site header — every page mounts it
+
+`chrome()` is the **"Site header + authentication"** handoff (`design_handoff_site_header`), two
+screens (1440 / 390) built as one component with breakpoints. It is the sixth scoped port after
+`.hero-a` / `.co` / `.gg` / `.dsh` / `.rst` — tokens on `.hd` (plus `.hd-promo`, `.hd-account`,
+`.hd-auth`, which are its siblings in the document), product radii per element, sentence-case
+controls, nothing leaking past the scope. It replaced a utility bar carrying a promo *sentence* and a
+three-column nav whose menu was centred in ~400px of dead space either side.
+
+The pieces: `hd_promo()` · `hd_live()` · `hd_nav()` · `hd_menu()` / `hd_card()` / `hd_rail()` ·
+`hd_actions()` / `hd_chip()` · `hd_auth()` · `hd_account_menu()`. `chrome_min()` is unchanged and is
+still what `layout(bare=True)` renders on checkout.
+
+- **One DOM, two presentations.** The nav items, their menus and the auth panel are emitted once. On
+  desktop `.hd-panel` is `display:contents` and the menus are full-bleed panels hung off the sticky
+  bar; below 1000px the same nodes *are* the sheet and its accordion, and the auth modal becomes the
+  bottom sheet. Emitting the menu twice is how the two versions drift apart.
+- **The mega menu is positioned against `.hd`, which is the sticky element.** Nothing between the
+  panel and `.hd` may be given `position` — the panel is `left:0;right:0;top:100%` and resolves to
+  the nearest positioned ancestor. The promo band is deliberately *not* sticky: the handoff's
+  recommendation is to keep the 68px nav and let the 38px bar scroll away.
+- **Log in is the filled button and "Start an order" is gone.** The old header put an ember *outline*
+  on a CTA that already appears in every hero and every closing band — loud enough to read as
+  primary, styled as secondary, and the fifth copy of one button on the page. The header's own job is
+  account access. This was the user's explicit call in the handoff.
+- **Every menu card points at a page this build produces**, the same rule `NAV` follows. The
+  handoff's "Booster leaderboard" and its own FAQ page do not exist here, so those slots went to
+  `/reviews.html` and the guarantee page's FAQ band — which is why `page_guarantee()` now carries
+  `id="safety"` and `id="faq"`, and `vetting_card()` carries `id="vetting"`.
+- **Every figure is read, never typed.** Prices come from `from_price()` through `money()` (so the
+  menu re-quotes in EUR with the rest of the page — a bare `$5` in the chrome is exactly the CRO
+  finding this build answers), counts from `D.STATS`, the top booster from `D.SPOTLIGHT`. The
+  handoff's "34 boosters" and "+10% for a named booster" are both stale: the roster is counted, and
+  `pricing.py` charges nothing for a named booster, so the card says **"no extra fee"**.
+- **A nav item with a menu is a `<button>`, so the hub page is unreachable from the nav without JS.**
+  Two things cover that: the hub is the first (or last) card *inside* its own menu — `/games/`,
+  `/boosters/`, `/guarantee.html` — and `layout()` writes `<html class="no-js">` with an inline head
+  script that strips it, which site.css uses to open the menus on `:hover` / `:focus-within` at
+  desktop width. Do not remove either half; together they are why the nav still reaches nine ladders
+  with scripting off.
+- **Only one surface is open at a time**, and every one closes on Escape and on an outside click,
+  returning focus to its trigger. Desktop menus also open on hover with a 120ms enter / 250ms leave
+  delay — the leave delay is what stops a diagonal mouse path to a card in the panel's far corner
+  from closing it underneath the pointer.
+- **The sheet is `position:fixed`, not in flow.** The mock is a 390×860 frame; a real page is not,
+  and a sheet that pushes 4,000px of content down leaves the visitor scrolling back to the header.
+  `--hd-top` is set from the header's live `getBoundingClientRect().bottom` on open, on scroll and on
+  resize. The sheet also hides the page's `.mobile-bar`, which otherwise sits on top of the last
+  accordion section quoting a configuration the visitor has navigated away from.
+- **The accordion opens section 0 when the sheet opens** (the handoff's default). It cannot be marked
+  open in the HTML — the same `data-open` attribute renders the Games mega menu hanging open on load
+  at desktop width.
+- **The availability line is a status, not a statistic.** It opens with a word rather than a digit,
+  the dot sits in a soft green halo, and it pulses over **2.4s** — slower than the site's 2s dots,
+  because this one runs on every page. Below 1000px it moves out of the bar and into the sheet: three
+  groups do not fit at that width and the sale is the more time-sensitive one.
+- **The code chip is a copy button.** A dashed border with no button chrome is the whole affordance —
+  it reads as a coupon, and a code you cannot click is a code people mistype. It confirms for 1.5s.
+  The handoff drops the old "-15% off with code" wording; the percentage is not lost, it rides in the
+  chip's accessible name so a screen reader still hears the discount.
+- **i18n**: every figure and separator rides in its own `<b>` / `<i aria-hidden>` so the words around
+  it stay whole translatable nodes, and **both auth tabs' copy is in the DOM** with one side hidden
+  for the same reason. Menu card notes are one node per service — the words are already dictionary
+  keys, because the games grid renders the identical list as chips through `services_of()`; joining
+  them into a sentence would leave the menu quoting English services beside a French grid. Card names
+  and every panel string are in both `fr` and `de`.
+- **Breakpoints follow the site's 1200/1000/760**, not the handoff's 1280/1024/768. 1200 tightens the
+  nav, drops the Demo button and takes the card grid to 2 columns; 1000 is the whole mobile pattern
+  (brand, Log in, burger, sheet, bottom-sheet auth); 760 is the phone promo bar. The handoff draws
+  1440 and 390 and asks for the middle to be confirmed with the designer.
+
+Deviations from the handoff, all deliberate: the brand lockup stays the site's shard, not the
+handoff's lightning bolt (the nav, the footer and the auth panel have to be the same mark); glyphs
+are inline `_ico()` linework rather than the Phosphor font, since this build ships no icon runtime;
+game marks and the Discord/Google marks are generic shapes, the same trademark rule `pay_marks()` and
+the Trustpilot star follow; the optional-account note is kept at phone width, where the handoff makes
+it desktop-only, because the guest-checkout contract matters most where the traffic is; and
+`/demo.html` keeps the full header rather than the reduced one — the handoff strips "track-order"
+because a buyer is mid-task there, but on this site that page is a browsable demo the nav and the
+footer both link to.
+
+## The Best Sellers band (homepage)
+
+`bs_band()` is the `design_handoff_best_sellers` handoff — a compressed order flow between the hero
+and the games grid, ported at full fidelity with its own tokens on `.bs`, same arrangement as the
+game-page card. Two screens are designed (1440 and 390) and both are implemented as one component
+with breakpoints, not two.
+
+- **Clamp the end the user touched; never move the other one.** This is the handoff's headline fix
+  and it is easy to regress. `setNode()` clamps only the value just chosen, and anything out of range
+  renders `disabled` (`nodeOk()` / `tierOk()`) so the limit is visible before the tap. The old rule
+  moved the untouched end, which silently demoted the player's current rank and made **Bronze IV →
+  Bronze III unorderable**. There is no test suite — if you touch the picker, check that one climb.
+- **Switching tier keeps the division numeral** (`tierNode()`), so Bronze IV → Silver IV is one click.
+- **Switching game resets to `from = node 0`, `to = node 12`** — ranks do not carry across ladders.
+- **The band shares `quote()` with the game pages.** The same climb must never quote two prices.
+- **The mobile screen swaps the tier grid for a native `<select>`** with the same disabled options —
+  an 8-tile grid clips every label at 390px. Both controls are always in the DOM; CSS picks one.
+- **The handoff's sticky mobile price bar is deliberately not built**: this site already has the
+  page-level `.mobile-bar`, which does the same job across the whole page. Two would stack.
+- Retired with the old calculator: `data-ladder`, `data-step-prompt`, `.gsel`, `.ladder`, `.tier`,
+  and the `next`/`guided` state keys. `.calc` / `.calc-head` / `.calc-kicker` / `.calc-figs` survive
+  — track, checkout and reviews still use that panel shell.
+
+## The game-page hero + order card
+
+`page_game()`'s first section is the **"Ladder card"** handoff (`design_handoff_lol_boost_hero`),
+which replaced two bare rank `<select>`s. It is ported at **full fidelity, including its own tokens**
+— this is the one deliberate exception to "layer on Ashfall". The handoff's palette, radii and
+sentence-case control typography are declared on `.hero-a` in `site.css` and nothing leaks past it:
+
+- `--ember`/`--ember-grad` are **re-declared on `.hero-a`** to the handoff's `#ff5a1f`, so existing
+  component rules (`.btn-primary`, `.seg-opt:has(input:checked)`, `.tab[aria-selected]`) pick the
+  handoff accent up without a single `!important`. Do the same for anything else you add there.
+- Radii are explicit per element (6 division · 7 mark/segment · 9 field/row · 10 ladder/CTA ·
+  14 card · 5 checkbox · 999 pills), **not** `--radius`. Ashfall's 2px would flatten the card.
+- Ashfall uppercases and tracks its controls; the handoff draws tabs, the card title, the segmented
+  control and the CTA in **sentence case**. Those overrides are why `.ob-tabs .tab`, `.ob-title`,
+  `.ob .seg-opt` and `.ob-cta` restate `text-transform`/`letter-spacing`.
+- Type is Inter already — `type-b-sans.css` owns `--display`/`--body` site-wide and loads last.
+
+Things that are load-bearing here:
+
+- **The card is generic, not LoL-only.** `rank_picker()`, `ladder_strip()` and `wizard()` read
+  `tiers`/`divmap`/`prices` out of `data.py`, so all nine game pages get it and a new game needs no
+  code. Tier mark colours come from `TIER_COLORS` with a positional ramp fallback — an unnamed tier
+  is never a missing colour.
+- **"Cheapest single division $N" is quoted, not typed.** `ladder_strip()` runs `pricing.quote()`
+  over every rung and takes the minimum, so it and the H1's `from $N` are the same claim and cannot
+  drift apart. The handoff calls this out as the bug it was fixing — keep the property if pricing
+  is re-tuned.
+- **Duo's "+55%" is read off `pricing.DUO_MULT`**, so the label can't drift from the formula.
+- **The CTA has to clear the fold at 1440×900** (the one measurement the handoff carries from the
+  mock). It currently lands at ~833–883. Anything added to the card comes out of that budget —
+  measure, don't eyeball.
+- **Availability lives in the card, not the hero stat row.** "N of M boosters free now" sits beside
+  the delivery estimate, where it argues for ordering now; the hero's third stat is boosts delivered.
+  Putting a roster count in both places is how the two conflicting numbers got shipped last time.
+- **The card shows three add-on rows** — `addons_block(paid_only=True)` drops the always-on
+  inclusion, which is a fact about every order rather than a choice. Checkout does the same and
+  states the inclusion in its green strip instead, so it is still said out loud in the flow.
+- **Add-on notes must stay one line.** They are `data.py` copy; a second line costs ~14px of the
+  fold budget per row.
+- **Tier captions never ellipse.** `data-tier-caps` measures itself once per game and sets
+  `data-dense`, which steps 9.5px → 8px. Tier *count* is not the test — Dota's eight long names
+  overflow where Valorant's eight do not.
+- **i18n matches whole text nodes.** `translateTextNode()` looks up a node's entire trimmed value,
+  so interpolating a number or a separator into a translatable string silently un-translates it —
+  this is why the CTA is `<span>Continue to checkout</span><span>·</span><span data-out="price">`
+  and why "N of M boosters free now" is split into `of` + `boosters free now` around its `<b>`s.
+  Add new card strings to both `fr` and `de` in `i18n.js`.
+
+## The checkout page
+
+`page_checkout()` is the **"LoL Checkout"** handoff (`design_handoff_lol_checkout`), ported the same
+way as the order card above: high-fidelity, with its tokens and measurements declared locally on
+`.co` in `site.css`. Same rules apply — explicit radii, sentence-case controls, nothing leaking past
+the scope. Five things are load-bearing:
+
+- **The form is the left column, the summary is 420px on the right.** It used to be the other way
+  round, with the summary *wider* than the form. The form is the task; the summary is reference.
+- **Both cards end on the same baseline.** `.co-aside` is a flex parent, `.co-sum` is `flex:1`, and
+  `.co-div-push` carries `margin-top:auto` — so the summary's spare height collects *above* the
+  totals instead of leaving a gap under them. Reproduce the behaviour, not the measurement: the two
+  natural heights move every time an upsell is toggled.
+- **The Climb line names both ranks.** `[IV] Iron → [IV] Gold · Solo` — a `data-mark` is the division
+  numeral alone, so the line used to read "IV → IV Gold · Solo" and never told the buyer which rank
+  they were paying to leave. Same pairing as the closing band's card; see that section.
+- **The summary column adds up.** `boost + one row per add-on − discount = total`, exactly, because
+  `[data-addon-lines]` quotes subtotal deltas in order. Those rows are pre-discount, so they do not
+  match the `+$N` on the picker above them, which answers "what does ticking this do to my total".
+  Both are true; the discount row between them is what reconciles them. Don't "fix" one to match the
+  other without deciding which question the buyer is asking.
+- **The discount code states that it is applied.** The old field was an empty input whose
+  placeholder claimed a code was already on, which reads as the opposite. Both toggle labels live in
+  the DOM (i18n matches whole text nodes); the button only flips `aria-expanded`.
+- **`layout(bare=True)` is what makes it a pay flow.** No promo bar, no nav, no currency switcher —
+  a page whose only job is finishing should not offer exits. The legal links survive in `foot_min()`
+  because terms/privacy/refunds have to be reachable where money moves.
+
+Everything toggled with `hidden` inside `.co` is caught by one `.co [hidden] { display: none; }`
+guard at the end of the section — the rows all carry a `display` value, which otherwise beats the
+UA's `[hidden]` (the bug `.banner` hit in the ops console).
+
+- **The "Pay with" chips keep the dark-pill + label shape, with coloured brand glyphs.** Same chip
+  as always — field-coloured pill, small glyph, the network's name — but `pay_marks()` now draws the
+  networks' own marks in their own colours (Visa/Amex blue cards, the Mastercard interlock, the Apple
+  glyph, Google's four-colour G) instead of the grey card/wallet stand-ins. They ride *beside* the
+  label, so the row's geometry is unchanged. Two things to keep in mind: these are **simplified marks,
+  not the released artwork** — the schemes require their logos be used unmodified from the brand kit
+  (Stripe ships all of them), so swap before launch; and the row must stay in step with what
+  `serve.py` actually enables on the Stripe session, or it advertises a method the buyer cannot pick.
+  `pay_glyphs()` (order-card foot) and `foot_pay()` (footer) are unchanged and still generic.
+
+Deviations from the handoff, all deliberate: add-on names and prices come from `data.py` and the real formula, not the mock's flat
+$13/$9/$10; and on mobile the form keeps source order with the price in a sticky bar, rather than
+the README's summary-first-behind-a-disclosure, which is not designed and would push the one
+required input below the fold. The README asks for breakpoints to be confirmed with the designer.
+
+## The home hero + booster spotlight
+
+`page_home()`'s first section is the **"Home hero"** handoff (`design_handoff_home_hero`), the
+sibling of the Ladder card above — same palette, same card shell. It **rides on `.hero-a`'s scoped
+tokens rather than redeclaring them**: the section is `class="hero-a hero-a-lit hero-h"`, so
+`.btn-primary`, `.grad-text` and the `--h-*` text colours pick up the handoff accent for free. Only
+the values this handoff sets differently live under `.hero-h` in `site.css`.
+
+- **The copy column is `.hero-h-copy`, deliberately not `.hero-copy`.** The game hero's ≤1000px
+  rules reflow `.hero-a .hero-copy` with `display:contents` and `order:` to lift the order card
+  above the proof. Those selectors are all anchored on `.hero-copy` for that reason — a bare
+  `.hero-a .lede` reorders the home hero's paragraph to the bottom of the column. If you add a
+  `.hero-a`-scoped rule, anchor it.
+- **Column order is the argument.** Headline → paragraph → CTAs → three guarantees → rule → rating.
+  The objections are answered beside the buttons, where the decision is made.
+- **One filled button in the viewport**, same rule as the game pages: `page_home()` passes
+  `nav_outline=True`, the secondary CTA is a real outline with a `play` glyph, and the hero's
+  gradient CTA is the only filled action.
+- **`guarantee_row()` is shared with `page_game()`.** One copy of money-back / no account / VPN
+  region, in `GUARANTEES_INLINE` — the two heroes cannot drift.
+- **The spotlight is roster data, not hero copy.** `D.SPOTLIGHT["handle"]` names a booster in
+  `D.BOOSTERS`; the name, order count and portrait filename all come off that entry, so the card,
+  the roster panel and the boosters page can't quote different numbers for the same person. An
+  unknown handle **hides the card** — the handoff's fallback for a month with no qualifying booster
+  is no card, never an empty one. `emit_art()` generates `portrait-<handle>.svg` from the same
+  constant.
+- **Mobile (≤760px) drops the card, the three guarantees and "N boosts delivered."** Four proof
+  blocks push the CTA below the fold; the phone ships headline → paragraph → CTAs → one rating line.
+  The headline steps down from the drawn 46px via `min(46px, calc(12.4vw - 5px))` — "The rank is
+  yours." needs ~369px at 46px and a 390px phone gives the column 350, and holding two lines matters
+  more than the exact size.
+- **Breakpoints follow the site's 1200/1000/760, not the README's 1280/1024/768**, so the hero
+  reflows in step with the header and the sections around it. The handoff draws 1440 and 390 only
+  and asks for the middle to be confirmed with the designer.
+- **The utility bar now has three groups**, not two: `availability_slot()` puts the roster count in
+  the centre on every page, reading the same `D.STATS["online"]` as the roster panel and the order
+  card, and hiding below 1000px.
+- **The portrait and the Trustpilot star are placeholders.** The handoff requires a real photograph
+  in the ring and Trustpilot's licensed mark or widget; the generated avatar and the green star are
+  stand-ins, same status as everything else in [Placeholder data](#placeholder-data--do-not-present-as-real).
+- **i18n**: the spotlight CTA carries the booster's handle ("See vantaa profile"), so changing
+  `D.SPOTLIGHT["handle"]` means adding the new sentence to `fr` and `de`. Numbers stay outside the
+  translatable nodes — see the whole-text-node rule above.
+
+## The stat band + 02 Live / 03 Safety
+
+`statband()`, `live_feed()`, `roster_card()`, `discord_card()` and `safety_block()` are the
+**"Live and safety"** handoff (`design_handoff_live_and_safety`) — the stretch of the homepage that
+answers "is this real, and is it safe?". Scoped the same way as the other ports: `.ls` (section),
+`.lf` (feed), `.rc` (roster), `.dcd` (Discord), `.sf` (safety), with the local tokens on `.ls, .rail`
+so nothing leaks. `.rail` carries its own copy because `roster_panel()` also renders on
+`/boosters.html` and `/games/`, outside `.ls`.
+
+- **The stat band is warm now.** It was a purple-blue gradient — the one cool surface on a warm
+  site — and the four figures floated with nothing between them. It is the ember fading left to
+  right with a 1px divider per cell. `_figure_unit()` splits `D.STATS`' written values ("4.8 / 5",
+  "18 min") into the 38px figure and its 17px unit; `initStats()` counts up `.statband .v .n`, not
+  `.v`, or it would overwrite the unit node.
+- **The feed is a timeline, not a grid.** The 2×2 card layout destroyed the ordering of a feed whose
+  whole meaning is "just now". Newest first, one rail with the accent dot and the warm timestamp on
+  `:first-child` — which is also why a live source only has to *prepend* a row to get the treatment.
+- **Feed rows are deliberately inert.** The handoff routes them at a public delivery receipt, and
+  this site has no such page; its own instruction for that case is to drop the caret and the pointer
+  rather than ship a dead control. Same reason there is no "See the full feed" link beside the count.
+  Build the receipt page and the rows become links.
+- **Tier marks come from `D.tier_color()`, never from the handoff's hex list.** The point of drawing
+  the climb with marks is that it matches every other rank display on the site; a second colour table
+  would defeat it. `tier_mark()` is the shared object, tinted through `--tier`. A feed entry's `frm`
+  / `to` tier **must be a rung of that game's ladder** — that is what the colour resolves against.
+- **Relative times re-render on a timer** (`initFeed()` in app.js). A static page can sit open for an
+  hour, so "2 min ago" has to keep meaning it. Rows carry `data-ts` (epoch seconds — what a feed
+  wired to the orders table emits) or `data-mins` (the placeholder stand-in, counted from page load);
+  `_ago()` in build.py and `label()` in app.js must stay identical or a reload changes the wording.
+  **Nothing generates feed entries** — the four rows are exactly what `D.LIVE_FEED` holds.
+- **Availability is the loud thing in the roster, not win rate.** That hierarchy was inverted:
+  "FREE" was 9px fine print under an orange win-rate figure. The status pill reads `queue == "free"`,
+  and the avatar ring's colour encodes the same fact — keep them in step. Rows link to
+  `/boosters.html#b-<handle>` (the table rows carry those ids) until per-booster profiles exist.
+- **Roster avatars are initials.** The handoff's design, and a generated portrait is a smudge at
+  38px. A real photograph dropped into `assets-in/avatar/<handle>` mounts inside the same ring —
+  `roster_card()` checks `drop_in()` and renders the `<img>` instead.
+- **`BOOSTERS[].slug` names the game**, so the chip renders that game's `short` and a booster can
+  never advertise a ladder the catalogue doesn't sell. orvo is a Rivals booster precisely because
+  the feed has them delivering the Rivals order two columns away.
+- **The safety mechanisms are labels, not new claims.** The four lines restate `SAFETY["body"]`,
+  which is signed-off copy that must not be edited or split. A fifth mechanism means writing the
+  sentence that backs it into `body` first.
+- **The Discord mark is a generic chat glyph**, not Discord's logo — same trademark rule as
+  `pay_marks()` and the Trustpilot star.
+- **Breakpoints follow the site's 1200/1000/760**, not the handoff's 1280/1024/768. 1200 narrows the
+  rail to 340 and drops the safety proof column under the prose; 1000 goes single column with the
+  rail last and gives the feed its game column back; 760 strips the clock, the rail and the game
+  column from feed rows and the win rate from roster rows. The handoff draws 1440 only and asks for
+  the middle to be confirmed with the designer.
+- **i18n**: every figure sits in its own `<b>` (`<b>34</b> boosters`, `<b>41</b> orders closed…`) so
+  the sentence still matches whole. `.rc-all` wraps its label in one `<span>` — the button is a flex
+  container and three bare children would space out as three flex items.
+
+## 04 Dashboard — the section and its mock
+
+`dashboard_section()` is the **"Dashboard section"** handoff (`design_handoff_dashboard`), sitting
+between Safety and Reviews on the homepage — which is why **Reviews is now `05`**. It renders again
+on `/how-it-works.html` with `num=None` (no kicker there: no numbered run to join). Fourth scoped
+exception after `.hero-a` / `.co` / `.gg` — tokens on `.dsh`, product radii per element, nothing
+leaking past. It replaced a `.split-9-11` figure holding `art.dashboard()`'s generated placeholder.
+
+- **The mock is the argument.** It is the evidence for the three claims beside it, so it is built as
+  a working screen at real fidelity — live rank, progress, an LP chart, a real match table — not as
+  a decorative panel. Anything that makes it look generated undoes the section.
+- **`dash_mock()` is inert by construction, and that is a decision.** `role="img"` puts one labelled
+  illustration in the accessibility tree instead of a fake table of somebody else's order, and the
+  footer's Pause / Message controls are **spans**, so nothing in the panel is focusable or clickable
+  — a real `<button>` that does nothing is a trap for anyone arriving by keyboard. Hover states stay
+  (a screenshot of a live product should look alive); the prototype's pointer cursor on match rows
+  does not, because it promises a click that never comes. The handoff sanctions exactly this.
+- **`dash_mock()` has two callers and three switches.** `example=True` adds the Example pill to the
+  header strip (the demo page's copy of the band); `live=True` is the resolved-order variant on
+  `/demo.html` — no header strip, a footer that says when the last game was, and no `role="img"`,
+  because there the table is the page's subject rather than an illustration beside an argument.
+  Build the card once: the track-order handoff carries the same ProgressCard / LpChart /
+  MatchHistory and asks for exactly that.
+- **Every figure in the mock is derived, not typed.** `demo_order()` computes the completion
+  percentage from the ladder distance, the days left and the price from `pricing.quote()`, and the
+  W–L record by counting the rows. The handoff draws **62%**; on this site's League ladder Gold IV →
+  Platinum II is 6 of the 12 rungs to Diamond IV, so it renders **50%**. The handoff asks for the
+  ladder distance — 62 was its arithmetic against a ladder with no Emerald.
+- **`D.DEMO_ORDER` is one order rendered on two pages.** "Open the demo dashboard" links at
+  `/demo.html?order=ESB-3F92K1` (`DEMO_HREF` in build.py — never a literal), which opens the
+  resolved order directly, so the demo page and the mock **must** show the same order — a visitor
+  who follows the link and finds different games on it has been shown a mock-up, not a product.
+  Both read this one fixture.
+- **The two pulsing dots need `--l-good` in scope.** `.dot-live.dot-ok` is shared with the live feed
+  and reads that token by name; `.dsh` declares it for the same reason `.rail` does. An unresolvable
+  `var()` computes to the *initial* value, not an inherited one — the dots painted transparent.
+- **The chart is a hand-plotted polyline**, 13 authored points in `DEMO_ORDER["chart"]` on a 104-unit
+  box; `dash_mock()` spaces them across the 588-unit width. If the fixture's story changes, re-plot
+  them. Both gradient ids are namespaced per instance (`_DASH_N`) — two panels on a page would
+  otherwise both paint with the first one's stops, the bug the inlined game logos hit.
+- **Champion slots are coloured placeholder tiles**, sized for a real 30px portrait to drop in.
+  Riot's champion art is licensed — same rule as `pay_marks()` and the Trustpilot star.
+- **Win and Loss must not share a colour.** They both used to be orange, which made the history
+  unreadable at a glance; Win is green, Loss neutral, and a lost LP figure is muted rather than
+  louder than the wins.
+- **Every claim in the copy column is a promise the product is held to.** If pause takes an hour
+  rather than minutes, or chat routes through support, `D.DASHBOARD_POINTS` changes.
+- **i18n**: figures and `·` separators ride in `<b>`/`<i aria-hidden>` carriers so the words around
+  them stay whole translatable nodes ("complete", "days left", "LP net", "Order start"). The one
+  exception is documented in the markup: "Last 5 of 38 games" carries two figures mid-sentence, and
+  fragmenting it would impose English word order on French and German, so it falls back to English.
+- **Breakpoints follow the site's 1200/1000/760**, not the handoff's 1280/1024/768. Below 1000 the
+  copy comes first and the mock below it at full width; below 760 the mock drops the K/D/A column and
+  the chart captions and the table goes to four columns. The handoff draws 1440 only.
+
+## The orders page (`/orders.html`)
+
+`page_orders()` is the **"My orders"** destination — the account menu's My orders row lands here
+(`ORDERS_HREF`), not on the single demo dashboard. It is a net-new page (no handoff), so it layers on
+Ashfall tokens rather than porting a scoped design; rank marks reuse the live feed's `.lf-mark`, so a
+climb here is tinted like every other climb on the site.
+
+- **The order data is placeholder, and the page says so.** There is no per-customer order store behind
+  the [facade session](#accounts--the-sign-up-list-in-ops), so — like `DEMO_ORDER` and the booster
+  histories — the list is generated, never typed. The active order **is** `demo_order()` (it opens the
+  one dashboard the site actually renders, on `?order=`); the delivered rows come from
+  `order_history()`, which walks real ladders and prices every row with `pricing.quote()`, seeded on a
+  constant so a rebuild is identical. A standing note calls it a preview until an account backend lands.
+- **It personalises client-side, and works without JS.** The full sample history is server-rendered; the
+  guest prompt ("you're viewing a sample — log in") is visible by default and `initOrders()` in app.js
+  drops it and shows "Signed in as <name>" when the facade session is present. Session changes re-run it
+  through `paint()`, so logging in or out on the page flips the state without a reload. The name rides in
+  its own `<b>` so the greeting stays a whole translatable node.
+- **It is account-scoped, so it is out of the sitemap** (alongside the pay flow) — reached only from the
+  account menu, not a page to rank. Still crawlable; no robots block.
+- **i18n**: all card strings are in `fr`/`de`; ranks, game names, order ids and dates are data and stay
+  as written, same as everywhere. Money runs through `money()`, so the prices convert with the currency
+  switch (the delivered totals and the active price both re-quote in EUR).
+
+## The demo page (`/demo.html`, was `/track.html`)
+
+`page_demo()` is the **"Track an order"** handoff (`design_handoff_track_order`) — a lookup, the
+Dashboard band underneath it, and the order dashboard the emailed link opens. Sixth scoped port after
+`.hero-a` / `.co` / `.gg` / `.dsh` / `.rst`: tokens on `.tk`, product radii per element, nothing
+leaking. It replaced a two-field form beside a headline with roughly 40% of the band empty, a dev line
+shipping as help text, and no state at all after submitting.
+
+**The rename is the point.** Every figure on the page is `D.DEMO_ORDER` — a placeholder — and there is
+no order store behind the form, so "Track my order" was a page promising something the build cannot
+do. It is `/demo.html`, the nav and footer say **Demo**, and the URL lives in **`DEMO_HREF`** in
+build.py, not as six string literals. `?order=<id>` is the deep link; the homepage's "Open the demo
+dashboard" and both checkout confirmations point at it.
+
+- **Two states, two sections, one of them `hidden`** — `[data-demo-view="lookup"]` (+ the `#dashboard`
+  band) and `[data-demo-view="order"]`. The switch pushes real history, so Back leaves the page the
+  way a visitor expects. In production the handoff wants **two routes** (`/track` and
+  `/orders/:token`) so the emailed link can deep-link; `?order=` is this build's stand-in.
+- **Everything toggled with `hidden` needs the `.tk [hidden]` guard.** The rows all carry a
+  `display`, which otherwise beats the UA's `[hidden]` — the same bug `.co` and the ops console's
+  `.banner` hit.
+- **The full site chrome stays.** The handoff drops it for checkout's reason ("a task page, the only
+  exits are support and the brand mark"), which is true of a guest chasing an order and false of a
+  visitor who clicked Demo in the menu. Renaming the page inverts that argument.
+- **The "link sent" notice says no email was sent**, because none is. The handoff kills a dev line
+  under the submit button as a bug and it was right — but that line leaked build detail into a
+  product page, and this one states what the page you are on *is*. The alternative is a confirmation
+  that nothing happened.
+- **No dead controls, same rule as the live feed.** "All 38 games" is not drawn (there is no replay
+  view); Message goes to `/support.html` (support reads the same thread, per `DASHBOARD_POINTS`); the
+  booster's arrow goes to their real profile; and **Pause is a real button** that puts the card into a
+  paused state. That state is undesigned in the handoff, but a dead control on a page whose whole job
+  is demonstrating the product is worse than a plain one.
+- **Pause owns the status pill too.** An order reading "In progress" beside its own "Order paused"
+  banner is telling the visitor two things at once, so `setPaused()` rewrites both and stops the dot.
+- **Every figure is derived.** Add-ons in the details rail are `ADDONS` ids that were **priced into**
+  the quote behind the "Paid" row; the timeline's live event is built from `at` + the newest match, so
+  it cannot contradict the card; the guarantee note's promise is `GUARANTEE["cases"][1]`'s own title,
+  because the handoff requires that wording to match the safety page exactly.
+- **Timeline rows name the rank, not just the mark.** A `data-mark`-style mark is the division numeral
+  alone — "IV reached" says nothing. Same mark + tier-name pairing as the feed, the checkout climb
+  line and the closing band's card.
+- **The connector is a 1px background on the 13px dot column**, not a border on the row. The column is
+  13px so the 11px live dot centres in it; painting the gradient at the column's full width renders as
+  stacked grey blocks rather than a line — a defect the handoff caught in review.
+- **The submit label follows the filled field** ("Find my order" / "Email me the link"). A static
+  label on a two-route form is what made the original ambiguous. That node, the helper line and the
+  two Pause labels are in **i18n.js's `SKIP` list** and owned by the page script through `esbT`,
+  because they swap at runtime; the script wraps `window.esbRender` so a language switch takes them.
+- **Breakpoints follow the site's 1200/1000/760.** 1200 narrows the form to 520 and drops the order's
+  rail under the card as a pair (the two short cards span both columns, or they leave a void beside
+  the tall ones); 1000 stacks the lookup with the **form first** and stretches the header actions;
+  760 gives the phone the handoff's order — headline, paragraph, card, assurance lines — via
+  `display:contents` on `.tk-copy`, the same technique the home hero uses. This page arrives by email,
+  so the handoff flags mobile as required work rather than a nice-to-have, but it draws 1440 only.
+- **The match table's mobile columns are `.dm`'s, not the handoff's.** Below 760 the shared card drops
+  K/D/A and keeps the champion square; the handoff asks for the reverse. One component, one
+  behaviour — changing it changes the homepage.
+
+## The closing band + the footer
+
+`cta_band()`, `fc_card()` and `footer()` are the **"Final CTA + Footer"** handoff
+(`design_handoff_footer`) — two bands designed as a pair and shipped as two independent components,
+because the footer renders on every page and the band must never appear on checkout. The band
+replaced a 400px `.band` with a background illustration and a generic "Ready when you are"; the
+footer replaced a four-column strip with a centred copyright.
+
+- **The close is their order, not a pitch.** The band reads back the configuration the visitor has
+  already made — the climb in words, the live price, and a summary card. `live=True` says this page
+  owns a configurator; only the homepage and the game pages pass it.
+- **`live=False` is the handoff's documented fallback, and it is deliberate.** A page with no
+  configurator has nothing to read back, so it gets no card, a headline quoting `catalogue_floor()`
+  and one CTA. Not an empty card, and not a fabricated default order — the handoff is explicit about
+  both. It is described but not drawn, and is flagged for the designer.
+- **`catalogue_floor()` is quoted, never typed.** It is `pricing.quote()` over every rung of every
+  game, so "Your climb starts at $3" and Valorant's "Cheapest single division $3" are the same claim.
+- **The card shares the checkout summary's data contract**, not just its shape — `data-sum` /
+  `data-mark` / `data-when-*`. One `render()` pass fills both, so the two can never disagree about
+  the same order. The band's headline, the card total and the struck price are three assertions of
+  one number for the same reason.
+- **The Climb row names both ranks — mark + tier, twice.** It used to be the two marks alone, and
+  since a mark is only the division numeral, an Iron IV → Gold IV order rendered "IV → IV": the
+  colours told the tiers apart but nothing said which they were. Checkout had the same hole from the
+  other side, naming only the *target* tier. Both now draw `data-mark` + `data-tiername` per end, the
+  same object the live feed and the dashboard mock draw. It does **not** append the mode, though —
+  checkout does that because it has no queue row, and this card has one, so borrowing that text
+  prints "Solo" twice in four rows.
+- **`.fc` rides on `.hero-a`'s scoped tokens** (`class="hero-a hero-a-lit fc"`) rather than
+  redeclaring the handoff palette — same design as the two heroes, so `.btn-primary`, `.grad-text`
+  and `.ob-mark` resolve to the handoff ember for free. `.ft` declares its own copy of the `--h-*`
+  and `--l-good` names because the shared parts (`.ico`, `.dot-live`) read them by name and an
+  unresolvable `var()` computes to the *initial* value, not an inherited one.
+- **The band's CTA labels are uppercase and tracked** — the footer's register, deliberately not the
+  sentence case `.hero-h-cta` uses. Same geometry otherwise.
+- **"Talk to support" and "Let's chat" are one destination.** The handoff says so outright; wiring
+  them apart is how a live-chat rollout loses half its traffic to a contact form.
+- **`FOOT_SUPPORT_ONLINE` is a real seam, not decoration.** The handoff requires that "Online now"
+  reflect actual availability and that the dot and label change rather than lie. False degrades the
+  card to the median reply time; the 24/7 heading above it is the promise this line reads out.
+- **"All N games" counts `D.GAMES`**, so adding a game can't leave the footer advertising 9.
+- **Socials are the four channels that exist**, not the handoff's six — its own note says to replace
+  them with the real set, because a tile linking nowhere is worse than one fewer tile. The brand
+  lockup stays the site's shard, not the handoff's lightning bolt: the nav and the footer have to be
+  the same mark.
+- **`foot_pay()` drops PayPal and BTC** for the reason `pay_glyphs()` gives — checkout takes neither,
+  and the card marks stay generic until Stripe's brand kit lands.
+- **The footer's locale menu opens upward.** It sits at the foot of the document; the shared
+  `.loc-menu` rule drops it below the button, which is off the page.
+- **Everything toggled with `hidden` needs the `.fc [hidden]` / `.ft [hidden]` guard** — the rows all
+  carry a `display`, which otherwise beats the UA's `[hidden]`. Same bug the checkout column and the
+  ops console's `.banner` hit.
+- **Breakpoints follow the site's 1200/1000/760.** At 1200 the band's card narrows to 340 and the
+  support card turns side-on across its own row rather than stretching two buttons over 1400px; at
+  1000 the band goes single column with the card first (it is the substance of the close); at 760
+  both CTAs go full width and the footer stacks with 44px link rows. Mobile keeps the full summary
+  card rather than the README's collapsed disclosure, which is not designed — same call the checkout
+  page made. The handoff draws 1440 only and asks for the rest to be confirmed with the designer.
+- **i18n**: `fromRank`/`toRank` and every figure ride in their own nodes so the sentences around them
+  stay whole. New strings are in both `fr` and `de`, including the payment strip's screen-reader
+  sentence, which `pay_glyphs()` had been shipping untranslated.
+
+## The boosters roster + one profile per booster
+
+`page_boosters()` and `page_booster(b)` are the **"Boosters roster"** handoff
+(`design_handoff_boosters_roster`), two screens that are one flow: `/boosters/` lists the board and
+every row's name opens `/boosters/<handle>.html`. Fifth scoped port after `.hero-a` / `.co` / `.gg` /
+`.dsh` — tokens on `.rst` (roster) and `.bp` (profile), product radii per element, nothing leaking.
+
+- **The page URL is `/boosters/`, not `/boosters.html`.** Profiles live in that directory, and a
+  `boosters.html` beside a `boosters/` makes `/boosters` resolve differently per host. Same shape as
+  `/games/` — `page_boosters()` is written to `/boosters/index.html` and NAV carries `/boosters/`.
+- **Nothing on the roster page may appear twice.** The version this replaces showed the same five
+  boosters in a hero rail card and again in the table 300px below. The rail now carries
+  `vetting_card()` — last month's intake, which is the *evidence* for the H1's claim. If you put a
+  roster preview back in that slot you have undone the redesign.
+- **The funnel figures are claims** (`D.VETTING`), not decoration, and they are deliberately not bars:
+  1,840 → 96 → 11 renders the last two as invisible slivers. The three rule lines under them restate
+  promises the hero paragraph already makes; a fourth line means writing that sentence into the
+  paragraph first.
+- **`D.WR_FLOOR` is asserted, not just stated.** The hero says boosters drop off the board below 62%;
+  `data.py` fails the import if any `wr_n` is under it, and the roster's win-rate bar is normalised
+  from that floor to `WR_TOP`. The bar's zero and the sentence are the same number on purpose.
+- **`STATS["online"]` / `STATS["free_now"]` are counted from `BOOSTERS`**, not typed. Every "N
+  boosters" on the site reads them (utility bar, order card, rail, roster footer), so counting is what
+  keeps one claim true everywhere — a hand-typed 34 over a 50-row table is exactly the bug this fixes.
+- **Availability is the loud thing.** `queue_pill()` and the avatar ring both read `queue`, so they
+  cannot drift; win rate is neutral with a bar under it, because ten orange figures are ten identical
+  accents and therefore no signal.
+- **Hire stays enabled for busy boosters** and goes to `/games/<slug>.html?booster=<handle>` — the
+  handoff's "carry that booster into the configurator as the named booster". The name link goes to the
+  profile. `?booster=` is validated against `D.boosters` in the client data and against `D.BOOSTERS`
+  again in `payments.py`; it rides the order as `metadata[booster]` and **never touches the price**.
+- **There is no named-booster fee.** The handoff prices it at +10% and flags the figure as invented;
+  `pricing.py` charges nothing, and the server recomputes every amount, so the rail card says "No extra
+  fee". Introducing a real one means adding it to `pricing.py` *and* its `app.js` mirror first — then
+  the label reads it off the constant the way Duo reads `DUO_MULT`.
+- **No dead controls.** "Load more" is rendered only when rows are actually `hidden` behind it
+  (`ROSTER_PAGE` / `BP_PAGE`, mirrored by `RST_PAGE` in app.js — change one, change the other), and the
+  profile's footer says "the last N of M orders" because the page shows a recent sample, not the whole
+  history. Same rule that keeps the live feed's rows unlinked.
+- **The empty state is required.** A game with nobody free is normal; `[data-rst-empty]` names the
+  game, counts who covers it, and offers Order anyway / Show everyone. Two headlines live in the DOM
+  (one hidden) because "Nobody free on DOTA" has no form when the chip is on "All games".
+- **Everything on a profile is derived from the booster's own data.** `booster_history()` builds the
+  completed-orders table from the rank bands in `climbs` — the same bands the rail card claims — and
+  takes each delivery time from `pricing.quote()`, the way `demo_order()` does for the dashboard mock.
+  `_climb_bands()` splits `orders` across the four bands below the peak, so the card's counts add up to
+  the stat card above it (it reproduces the handoff's 71/63/48/32 for vantaa exactly). Seeded on the
+  handle, so a rebuild renders the same table.
+- **No `aggregateRating` in the JSON-LD.** The profile emits `ProfilePage` + `Person` only. The ratings
+  are placeholders; shipping them as structured data would put invented review stars in search results.
+- **Portraits are per booster** (`portrait-<handle>.svg`, drop-in slot `portrait/<handle>`); the home
+  hero's spotlight reads the same file for whoever `SPOTLIGHT` names, so the card and the page it links
+  to can never show two faces. Roster avatars stay initials — a generated portrait is a smudge at 38px
+  and the ring's colour is what carries free/busy.
+- **Game pages cap their roster at 6** (`page_game()`); League alone has 22 boosters and that section
+  only has to establish that real people cover the ladder. The full board is `/boosters/`.
+- **Breakpoints follow the site's 1200/1000/760.** 1200 stacks the hero and moves Peak under the
+  handle; 1000 goes to Booster/Game/Win/Hire with the queue pill under the handle; 760 turns both
+  tables into cards. The handoff draws 1440 only and asks for the middle to be confirmed.
+- **i18n**: figures ride in their own `<b>` as everywhere else. Two sentences carry two figures
+  mid-sentence and deliberately fall back to English — the profile's "Showing the last N of M orders"
+  is translated with English word order, and the roster's count works because "of" is already a
+  shared key. New card strings are in both `fr` and `de`.
+
+## The reviews page
+
+`page_reviews()` is the **"Reviews page"** handoff (`design_handoff_reviews`) — the page the
+"4.8 / 5 · 3,140 reviews" line in the hero, the checkout and the footer leads to when someone decides
+to actually check. It has one job: **let a sceptic verify the rating instead of taking it on faith**,
+and every decision below is that job. It replaced a wall of ~58 identical cards at one visual weight
+with no filters, no distribution and no paging — where nothing was findable and the page's own claim
+was unverifiable, because every visible card was a five. Scoped on `.rvp`, tokens declared locally.
+
+- **The distribution is a control, not a graphic.** Five rows, each a `<button aria-pressed>` that
+  filters the feed. The counts are what make "we don't filter by score" checkable, so the reader can
+  act on them where they read them. 4★/5★ fill with the accent; 3★ and below fill neutral — a
+  negative rating shown plainly rather than dressed in brand colour.
+- **`D.REVIEW_DIST` is the one place the rating is written.** `STATS["trustpilot"]` (the average) and
+  `STATS["reviews"]` (the total) are computed from it in `data.py`, and `rating_dist()` computes the
+  percentages. The H1, the summary card, the five rows, the Trustpilot badge and the checkout all
+  read one source, so the numbers on this page cannot contradict each other or the rest of the site.
+  The badge and the checkout summary read the same two STATS keys they always did.
+- **`D.REVIEWS` must keep its sub-five-star entries.** The page offers a `3★ or less` filter and a
+  `Lowest rated` sort *because* the paragraph above them says nothing is hidden; an empty result
+  behind either reads as suppression. One 3★ sits inside the first twelve so the default feed is not
+  a wall of fives. `_pick_review()` in `data.py` still draws booster testimonials from 4★+ — that is
+  attribution, not filtering: the low fixtures complain about an order changing hands, which cannot
+  be printed on one named booster's profile as *their* review.
+- **"Lowest rated" stays in the sort options.** Removing it to make the feed look better would
+  contradict the copy two bands above it.
+- **The count line counts the DOM.** Its second figure is the *filtered* total — how many reviews
+  match, not the page size — and with no filter on it is the number of reviews the page actually
+  publishes (58 today), never the 3,140 the aggregate is computed over. The handoff prints
+  "Showing 12 of 3,140" over twelve fixtures; on a feed holding 58 that is the one claim on the page
+  a sceptic could disprove by counting, which is the opposite of what the page is for.
+- **The card is `review_card()`, shared with the homepage feed** — `filterable=True` adds the two
+  facts the filter reads, `hide=True` ships the second page collapsed. One component, or a review
+  reads one way in the feed and another on the page the feed links to.
+- **Everything is server-rendered; JS only hides.** Every review is in the HTML with everything past
+  `REVIEWS_PAGE` already `hidden`, so the first page reads correctly with no JS and "Load 30 more"
+  reveals cards already in the document rather than fetching (the button itself is inert without JS,
+  the same trade-off the roster's makes). `RVP_PAGE` / `RVP_MORE` in app.js mirror `REVIEWS_PAGE` /
+  `REVIEWS_MORE` in build.py — change one, change the other. At 3,140 reviews the filter, sort and
+  page become query parameters and the `data-rv-*` pair on each card is the contract for them.
+- **Two controls, one state.** The distribution rows and the rating segments both write `rating` and
+  are re-marked together. A row toggles back to All when it is already selected; the segments always
+  set. 3★/2★/1★ have no segment, so none is marked then — that is correct, not a bug.
+- **The chips are data-driven** (`review_games()`): the handoff draws six against nine catalogue
+  games, which leaves an Apex review visible under "All games" and unreachable by filter. A chip
+  here can never filter to nobody, and a tenth game arrives with its own chip.
+- **The filter bar and the "Load more" button are the roster's**, shared by selector group in
+  `site.css` rather than copied — same control, same values, from the sibling handoff. That is also
+  why `.rvp` declares two overlapping token sets; the comment on the block explains which is which
+  before you add a third component to this page.
+- **"Read on Trustpilot" only exists once `D.TRUSTPILOT_URL` names our own profile**, the rule the
+  badge already follows — and it matters most here, where the page's whole argument is "go and
+  check". Until then the second action is "Read the worst first", which sets the `Lowest rated` sort
+  the paragraph promises. The green tile block is still the placeholder mark, same standing as the
+  rest of [Placeholder data](#placeholder-data--do-not-present-as-real).
+- **"Where the score comes from" is kept below the feed.** The handoff does not draw it, but it is
+  the only place the site says review requests are never incentivised — deleting signed-off copy is
+  not part of porting a screen.
+- **Breakpoints follow the site's 1200/1000/760**, not the handoff's 1280/1024/768. 1000 stacks the
+  hero and goes to two columns; 760 is one column with 44px chips and taller distribution rows,
+  which are the primary rating filter at that width. The handoff draws 1440 only.
+- **i18n**: the H1's figures ride in their own nodes, so "across" and "reviews" stay whole
+  translatable words. The rating segment says **"Any"**, not the handoff's "All" — `"All"` is already
+  the roster rail's "All 187 reviews", where French needs "Tous les". "Load 30 more" and "Show the
+  rest" are two whole labels rather than one with a number interpolated into it.
+
+## The safety & guarantee page
+
+`page_guarantee()` is the **"Safety & guarantee"** handoff (`design_handoff_safety_guarantee`) — the
+refund policy, the account-safety argument, three promises and an FAQ, in four bands. Sixth scoped
+port after `.hero-a` / `.co` / `.gg` / `.dsh` / `.rst` — tokens on `.sg`, product radii per element,
+nothing leaking. It is where "Money-back until a booster is assigned", checkout's "Read the
+guarantee" and the nav's Safety link all land.
+
+Its job is narrow and unusual for a marketing page: **be the page a sceptic can finish reading and
+still trust.** Every claim is a number that can be checked, a mechanism that can be described, or an
+admission. That is a design constraint, not just a copy one:
+
+- **Nothing on this page animates and nothing pulses.** On a page whose subject is trust, a moving
+  element reads as a sales device. The accordion is the only motion, and it is suppressed under
+  `prefers-reduced-motion`.
+- **One filled button on the whole page** — the hero CTA. `nav_outline=True` drops the header's, the
+  FAQ's "Ask support" is a real outline and "Read the full terms" is a bare link.
+- **The disclaimer is a framed plate, not fine print.** `SAFETY["disclaimer"]` is verbatim and is not
+  to be softened: a page arguing for honesty cannot bury the one paragraph admitting the risk isn't
+  zero. It was a ragged column floating mid-band, which is how the most important paragraph on the
+  page came to look like an afterthought. Its glyph is `--g-caution`, deliberately **not** the accent.
+- **The hero's stat list is what earns the column's height.** The old hero stopped at the CTA with
+  ~350px of empty gradient under it. The three figures *back* the policy rather than restate it, so
+  the void closed without stretching anything — delete them and it reopens.
+- **Band 2 is flush left**, like every other section here. The kicker used to sit alone at the left
+  edge with the heading and both paragraphs pushed into the right column; half a full-width band was
+  empty and it read as a layout error. The measure card is the same argument in a second register —
+  prose for readers, list for scanners.
+- **`SAFETY["measures"]` is `mechanisms` plus the fifth line `body` already backs** ("Duo orders never
+  touch your login at all"). The five *notes*, though, are the one place on the page that says more
+  than `body` does — each is an operational commitment falsifiable by a single bad order, and
+  `data.py` carries the ⚠ listing which need ops sign-off. If one isn't true, cut that note; the name
+  alone still works.
+- **`D.GUARANTEES` is one list rendered twice.** `guarantee_cards()` draws kicker/title/body in the
+  plain `cards-3` shell on `/games/` and the game pages; `promise_cards()` draws the same entries with
+  their icon tile and proof line here. Six-tuples — `(glyph, stroke?, kicker, title, body, proof)`.
+  The proof line is pinned with `margin-top:auto`, which is what keeps the three on one baseline
+  across cards with unequal bodies.
+- **Support's proof line reads `STATS["reply"]`.** The handoff types "Median first reply 4 minutes"
+  and flags it as invented; this site already measures 3m 40s, so the line is quoted, not typed.
+- **The duo percentage is read off `pricing.DUO_MULT`**, same as `mode_seg(pct=True)`. The handoff's
+  FAQ types 35%; this site charges 55%, and a typed percentage in a *policy answer* is exactly the
+  kind of claim that drifts silently from what is billed.
+- **The FAQ is single-open, and every answer is in the DOM.** Item 1 is open on load so the band never
+  reads as an empty list; opening one closes the rest; clicking the open one collapses it. Panels are
+  toggled with the `hidden` attribute, never conditionally rendered — the FAQPage JSON-LD asserts the
+  answers are on the page, so they have to be. `.sg [hidden] { display: none; }` is the guard the rows
+  need, same bug `.co` and the ops console's `.banner` hit.
+- **The FAQ ids are a public contract.** Support links people at specific answers, so
+  `#faq-<id>` comes from `D.GUARANTEE["faq"]` and renaming one breaks the links in old tickets. The
+  deep-link scroll must be **`behavior: 'instant'`, not `'auto'`** — `ashfall.css` sets
+  `scroll-behavior: smooth` globally and `'auto'` means "use the CSS value", so `'auto'` reintroduces
+  exactly the animation being overridden. It also sets `history.scrollRestoration = 'manual'`, but
+  only when there is a hash target: restoration runs after `load` and otherwise wins, putting a
+  reader who reloads a deep link back where they were rather than on the answer the link names. The
+  offset is the sheet's own `scroll-padding-top`, so the header and this stay in step from one place.
+- **Three answers contradict the sales pitch on purpose**: don't queue ranked alongside an unpaused
+  solo order, naming a booster means a slower start, and the ToS risk is real. They are why the page
+  is credible; removing them is the single easiest way to make it worthless.
+- **The FAQ intro doesn't claim a ranking it hasn't got.** The handoff's "Ranked by volume over the
+  last 90 days" is flagged there as invented — this order is editorial, so the sentence says so.
+- **The measure card's row rules come off in the 2-up layout** (≤1200px), rather than being trimmed on
+  the last row: an odd count leaves one cell ruled and its neighbour bare, drawing a half-width line
+  across the middle of the card. Whitespace separates instead, and it stays right at any list length.
+- **Breakpoints follow the site's 1200/1000/760**, not the README's 1280/1024/768. 1200 narrows the
+  case column and drops the measure card under the prose two-up; 1000 goes single column and the FAQ's
+  sticky heading becomes a static header; 760 stacks the stat figures over their labels, aligns the
+  FAQ headers to the top for two-line questions and drops the answer inset from 62px to 18px. The
+  disclaimer stays full width at every size — it is never collapsed into a tooltip or a "read more".
+  The handoff draws 1440 only and asks for the rest to be confirmed with the designer.
+- **i18n**: the hero stat's one figure rides in its own `<b>` so the words either side stay whole
+  translatable nodes; "5 days" / "24 hrs" are translated as words. The Guarantee card's proof line is
+  the same sentence checkout states, so it has **one** dictionary entry, in the checkout block — the
+  handoff requires the two to match word for word.
 
 ## Design handoffs (`redesign_zip*/` — reference only, never imported at build time)
 
@@ -156,11 +892,48 @@ they only agree by accident otherwise, and `data-addon-price` depends on quoting
 
 ## Placeholder data — do not present as real
 
-`data.py`'s `STATS`, `BOOSTERS`, `REVIEWS` and every game except League of Legends are **invented
-placeholders** carried over from the handoff, as is the key art (`keyart()` generates labelled SVG
-placeholders). Both handoffs and the README flag this as blocking for launch. Keep the warning
-comment at the top of `data.py` intact, and don't let placeholder statistics leak into new copy —
-the site deliberately uses one single set of numbers everywhere.
+`data.py`'s `STATS`, `REVIEW_DIST`, `BOOSTERS`, `VETTING`, `LIVE_FEED`, `REVIEWS`, `DEMO_ORDER` and
+every game except League of Legends are **invented placeholders** carried over from the handoff, as is
+the key art (`keyart()` generates labelled SVG placeholders). Three of these read most like live data
+and are not:
+the homepage feed renders exactly the four rows in `LIVE_FEED` and nothing on the page ever adds a
+fifth; `DEMO_ORDER` is one invented order drawn as a product screenshot in the dashboard section and as
+the whole of `/demo.html`, which is why that page carries an Example pill in both places it shows the
+order code; and **the fifty booster profiles are fifty invented people** — handles,
+ranks, ratings, on-time rates, dispute counts, order histories and testimonials. A profile reads like a
+personnel record, which is exactly why none of it can go live unverified, and `VETTING`'s 1,840 / 96 /
+11 are load-bearing claims that must be wired to the applications queue (if the real numbers are less
+flattering, ship the real numbers — the page's whole argument is that it doesn't self-report). Both
+handoffs and the README flag this as blocking for launch.
+
+**The header's auth panel is now partly real, not a pure facade.** `build.py`'s `AUTH_PLACEHOLDER`
+block carries the full list. Email/password **login is server-verified**: the form POSTs to
+`/api/account`, which checks the password against a salted PBKDF2 hash in the account store (see
+[Accounts](#accounts--the-sign-up-list-in-ops)) — an unknown email or a wrong password is refused,
+so the panel no longer accepts anything. What is **still unfinished and blocking for launch**: the
+email/password session is a `localStorage` record, not the signed server cookie the OAuth path
+(`oauth.py`) mints; there is no email verification, no password reset, and no rate limiting on the
+public `/api/account`. Checkout stays guest-only, orders are tracked by an emailed link, and the
+panel still says twice that an account is optional and is never their game login.
+
+`REVIEW_DIST` is one of these and the most quotable: 2,612 / 372 / 94 / 34 / 28 invented
+reviews per star, drawn on `/reviews.html` as a distribution a visitor is invited to check the rating
+against, and the source `STATS["trustpilot"]` and `STATS["reviews"]` are computed from. It has to be
+counted from the real corpus before launch — and so do the four sub-five-star reviews written to keep
+the `3★ or less` filter from returning nothing, which are complaints attributed to nobody about
+orders that never happened. Keep the warning comment at the top of
+`data.py` intact, and don't let placeholder statistics leak into new copy — the site deliberately uses
+one single set of numbers everywhere.
+
+`GUARANTEE` and `SAFETY` are a different kind of unverified: not invented statistics but **written
+commitments**. The refund page states 5 business days to a refund, 24 hours to an automatic refund on
+an unclaimed order, a 15% credit past the ETA and a pro-rata rule — and its FAQ asserts that pausing
+is free and resumes the same night, that boosters never change a password or make a purchase, that
+settings are mirrored then restored, and that the price is fixed at checkout. `SAFETY["measures"]`'s
+five notes do the same for the VPN estate and the play window. **Each is falsifiable by a single bad
+order.** Legal review the policy numbers and confirm the operational ones with ops before the page
+ships; where one isn't true, cut the line rather than soften it — the page's whole argument is that
+it says the checkable thing.
 
 The same rule covers **seeded analytics**: every event written by `tools/seed_analytics.py` carries
 `"syn": 1`, and `/ops` shows a standing "synthetic data — not real traffic" banner for as long as
@@ -218,7 +991,8 @@ public/assets/js/analytics.js  ──►  POST /api/collect  ──►  src/anal
 | `site/src/ops.py` | Password auth + two routes: the dashboard payload, and one session's full timeline on demand. |
 | `site/public/assets/js/ops.js`, `ops.css` | The console. Self-contained; shares nothing with the shop's stylesheets. |
 | `site/tools/seed_analytics.py` | Synthetic traffic for testing. |
-| `api/collect.py`, `api/ops.py` | Vercel shells, mirroring the `serve.py` routes. |
+| `site/src/accounts.py` | The header sign-up list — a **separate** store, `POST /api/account` to write, `ops.py`'s `accounts` action to read. Holds name + email, never a password. |
+| `api/collect.py`, `api/account.py`, `api/ops.py` | Vercel shells, mirroring the `serve.py` routes. |
 
 **Two stores, chosen by environment.** With `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`
 set, events go to Upstash Redis over its REST API (stdlib `urllib`) — required in production,
@@ -264,6 +1038,102 @@ with nothing to configure.
   *which* signal answered (`cosrc`) and the dashboard shows it, so an inferred country is never read
   as a measured one. `.env` is gitignored — `serve.py` loads it at startup, so a key left there would
   otherwise be committed.
+
+### Accounts — the sign-up list in /ops
+
+The header's auth panel (see the site header section) has no real backend, so what "create an
+account" actually produces is a name and an email. `accounts.py` is where that lead is kept, and the
+**Accounts** tab in `/ops` is where it is read. It is a deliberate sibling of the analytics pipeline,
+not part of it — same house rules (stdlib, no build step, file store in dev / Upstash in prod), same
+public-write / gated-read shape, but a **separate store** because it holds PII the analytics store is
+sworn never to.
+
+- **It is a different store from analytics, and must stay one.** `esb:accounts` / `accounts.ndjson`,
+  never `esb:ev` / `analytics.ndjson`. The analytics schema's whole value is being anonymous and
+  consent-banner-free; an email in it breaks that. `accounts.py` reuses only analytics' Upstash
+  *transport* (`_upstash`) and store selection, never its data. Do not merge them.
+- **Passwords are only ever stored hashed.** Sign-up sends the password to `/api/account`;
+  `hash_password()` runs PBKDF2-HMAC-SHA256 with a per-account random salt (stdlib `hashlib`) and the
+  plaintext is verified once and never written. The hash is kept **out of the `/ops` payload** (Upstash
+  keeps it in the `esb:accounts:cred` HASH, never the displayed list; the file store carries it in the
+  row, and `summary()` whitelists fields). Never store, log or return a plaintext password.
+- **Sign-in is verified server-side.** `_login()` in `accounts.py` reads the stored hash for the email
+  and `verify_password()`s it in constant time (`hmac.compare_digest`). An unknown email and a wrong
+  password both answer the same `401 {"error":"invalid"}` — the panel no longer accepts anything.
+- **`/api/account` is public and unauthenticated**, exactly like `/api/collect`: the form is on every
+  page. Everything is length-capped and validated (`clean_signup()` for the row, the password capped
+  before hashing), and the list is read only through the password-gated `ops.py` `accounts` action,
+  fetched on demand (it is PII, kept off every dashboard refresh the way session timelines are). A real
+  login endpoint is a credential-stuffing target, so production **needs rate limiting** on this route.
+- **One address, one row.** `append()` dedupes on email (lower-cased in `clean_signup()`): a repeat
+  submission is dropped, first-signup wins, and duplicates inside one batch collapse. On Upstash the
+  check is O(1) against the `esb:accounts:emails` SET, written in the same pipeline as the row and
+  cleared with it; on the file store it scans `read()`. So re-signing-in with an existing email, or
+  the facade beacon firing twice, never grows the list. The ops panel's repeat count is therefore an
+  integrity check that should read zero — it only renders a tile if a duplicate ever slips through.
+  (Real "that email is already registered" feedback to the visitor still needs the account backend;
+  the facade beacon is fire-and-forget.)
+- **Country is resolved the same way as a session** — edge header, then timezone, then locale, never
+  an IP — and `cosrc` records which signal answered, shown in the panel.
+- **The panel says what it is.** A standing banner names it a sign-up list against a facade, not an
+  account system, so a seeded or half-built figure is never read as real customers. A second banner
+  appears if any row carries `syn` (the seeder's flag, same as analytics). The store must be cleared,
+  and a real backend + privacy-policy line + deletion path must exist, before these are treated as
+  accounts — it is blocking for launch.
+- **Restart the server after touching these files.** Like the payment and analytics routes, the
+  `/api/account` and `accounts` routes live in `serve.py` / `ops.py` and only take effect on a
+  process restart — there is no watcher.
+
+## Social sign-in — Google + Discord OAuth
+
+`src/oauth.py` is the real authorization-code flow behind the header's two OAuth buttons — the same
+house rules as payments (stdlib `urllib` against each provider's REST API, no packages, no framework).
+It turns "Continue with Google/Discord" from a facade into a working login: redirect to the provider,
+exchange the code **server-side** (the client secret never touches the browser), read the verified
+name + email, store that lead in the **same** `accounts.py` list the email form writes to, and mint a
+signed **HttpOnly session cookie**.
+
+```
+button ─► GET /api/auth/<provider> ─► 302 to provider ─┐ (Set-Cookie: signed state)
+                                                        ▼ user consents
+header ◄─ 302 return_to ◄─ GET /api/auth/<provider>/callback  (Set-Cookie: signed session)
+  │  reads /api/auth/me (session + which providers are wired)   └─► accounts.append(verified lead)
+```
+
+- **The flow logic lives in `oauth.dispatch()` alone.** `serve.py`'s `_auth()` and the four
+  `api/auth/*` Vercel shells both render the same `{status, json, location, set_cookie}` descriptor,
+  so the local server and the serverless functions can't drift — the project's rule that `/api` is a
+  thin mirror of `serve.py`. The Vercel routes are `api/auth/me.py`, `api/auth/logout.py`,
+  `api/auth/[provider].py` and `api/auth/[provider]/callback.py`.
+- **Four routes.** `GET /api/auth/<provider>` starts it (signed state cookie + 302);
+  `GET /api/auth/<provider>/callback` finishes it (token exchange → session cookie → 302 to
+  `return_to`); `GET /api/auth/me` is the client's source of truth (current session + `{google,
+  discord}` availability); `POST /api/auth/logout` clears the cookie.
+- **CSRF is a signed `state` in both the redirect and an HttpOnly cookie**, checked to match on
+  return; nothing is trusted from the query string alone. `return_to` is validated by `_safe_return()`
+  to a bare same-site `/path` — an open redirector is the classic OAuth bug.
+- **The session cookie is signed with `SESSION_SECRET`** (HMAC-SHA256, `_sign`/`_unsign`), `HttpOnly`,
+  `SameSite=Lax`, `Secure` only on https (localhost over http would drop it), 30-day expiry to match
+  the panel's copy. Absent `SESSION_SECRET`, it falls back to a per-process random key — logins work
+  but don't survive a restart, which is the safe failure, not a shared default.
+- **Graceful degradation, same contract as Stripe.** A provider with no `CLIENT_ID`/`CLIENT_SECRET`
+  pair is reported disabled by `/api/auth/me`; `app.js` keeps that button's honest facade message
+  ("Social sign-in isn't connected yet") instead of navigating to a 503. So the static preview still
+  walks. Config is env-only: `GOOGLE_/DISCORD_CLIENT_ID` + `_SECRET`, `SESSION_SECRET`,
+  `PUBLIC_BASE_URL` (the redirect-URI origin, shared with Stripe). See DEPLOY.md.
+- **The client reconciles two session mechanisms.** Email/password logins are a `localStorage` record
+  (`esb.session.v1`); OAuth logins are the server cookie. `loadMe()` in `app.js` upgrades the header
+  to a live cookie session but never clears a localStorage one when the cookie is absent, and
+  `signOut()` clears both. A failed callback returns to `?auth_error=<msg>`, which the header surfaces
+  in the panel and strips from the URL.
+- **An OAuth lead is stored via `accounts.append`, not `create_account`** — it has no local password
+  (the provider is the credential), so `credential(email)` is empty for it and email/password login
+  won't match. It's tagged `mode: "oauth:<provider>"`, visible in the `/ops` Accounts tab. Linking an
+  OAuth login to an existing email/password row is unbuilt — see `build.py`'s `AUTH_PLACEHOLDER`.
+- **The brand marks are `_hd_brand()` in `build.py`** — Discord's Blurple mascot and Google's
+  four-colour G, simplified reproductions. Before launch, swap for each provider's licensed sign-in
+  button asset (same trademark rule as `pay_marks()`).
+- **Restart the server after touching these files** — `/api/auth/*` lives in `serve.py`, no watcher.
 
 ## CRO audit constraints
 
