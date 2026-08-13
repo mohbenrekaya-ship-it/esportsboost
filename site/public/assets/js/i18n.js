@@ -168,8 +168,6 @@
       "An account with this email already exists. Log in instead.": "Un compte avec cet e-mail existe déjà. Connectez-vous plutôt.",
       "Enter a valid email address.": "Saisissez une adresse e-mail valide.",
       "Choose a password of at least 6 characters.": "Choisissez un mot de passe d'au moins 6 caractères.",
-      "Re-enter your password": "Ressaisissez votre mot de passe.",
-      "The passwords don't match.": "Les mots de passe ne correspondent pas.",
       "Please accept the terms to create your account.": "Veuillez accepter les conditions pour créer votre compte.",
       "Enter your password.": "Saisissez votre mot de passe.",
       "Couldn't reach the server. Check your connection and try again.": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.",
@@ -389,7 +387,7 @@
       "Your configuration": "Votre configuration",
       "Change": "Modifier",
       "Queue · Server": "File · Serveur",
-      "Money-back": "Satisfait ou remboursé",
+      "Money-back guarantee": "Satisfait ou remboursé",
 
       /* stat band + roster */
       "Boosts delivered": "Boosts livrés",
@@ -422,7 +420,7 @@
       "2 orders": "2 commandes",
       "Free to join": "Gratuit",
       "Join the server": "Rejoindre le serveur",
-      "Recovery rate on account reviews": "Taux de récupération sur les vérifications de compte",
+      "Client satisfaction rate": "Taux de satisfaction client",
       "Your sensitivity and crosshair": "Votre sensibilité et votre viseur",
       "Played in your normal hours": "Joué à vos heures habituelles",
       "Offline the whole order": "Hors ligne pendant toute la commande",
@@ -663,8 +661,8 @@
       /* band 02 — the safety prose, the disclaimer plate, the measure card */
       "Anti-cheat looks for software, not skill. Every solo order runs behind an enterprise VPN matched to your region, the booster mirrors your sensitivity and crosshair, and sessions are scheduled inside the hours you normally play — so the activity pattern on the account never changes. Duo orders never touch your login at all.":
         "L'anti-triche cherche des logiciels, pas du talent. Chaque commande solo passe par un VPN professionnel dans votre région, le booster reproduit votre sensibilité et votre viseur, et les sessions sont planifiées pendant vos horaires de jeu habituels — le schéma d'activité du compte ne change donc jamais. Les commandes duo ne touchent jamais à vos identifiants.",
-      "Across 92,400 completed orders the recovery rate on account reviews is 100%. If a boost triggers one, support files the appeal and the order is refunded in full while it runs. Your name, email and payment details are never shared with the booster.":
-        "Sur 92 400 commandes terminées, le taux de récupération sur les vérifications de compte est de 100 %. Si un boost en déclenche une, le support dépose le recours et la commande est remboursée intégralement pendant la procédure. Votre nom, votre e-mail et vos données de paiement ne sont jamais communiqués au booster.",
+      "If a boost triggers an account review, support files the appeal and the order is refunded in full while it runs. Your name, email and payment details are never shared with the booster.":
+        "Si un boost déclenche une vérification de compte, le support dépose le recours et la commande est remboursée intégralement pendant la procédure. Votre nom, votre e-mail et vos données de paiement ne sont jamais communiqués au booster.",
       "Boosting is against the terms of service of every game listed here. We reduce the risk as far as it can be reduced and we will not pretend it is zero, because it isn't — any competitor telling you otherwise is lying to you.":
         "Le boosting va à l'encontre des conditions d'utilisation de chaque jeu listé ici. Nous réduisons le risque autant que possible et ne prétendrons pas qu'il est nul, car il ne l'est pas — tout concurrent qui affirme le contraire vous ment.",
       "What that means per order": "Ce que cela signifie par commande",
@@ -705,8 +703,8 @@
         "Oui, et cela ne coûte rien. Mettez la commande en pause depuis sa page et le booster s'arrête à la fin de la partie en cours ; relancez-la et elle reprend le soir même si un créneau est libre. La seule chose à éviter est de jouer en classé vous-même pendant qu'une commande solo est active — c'est le fait que deux personnes lancent des files sur le même compte qui paraît anormal, pas le boost.",
       "What happens if my account gets a review or a ban?":
         "Que se passe-t-il si mon compte fait l'objet d'une vérification ou d'un bannissement ?",
-      "Support files the appeal for you and the order is refunded in full while it runs, so you are never paying for an account you cannot use. Across 92,400 completed orders the recovery rate on reviews is 100%. Boosting still breaks every listed game's terms of service — the risk is reduced as far as it can be, not removed.":
-        "Le support dépose le recours à votre place et la commande est remboursée intégralement pendant la procédure : vous ne payez jamais pour un compte inutilisable. Sur 92 400 commandes terminées, le taux de récupération sur les vérifications est de 100 %. Le boosting enfreint toujours les conditions d'utilisation de chaque jeu listé — le risque est réduit autant que possible, pas supprimé.",
+      "Support files the appeal for you and the order is refunded in full while it runs, so you are never paying for an account you cannot use. Boosting still breaks every listed game's terms of service — the risk is reduced as far as it can be, not removed.":
+        "Le support dépose le recours à votre place et la commande est remboursée intégralement pendant la procédure : vous ne payez jamais pour un compte inutilisable. Le boosting enfreint toujours les conditions d'utilisation de chaque jeu listé — le risque est réduit autant que possible, pas supprimé.",
       "Will the booster change my password or my settings?":
         "Le booster va-t-il changer mon mot de passe ou mes réglages ?",
       "No. Login details are used to sign in and nothing else — no password changes, no email changes, no purchases, no rune or loadout edits beyond the champions and roles you asked for. Sensitivity and crosshair are mirrored to yours, then restored. Change your password once the order closes anyway; the order page tells you when.":
@@ -950,7 +948,68 @@
       "The link is dead or the page moved. The calculator is two clicks away either way.":
         "Le lien est mort ou la page a été déplacée. Le calculateur est à deux clics dans tous les cas.",
       "Pick a game": "Choisir un jeu",
-      "Back to the homepage": "Retour à l'accueil"
+      "Back to the homepage": "Retour à l'accueil",
+
+      /* free guides landing — design_handoff_free_guides. Long-form prose
+         (the lede, band subs, chapter notes, author metas, reader quotes and
+         the FAQ answers) stays as content, the same as review text. */
+      "Free guides · no payment": "Guides gratuits · sans paiement",
+      "Browse boosting": "Parcourir le boosting",
+      "Free guides": "Guides gratuits",
+      "The two guides our boosters actually wrote.": "Les deux guides que nos boosters ont vraiment écrits.",
+      "PDFs, yours to keep": "Des PDF, à vous pour toujours",
+      "Free, and they stay free": "Gratuits, et ils le restent",
+      "One email, no spam": "Un e-mail, aucun spam",
+      "Players downloaded them": "Joueurs les ont téléchargés",
+      "Chapters + 12 drills": "Chapitres + 12 exercices",
+      "Reader rating": "Note des lecteurs",
+      "Which do you want?": "Lequel voulez-vous ?",
+      "Instant": "Immédiat",
+      "Take both — they're free, and most people play both.":
+        "Prenez les deux — ils sont gratuits, et la plupart des gens jouent aux deux.",
+      "Also send me one email a month with new guides and patch notes. Nothing else, and one click unsubscribes.":
+        "Envoyez-moi aussi un e-mail par mois avec les nouveaux guides et les notes de patch. Rien d'autre, et un clic pour se désabonner.",
+      "We never sell your address.": "Nous ne vendons jamais votre adresse.",
+      "Privacy policy": "Politique de confidentialité",
+      "Check your inbox.": "Vérifiez votre boîte de réception.",
+      "on the way to": "en route vers",
+      "If nothing lands in two minutes, look in promotions — it sometimes goes there first.":
+        "Si rien n'arrive dans deux minutes, regardez dans les promotions — il y atterrit parfois en premier.",
+      "Use a different address": "Utiliser une autre adresse",
+      /* CTA labels, helper, note, success line — swapped at runtime via esbT */
+      "Send me both guides": "Envoyez-moi les deux guides",
+      "Send me the League guide": "Envoyez-moi le guide League",
+      "Send me the Valorant guide": "Envoyez-moi le guide Valorant",
+      "Pick a guide first": "Choisissez d'abord un guide",
+      "Both guides, one email, two attachments.": "Deux guides, un e-mail, deux pièces jointes.",
+      "Only one? The other is free too.": "Un seul ? L'autre est gratuit aussi.",
+      "Pick at least one guide.": "Choisissez au moins un guide.",
+      "Used to send the guides. Nothing else unless you tick the box below.":
+        "Sert à envoyer les guides. Rien d'autre, sauf si vous cochez la case ci-dessous.",
+      "Enter an address we can send the PDFs to.": "Entrez une adresse à laquelle envoyer les PDF.",
+      "Arrives in about a minute. No card, no account.": "Arrive en une minute environ. Sans carte, sans compte.",
+      "That address does not look right — check it and try again.":
+        "Cette adresse semble incorrecte — vérifiez-la et réessayez.",
+      "Both guides are": "Les deux guides sont",
+      "The League guide is": "Le guide League est",
+      "The Valorant guide is": "Le guide Valorant est",
+      "Your guide is": "Votre guide est",
+      "What's inside": "Ce qu'ils contiennent",
+      "Six chapters each, no padding.": "Six chapitres chacun, sans remplissage.",
+      "Who wrote them": "Qui les a écrits",
+      "Written by people who play these ranks for a living.":
+        "Écrits par des gens qui jouent ces rangs pour vivre.",
+      "The authors": "Les auteurs",
+      "Seven authors across two games": "Sept auteurs sur deux jeux",
+      "Rewritten every patch cycle": "Réécrits à chaque cycle de patch",
+      "Readers": "Lecteurs",
+      "What they changed for them.": "Ce qu'ils ont changé pour eux.",
+      "Before you hand over an email": "Avant de donner votre e-mail",
+      "Fair questions. We would ask them too.": "Des questions légitimes. Nous les poserions aussi.",
+      "Two guides. One email address.": "Deux guides. Une adresse e-mail.",
+      "Never sold, never rented": "Jamais vendue, jamais louée",
+      "One click unsubscribes": "Un clic pour se désabonner",
+      "Send them": "Envoyez-les"
     },
 
     de: {
@@ -1056,8 +1115,6 @@
       "An account with this email already exists. Log in instead.": "Ein Konto mit dieser E-Mail existiert bereits. Melde dich stattdessen an.",
       "Enter a valid email address.": "Gib eine gültige E-Mail-Adresse ein.",
       "Choose a password of at least 6 characters.": "Wähle ein Passwort mit mindestens 6 Zeichen.",
-      "Re-enter your password": "Passwort erneut eingeben",
-      "The passwords don't match.": "Die Passwörter stimmen nicht überein.",
       "Please accept the terms to create your account.": "Bitte akzeptiere die Bedingungen, um dein Konto zu erstellen.",
       "Enter your password.": "Gib dein Passwort ein.",
       "Couldn't reach the server. Check your connection and try again.": "Server nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.",
@@ -1273,7 +1330,7 @@
       "Your configuration": "Deine Konfiguration",
       "Change": "Ändern",
       "Queue · Server": "Warteschlange · Server",
-      "Money-back": "Geld zurück",
+      "Money-back guarantee": "Geld zurück",
 
       /* stat band + roster */
       "Boosts delivered": "Boosts geliefert",
@@ -1303,7 +1360,7 @@
       "2 orders": "2 Bestellungen",
       "Free to join": "Kostenlos",
       "Join the server": "Server beitreten",
-      "Recovery rate on account reviews": "Wiederherstellungsquote bei Kontoprüfungen",
+      "Client satisfaction rate": "Kundenzufriedenheitsrate",
       "Your sensitivity and crosshair": "Deine Sensitivität und dein Fadenkreuz",
       "Played in your normal hours": "Gespielt zu deinen üblichen Zeiten",
       "Offline the whole order": "Die ganze Bestellung offline",
@@ -1539,8 +1596,8 @@
       /* band 02 — the safety prose, the disclaimer plate, the measure card */
       "Anti-cheat looks for software, not skill. Every solo order runs behind an enterprise VPN matched to your region, the booster mirrors your sensitivity and crosshair, and sessions are scheduled inside the hours you normally play — so the activity pattern on the account never changes. Duo orders never touch your login at all.":
         "Anti-Cheat sucht nach Software, nicht nach Können. Jede Solo-Bestellung läuft hinter einem Enterprise-VPN in deiner Region, der Booster übernimmt deine Empfindlichkeit und dein Fadenkreuz, und Sitzungen werden in deinen üblichen Spielzeiten geplant — das Aktivitätsmuster des Kontos ändert sich also nie. Duo-Bestellungen berühren deine Zugangsdaten überhaupt nicht.",
-      "Across 92,400 completed orders the recovery rate on account reviews is 100%. If a boost triggers one, support files the appeal and the order is refunded in full while it runs. Your name, email and payment details are never shared with the booster.":
-        "Über 92.400 abgeschlossene Bestellungen liegt die Wiederherstellungsquote bei Kontoprüfungen bei 100 %. Löst ein Boost eine aus, legt der Support den Einspruch ein, und die Bestellung wird während des Verfahrens voll erstattet. Dein Name, deine E-Mail und deine Zahlungsdaten werden nie an den Booster weitergegeben.",
+      "If a boost triggers an account review, support files the appeal and the order is refunded in full while it runs. Your name, email and payment details are never shared with the booster.":
+        "Löst ein Boost eine Kontoprüfung aus, legt der Support den Einspruch ein, und die Bestellung wird während des Verfahrens voll erstattet. Dein Name, deine E-Mail und deine Zahlungsdaten werden nie an den Booster weitergegeben.",
       "Boosting is against the terms of service of every game listed here. We reduce the risk as far as it can be reduced and we will not pretend it is zero, because it isn't — any competitor telling you otherwise is lying to you.":
         "Boosting verstößt gegen die Nutzungsbedingungen jedes hier gelisteten Spiels. Wir senken das Risiko so weit wie möglich und tun nicht so, als wäre es null, denn das ist es nicht — jeder Konkurrent, der dir das Gegenteil erzählt, belügt dich.",
       "What that means per order": "Was das pro Bestellung bedeutet",
@@ -1580,8 +1637,8 @@
         "Ja, und es kostet nichts. Pausiere die Bestellung auf ihrer Seite, und der Booster hört am Ende der laufenden Partie auf; hebst du die Pause auf, geht es noch am selben Abend weiter, sofern ein Slot frei ist. Das Einzige, was du vermeiden solltest: selbst Ranked spielen, während eine Solo-Bestellung nicht pausiert ist — dass zwei Personen mit demselben Konto in die Warteschlange gehen, wirkt auffällig, nicht der Boost.",
       "What happens if my account gets a review or a ban?":
         "Was passiert, wenn mein Konto geprüft oder gesperrt wird?",
-      "Support files the appeal for you and the order is refunded in full while it runs, so you are never paying for an account you cannot use. Across 92,400 completed orders the recovery rate on reviews is 100%. Boosting still breaks every listed game's terms of service — the risk is reduced as far as it can be, not removed.":
-        "Der Support legt den Einspruch für dich ein, und die Bestellung wird während des Verfahrens voll erstattet — du zahlst also nie für ein Konto, das du nicht nutzen kannst. Über 92.400 abgeschlossene Bestellungen liegt die Wiederherstellungsquote bei Prüfungen bei 100 %. Boosting verstößt trotzdem gegen die Nutzungsbedingungen jedes gelisteten Spiels — das Risiko ist so weit wie möglich gesenkt, nicht beseitigt.",
+      "Support files the appeal for you and the order is refunded in full while it runs, so you are never paying for an account you cannot use. Boosting still breaks every listed game's terms of service — the risk is reduced as far as it can be, not removed.":
+        "Der Support legt den Einspruch für dich ein, und die Bestellung wird während des Verfahrens voll erstattet — du zahlst also nie für ein Konto, das du nicht nutzen kannst. Boosting verstößt trotzdem gegen die Nutzungsbedingungen jedes gelisteten Spiels — das Risiko ist so weit wie möglich gesenkt, nicht beseitigt.",
       "Will the booster change my password or my settings?":
         "Ändert der Booster mein Passwort oder meine Einstellungen?",
       "No. Login details are used to sign in and nothing else — no password changes, no email changes, no purchases, no rune or loadout edits beyond the champions and roles you asked for. Sensitivity and crosshair are mirrored to yours, then restored. Change your password once the order closes anyway; the order page tells you when.":
@@ -1822,7 +1879,65 @@
       "The link is dead or the page moved. The calculator is two clicks away either way.":
         "Der Link ist tot oder die Seite wurde verschoben. Der Rechner ist so oder so zwei Klicks entfernt.",
       "Pick a game": "Spiel auswählen",
-      "Back to the homepage": "Zurück zur Startseite"
+      "Back to the homepage": "Zurück zur Startseite",
+
+      /* free guides landing — design_handoff_free_guides */
+      "Free guides · no payment": "Kostenlose Guides · keine Zahlung",
+      "Browse boosting": "Boosting ansehen",
+      "Free guides": "Kostenlose Guides",
+      "The two guides our boosters actually wrote.": "Die zwei Guides, die unsere Booster wirklich geschrieben haben.",
+      "PDFs, yours to keep": "PDFs, die dir gehören",
+      "Free, and they stay free": "Kostenlos, und bleiben es",
+      "One email, no spam": "Eine E-Mail, kein Spam",
+      "Players downloaded them": "Spieler haben sie geladen",
+      "Chapters + 12 drills": "Kapitel + 12 Übungen",
+      "Reader rating": "Leserbewertung",
+      "Which do you want?": "Welche möchtest du?",
+      "Instant": "Sofort",
+      "Take both — they're free, and most people play both.":
+        "Nimm beide — sie sind kostenlos, und die meisten spielen beides.",
+      "Also send me one email a month with new guides and patch notes. Nothing else, and one click unsubscribes.":
+        "Schickt mir außerdem einmal im Monat eine E-Mail mit neuen Guides und Patchnotes. Sonst nichts, und ein Klick zum Abmelden.",
+      "We never sell your address.": "Wir verkaufen deine Adresse nie.",
+      "Privacy policy": "Datenschutzerklärung",
+      "Check your inbox.": "Sieh in deinem Postfach nach.",
+      "on the way to": "unterwegs an",
+      "If nothing lands in two minutes, look in promotions — it sometimes goes there first.":
+        "Wenn in zwei Minuten nichts ankommt, sieh unter Werbung nach — dort landet es manchmal zuerst.",
+      "Use a different address": "Andere Adresse verwenden",
+      "Send me both guides": "Schickt mir beide Guides",
+      "Send me the League guide": "Schickt mir den League-Guide",
+      "Send me the Valorant guide": "Schickt mir den Valorant-Guide",
+      "Pick a guide first": "Wähle zuerst einen Guide",
+      "Both guides, one email, two attachments.": "Zwei Guides, eine E-Mail, zwei Anhänge.",
+      "Only one? The other is free too.": "Nur einer? Der andere ist auch kostenlos.",
+      "Pick at least one guide.": "Wähle mindestens einen Guide.",
+      "Used to send the guides. Nothing else unless you tick the box below.":
+        "Wird zum Versand der Guides genutzt. Sonst nichts, außer du setzt unten das Häkchen.",
+      "Enter an address we can send the PDFs to.": "Gib eine Adresse an, an die wir die PDFs senden können.",
+      "Arrives in about a minute. No card, no account.": "Kommt in etwa einer Minute an. Keine Karte, kein Konto.",
+      "That address does not look right — check it and try again.":
+        "Diese Adresse sieht nicht richtig aus — prüfe sie und versuche es erneut.",
+      "Both guides are": "Beide Guides sind",
+      "The League guide is": "Der League-Guide ist",
+      "The Valorant guide is": "Der Valorant-Guide ist",
+      "Your guide is": "Dein Guide ist",
+      "What's inside": "Was drin ist",
+      "Six chapters each, no padding.": "Sechs Kapitel pro Guide, ohne Füllmaterial.",
+      "Who wrote them": "Wer sie geschrieben hat",
+      "Written by people who play these ranks for a living.":
+        "Geschrieben von Leuten, die diese Ränge beruflich spielen.",
+      "The authors": "Die Autoren",
+      "Seven authors across two games": "Sieben Autoren in zwei Spielen",
+      "Rewritten every patch cycle": "Zu jedem Patch neu geschrieben",
+      "Readers": "Leser",
+      "What they changed for them.": "Was sie für sie verändert haben.",
+      "Before you hand over an email": "Bevor du eine E-Mail herausgibst",
+      "Fair questions. We would ask them too.": "Faire Fragen. Wir würden sie auch stellen.",
+      "Two guides. One email address.": "Zwei Guides. Eine E-Mail-Adresse.",
+      "Never sold, never rented": "Nie verkauft, nie vermietet",
+      "One click unsubscribes": "Ein Klick zum Abmelden",
+      "Send them": "Schickt sie"
     }
   };
 
@@ -1841,6 +1956,9 @@
     "[data-demo-note],[data-demo-label],[data-demo-addr],[data-demo-pause-label]," +
     "[data-demo-status-label]," +
     "[data-apply-note],[data-contact-note],[data-pay-error]," +
+    // guides landing — strings the form rewrites at runtime through esbT()
+    "[data-gd-cta],[data-gd-pick],[data-gd-note],[data-gd-ctanote]," +
+    "[data-gd-sentline],[data-gd-email-out]," +
     ".money,.nav-brand,.locale,[data-sel],script,style,code,textarea,output";
   var ATTRS = ["placeholder", "aria-label", "title", "alt"];
 

@@ -29,6 +29,7 @@ from hashlib import sha256
 
 import accounts
 import analytics
+import boosters
 import insights
 
 TOKEN_TTL = 12 * 3600      # a working day, then log in again
@@ -185,5 +186,11 @@ def process_ops(raw):
         # bundled into every dashboard refresh: it is PII, so it is read only
         # when the Accounts tab is actually open.
         return 200, {"accounts": accounts.summary(days)}
+
+    if action == "boosters":
+        # The roster store — a separate store from analytics and accounts, read
+        # only here. Unlike Accounts it holds no PII, but it is fetched on demand
+        # the same way rather than bundled into every dashboard refresh.
+        return 200, {"boosters": boosters.summary()}
 
     return 200, {"data": dashboard_data(days, game)}

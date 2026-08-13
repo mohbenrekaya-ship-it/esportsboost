@@ -60,8 +60,22 @@
   /* ── state ───────────────────────────────────────────────────────────── */
   var DEFAULT = {
     game: "League of Legends", service: "division",
-    from: "Iron IV", to: "Gold IV", mode: "Solo",
-    wins: 5, placements: 5, region: "EUW", addons: [], promo: "",
+    // Opens on Iron I → Gold II, the handoff's default climb (11 divisions).
+    from: "Iron I", to: "Gold II", mode: "Solo",
+    // Net wins / placements are a 1–5 grid now, capped at five per order.
+    // `unranked` is placements-only: no MMR to read, so the rank picker is hidden
+    // and the price falls back to the ladder floor.
+    wins: 3, placements: 3, unranked: false,
+    region: "EUW", addons: [], promo: "",
+    // Opt-in bundle (index into D.bundles[game]) — a real discount that replaces
+    // the sitewide sale on a matching climb. Never auto-set; dropped when the
+    // climb stops matching (tier or target change). See bundleDiscount().
+    bundle: null,
+    // Coaching (service === "coaching") — a booking, not a climb. `coach` and
+    // `pack` are indices into D.coaches / D.coachPacks; `focus` is a set of the
+    // topics to work on; `slot` is the first-session time. Priced only off coach
+    // rate × pack, so these never enter the rank engine.
+    coach: 0, pack: 1, focus: [0], slot: (D.coachSlots && D.coachSlots[0]) || "",
     // A named booster, arriving from a roster Hire or a profile CTA. It is an
     // order attribute, never a price input: pricing.py charges no fee for it,
     // so quote() must not read it. If naming a booster ever costs money it
@@ -85,6 +99,10 @@
       }
       if ((D.regions[s.game] || []).indexOf(s.region) < 0) s.region = (D.regions[s.game] || ["EU"])[0];
       if (s.mode !== "Solo" && s.mode !== "Duo queue") s.mode = "Solo";  // migrate old "Piloted"
+      if (!s.slot) s.slot = (D.coachSlots && D.coachSlots[0]) || "";
+      // Grid caps at five now; migrate a stored 6–20 from the old stepper.
+      s.wins = Math.max(1, Math.min(5, s.wins | 0));
+      s.placements = Math.max(1, Math.min(5, s.placements | 0));
       return s;
     } catch (e) { return Object.assign({}, DEFAULT); }
   }
@@ -163,11 +181,45 @@
   }
   window.esbPromo = resolvePromo;
 
+  /* The active bundle's discount, but only while the current climb still matches
+     it — mirrors data.bundle_discount() in ../../../src/data.py. A division
+     change keeps it (same from-tier); a tier or target change drops it. */
+  function bundleDiscount(s) {
+    if (s.bundle === null || s.bundle === undefined) return 0;
+    var b = ((D.bundles && D.bundles[s.game]) || [])[s.bundle | 0];
+    if (!b) return 0;
+    return (tierOf(s.game, s.from) === b.ft && s.to === b.target) ? b.disc : 0;
+  }
+
   function quote(s) {
     var per = D.perDivision;
     var factor = D.factors[s.game] || 1;
     var duo = s.mode === "Duo queue" ? 1.55 : 1;
     var base = 0, days = 0, summary = "", invalid = false;
+
+    /* Coaching — the booking product. Priced off the coach's rate and the hour
+       pack only; the rank engine, duo, add-ons and the sitewide promo never
+       touch it. Mirrors pricing.py's `service == "coaching"` branch. */
+    if (s.service === "coaching") {
+      var coaches = D.coaches || [], packs = D.coachPacks || [];
+      var ci = Math.max(0, Math.min(coaches.length - 1, s.coach | 0));
+      var pi = Math.max(0, Math.min(packs.length - 1, s.pack | 0));
+      var coach = coaches[ci] || { rate: 0, name: "" };
+      var pack = packs[pi] || { hours: 1, disc: 0 };
+      var listed = coach.rate * pack.hours;
+      var cTotal = Math.round(listed * (1 - pack.disc));
+      var cDisc = listed - cTotal;
+      var hrs = pack.hours + " " + T(pack.hours === 1 ? "hour" : "hours");
+      return {
+        invalid: false, total: cTotal, base: listed, addons: 0,
+        subtotal: listed, discount: cDisc,
+        price: usd(cTotal), wasPrice: cDisc ? usd(listed) : "",
+        discountPrice: cDisc ? "−" + usd(cDisc) : "",
+        promoCode: "", promoLabel: "", promoEnds: "",
+        summary: hrs + " " + T("coaching with") + " " + coach.name,
+        days: pack.hours, eta: s.slot || T("First session")
+      };
+    }
 
     if (s.service === "wins") {
       var lw = ladderOf(s.game), iw = lw.indexOf(s.from);
@@ -179,10 +231,13 @@
     } else if (s.service === "placements") {
       var lp = ladderOf(s.game), ip = lp.indexOf(s.from);
       var p = Math.max(1, s.placements | 0);
-      var climbP = Math.max(1, ip - 1);
+      // Unranked: no MMR to read, so there is no starting rank to price the
+      // climb off — fall back to the ladder floor (climb = 1).
+      var climbP = s.unranked ? 1 : Math.max(1, ip - 1);
       base = p * per * 0.7 * factor * (1 + climbP * 0.045) * duo;
       days = Math.max(1, Math.round(p * 0.4));
-      summary = p + " " + T(p === 1 ? "placement game" : "placement games") + " · " + s.from + " · " + T(s.mode);
+      var where = s.unranked ? T("Unranked") : s.from;
+      summary = p + " " + T(p === 1 ? "placement game" : "placement games") + " · " + where + " · " + T(s.mode);
     } else {
       var ladder = ladderOf(s.game);
       var i = ladder.indexOf(s.from), j = ladder.indexOf(s.to);
@@ -215,8 +270,11 @@
     var subtotal = Math.round(base + extra);
 
     // Discount comes off the computed price — the strikethrough is a real
-    // reduction, never a grossed-up reference price. Mirrors pricing.py.
-    var r = resolvePromo(s.promo);
+    // reduction, never a grossed-up reference price. Mirrors pricing.py. A live
+    // bundle replaces the sitewide sale on a matching division climb.
+    var bpct = s.service === "division" ? bundleDiscount(s) : 0;
+    var r = bpct ? { code: "BUNDLE", promo: { pct: bpct, label: "Bundle", ends: "" } }
+                 : resolvePromo(s.promo);
     var discount = r.promo ? Math.round(subtotal * r.promo.pct) : 0;
     var total = subtotal - discount;
 
@@ -273,17 +331,33 @@
                              + (q.promoEnds ? " · " + T("sale ends") + " " + q.promoEnds : "")
                              : "",
         // Same saving, named by the code that produced it — the order card says
-        // which discount is in the price, not when the sale ends.
-        saveWith: q.discount ? T("You save") + " " + usd(q.discount)
-                             + (q.promoCode ? " " + T("with") + " " + q.promoCode : "")
-                             : "",
+        // which discount is in the price, not when the sale ends. A bundle names
+        // itself rather than printing the internal "BUNDLE" code.
+        saveWith: q.discount
+          ? (q.promoCode === "BUNDLE"
+              ? T("You save") + " " + usd(q.discount) + " · " + T("bundle price")
+              : T("You save") + " " + usd(q.discount)
+                + (q.promoCode ? " " + T("with") + " " + q.promoCode : ""))
+          : "",
         summaryUpper: q.summary.toUpperCase(),
+        // Per-game price for the unit tabs — one win / one placement at the
+        // current rank and mode, quoted live so it tracks the rank picker.
+        winsUnit: usd(quote(Object.assign({}, state, { service: "wins", wins: 1, addons: [] })).base),
+        placementsUnit: usd(quote(Object.assign({}, state, { service: "placements", placements: 1, addons: [] })).base),
         // The card's config line carries the server too, so everything the
         // order is made of reads back in one line above the price.
         configLine: q.invalid ? q.summary.toUpperCase()
                               : q.summary.toUpperCase() + " · " + state.region.toUpperCase(),
         headline: q.invalid ? T("Pick a target above your current rank")
-                            : q.summary + " — " + q.price
+                            : q.summary + " — " + q.price,
+        // Coaching CTA lead-in ("Book 3 hours"), swapped in for "Continue to
+        // checkout" on that tab; the price rides in its own node after it.
+        bookLabel: (function () {
+          if (state.service !== "coaching") return "";
+          var p = (D.coachPacks || [])[state.pack | 0];
+          var h = p ? p.hours : 1;
+          return T("Book") + " " + h + " " + T(h === 1 ? "hour" : "hours");
+        })()
       }[k];
       if (v !== undefined) el.textContent = v;
     });
@@ -296,16 +370,113 @@
     // card's fold budget nothing for everyone who didn't come from a Hire.
     each("[data-when-booster]", function (el) { el.hidden = !state.booster; });
 
-    /* The climb, drawn: one tick per rung of the flat ladder with the crossed
-       span filled, and the tier names underneath lit for the tiers it covers.
-       This is what the two bare rank <select>s never showed — the distance
-       being bought, which is the thing the price is actually for. */
-    each("[data-ticks]", function (root) {
-      fillCells(root, ladder.length, "ob-tick");
-      Array.prototype.forEach.call(root.children, function (t, idx) {
-        t.setAttribute("data-state",
-          (idx === iFrom || idx === iTo) ? "end"
-          : (steps > 0 && idx > iFrom && idx < iTo) ? "span" : "idle");
+    // Rows that belong to the boost/wins/placements products and have no place
+    // on Coaching (queue, add-ons, the boosters-free line, the boost CTA verb).
+    each("[data-hide-service]", function (el) {
+      el.hidden = el.getAttribute("data-hide-service").split(",").indexOf(state.service) >= 0;
+    });
+
+    /* Coaching selections. Coach and pack are single-select indices; focus is a
+       set of topic indices. All server-rendered, so this only marks state. */
+    each("[data-coach]", function (el) {
+      el.setAttribute("aria-pressed", (+el.getAttribute("data-coach") === (state.coach | 0)) ? "true" : "false");
+    });
+    each("[data-pack]", function (el) {
+      el.setAttribute("aria-pressed", (+el.getAttribute("data-pack") === (state.pack | 0)) ? "true" : "false");
+    });
+    each("[data-focus]", function (el) {
+      var on = (state.focus || []).indexOf(+el.getAttribute("data-focus")) >= 0;
+      el.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    each("[data-sel-slot]", function (el) {
+      fillOptions(el, D.coachSlots || []);
+      el.value = state.slot || (D.coachSlots || [])[0] || "";
+    });
+
+    /* Net wins / placements 1–5 grid: one selected value per product. */
+    each("[data-count]", function (el) {
+      var kind = el.getAttribute("data-count");
+      el.setAttribute("aria-pressed", (+el.getAttribute("data-n") === (state[kind] | 0)) ? "true" : "false");
+    });
+    /* Placements' rank / unranked toggle. Unranked hides the rank picker and
+       shows the explanatory plate; the two share the `data-when-*` hooks. */
+    each("[data-ranked]", function (el) {
+      el.setAttribute("aria-pressed", ((el.getAttribute("data-ranked") === "1") === !state.unranked) ? "true" : "false");
+    });
+    each("[data-when-ranked]", function (el) {
+      el.hidden = state.service === "placements" && !!state.unranked;
+    });
+    each("[data-when-unranked]", function (el) {
+      el.hidden = !(state.service === "placements" && state.unranked);
+    });
+
+    /* Bundle cards. The struck price is the floor climb at full price (Solo, no
+       add-ons, no discount); the price beside it is that same climb with the
+       bundle's real discount applied. Applied = this bundle is the active one and
+       the current climb still matches it. */
+    each("[data-bundle]", function (el) {
+      var i = +el.getAttribute("data-bundle");
+      var disc = parseFloat(el.getAttribute("data-bundle-disc")) || 0;
+      var full = quote(Object.assign({}, state, {
+        service: "division", mode: "Solo", addons: [], promo: "", bundle: null,
+        from: el.getAttribute("data-bundle-floor"), to: el.getAttribute("data-bundle-to")
+      })).subtotal;
+      var listEl = el.querySelector("[data-bundle-list]");
+      var priceEl = el.querySelector("[data-bundle-price]");
+      if (listEl) listEl.textContent = usd(full);
+      if (priceEl) priceEl.textContent = usd(Math.round(full * (1 - disc)));
+      var applied = state.bundle === i && state.service === "division"
+        && state.to === el.getAttribute("data-bundle-to")
+        && tierOf(state.game, state.from) === el.getAttribute("data-bundle-tier");
+      el.setAttribute("aria-pressed", applied ? "true" : "false");
+    });
+
+    /* The climb, drawn as tier tracks — the boost-hero handoff's ladder. One
+       segment per tier, striped into its division slots and filled in that
+       tier's own colour across the span, with a hollow ring at the current rank
+       and an accent dot at the target. You can see which tiers you cross, not
+       only how many rungs are lit — the thing the price is actually for. */
+    each("[data-ladder]", function (root) {
+      var tiers = tiersOf(state.game);
+      if (root.getAttribute("data-for") !== state.game || root.children.length !== tiers.length) {
+        root.setAttribute("data-for", state.game);
+        root.innerHTML = "";
+        tiers.forEach(function (t) {
+          var seg = document.createElement("span");
+          seg.className = "ob-seg";
+          seg.style.setProperty("--tier", tierColor(state.game, t));
+          seg.style.setProperty("--slots", divsOf(state.game, t).length);
+          var track = document.createElement("span"); track.className = "ob-seg-track";
+          var fill = document.createElement("span"); fill.className = "ob-seg-fill";
+          track.appendChild(fill);
+          var ring = document.createElement("span"); ring.className = "ob-seg-ring";
+          var dot = document.createElement("span"); dot.className = "ob-seg-dot";
+          seg.appendChild(track); seg.appendChild(ring); seg.appendChild(dot);
+          root.appendChild(seg);
+        });
+      }
+      var fromT = tiers.indexOf(tierOf(state.game, state.from));
+      var toT = tiers.indexOf(tierOf(state.game, state.to));
+      Array.prototype.forEach.call(root.children, function (seg, ti) {
+        var nodes = divsOf(state.game, tiers[ti]).map(nodeAt);
+        var base = nodes[0], k = nodes.length;
+        /* A division's slot-centre, as a percentage across its tier — the
+           handoff's `slot(i) = ((i % 4) + 0.5) / 4`, generalised to however many
+           divisions this tier actually has (CS2's rungs are one slot each). */
+        var slot = function (node) { return ((node - base + 0.5) / k) * 100; };
+        // The tier is crossed when the span overlaps it at all.
+        var crossed = steps > 0 && iTo >= nodes[0] && iFrom <= nodes[k - 1];
+        var start = crossed ? (ti === fromT ? slot(iFrom) : 0) : 0;
+        var end = crossed ? (ti === toT ? slot(iTo) : 100) : 0;
+        var fill = seg.querySelector(".ob-seg-fill");
+        fill.style.left = start + "%";
+        fill.style.width = Math.max(0, end - start) + "%";
+        var ring = seg.querySelector(".ob-seg-ring");
+        var dot = seg.querySelector(".ob-seg-dot");
+        if (ti === fromT) { ring.style.left = slot(iFrom) + "%"; ring.hidden = false; }
+        else ring.hidden = true;
+        if (ti === toT && steps > 0) { dot.style.left = slot(iTo) + "%"; dot.hidden = false; }
+        else dot.hidden = true;
       });
     });
 
@@ -318,14 +489,25 @@
          eight do not — so this measures once, on the only render that can
          change the labels, and never again. */
       if (fillCells(root, caps.length, "ob-cap", caps)) {
+        /* Each caption is a 1fr cell with `white-space: nowrap`, so a name too
+           wide for its cell overflows the cell without ever widening the row —
+           the row's own scrollWidth therefore never reports it. Measure the
+           cells instead, and leave a 2px breathing gap so neighbours can't touch. */
         root.setAttribute("data-dense", "0");
-        if (root.scrollWidth > root.clientWidth) root.setAttribute("data-dense", "1");
+        var tight = Array.prototype.some.call(root.children, function (c) {
+          return c.scrollWidth > c.clientWidth - 2;
+        });
+        if (tight) root.setAttribute("data-dense", "1");
       }
       var a = caps.indexOf(tierOf(state.game, state.from));
       var b = caps.indexOf(tierOf(state.game, state.to));
       var lo = Math.min(a, b), hi = Math.max(a, b);
       Array.prototype.forEach.call(root.children, function (c, idx) {
-        c.setAttribute("data-state", (idx >= lo && idx <= hi) ? "in" : "out");
+        var within = steps > 0 && idx >= lo && idx <= hi;
+        c.setAttribute("data-state", within ? "in" : "out");
+        // Tint each in-span caption in its own tier's colour — the same colour
+        // the ladder segment above it fills with, so the two read as one mark.
+        c.style.setProperty("--tier", tierColor(state.game, caps[idx]));
       });
     });
 
@@ -340,6 +522,13 @@
     each("[data-tiername]", function (el) {
       var rank = el.getAttribute("data-tiername") === "to" ? state.to : state.from;
       el.textContent = tierOf(state.game, rank);
+    });
+
+    // Whole rank names that carry the tier colour themselves (the closing band's
+    // climb line), so "Iron IV → Gold IV" reads tinted without a separate mark.
+    each("[data-rankcolor]", function (el) {
+      var rank = el.getAttribute("data-rankcolor") === "to" ? state.to : state.from;
+      el.style.setProperty("--tier", tierColor(state.game, tierOf(state.game, rank)));
     });
 
     /* Tier grids. Selection follows the panel's own end; a tier with no node
@@ -612,14 +801,22 @@
      the tap rather than corrected after it. ────────────────────────────── */
   function nodeAt(rank) { return ladderOf(state.game).indexOf(rank); }
 
+  // The bundle to keep after a prospective from/to change: it survives a
+  // division change (same from-tier, same target) and drops otherwise.
+  function bundleAfter(from, to) {
+    if (state.bundle === null || state.bundle === undefined) return null;
+    var b = ((D.bundles && D.bundles[state.game]) || [])[state.bundle | 0];
+    return (b && tierOf(state.game, from) === b.ft && to === b.target) ? state.bundle : null;
+  }
+
   function setNode(which, i) {
     var l = ladderOf(state.game);
     if (which === "to") {
       i = Math.max(Math.min(l.length - 1, i), nodeAt(state.from) + 1);
-      if (l[i] !== state.to) set({ to: l[i] }, "add_to_cart");
+      if (l[i] !== state.to) set({ to: l[i], bundle: bundleAfter(state.from, l[i]) }, "add_to_cart");
     } else {
       i = Math.min(Math.max(0, i), nodeAt(state.to) - 1);
-      if (l[i] !== state.from) set({ from: l[i] }, "add_to_cart");
+      if (l[i] !== state.from) set({ from: l[i], bundle: bundleAfter(l[i], state.to) }, "add_to_cart");
     }
   }
 
@@ -870,6 +1067,64 @@
       });
     });
 
+    /* Net wins / placements 1–5 grid. */
+    each("[data-count]", function (el) {
+      el.addEventListener("click", function () {
+        var patch = {}; patch[el.getAttribute("data-count")] = +el.getAttribute("data-n");
+        set(patch, "add_to_cart");
+      });
+    });
+    /* Placements' rank / unranked toggle. */
+    each("[data-ranked]", function (el) {
+      el.addEventListener("click", function () { set({ unranked: el.getAttribute("data-ranked") === "0" }, "select_item"); });
+    });
+
+    /* Coaching controls — coach and pack are single-select, focus toggles. */
+    each("[data-coach]", function (el) {
+      el.addEventListener("click", function () { set({ coach: +el.getAttribute("data-coach") }, "select_item"); });
+    });
+    each("[data-pack]", function (el) {
+      el.addEventListener("click", function () { set({ pack: +el.getAttribute("data-pack") }, "add_to_cart"); });
+    });
+    each("[data-focus]", function (el) {
+      el.addEventListener("click", function () {
+        var i = +el.getAttribute("data-focus");
+        var f = (state.focus || []).slice();
+        var at = f.indexOf(i);
+        if (at >= 0) f.splice(at, 1); else f.push(i);
+        set({ focus: f });
+      });
+    });
+    each("[data-sel-slot]", function (el) {
+      el.addEventListener("change", function () { set({ slot: el.value }); });
+    });
+
+    /* Bundle cards — one click configures a popular climb on the boost tab.
+       Keeps the visitor's current division within the lower tier when it can,
+       so "from any Platinum division" is honoured rather than reset. */
+    each("[data-bundle]", function (el) {
+      el.addEventListener("click", function () {
+        var i = +el.getAttribute("data-bundle");
+        var tier = el.getAttribute("data-bundle-tier");
+        var to = el.getAttribute("data-bundle-to");
+        var def = el.getAttribute("data-bundle-def");
+        // Toggle off if this bundle is already the applied one.
+        if (state.bundle === i && state.service === "division"
+            && state.to === to && tierOf(state.game, state.from) === tier) {
+          set({ bundle: null }); return;
+        }
+        // Keep the visitor's current division within the lower tier when we can,
+        // so "from any Platinum division" is honoured rather than reset.
+        var from = def, curDiv = divOf(state.game, state.from);
+        divsOf(state.game, tier).forEach(function (r) {
+          if (divOf(state.game, r) === curDiv) from = r;
+        });
+        var l = ladderOf(state.game);
+        if (l.indexOf(from) >= l.indexOf(to)) from = def;
+        set({ service: "division", from: from, to: to, bundle: i }, "select_item");
+      });
+    });
+
     // begin_checkout fires BEFORE navigation — the number the audit asked for.
     // Commit this configurator's order into the shared checkout snapshot so
     // the checkout page charges exactly what was configured here.
@@ -884,7 +1139,7 @@
     // Radio-group arrow keys for every row of buttons in the band, and for the
     // roster's filter chips / segmented controls.
     each("[data-tiergrid], [data-subseg], [data-regions], .rst-chips, .rst-seg, .bp-chips, "
-       + ".rvp-chips, .rvp-seg",
+       + ".rvp-chips, .rvp-seg, .ob-packs, .ob-focuses, .ob-counts, .ob-ranked",
       function (root) {
       root.addEventListener("keydown", function (e) {
         if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
@@ -894,6 +1149,19 @@
         if (i < 0) return;
         e.preventDefault();
         btns[(i + (e.key === "ArrowRight" ? 1 : btns.length - 1)) % btns.length].focus();
+      });
+    });
+
+    /* The game page's FAQ is single-open: opening one closes the rest. Native
+       <details>, so every answer is in the DOM and the band still works with no
+       JS — this only enforces the "one at a time" the handoff draws. */
+    each("[data-gp-faq]", function (root) {
+      var items = Array.prototype.slice.call(root.querySelectorAll("details"));
+      items.forEach(function (d) {
+        d.addEventListener("toggle", function () {
+          if (!d.open) return;
+          items.forEach(function (o) { if (o !== d) o.open = false; });
+        });
       });
     });
 
@@ -908,8 +1176,10 @@
     initLiveStats();
     initFeed();
     initRoster();
+    initBoosters();
     initProfile();
     initReviews();
+    initGuides();
 
     if (document.querySelector("[data-configurator]")) track("view_item", itemParams());
   }
@@ -1104,7 +1374,6 @@
     var panel = document.querySelector("[data-hd-auth-panel]");
     var form = panel && panel.querySelector("[data-hd-form]");
     var pass = panel && panel.querySelector("[data-hd-pass]");
-    var pass2 = panel && panel.querySelector("[data-hd-pass2]");
     var mail = panel && panel.querySelector("[data-hd-email]");
     var who = panel && panel.querySelector("[data-hd-dname]");
     var terms = panel && panel.querySelector("[data-hd-terms]");
@@ -1169,10 +1438,8 @@
         b.setAttribute("aria-label", hdT(on ? "Show password" : "Hide password"));
         var t = on ? "password" : "text";
         if (pass) pass.type = t;
-        if (pass2) pass2.type = t;          // reveal both entries together
       });
     });
-    if (pass2) pass2.addEventListener("input", clearErr);
     if (terms) terms.addEventListener("click", function () {
       terms.setAttribute("aria-pressed", terms.getAttribute("aria-pressed") === "true" ? "false" : "true");
       clearErr();
@@ -1248,10 +1515,6 @@
       if (mode === "signup") {
         if (pw.length < 6) {
           showErr(hdT("Choose a password of at least 6 characters.")); return;
-        }
-        // "Verify" the password: the confirm field has to match.
-        if (pass2 && pass2.value !== pw) {
-          showErr(hdT("The passwords don't match.")); return;
         }
         // The terms box must be ticked to create the account.
         if (terms && terms.getAttribute("aria-pressed") !== "true") {
@@ -1483,8 +1746,13 @@
   function initRoster() {
     var body = document.querySelector("[data-rst-body]");
     if (!body) return;
-    var rows = [].slice.call(body.querySelectorAll("[data-rst-row]"));
-    if (!rows.length) return;
+    // Re-read from the DOM on every draw so initBoosters() can swap the rows in
+    // from /api/boosters and just call the exposed refresh — the filter buttons
+    // are bound once below and outlive the row replacement.
+    function currentRows() { return [].slice.call(body.querySelectorAll("[data-rst-row]")); }
+    if (body.getAttribute("data-rst-bound")) { window.esbRefreshRoster && window.esbRefreshRoster(); return; }
+    body.setAttribute("data-rst-bound", "1");
+    if (!currentRows().length) return;
     var shownEl = document.querySelector("[data-rst-shown]");
     var fGame = document.querySelector("[data-rst-fgame]");
     var fFree = document.querySelector("[data-rst-ffree]");
@@ -1506,6 +1774,7 @@
     }
 
     function draw() {
+      var rows = currentRows();
       var hits = rows.filter(matches);
       // "Free first" sorts free boosters up and orders within each group by
       // win rate; "Win rate" sorts purely by win rate.
@@ -1576,6 +1845,9 @@
       if (all) all.click();
       if (everyone) everyone.click();
     });
+
+    // initBoosters() calls this after swapping the board rows in from the store.
+    window.esbRefreshRoster = function () { st.page = 1; draw(); };
 
     draw();
   }
@@ -1803,7 +2075,13 @@
      needs that real source. No JS is required for the treatment: .lf-row's
      newest-row styling keys off :first-child, so a live feed only has to
      insert the row. */
+  var feedTimer = null;
+
   function initFeed() {
+    // Re-entrant: initBoosters() re-renders the feed from /api/boosters and calls
+    // this again, so clear any prior ticker rather than stack a second interval on
+    // the same rows.
+    if (feedTimer) { clearInterval(feedTimer); feedTimer = null; }
     // Any .lf-ago carrying one of the two timestamp attributes, not just the
     // feed's rows: the demo page's order card states when the last game was in
     // the same relative words, and it has to tick for the same reason.
@@ -1840,11 +2118,140 @@
       });
     }
     tick();
-    setInterval(tick, 30000);
+    feedTimer = setInterval(tick, 30000);
 
     // A language switch re-renders through esbRender; the unit words go with it.
     var prev = window.esbRender;
     window.esbRender = function () { if (prev) prev.apply(this, arguments); tick(); };
+  }
+
+  /* ── the dynamic roster: board, "On shift now" rail and the feed ───────
+     These three panels are server-rendered from data.py so the page is correct
+     with no JS and readable to a crawler. When the backend roster store has data,
+     /api/boosters serves it live — a rotating rail + feed and the whole board —
+     and this swaps the server rows for the store's. A 204 (empty store), a
+     non-200 or a network failure leaves the server-rendered fallback in place, so
+     the panels never blank. Every glyph comes from D.icons (build.py's own _ico),
+     so a JS-built row is drawn with the same marks as its server twin. */
+  function escH(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function initBoosters() {
+    var feedList = document.querySelector(".lf-list");
+    var shiftList = document.querySelector(".rc-list");
+    var board = document.querySelector("[data-rst-body]");
+    if (!feedList && !shiftList && !board) return;
+
+    fetch("/api/boosters", { headers: { Accept: "application/json" } })
+      .then(function (r) { return r.status === 200 ? r.json() : null; })
+      .then(function (data) {
+        if (!data) return;                        // 204 / empty store → keep the fallback
+        if (feedList && data.feed && data.feed.length) renderFeed(feedList, data);
+        if (shiftList && data.shift && data.shift.length) renderShift(shiftList, data);
+        if (board && data.boosters && data.boosters.length) renderBoard(board, data);
+      })
+      .catch(function () {});                      // network error → keep the fallback
+  }
+
+  function feedSide(s, strong) {
+    var name = s.tier ? '<span class="lf-tier">' + escH(s.tier) + "</span>" : "";
+    return name + '<span class="lf-mark' + (strong ? " is-to" : "") +
+      '" style="--tier:' + escH(s.color) + '">' + escH(s.label) + "</span>";
+  }
+
+  function renderFeed(list, data) {
+    var I = D.icons || {};
+    var feed = data.feed;
+    list.innerHTML = feed.map(function (f) {
+      return '<li class="lf-row">' +
+        '<span class="lf-when">' +
+          '<span class="lf-ago" data-mins="' + f.mins + '"></span>' +
+          '<span class="lf-clock" data-mins="' + f.mins + '"></span>' +
+        "</span>" +
+        '<span class="lf-rail" aria-hidden="true"><i class="lf-dot"></i></span>' +
+        '<span class="lf-climb">' +
+          '<span class="lf-letter" aria-hidden="true">' + escH(f.gameShort) + "</span>" +
+          '<span class="lf-climb-in">' + feedSide(f.frm, false) + (I.feedArrow || "") + feedSide(f.to, true) + "</span>" +
+        "</span>" +
+        '<span class="lf-game">' +
+          '<span class="lf-game-n">' + escH(f.gameName) + "</span>" +
+          '<span class="lf-region">' + escH(f.region) + "</span>" +
+        "</span>" +
+        '<span class="lf-by">' +
+          '<span class="lf-booster">' + escH(f.booster) + "</span>" +
+          '<span class="lf-done">' + (I.feedSeal || "") + T("Delivered") + "</span>" +
+        "</span>" +
+      "</li>";
+    }).join("");
+    // The rolling "N orders closed in the last 24 hours" figure comes off the
+    // store too, so the footer moves with the feed instead of sitting frozen.
+    var closed = data.stats && data.stats.closed_24h;
+    if (closed != null) {
+      var foot = document.querySelector(".lf-foot b");
+      if (foot) foot.textContent = closed;
+    }
+    initFeed();                                    // re-attach the relative-time ticker to the new rows
+  }
+
+  function renderShift(list, data) {
+    var I = D.icons || {};
+    list.innerHTML = data.shift.map(function (b) {
+      var chip = b.gameShort ? '<span class="rc-chip">' + escH(b.gameShort) + "</span>" : "";
+      var pill = '<span class="rc-pill' + (b.free ? "" : " is-busy") + '">' +
+        (b.free ? (I.pillDotRc || "") : (I.pillHourRc || "")) +
+        escH(b.free ? T("Free") : b.queue) + "</span>";
+      return '<li><a class="rc-row" href="' + escH(b.href) + '">' +
+        '<span class="rc-ring' + (b.free ? "" : " is-busy") + '"><span class="rc-initial">' + escH(b.initial) + "</span></span>" +
+        '<span class="rc-who">' +
+          '<span class="rc-name">' + escH(b.handle) + chip + "</span>" +
+          '<span class="rc-rank">' + escH(b.peakFull) + "</span>" +
+        "</span>" +
+        '<span class="rc-state">' + pill +
+          '<span class="rc-wr"><b>' + escH(b.wr) + "</b> " + T("win rate") + "</span>" +
+        "</span>" +
+      "</a></li>";
+    }).join("");
+    var n = (data.stats && data.stats.online) || data.shift.length;
+    each(".rc-count b", function (el) { el.textContent = n; });
+    each(".rc-all b", function (el) { el.textContent = n; });
+  }
+
+  function renderBoard(body, data) {
+    var I = D.icons || {};
+    body.innerHTML = data.boosters.map(function (b, i) {
+      var pill = '<span class="rst-pill' + (b.free ? "" : " is-busy") + '">' +
+        (b.free ? (I.pillDotRst || "") : (I.pillHourRst || "")) +
+        escH(b.free ? T("Free") : b.queue) + "</span>";
+      return '<div class="rst-row" data-rst-row data-game="' + escH(b.gameShort) + '"' +
+        ' data-free="' + (b.free ? 1 : 0) + '" data-win="' + b.wrN + '"' + (i >= 12 ? " hidden" : "") + ">" +
+        '<a class="rst-who" href="' + escH(b.href) + '">' +
+          '<span class="rst-ring' + (b.free ? "" : " is-busy") + '"><span class="rst-initial">' + escH(b.initial) + "</span></span>" +
+          '<span class="rst-who-t">' +
+            '<span class="rst-handle">' + escH(b.handle) + "</span>" +
+            '<span class="rst-orders"><b>' + b.orders + "</b> " + T("orders delivered") + "</span>" +
+          "</span>" +
+        "</a>" +
+        '<span class="rst-game">' +
+          '<span class="rst-code">' + escH(b.gameShort || "—") + "</span>" +
+          '<span class="rst-server">' + escH(b.region) + "</span>" +
+        "</span>" +
+        '<span class="rst-peak"><span class="rst-mark is-to" style="--tier:' + escH(b.markColor) + '">' + escH(b.markLabel) + "</span>" +
+          '<span class="rst-peak-t">' + escH(b.peak) + "</span></span>" +
+        '<span class="rst-wr">' +
+          '<span class="rst-wr-v">' + escH(b.wr) + "</span>" +
+          '<span class="rst-wr-bar"><i style="width:' + b.wrPct + '%"></i></span>' +
+        "</span>" +
+        pill +
+        '<a class="rst-hire" href="' + escH(b.hire) + '" data-rst-hire="' + escH(b.handle) + '">' + T("Hire") + (I.hireArrow || "") + "</a>" +
+      "</div>";
+    }).join("");
+    var total = (data.stats && data.stats.online) || data.boosters.length;
+    var count = document.querySelector(".rst-count");
+    if (count) { var bs = count.querySelectorAll("b"); if (bs[1]) bs[1].textContent = total; }
+    if (window.esbRefreshRoster) window.esbRefreshRoster();   // re-run filters/sort/pager over the new rows
   }
 
   /* ── stat boxes: count-up + rise-in when scrolled into view ──────────── */
@@ -2061,27 +2468,45 @@
     });
   }
 
-  /* ── "boosters free now": wander the count so the band reads live ─────── */
+  /* ── live counts wander so the page reads live ───────────────────────────
+     Every [data-live] number drifts on its own timer: "boosters free now" and
+     the header's "N verified boosters". A data-live-min sets the floor (and
+     pins the ceiling at the rendered figure, so the header never claims more
+     than the roster's real count); otherwise it wanders ±a few off its base.
+     On every change the figure flashes ember (.is-up) before easing back. */
   function initLiveStats() {
-    var el = document.querySelector('[data-live="free"]');
-    if (!el) return;
+    var els = document.querySelectorAll("[data-live]");
+    if (!els.length) return;
     var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduce) return;
+    Array.prototype.forEach.call(els, function (el) { wanderStat(el); });
+  }
+
+  function wanderStat(el) {
     var host = el.closest ? el.closest("[data-live-stat]") : null;
     var base = parseInt((el.getAttribute("data-raw") || el.textContent || "").replace(/[^\d-]/g, ""), 10);
     if (isNaN(base)) return;
-    var cur = base, lo = Math.max(1, base - 3), hi = base + 4;
+    var min = parseInt(el.getAttribute("data-live-min"), 10);
+    var hasMin = !isNaN(min);
+    var cur = base;
+    var lo = hasMin ? min : Math.max(1, base - 3);
+    var hi = hasMin ? base : base + 4;          // min-based: never above the true count
+    if (hi <= lo) return;
+    var upT;
 
     function tween(to) {
       var from = cur, t0 = null, dur = 650;
       if (host) host.classList.add("bump");
+      el.classList.add("is-up");                // flash ember while it moves
+      clearTimeout(upT);
       function step(ts) {
         if (t0 === null) t0 = ts;
         var k = Math.min(1, (ts - t0) / dur);
         el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3)));
         if (k < 1) requestAnimationFrame(step);
         else { el.textContent = to; el.setAttribute("data-raw", String(to)); cur = to;
-               if (host) setTimeout(function () { host.classList.remove("bump"); }, 260); }
+               if (host) setTimeout(function () { host.classList.remove("bump"); }, 260);
+               upT = setTimeout(function () { el.classList.remove("is-up"); }, 500); }
       }
       requestAnimationFrame(step);
     }
@@ -2094,6 +2519,129 @@
     }
     function schedule() { setTimeout(tick, 3800 + Math.random() * 4200); }
     schedule();                          // first wander lands after the count-up settles
+  }
+
+  /* ── free guides landing ── design_handoff_free_guides ────────────────────
+     The lead form. Two guides is a choice inside ONE funnel: one email, one CTA,
+     the two covers as selectable cards whose selection changes what gets sent
+     (and, in production, is stored with the address as a game-preference signal).
+
+     ⚠ FACADE. There is no POST, no ESP, no double opt-in — a valid-looking
+     address flips `sent`. See build.py's page_guides() note and the handoff for
+     everything that has to exist before this takes a real signup. The email and
+     the guide picks are shared by both capture points (hero card + closing
+     band), so a value typed in one appears in the other. The dynamic strings
+     (CTA label, helper, note, success line) go through esbT() and their nodes
+     are in i18n.js's SKIP list, matching whole-node translation. */
+  function gdT(s) { return window.esbT ? window.esbT(s) : s; }
+  var GD_RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
+
+  function initGuides() {
+    var root = document.querySelector("[data-gd]");
+    if (!root) return;
+
+    var cards = Array.prototype.slice.call(root.querySelectorAll("[data-gd-card]"));
+    var emails = Array.prototype.slice.call(root.querySelectorAll("[data-gd-email]"));
+    var form = root.querySelector("[data-gd-form]");
+    var success = root.querySelector("[data-gd-success]");
+    var st = { email: "", err: false, pickErr: false, sent: false };
+
+    function picks() { return cards.filter(function (c) { return c.getAttribute("aria-pressed") === "true"; }); }
+    function shortOf(c) { return c.getAttribute("data-gd-short") || ""; }
+    function valid() { return GD_RE.test(st.email.trim()); }
+
+    function paint() {
+      var chosen = picks();
+      var both = chosen.length === 2;
+      var one = chosen.length === 1;
+
+      // CTA label — states what will actually be sent.
+      var cta = both ? "Send me both guides"
+        : one ? "Send me the " + shortOf(chosen[0]) + " guide"
+        : "Pick a guide first";
+      root.querySelectorAll("[data-gd-cta]").forEach(function (n) { n.textContent = gdT(cta); });
+
+      // Helper line under the cards.
+      var pick = st.pickErr ? "Pick at least one guide."
+        : both ? "Both guides, one email, two attachments."
+        : one ? "Only one? The other is free too."
+        : "Pick at least one guide.";
+      root.querySelectorAll("[data-gd-pick]").forEach(function (n) {
+        n.textContent = gdT(pick);
+        if (st.pickErr) n.setAttribute("data-err", ""); else n.removeAttribute("data-err");
+      });
+
+      // Email field state + note.
+      emails.forEach(function (i) {
+        if (i.value !== st.email) i.value = st.email;
+        if (st.err) i.setAttribute("data-err", ""); else i.removeAttribute("data-err");
+        if (valid() && !st.err) i.setAttribute("data-valid", ""); else i.removeAttribute("data-valid");
+      });
+      var note = st.err ? "Enter an address we can send the PDFs to."
+        : "Used to send the guides. Nothing else unless you tick the box below.";
+      root.querySelectorAll("[data-gd-note]").forEach(function (n) {
+        n.textContent = gdT(note);
+        if (st.err) n.setAttribute("data-err", ""); else n.removeAttribute("data-err");
+      });
+      // Closing capture note.
+      var cnote = st.err ? "That address does not look right — check it and try again."
+        : "Arrives in about a minute. No card, no account.";
+      root.querySelectorAll("[data-gd-ctanote]").forEach(function (n) { n.textContent = gdT(cnote); });
+
+      // Success line (rendered even while hidden, so a swap shows it correct).
+      var sent = both ? "Both guides are" : one ? "The " + shortOf(chosen[0]) + " guide is" : "Your guide is";
+      root.querySelectorAll("[data-gd-sentline]").forEach(function (n) { n.textContent = gdT(sent); });
+    }
+
+    function submit() {
+      if (!picks().length) { st.pickErr = true; paint(); return; }
+      if (!valid()) { st.err = true; paint(); return; }
+      st.sent = true; st.err = false; st.pickErr = false;
+      root.querySelectorAll("[data-gd-email-out]").forEach(function (n) { n.textContent = st.email.trim(); });
+      paint();
+      if (form) form.hidden = true;
+      if (success) success.hidden = false;
+      track("generate_lead", { guides: picks().map(function (c) { return c.getAttribute("data-gd-card"); }).join(",") });
+    }
+
+    cards.forEach(function (c) {
+      c.addEventListener("click", function () {
+        c.setAttribute("aria-pressed", c.getAttribute("aria-pressed") === "true" ? "false" : "true");
+        st.pickErr = false;
+        paint();
+      });
+    });
+
+    emails.forEach(function (i) {
+      i.addEventListener("input", function () { st.email = i.value; st.err = false; paint(); });
+      i.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+    });
+
+    root.querySelectorAll("[data-gd-send]").forEach(function (b) {
+      b.addEventListener("click", submit);
+    });
+
+    var optin = root.querySelector("[data-gd-optin]");
+    if (optin) optin.addEventListener("click", function () {
+      optin.setAttribute("aria-pressed", optin.getAttribute("aria-pressed") === "true" ? "false" : "true");
+    });
+
+    var reset = root.querySelector("[data-gd-reset]");
+    if (reset) reset.addEventListener("click", function () {
+      st.sent = false; st.email = ""; st.err = false;
+      if (success) success.hidden = true;
+      if (form) form.hidden = false;
+      paint();
+      var first = root.querySelector("[data-gd-form] [data-gd-email]");
+      if (first) first.focus();
+    });
+
+    // A language switch re-renders the site through esbRender; the guides' own
+    // dynamic strings have to go with it or they stay in the previous language.
+    var prev = window.esbRender;
+    window.esbRender = function () { if (prev) prev.apply(this, arguments); paint(); };
+
+    paint();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", wire);

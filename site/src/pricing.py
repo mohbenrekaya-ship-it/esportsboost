@@ -17,9 +17,10 @@ import data as D
 BY_NAME = {g["name"]: g for g in D.GAMES}
 ADDON = {a["id"]: a for a in D.ADDONS}
 
-# stepper bounds — a tampered `wins`/`placements` is clamped into this range
-# before it can reach the charge amount.
-UNIT_MIN, UNIT_MAX = 1, 40
+# Net wins / placements are a 1–5 grid (five per order is the product cap), so a
+# tampered `wins`/`placements` is clamped into this range before it can reach the
+# charge amount.
+UNIT_MIN, UNIT_MAX = 1, 5
 
 # Duo queue multiplier. Named so the order card can label the option with the
 # real percentage instead of a hand-typed one that drifts. Mirrored literally in
@@ -67,6 +68,28 @@ def quote(state):
     duo = DUO_MULT if mode == "Duo queue" else 1.0
     service = state.get("service", "division")
 
+    if service == "coaching":
+        # Booking product: price is rate × hours × (1 − pack discount) and
+        # nothing else — no rank, no duo, no add-ons, no sitewide promo. The
+        # pack discount is expressed as `discount` so the card's struck price and
+        # save line read it the same way a promo would.
+        coaches, packs = D.COACHES, D.COACH_PACKS
+        ci = _idx(state.get("coach", 0), len(coaches))
+        pi = _idx(state.get("pack", 1), len(packs))
+        coach, pack = coaches[ci], packs[pi]
+        hours = pack["hours"]
+        listed = coach["rate"] * hours
+        total = _jsround(listed * (1 - pack["disc"]))
+        hrs = "%d hour" % hours if hours == 1 else "%d hours" % hours
+        return dict(
+            invalid=False, total=total, total_cents=total * 100,
+            subtotal=listed, discount=listed - total,
+            promo_code="", promo_label="", promo_pct=0, promo_ends="",
+            base=listed, addons=0, days=hours,
+            summary="%s coaching with %s" % (hrs, coach["name"]),
+            eta="First session",
+        )
+
     if service == "wins":
         frm = state.get("from")
         if frm not in g["ladder"]:
@@ -78,13 +101,16 @@ def quote(state):
         summary = "%d %s · %s · %s" % (w, "net win" if w == 1 else "net wins", frm, mode)
     elif service == "placements":
         frm = state.get("from")
-        if frm not in g["ladder"]:
+        unranked = bool(state.get("unranked"))
+        if not unranked and frm not in g["ladder"]:
             return _invalid("Unknown rank")
         p = _clamp(state.get("placements", 1))
-        climb = _climb(g, frm)
+        # Unranked has no starting rank to read a climb off — price at the floor.
+        climb = 1 if unranked else _climb(g, frm)
         base = p * per * 0.7 * factor * (1 + climb * 0.045) * duo
         days = max(1, _jsround(p * 0.4))
-        summary = "%d placement %s · %s · %s" % (p, "game" if p == 1 else "games", frm, mode)
+        where = "Unranked" if unranked else frm
+        summary = "%d placement %s · %s · %s" % (p, "game" if p == 1 else "games", where, mode)
     else:
         ladder = g["ladder"]
         frm, to = state.get("from"), state.get("to")
@@ -113,7 +139,16 @@ def quote(state):
     # Discount comes off the computed price, so the strikethrough shown to the
     # buyer is a real reduction from what the order would otherwise cost —
     # never a grossed-up reference price.
-    pcode, promo = resolve_promo(state.get("promo"))
+    #
+    # A bundle (opt-in, division only) REPLACES the sitewide sale when the current
+    # climb still matches it — the handoff's rule that only one discount is ever
+    # in play. Otherwise the usual promo resolution applies.
+    bpct = D.bundle_discount(g, state.get("from"), state.get("to"),
+                             state.get("bundle")) if service == "division" else 0.0
+    if bpct:
+        pcode, promo = "BUNDLE", {"pct": bpct, "label": "Bundle", "ends": ""}
+    else:
+        pcode, promo = resolve_promo(state.get("promo"))
     discount = _jsround(subtotal * promo["pct"]) if promo else 0
     total = subtotal - discount
 
@@ -142,6 +177,16 @@ def _climb(g, frm):
     """Higher starting ranks cost more — the same multiplier the division
     boost uses, so a win/placement at Diamond prices above one at Bronze."""
     return max(1, g["ladder"].index(frm) - 1)
+
+
+def _idx(n, length):
+    """Clamp a client-supplied list index into range — a tampered coach/pack
+    selection can never read past the list."""
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        n = 0
+    return max(0, min(length - 1, n))
 
 
 def _clamp(n):

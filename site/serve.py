@@ -65,6 +65,7 @@ _load_dotenv()
 sys.path.insert(0, os.path.join(HERE, "src"))
 import accounts   # noqa: E402  — header sign-up list (also used by /api)
 import analytics  # noqa: E402  — first-party event ingest (also used by /api)
+import boosters   # noqa: E402  — roster store behind /api/boosters (also used by /api)
 import oauth      # noqa: E402  — social sign-in (Google/Discord), also used by /api
 import ops        # noqa: E402  — gated dashboard API (also used by /api)
 import payments   # noqa: E402  — shared Stripe/pricing logic (also used by /api)
@@ -142,6 +143,19 @@ class Handler(SimpleHTTPRequestHandler):
             sid = urllib.parse.parse_qs(
                 urllib.parse.urlsplit(self.path).query).get("id", [""])[0]
             status, payload = payments.process_session(sid)
+            return self._json(status, payload)
+        if route == "/api/boosters":
+            # Public, anonymous read of the roster store — the dynamic source for
+            # the boosters board, the "On shift now" rail and the delivered feed.
+            # 204 when the store is empty so the client keeps the server-rendered
+            # fallback rather than blanking those panels.
+            status, payload = boosters.process_list()
+            if payload is None:
+                self.send_response(status)
+                self.send_header("Content-Length", "0")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
             return self._json(status, payload)
         if route.startswith("/api/auth/"):
             return self._auth(route)

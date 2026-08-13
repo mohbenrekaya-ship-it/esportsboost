@@ -83,6 +83,10 @@ NAV = [
     ("/#live", "Live"),
     ("/boosters/", "Boosters"),
     ("/guarantee.html", "Safety"),
+    # "Guides" is one word to match the rest of the nav — "Free" belongs on the
+    # cards inside the page, where it reads as a benefit, not on the chrome,
+    # where a price word reads as a promo banner. Placed after Safety.
+    ("/guides.html", "Guides"),
     ("/reviews.html", "Reviews"),
 ]
 # Only when HIDE_PLACEHOLDER_CLAIMS drops the pages behind them — never link
@@ -91,6 +95,8 @@ if not D.LIVE_FEED:
     NAV.remove(("/#live", "Live"))
 if not D.BOOSTERS:
     NAV.remove(("/boosters/", "Boosters"))
+if not getattr(D, "GUIDES", None):
+    NAV.remove(("/guides.html", "Guides"))
 if not D.REVIEWS:
     NAV.remove(("/reviews.html", "Reviews"))
 
@@ -432,6 +438,9 @@ HD_NAV = [
     (None, "/#live", "Live"),
     ("boosters", "/boosters/", "Boosters"),
     ("safety", "/guarantee.html", "Safety"),
+    # Guides is a single destination — a lead-capture page, no menu. Same shape
+    # as Live and Reviews.
+    (None, "/guides.html", "Guides"),
     (None, "/reviews.html", "Reviews"),
 ]
 HD_NAV = [(k, h, l) for k, h, l in HD_NAV if (h, l) in NAV]
@@ -501,7 +510,8 @@ def hd_live(cls=""):
     return (f'<p class="hd-live{(" " + cls) if cls else ""}">'
             f'<span class="hd-live-halo" aria-hidden="true"><span class="hd-live-dot"></span></span>'
             f'<span class="hd-live-txt"><b>Online now</b><i aria-hidden="true">—</i>'
-            f'<b class="hd-live-n">{n}</b><span>verified boosters</span></span></p>')
+            f'<b class="hd-live-n" data-live="online" data-live-min="36" '
+            f'data-raw="{n}">{n}</b><span>verified boosters</span></span></p>')
 
 
 def hd_menu(key):
@@ -774,16 +784,6 @@ def hd_auth():
         <div class="hd-str" data-hd-strength aria-hidden="true"><i></i><i></i><i></i><i></i></div>
         <p class="hd-str-note" data-hd-strength-note>Six characters or more. A passphrase beats a
         symbol soup.</p>
-        <!-- Confirm password: the second entry has to match before the account
-             is created. Shares the main field's eye toggle, so revealing one
-             reveals both. -->
-        <div class="hd-pass hd-pass-confirm">
-          <span class="hd-f-top"><span class="hd-label">Confirm password</span></span>
-          <span class="hd-pass-wrap">
-            <input class="hd-input hd-input-bare" type="password" name="password2" data-hd-pass2
-              placeholder="Re-enter your password" autocomplete="new-password">
-          </span>
-        </div>
         <button type="button" class="hd-terms" data-hd-terms aria-pressed="false">
           <span class="hd-check" aria-hidden="true">{_ico("check", 10, "ico", stroke=True)}</span>
           <span>I've read the <a href="/legal/terms.html">terms</a> and the
@@ -905,6 +905,29 @@ def foot_min():
     <nav class="co-foot-links" aria-label="Legal">{links}</nav>
   </div>
 </footer>"""
+
+
+def chrome_guides():
+    """The guides page's reduced header — design_handoff_free_guides.
+
+    A lead-capture page with five nav items is a page with five exits, so this
+    strips the promo bar, the mega menu and the currency switcher exactly like
+    checkout's `chrome_min()`. What is kept is different, though: not a padlock
+    and a help link, but a status line ("Free guides · no payment") and one way
+    back to the thing this page is a funnel for — boosting. The green
+    book glyph matches the page's own accent, and "Guides" is still in every
+    other page's nav, which is how a visitor reaches this one.
+    """
+    return f"""<header class="gd-nav">
+  <div class="wrap gd-nav-in">
+    <a class="nav-brand" href="/"><span class="shard" aria-hidden="true"></span>esports<b>boost</b></a>
+    <div class="gd-nav-r">
+      <span class="gd-nav-tag">{_ico("book", 15, "ico gd-nav-tag-ico", stroke=True)}<span>Free guides · no payment</span></span>
+      <span class="gd-nav-sep" aria-hidden="true"></span>
+      <a class="gd-nav-back" href="/games/">{_ico("arrow", 15, "ico", stroke=True)}<span>Browse boosting</span></a>
+    </div>
+  </div>
+</header>"""
 
 
 TRUSTPILOT_URL = getattr(D, "TRUSTPILOT_URL", "")
@@ -1046,9 +1069,12 @@ FOOT_LEGAL = [
 ]
 FOOT_SUPPORT = [
     (DEMO_HREF, "Demo", "package"),
+    ("/guides.html", "Free guides", "book"),
     ("/support.html", "Help center", None),
     ("/become-a-booster.html", "Become a booster", None),
 ]
+if not getattr(D, "GUIDES", None):
+    FOOT_SUPPORT = [row for row in FOOT_SUPPORT if row[0] != "/guides.html"]
 FOOT_EMAIL = "info@esportsboost.com"
 # The handoff's one hard rule about the support card's status line: "Online now"
 # has to reflect real support availability, and if support is offline the dot
@@ -1211,7 +1237,8 @@ def footer():
 
 
 def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
-           mobile_bar=False, extra_js="", nav_outline=False, bare=False):
+           mobile_bar=False, extra_js="", nav_outline=False, bare=False,
+           head=None, foot=None, body_class=None):
     ld = ""
     for block in (jsonld or []):
         ld += '<script type="application/ld+json">%s</script>\n' % json.dumps(block, ensure_ascii=False)
@@ -1228,9 +1255,12 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
     # legal line. Set on the pay flow only: its one job is finishing, so it
     # offers no exits. The body class carries the warmer checkout ground so the
     # header and footer match the section between them.
-    head = chrome_min() if bare else chrome(current, nav_outline)
-    foot = foot_min() if bare else footer()
-    body_cls = ' class="co-page"' if bare else ""
+    # `head`/`foot`/`body_class` let a page supply its own chrome without joining
+    # the bare/pay-flow family — the guides landing uses a reduced header of its
+    # own (chrome_guides) but keeps its own warm ground rather than checkout's.
+    head = head if head is not None else (chrome_min() if bare else chrome(current, nav_outline))
+    foot = foot if foot is not None else (foot_min() if bare else footer())
+    body_cls = ' class="%s"' % body_class if body_class else (' class="co-page"' if bare else "")
     og_image = og_image or img("/assets/img/og-default.svg")
     canonical = D.SITE + path
     # `no-js` is stripped by the first line of the document. It is the only hook
@@ -1450,6 +1480,11 @@ _ICONS = {
     "question": ("M12 2.8a9.2 9.2 0 1 0 0 18.4 9.2 9.2 0 0 0 0-18.4M9.2 9.4a2.8 2.8 0 1 1 3.6 3"
                  "c-.6.2-.8.7-.8 1.3v.8M12 16.4a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2"),
     "bookmark": "M6.4 3.6h11.2v16.8L12 16.6l-5.6 3.8z",
+    # Open book — the guides mark. Two leaves meeting at a central spine.
+    "book": ("M12 6.4C10.4 5.2 8.2 4.6 5.2 4.6v12.4c3 0 5.2.6 6.8 1.8"
+             "M12 6.4c1.6-1.2 3.8-1.8 6.8-1.8v12.4c-3 0-5.2.6-6.8 1.8M12 6.4v12.6"),
+    # Document with a folded corner — the "PDF, yours to keep" guarantee.
+    "file": "M6.4 3.6h7.4l4.2 4.2v12.6H6.4zM13.4 3.6v4.6h4.6",
     "gear": ("M12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8"
              "M19.3 13.4a7.6 7.6 0 0 0 0-2.8l2-1.4-2-3.4-2.3.9a7.6 7.6 0 0 0-2.4-1.4L14.2 3H9.8"
              "l-.4 2.3a7.6 7.6 0 0 0-2.4 1.4L4.7 5.8l-2 3.4 2 1.4a7.6 7.6 0 0 0 0 2.8l-2 1.4"
@@ -1464,6 +1499,24 @@ _ICONS = {
                     "M9.5 21a9.2 9.2 0 0 1-3.4-1.9M3 14.5a9.2 9.2 0 0 1 0-5"
                     "M12 7.6a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6"
                     "M7.6 17.6a4.9 4.9 0 0 1 8.8 0"),
+    # ── support page linework (design_handoff_support) ────────────────────
+    # The handoff draws these in Phosphor duotone; drawn here as single-path
+    # linework for the same reason as everything above — this build ships no
+    # icon font. The channel-card meta glyphs, the "what to put in it" list
+    # marks, and the form's helper marks.
+    "timer": ("M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16M12 9.4V13l2.8 1.8"
+              "M9.6 2.8h4.8M12 2.8v2.2M18.6 6.4l1.4-1.4"),
+    "clock-countdown": ("M20.9 13.4A9 9 0 1 1 12 3M12 7.6V12l3.2 1.9"
+                        "M20.4 4.6l.6 3.4-3.4-.6"),
+    "paperclip": ("M17.6 9.4 9.9 17a3.4 3.4 0 0 1-4.8-4.8l7.6-7.5a2.2 2.2 0 0 1 3.2 3.2"
+                  "l-7.6 7.5a1.1 1.1 0 0 1-1.6-1.6l6.9-6.8"),
+    "hash": "M8.6 3.8 6.8 20.2M17.2 3.8l-1.8 16.4M4.4 8.8h16M3.6 15.2h16",
+    "target": ("M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 7.6a4.4 4.4 0 1 0 0 8.8 4.4 4.4 0 0 0 0-8.8"
+               "M12 11.2a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6"),
+    "image-square": ("M4.2 4.4h15.6v15.2H4.2zM4.2 15.6l4.6-4.4 3 2.9 3.9-3.8 4.1 4"
+                     "M9.2 9.4a1.4 1.4 0 1 1-2.8 0 1.4 1.4 0 0 1 2.8 0"),
+    "envelope-open": "M3.6 9.6 12 3.8l8.4 5.8v10.2H3.6zM3.6 9.6 12 15.2l8.4-5.6",
+    "lock-simple": "M6 10.4h12v9.2H6zM8 10.4V7.6a4 4 0 0 1 8 0v2.8",
 }
 
 
@@ -1480,6 +1533,29 @@ def _ico(name, size=16, cls="ico", stroke=False, evenodd=False):
         paint += ' fill-rule="evenodd"'
     return (f'<svg class="{cls}" width="{size}" height="{size}" viewBox="0 0 24 24" '
             f'aria-hidden="true" focusable="false"><path d="{_ICONS[name]}" {paint}/></svg>')
+
+
+# Discord's own brand mark, in Blurple — the real logo, per request. Note this
+# is a trademark: before launch swap it for Discord's licensed sign-in/brand
+# asset, same rule pay_marks() and the Trustpilot star follow.
+_DISCORD_PATH = (
+    "M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25"
+    "a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0"
+    " 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.057 19.9"
+    " 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041"
+    "-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074"
+    " 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292"
+    "a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.891.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225"
+    " 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177"
+    "-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.331c-1.183 0-2.157-1.085-2.157-2.419 0"
+    "-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0"
+    "c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0"
+    " 1.333-.946 2.418-2.157 2.418z")
+
+
+def _discord_mark(size=19, cls="ico dcd-mark"):
+    return (f'<svg class="{cls}" width="{size}" height="{size}" viewBox="0 0 24 24" '
+            f'aria-hidden="true" focusable="false"><path d="{_DISCORD_PATH}" fill="#5865F2"/></svg>')
 
 
 # Money-back / no account / VPN region. These are the three objections a
@@ -1563,12 +1639,12 @@ def fc_card():
     screen earlier, not a place to change it — "Change" goes back to the
     configurator instead.
 
-    The Climb row names both ranks — mark + tier, twice, the same object the
+    The Climb row names both ranks — tier + mark, twice, the same object the
     live feed and the dashboard mock draw. It was the two marks alone, which on
     a ladder whose divisions all end in the same numeral read "IV → IV": the
     colour told you the tiers apart but nothing said which they were, and an
     Iron IV → Gold IV order was indistinguishable from Silver IV → Diamond IV.
-    The mark carries the numeral, the word beside it carries the tier.
+    The word leads and the mark trails it, so the pair reads "Iron IV".
 
     It does NOT append the mode, though: checkout does that because it has no
     queue row to carry it, and this card has one — borrowing that text would
@@ -1589,11 +1665,11 @@ def fc_card():
           <span class="fc-lab">Climb</span>
           <span class="fc-val fc-val-climb">
             <span class="fc-marks" data-when-service="division" hidden>
-              <span class="ob-mark" data-mark="from"></span>
               <span class="fc-marks-t" data-tiername="from">—</span>
+              <span class="ob-mark" data-mark="from"></span>
               {_ico("arrow", 11, "ico fc-marks-arrow", stroke=True)}
-              <span class="ob-mark" data-mark="to"></span>
               <span class="fc-marks-t is-to" data-tiername="to">—</span>
+              <span class="ob-mark" data-mark="to"></span>
             </span>
             <span data-when-service="units" data-sum="summary" hidden>—</span>
           </span>
@@ -1616,7 +1692,7 @@ def fc_card():
             <span class="fc-total" data-sum="total">—</span>
           </span>
         </div>
-        <span class="fc-mb">{_ico("shield", 14, "ico")}<span>Money-back</span></span>
+        <span class="fc-mb">{_ico("shield", 14, "ico")}<span>Money-back guarantee</span></span>
       </div>
     </aside>"""
 
@@ -1652,11 +1728,9 @@ def cta_band(live=False, title=None, sub=None, cta=("Configure your boost", "/ga
                        "pro-rated after that.")
         config = f"""<div class="fc-config">
         <span class="fc-pair" data-when-service="division" hidden>
-          <span class="ob-mark fc-mark" data-mark="from"></span>
-          <span class="fc-rank" data-out="fromRank">—</span>
+          <span class="fc-rank" data-rankcolor="from" data-out="fromRank">—</span>
           {_ico("arrow", 13, "ico fc-arrow", stroke=True)}
-          <span class="ob-mark fc-mark fc-mark-to" data-mark="to"></span>
-          <span class="fc-rank fc-rank-to" data-out="toRank">—</span>
+          <span class="fc-rank fc-rank-to" data-rankcolor="to" data-out="toRank">—</span>
           <span class="fc-div" aria-hidden="true"></span>
           <span class="fc-queue">{_ico("user", 14, "ico", stroke=True)}<span data-out="mode">—</span></span>
         </span>
@@ -1926,8 +2000,8 @@ def live_feed():
             tier, div = f[key]
             label = div or tier[:2].upper()
             name = "" if wide else tier
-            return (tier_mark(g, tier, label, strong=strong, wide=wide)
-                    + ('<span class="lf-tier">%s</span>' % esc(name) if name else ""))
+            return (('<span class="lf-tier">%s</span>' % esc(name) if name else "")
+                    + tier_mark(g, tier, label, strong=strong, wide=wide))
         rating_name = ('<span class="lf-tier is-to">%s</span>' % esc(f["rating"])) if wide else ""
         mins = f["mins"]
         rows += f"""<li class="lf-row">
@@ -1937,7 +2011,7 @@ def live_feed():
         </span>
         <span class="lf-rail" aria-hidden="true"><i class="lf-dot"></i></span>
         <span class="lf-climb">
-          <span class="lf-letter" aria-hidden="true">{esc(f.get('initial') or (g['name'][0] if g else '?'))}</span>
+          <span class="lf-letter" aria-hidden="true">{esc(g['short'] if g else (f.get('initial') or '?'))}</span>
           <span class="lf-climb-in">{side('frm', False)}{_ico("arrow", 12, "lf-arrow", stroke=True)}{side('to', True)}{rating_name}</span>
         </span>
         <span class="lf-game">
@@ -2021,7 +2095,7 @@ def discord_card():
         return ""
     return f"""<div class="dcd">
       <div class="dcd-head">
-        <span class="dcd-tile">{_ico("chat", 19, "ico", stroke=True)}</span>
+        <span class="dcd-tile">{_discord_mark(19)}</span>
         <span class="dcd-titles">
           <span class="dcd-title"><b>{esc(D.STATS['discord'])}</b> in the Discord</span>
           <span class="dcd-label">{esc(d['label'])}</span>
@@ -2039,7 +2113,13 @@ def roster_panel(rows=None):
     still wraps whatever is left, because `.rail` is where the section's local
     tokens are declared and a bare Discord card outside it would lose them.
     """
-    rows = rows or D.BOOSTERS[:5]
+    if rows is None:
+        # Default rail: interleave the two biggest ladders so the card reads as a
+        # mixed roster (LoL + Valorant) rather than five League rows in a row.
+        lol = [b for b in D.BOOSTERS if b.get("slug") == "league-of-legends"]
+        val = [b for b in D.BOOSTERS if b.get("slug") == "valorant"]
+        mixed = [b for pair in zip(lol, val) for b in pair]
+        rows = (mixed or D.BOOSTERS)[:5]
     inner = (roster_card(rows) if rows else "") + discord_card()
     if not inner:
         return ""
@@ -2175,7 +2255,7 @@ def demo_order():
 _DASH_N = 0
 
 
-def dash_mock(example=False, live=False):
+def dash_mock(example=False, live=False, gp=False):
     """The order dashboard, drawn as a static replica of the real screen.
 
     One component, two instances — the marketing band's and the demo page's
@@ -2250,7 +2330,7 @@ def dash_mock(example=False, live=False):
             <circle cx="588" cy="{pts[-1]}" r="4.5" fill="#ff5a1f" stroke="#131110" stroke-width="2.5"/>
           </svg>
           <div class="dm-chart-caps">
-            <span class="dm-cap">Order start<i aria-hidden="true"> · </i>{esc(O['start_rank'])}</span>
+            <span class="dm-cap">{'Start' if gp else 'Order start'}<i aria-hidden="true"> · </i>{esc(O['start_rank'])}</span>
             <span class="dm-cap is-now">Now<i aria-hidden="true"> · </i>{esc(O['at_rank'])}</span>
           </div>
         </div>"""
@@ -2267,7 +2347,7 @@ def dash_mock(example=False, live=False):
           </div>"""
 
     pill = ('<span class="dm-example">Example</span>' if example else "")
-    bar = "" if live else f"""<div class="dm-bar">
+    bar = "" if (live or gp) else f"""<div class="dm-bar">
         <span class="dm-bar-l"><span class="dm-lab">Order</span><span class="dm-id">{esc(O['id'])}</span>{pill}</span>
         <span class="dm-status"><span class="dot-live dot-ok" aria-hidden="true"></span>In progress</span>
       </div>"""
@@ -2276,7 +2356,13 @@ def dash_mock(example=False, live=False):
     # drawn — same rule that keeps the live feed's rows unlinked and the roster's
     # "Load more" out of the DOM when nothing is behind it. Build the replay
     # page and the link comes back.
-    if live:
+    if gp:
+        # The game page's variant: the same live footer, plus the order's game
+        # count on the right (the handoff's "38 games this order").
+        mins = O["matches"][0]["when"] if O["matches"] else 0
+        foot = (f"""<span class="dm-foot-l"><span class="dot-live dot-ok" aria-hidden="true"></span>Updated live<i aria-hidden="true"> · </i>last game <b class="lf-ago" data-mins="{mins}">{esc(_ago(mins))}</b></span>"""
+                f"""<span class="dm-foot-r dm-foot-games"><b>{O['games']}</b> games this order</span>""")
+    elif live:
         mins = O["matches"][0]["when"] if O["matches"] else 0
         foot = f"""<span class="dm-foot-l"><span class="dot-live dot-ok" aria-hidden="true"></span>Updated live<i aria-hidden="true"> · </i>last game <b class="lf-ago" data-mins="{mins}">{esc(_ago(mins))}</b></span>"""
     else:
@@ -2285,18 +2371,34 @@ def dash_mock(example=False, live=False):
           <span class="dm-btn">{_ico("pause", 13, "ico", stroke=True)}Pause</span>
           <span class="dm-btn">{_ico("chat", 13, "ico", stroke=True)}<span>Message <i>{esc(O['booster'])}</i></span></span>
         </span>"""
-    shell = ('<div class="dm dm-open">' if live else
-             '<div class="dm" role="img" aria-label="Preview of the order dashboard">')
+    if gp:
+        shell = '<div class="dm dm-open dm-gp" role="img" aria-label="Preview of the order dashboard">'
+    elif live:
+        shell = '<div class="dm dm-open">'
+    else:
+        shell = '<div class="dm" role="img" aria-label="Preview of the order dashboard">'
+
+    # The handoff's game-page card leads each rank with its mark and carries the
+    # status pill on that row (there is no order bar above it to hold one).
+    if gp:
+        climb = f"""<div class="dm-climb dm-climb-gp">
+          <span class="dm-climb-pair">{mark(O['start'])}<span class="dm-climb-t">{esc(O['start'][0])}</span></span>
+          {_ico("arrow", 16, "dm-climb-arrow", stroke=True)}
+          <span class="dm-climb-pair">{mark(O['target'], strong=True)}<span class="dm-climb-t is-to">{esc(O['target'][0])}</span></span>
+          <span class="dm-status dm-status-gp"><span class="dot-live dot-ok" aria-hidden="true"></span>In progress</span>
+        </div>"""
+    else:
+        climb = f"""<div class="dm-climb">
+          <span class="dm-climb-t">{esc(O['start'][0])}</span>{mark(O['start'])}
+          {_ico("arrow", 16, "dm-climb-arrow", stroke=True)}
+          <span class="dm-climb-t is-to">{esc(O['target'][0])}</span>{mark(O['target'], strong=True)}
+        </div>"""
 
     return f"""{shell}
       {bar}
 
       <div class="dm-body">
-        <div class="dm-climb">
-          {mark(O['start'])}<span class="dm-climb-t">{esc(O['start'][0])}</span>
-          {_ico("arrow", 16, "dm-climb-arrow", stroke=True)}
-          {mark(O['target'], strong=True)}<span class="dm-climb-t is-to">{esc(O['target'][0])}</span>
-        </div>
+        {climb}
 
         <div class="dm-prog">
           <span class="dm-prog-l">{mark(O['at'], small=True)}{esc(O['at_rank'])} · <b>{O['lp']} LP</b></span>
@@ -2311,10 +2413,10 @@ def dash_mock(example=False, live=False):
              into fragments the way the progress line is split would fix the
              English word order onto French and German, which put the count
              elsewhere. It falls back to English, which i18n.js is built for. -->
-        <div class="dm-hist">
+        {'' if gp else f'''<div class="dm-hist">
           <span class="dm-hist-t">Match history</span>
           <span class="dm-hist-m">Last {len(O['matches'])} of {O['games']} games · <b>{esc(O['record'])}</b></span>
-        </div>
+        </div>'''}
         <div class="dm-table">
           <div class="dm-row dm-head">
             <span></span><span>Queue</span><span>Result</span><span>K / D / A</span><span>LP</span>
@@ -2367,8 +2469,8 @@ def dashboard_section(num=None, on_demo=False):
     # numbers would undo the section's own argument.
     demo = "%s?order=%s" % (DEMO_HREF, esc(demo_order()["id"]))
     open_demo = (
-        f'<button class="dsh-demo" type="button" data-demo-open>'
-        f'{_ico("monitor", 18, "dsh-demo-ico", evenodd=True)}Open the demo dashboard</button>'
+        f'<a class="dsh-demo" href="/support.html">'
+        f'<span class="dot-live dot-ok dsh-demo-dot" aria-hidden="true"></span>Talk to support</a>'
         if on_demo else
         f'<a class="dsh-demo" href="{demo}">'
         f'{_ico("monitor", 18, "dsh-demo-ico", evenodd=True)}Open the demo dashboard</a>')
@@ -2867,9 +2969,9 @@ def order_rows(b):
         tm, tn = _side_mark(g, o["to"], True)
         out += f"""<div class="bp-row" data-bp-row data-mode="{esc(o['mode'])}"{' hidden' if i >= BP_PAGE else ''}>
           <span class="bp-id">{esc(o['id'])}</span>
-          <span class="bp-climb">{fm}<span class="bp-tier">{esc(fn)}</span>
+          <span class="bp-climb"><span class="bp-tier">{esc(fn)}</span>{fm}
             {_ico("arrow", 12, "bp-arrow", stroke=True)}
-            {tm}<span class="bp-tier is-to">{esc(tn)}</span></span>
+            <span class="bp-tier is-to">{esc(tn)}</span>{tm}</span>
           <span class="bp-q">{_ico("user" if o['mode'] == "Solo" else "users", 15, "bp-q-ico", stroke=True)}{esc(o['mode'])}</span>
           <span class="bp-days">{o['days']}<span> {esc("day" if o['days'] == 1 else "days")}</span></span>
           <span class="bp-date">{esc(o['date'])}</span>
@@ -3189,11 +3291,11 @@ def review_climb(r):
         label = div or (tier if ladder else tier[:2].upper())
         if to:
             out += _ico("arrow", 12, "rv-climb-arrow", stroke=True)
-        out += tier_mark(g, tier, label, strong=to, wide=bool(ladder), base="rv-mark")
         name = ladder if (to and ladder) else ("" if ladder else tier)
         if name:
             out += ('<span class="rv-tier%s">%s</span>'
                     % (" is-to" if to else "", esc(name)))
+        out += tier_mark(g, tier, label, strong=to, wide=bool(ladder), base="rv-mark")
     return out
 
 
@@ -3305,7 +3407,9 @@ def mode_seg(name, pct=False, icons=False):
     authoritative multiplier rather than typed in — the label can't drift from
     the formula the way a hard-coded "+35%" would. `icons` adds the one/two
     figure glyphs the Best Sellers band draws."""
-    duo = "Duo queue"
+    # Label reads "Duo" (the handoff's control), while the input value stays the
+    # canonical "Duo queue" the pricing formula matches on.
+    duo = "Duo"
     if pct:
         duo += ' <span class="seg-pct">+%d%%</span>' % round((pricing.DUO_MULT - 1) * 100)
     solo_i = _ico("user", 15, "seg-ico", stroke=True) if icons else ""
@@ -3487,8 +3591,9 @@ def rank_picker(g, which, sfx=""):
     sid = "w-%s-tier%s" % (which, sfx)
     return f"""<div class="ob-rank{' ob-rank-target' if target else ''}">
         <label class="ob-lab" for="{sid}">{label}</label>
+        <!-- Tier name only. The division is the button row directly below, so a
+             numeral in the field just says the same thing twice. -->
         <div class="ob-field">
-          <span class="ob-mark" data-mark="{which}" aria-hidden="true"></span>
           <select class="ob-select" id="{sid}" data-sel="{which}Tier" autocomplete="off">{tiers}</select>
           {_CARET}
         </div>
@@ -3497,22 +3602,25 @@ def rank_picker(g, which, sfx=""):
 
 
 def ladder_strip(g):
-    """The climb, drawn. One tick per rung with the crossed span filled, tier
-    captions underneath, and the two facts that make the price legible: how far
-    this order actually goes, and what the cheapest possible order costs.
+    """The climb, drawn as tier tracks — the boost-hero handoff's ladder.
+
+    One track per tier, each striped into its division slots and filled in that
+    tier's own colour across the selected span, with a hollow ring at the current
+    rank and an accent dot at the target. It replaces the flat tick strip: you
+    can see *which* tiers you cross, not only how many bars are lit. `data-ladder`
+    is the JS hook that builds the segments per game; `data-tier-caps` keeps the
+    captions underneath (tinted per tier when inside the span).
 
     The floor price is quoted through pricing.quote() like every other number on
     the site, so "cheapest single division" and the `from $NN` in the H1 are the
     same claim and cannot contradict each other.
     """
-    floor = min(quote(g["name"], g["ladder"][i], g["ladder"][i + 1])["total"]
-                for i in range(len(g["ladder"]) - 1))
     return f"""<div class="ob-ladder">
-        <div class="ob-ticks" data-ticks aria-hidden="true"></div>
+        <div class="ob-track" data-ladder aria-hidden="true"></div>
         <div class="ob-tiercaps" data-tier-caps aria-hidden="true"></div>
         <div class="ob-ladder-foot">
           <span><b data-out="steps">—</b> <span data-out="stepsWord">divisions</span> to climb</span>
-          <span>Cheapest single division {money(floor)}</span>
+          <span class="ob-ladder-hours">{_ico("clock-countdown", 14, "ob-ico", stroke=True)}Played in your preferred hours</span>
         </div>
       </div>"""
 
@@ -3545,6 +3653,180 @@ def ob_trust():
             'fill="#00b67a"/></svg>')
     return (f'<span class="ob-tp">{star}<b>{esc(D.STATS["trustpilot"])}</b> on Trustpilot · '
             f'{esc(D.STATS["reviews"])} reviews</span>')
+
+
+def offers_coaching(g):
+    """True when this game's service list mentions coaching, so only games we
+    actually coach show the fourth tab. Honest by construction — a game with no
+    coaches never offers a coaching booking."""
+    return "coaching" in (g.get("services") or "").lower()
+
+
+def coaching_panel(g):
+    """The Coaching tab — a booking flow, not a boost. Coach rows, hour packs,
+    focus chips, a first-session slot and server, and the format line.
+
+    All four coaches, their rates and slots are PLACEHOLDER (D.COACHES); calendar
+    and payment are unbuilt. Every control is server-rendered so the tab reads
+    with no JS; app.js manages the selected state and the live price, which comes
+    from coach rate × pack only (see pricing.quote's coaching branch).
+    """
+    coaches = "".join(f"""<button type="button" class="ob-coach" data-coach="{i}"
+          aria-pressed="{'true' if i == 0 else 'false'}">
+          <span class="ob-coach-av" aria-hidden="true">{esc(c['name'][0])}</span>
+          <span class="ob-coach-main">
+            <span class="ob-coach-top">
+              <span class="ob-coach-name">{esc(c['name'])}</span>
+              <span class="ob-coach-rating">{_ico('star', 10, 'ob-coach-star')}{esc(c['rating'])}</span>
+            </span>
+            <span class="ob-coach-meta">{esc(c['rank'])} · {esc(c['role'])}</span>
+          </span>
+          <span class="ob-coach-price">
+            <span class="ob-coach-rate">{money(c['rate'])}</span>
+            <span class="ob-coach-per">per hour</span>
+          </span>
+        </button>""" for i, c in enumerate(D.COACHES))
+
+    packs = "".join(f"""<button type="button" class="ob-pack" data-pack="{i}"
+          aria-pressed="{'true' if i == 1 else 'false'}">
+          <span class="ob-pack-h">{p['hours']}h</span>
+          <span class="ob-pack-note">{'Single session' if p['disc'] == 0 else 'Save %d%%' % round(p['disc'] * 100)}</span>
+        </button>""" for i, p in enumerate(D.COACH_PACKS))
+
+    focus = "".join(f"""<button type="button" class="ob-focus" data-focus="{i}"
+          aria-pressed="{'true' if i == 0 else 'false'}">{esc(f)}</button>"""
+                    for i, f in enumerate(D.COACH_FOCUS))
+
+    slots = "".join('<option value="%s">%s</option>' % (esc(s), esc(s)) for s in D.COACH_SLOTS)
+    regions = "".join('<option value="%s">%s</option>' % (esc(r), esc(r)) for r in g["regions"])
+
+    return f"""<div data-panel="coaching" hidden>
+      <div class="ob-coach-head">
+        <span class="ob-lab">Pick your coach</span>
+        <span class="ob-coach-count"><b>{len(D.COACHES)}</b> <span>taking bookings</span></span>
+      </div>
+      <div class="ob-coaches" role="group" aria-label="Pick your coach">{coaches}</div>
+
+      <div class="ob-cell ob-coach-gap">
+        <span class="ob-lab">How many hours</span>
+        <div class="ob-packs" role="group" aria-label="How many hours">{packs}</div>
+      </div>
+
+      <div class="ob-cell ob-coach-gap">
+        <span class="ob-lab">What to work on</span>
+        <div class="ob-focuses" role="group" aria-label="What to work on">{focus}</div>
+      </div>
+
+      <div class="ob-two ob-coach-gap">
+        <div class="ob-cell">
+          <label class="ob-lab" for="w-slot">First session</label>
+          <div class="ob-field">
+            {_ico('clock', 14, 'ob-ico', stroke=True)}
+            <select class="ob-select" id="w-slot" data-sel-slot autocomplete="off">{slots}</select>
+            {_CARET}
+          </div>
+        </div>
+        <div class="ob-cell">
+          <label class="ob-lab" for="w-region-c">Server</label>
+          <div class="ob-field">
+            {_ico('globe', 14, 'ob-ico')}
+            <select class="ob-select" id="w-region-c" data-sel="region" autocomplete="off">{regions}</select>
+            {_CARET}
+          </div>
+        </div>
+      </div>
+
+      <p class="ob-coach-fmt">{_ico('monitor', 15, 'ob-ico', stroke=True)}
+        <span>Live on Discord, screen shared, recorded for you to keep.</span></p>
+    </div>"""
+
+
+def bundle_strip(g):
+    """The bundle strip in the hero — the handoff's "Save big on bundles".
+
+    Each card is a real bundle: a two-tier climb at a genuine discount (D.BUNDLES)
+    that REPLACES the sitewide sale when applied, so the "−N%" pill and the struck
+    → discounted price are a reduction the checkout actually charges (the server
+    recomputes it in pricing.quote). Clicking a card configures the climb on the
+    Division boost tab and marks the bundle active; it survives a division change
+    and drops on a tier or target change. Renders nothing for a game with no
+    bundles.
+
+    Every label is read off the ladder, never typed, because all nine games render
+    this strip and their divisions are all different (IV–I, 1–3, 5–1, I–IV, none):
+    the target is the resolved rank name, and the "from any … division" line is
+    dropped on a tier that has no divisions — CS2's flat CS Rating rungs, where a
+    bundle names two exact checkpoints.
+    """
+    climbs = D.bundle_climbs(g)
+    if not climbs:
+        return ""
+    dm = g.get("divmap") or {}
+    max_off = max(int(round(b["disc"] * 100)) for b in climbs)
+    flat = not any(len(dm.get(b["ft"], ())) > 1 for b in climbs)
+    note = ("Two rating bands up in one order" if flat
+            else "Two tiers up in one order, from wherever you are")
+    cards = ""
+    for i, b in enumerate(climbs):
+        q = pricing.quote({"game": g["name"], "service": "division",
+                           "from": b["floorFrom"], "to": b["target"],
+                           "mode": "Solo", "addons": []})
+        full = q["subtotal"]
+        price = pricing._jsround(full * (1 - b["disc"]))
+        off = int(round(b["disc"] * 100))
+        sub = ("From any %s division" % b["ft"] if len(dm.get(b["ft"], ())) > 1
+               else "Starts at %s" % b["floorFrom"])
+        cards += f"""<button type="button" class="ob-bundle" data-bundle="{i}"
+          data-bundle-to="{esc(b['target'])}" data-bundle-tier="{esc(b['ft'])}"
+          data-bundle-floor="{esc(b['floorFrom'])}" data-bundle-def="{esc(b['defFrom'])}"
+          data-bundle-disc="{b['disc']}" aria-pressed="false">
+          <span class="ob-bundle-top">
+            <span class="ob-bundle-name"><span>{esc(b['ft'])}</span><i aria-hidden="true">→</i><wbr><span>{esc(b['target'])}</span></span>
+            <span class="ob-bundle-off">−{off}%</span>
+          </span>
+          <span class="ob-bundle-sub">{esc(sub)}</span>
+          <span class="ob-bundle-price">
+            <span class="ob-bundle-from">from</span>
+            <span class="ob-bundle-list" data-bundle-list>{money(full)}</span>
+            <span class="ob-bundle-amt" data-bundle-price>{money(price)}</span>
+          </span>
+          <span class="ob-bundle-cta">
+            <span class="ob-bundle-apply">{_ico('plus', 12, 'ob-bundle-cico', stroke=True)}Apply bundle</span>
+            <span class="ob-bundle-on">{_ico('check', 12, 'ob-bundle-cico', stroke=True)}Applied</span>
+          </span>
+        </button>"""
+    return f"""<div class="ob-bundles">
+      <div class="ob-bundles-head">
+        <span class="ob-bundles-tile" aria-hidden="true">{_ico('tag', 18, 'ob-bundles-ico')}</span>
+        <span class="ob-bundles-copy">
+          <span class="ob-bundles-title">Save big on bundles</span>
+          <span class="ob-bundles-note">{esc(note)}</span>
+        </span>
+        <span class="ob-bundles-pill">Up to {max_off}% off</span>
+      </div>
+      <div class="ob-bundles-grid">{cards}</div>
+    </div>"""
+
+
+def unit_grid(kind, label, note):
+    """The 1–5 game grid for the Net wins / Placements tabs — the handoff's
+    PerGamePanel. Replaces the ± stepper: both products are capped at five per
+    order, so five exposed buttons read the cap at a glance and take one tap. The
+    per-game price sits beside the label (quoted live, one unit at the current
+    rank), and the note differs per product.
+    """
+    btns = "".join(
+        '<button type="button" class="ob-count" data-count="%s" data-n="%d" '
+        'aria-pressed="%s">%d</button>' % (kind, n, "true" if n == 3 else "false", n)
+        for n in range(1, 6))
+    return f"""<div class="ob-unit-block">
+        <div class="ob-unit-head">
+          <span class="ob-lab">{label}</span>
+          <span class="ob-unit-price"><b data-out="{kind}Unit">—</b> <span>per game</span></span>
+        </div>
+        <div class="ob-counts" data-countgrid="{kind}" role="group" aria-label="{label}">{btns}</div>
+        <span class="ob-unit-note">{_ico("info", 13, "ob-ico", stroke=True)}<span>{esc(note)}</span></span>
+      </div>"""
 
 
 def wizard(game=None):
@@ -3597,6 +3879,7 @@ def wizard(game=None):
         <button class="tab" role="tab" data-service="division" aria-selected="true">Division boost</button>
         <button class="tab" role="tab" data-service="wins" aria-selected="false">Net wins</button>
         <button class="tab" role="tab" data-service="placements" aria-selected="false">Placements</button>
+        {'<button class="tab" role="tab" data-service="coaching" aria-selected="false">Coaching</button>' if offers_coaching(g) else ''}
       </div>
 
       <div data-panel="division">
@@ -3609,33 +3892,31 @@ def wizard(game=None):
       </div>
 
       <div data-panel="wins" hidden>
-        <div class="ob-ranks ob-ranks-unit">
-          {rank_picker(g, "from", "-wins")}
-          <div class="ob-unit">
-            <span class="ob-lab">How many net wins</span>
-            <div class="stepper" data-stepper="wins" data-min="1" data-max="20">
-              <button class="btn btn-icon" type="button" data-step="-1" aria-label="One win fewer">–</button>
-              <output>5</output>
-              <button class="btn btn-icon" type="button" data-step="1" aria-label="One win more">+</button>
-            </div>
-          </div>
-        </div>
+        <div class="ob-cell ob-unit-rank">{rank_picker(g, "from", "-wins")}</div>
+        {unit_grid("wins", "How many net wins",
+                   "A net win means one win above your losses — five is the cap per order.")}
       </div>
 
       <div data-panel="placements" hidden>
-        <div class="ob-ranks ob-ranks-unit">
-          {rank_picker(g, "from", "-pl")}
-          <div class="ob-unit">
-            <span class="ob-lab">How many placement games</span>
-            <div class="stepper" data-stepper="placements" data-min="1" data-max="10">
-              <button class="btn btn-icon" type="button" data-step="-1" aria-label="One game fewer">–</button>
-              <output>5</output>
-              <button class="btn btn-icon" type="button" data-step="1" aria-label="One game more">+</button>
-            </div>
-          </div>
+        <div class="ob-ranked" role="group" aria-label="Do you have a rank">
+          <button type="button" class="ob-ranked-opt" data-ranked="1" aria-pressed="true">I have a rank</button>
+          <button type="button" class="ob-ranked-opt" data-ranked="0" aria-pressed="false">Unranked</button>
         </div>
+        <div class="ob-cell ob-unit-rank" data-when-ranked>{rank_picker(g, "from", "-pl")}</div>
+        <div class="ob-unranked" data-when-unranked hidden>
+          {_ico("question", 18, "ob-unranked-ico", stroke=True)}
+          <span>Fresh account or a new season — no MMR to read yet. Your booster plays all five and
+          the rank you land is the rank you keep.</span>
+        </div>
+        {unit_grid("placements", "How many placement games",
+                   "Ten placements per season; we take up to five of them.")}
       </div>
 
+      {coaching_panel(g) if offers_coaching(g) else ''}
+
+      <!-- Shared queue/server/add-ons. Hidden on Coaching, which is a booking
+           with no queue and no add-ons and carries its own server select. -->
+      <div data-hide-service="coaching">
       <div class="ob-two">
         <div class="ob-cell">
           <span class="ob-lab">How it's played</span>
@@ -3655,6 +3936,7 @@ def wizard(game=None):
         <span class="ob-lab">Add-ons</span>
         {addons_block(money=True, paid_only=True)}
       </div>
+      </div>
 
       <div class="ob-div"></div>
 
@@ -3668,14 +3950,15 @@ def wizard(game=None):
           <span class="save-line" data-when-discount data-out="saveWith" hidden></span>
         </div>
         <div class="ob-sum-r">
-          <span class="ob-lab">Delivered in</span>
+          <span class="ob-lab"><span data-hide-service="coaching">Delivered in</span><span data-when-service="coaching" hidden>First session</span></span>
           <span class="quote-eta" data-out="eta">—</span>
-          {free}
+          <span data-hide-service="coaching">{free}</span>
+          <span class="ob-free" data-when-service="coaching" hidden><span class="live-dot" aria-hidden="true"></span><b>{len(D.COACHES)}</b> <span>coaches taking bookings</span></span>
         </div>
       </div>
 
       <a class="btn btn-primary btn-block ob-cta" href="/checkout.html" data-continue>
-        <span>Continue to checkout</span><span class="ob-cta-sep" aria-hidden="true">·</span><span data-out="price">—</span>
+        <span data-hide-service="coaching">Continue to checkout</span><span data-when-service="coaching" data-out="bookLabel" hidden>Book</span><span class="ob-cta-sep" aria-hidden="true">·</span><span data-out="price">—</span>
         {_ico("arrow", 15, "ico", stroke=True)}
       </a>
 
@@ -3730,8 +4013,8 @@ def rank_panel(g, which):
         <div class="bs-panel-head">
           <span class="bs-lab" id="{sid}-lab">{label}</span>
           <span class="bs-panel-val">
-            <span class="bs-tiermark" data-mark="{which}" aria-hidden="true"></span>
             <span data-tiername="{which}">—</span>
+            <span class="bs-tiermark" data-mark="{which}" aria-hidden="true"></span>
           </span>
         </div>
         <div class="bs-tiergrid" data-tiergrid="{which}" role="group" aria-labelledby="{sid}-lab"></div>
@@ -4033,9 +4316,384 @@ def page_games_index():
                   body, current="/games/")
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  game-page proof bands — design_handoff_lol_game_page, bands 01–06 + close
+#
+#  A full-fidelity port of the handoff's below-the-fold page: one numbered band
+#  each for how it runs, what you watch while it runs, who plays it, why it is
+#  safe, what buyers said, and the six questions. Scoped on `.gp` (its own token
+#  set, same ember palette as the hero and the Best Sellers band). The bands 02
+#  order preview reuses `dash_mock()` and 06 reuses `faq_block()` — the site's
+#  canonical ports of the dashboard and support handoffs this one references —
+#  so the game page cannot drift from them. Every price is still the shared
+#  engine's; nothing here quotes a number of its own.
+# ══════════════════════════════════════════════════════════════════════════
+def _ago_days(days):
+    """"3 days ago" / "1 week ago" — the review footer's relative date. Weeks
+    once it passes seven days, so a two-month-old review doesn't read "63 days"."""
+    try:
+        d = max(0, int(days))
+    except (TypeError, ValueError):
+        d = 0
+    if d <= 0:
+        return "today"
+    if d == 1:
+        return "1 day ago"
+    if d < 7:
+        return "%d days ago" % d
+    w = d // 7
+    return "1 week ago" if w == 1 else "%d weeks ago" % w
+
+
+def gp_eyebrow(num, label):
+    return (f'<div class="gp-eyebrow"><span class="gp-eyebrow-n">{num}</span>'
+            f'<span class="gp-eyebrow-bar" aria-hidden="true"></span>'
+            f'<span class="gp-eyebrow-l">{esc(label)}</span></div>')
+
+
+# 01 — the four steps. Icons are the site's linework glyphs (the handoff's
+# Phosphor duotone set isn't shipped); the proof line is a checkable fact under
+# each claim, one read off STATS so it can't drift.
+def gp_steps(g):
+    """The four steps. `%s` is the game's short name, so step 02 reads "a
+    verified League booster" the way the handoff draws it."""
+    tab = g.get("tab") or g["short"]
+    claim = D.STATS["median_claim"].replace("min", "minutes")
+    return [
+        ("filter", "Configure and pay",
+         "The number you see is the number you pay. Nothing is added later, and no account is "
+         "needed to buy.", "Price fixed at checkout"),
+        ("user", "A booster claims it",
+         "It goes on the board and a verified %s booster takes it. If nothing claims it within "
+         "24 hours, the order refunds itself." % tab, "Median %s" % claim),
+        ("chart-up", "Watch it climb",
+         "Every game appears on your order page with the result, the KDA and the LP swing. Pause "
+         "it any time you want to play.", "Updated as games finish"),
+        ("shield-check", "Finished, or refunded",
+         "Delivered to the rank you set. Anything not delivered is refunded pro-rata, any time the "
+         "order is open.", "Back within 5 business days"),
+    ]
+
+
+def gp_how(g):
+    cards = ""
+    for i, (icon, title, body, proof) in enumerate(gp_steps(g)):
+        cards += f"""<div class="gp-step">
+          <div class="gp-step-top">
+            <span class="gp-step-ico">{_ico(icon, 19, "ico", stroke=True)}</span>
+            <span class="gp-step-num">{i + 1:02d}</span>
+          </div>
+          <span class="gp-step-t">{esc(title)}</span>
+          <p class="gp-step-b">{esc(body)}</p>
+          <span class="gp-step-proof">{esc(proof)}</span>
+        </div>"""
+    return f"""<section class="gp-sec">
+      <div class="wrap gp-inner">
+        <div class="gp-head">
+          <div class="gp-head-l">
+            {gp_eyebrow("01", "How it runs")}
+            <h2 class="gp-h2">Four steps, and you can see all of them.</h2>
+          </div>
+          <p class="gp-head-p">Nothing about this happens out of sight. The price is fixed at
+          checkout, the claim is timed, and every game lands on a dashboard you can open without an
+          account.</p>
+        </div>
+        <div class="gp-steps">{cards}</div>
+      </div>
+    </section>"""
+
+
+# 02 — the three things the order page gives you (the handoff's DASH_POINTS,
+# distinct from the homepage's D.DASHBOARD_POINTS).
+GP_WHILE_POINTS = [
+    ("chart-up", "The LP graph, not a percentage",
+     "Every game plotted from the rank you started at, so a bad night is visible instead of "
+     "averaged away."),
+    ("list-search", "Match history with replays",
+     "Result, KDA and LP for every game, each with a replay link that stays live for 14 days."),
+    ("chat", "One thread with your booster",
+     "Ask for a champion, a pause or a swap. Support reads the same thread, so nothing gets "
+     "repeated."),
+]
+
+
+def gp_while():
+    points = ""
+    for icon, name, note in GP_WHILE_POINTS:
+        points += f"""<div class="gp-dp">
+          {_ico(icon, 19, "gp-dp-ico", stroke=True)}
+          <span class="gp-dp-txt"><span class="gp-dp-name">{esc(name)}</span>
+          <span class="gp-dp-note">{esc(note)}</span></span>
+        </div>"""
+    return f"""<section class="gp-sec">
+      <div class="gp-while-glow" aria-hidden="true"></div>
+      <div class="wrap gp-inner gp-while">
+        <div class="gp-while-copy">
+          {gp_eyebrow("02", "While it runs")}
+          <h2 class="gp-h2 gp-h2-tight">Watch every game land.</h2>
+          <p class="gp-p">The order page opens from the link we email you — no password, no app. It
+          updates as games finish, so you never have to ask where things are.</p>
+          <div class="gp-dps">{points}</div>
+        </div>
+        <div class="gp-while-mock">{dash_mock(gp=True)}</div>
+      </div>
+    </section>"""
+
+
+def gp_who(g, roster):
+    cards = ""
+    for i, b in enumerate(roster[:3]):
+        top = '<span class="gp-who-top">#1</span>' if i == 0 else ""
+        cards += f"""<div class="gp-who-card{' is-top' if i == 0 else ''}">
+          <div class="gp-who-id">
+            <span class="gp-who-av" aria-hidden="true"><span>{esc(b["handle"][0].upper())}</span></span>
+            <span class="gp-who-meta">
+              <span class="gp-who-name">{esc(b["handle"])}{top}</span>
+              <span class="gp-who-rank">{esc(b["peak"])} · {esc(b["region"])}</span>
+            </span>
+          </div>
+          <div class="gp-who-stats">
+            <div class="gp-who-stat"><span class="gp-who-v">{esc(str(b["orders"]))}</span>
+              <span class="gp-who-k">Orders</span></div>
+            <span class="gp-who-div" aria-hidden="true"></span>
+            <div class="gp-who-stat"><span class="gp-who-v">{_ico("star", 13, "gp-who-star")}{esc(b["rating"])}</span>
+              <span class="gp-who-k">Rating</span></div>
+          </div>
+          <span class="gp-who-spec">{_ico("crosshair", 15, "gp-dp-ico", stroke=True)}{esc(b["role"])}</span>
+        </div>"""
+    n = len([b for b in D.BOOSTERS if b["slug"] == g["slug"]]) or len(roster)
+    tab = g.get("tab") or g["short"]
+    # The floor the board is held to, read off the roster rather than typed:
+    # the lowest peak tier any booster on this ladder holds.
+    own = [b for b in D.BOOSTERS if b["slug"] == g["slug"]] or roster
+    floor_tier = min((b["tier"] for b in own),
+                     key=lambda t: g["tiers"].index(t) if t in g["tiers"] else 99)
+    return f"""<section class="gp-sec">
+      <div class="wrap gp-inner gp-who">
+        <div class="gp-who-copy">
+          {gp_eyebrow("03", "Who plays it")}
+          <h2 class="gp-h2 gp-h2-sm">Our {esc(tab)} boosters.</h2>
+          <p class="gp-p gp-p-sm">{spell(n).capitalize()} of them, {esc(tab)} only — {esc(floor_tier)}
+          or above, with a clean account history and a name you can look up. Order without naming
+          anyone and it goes to whoever is free; name one and it waits for them.</p>
+          <a class="gp-outline" href="/boosters/">See the roster{_ico("arrow", 14, "ico", stroke=True)}</a>
+        </div>
+        <div class="gp-who-cards">{cards}</div>
+      </div>
+    </section>"""
+
+
+# 04 — the five per-order mechanisms, in the handoff's wording. Same commitments
+# as D.SAFETY["measures"] (which every other page still uses); ⚠ each is an
+# operational promise falsifiable by one bad order, so it needs ops sign-off.
+GP_MEASURES = [
+    ("globe", "Enterprise VPN matched to your region",
+     "Not a consumer VPN, and never a datacentre IP."),
+    ("crosshair", "Your sensitivity, your crosshair, your runes",
+     "Settings are mirrored at the start and restored at the end."),
+    ("clock", "Played inside your normal hours",
+     "You set the window at checkout. Nothing runs at 04:00 unless you do."),
+    ("eye-off", "Offline appearance for the whole order",
+     "Friends see you offline until it finishes."),
+    ("users", "Duo never touches your login",
+     "In duo your booster queues beside you from their own account."),
+]
+
+
+def gp_safety(g):
+    rows = ""
+    for icon, name, note in GP_MEASURES:
+        rows += f"""<div class="gp-measure">
+          {_ico(icon, 19, "gp-dp-ico", stroke=True)}
+          <span class="gp-dp-txt"><span class="gp-dp-name">{esc(name)}</span>
+          <span class="gp-dp-note">{esc(note)}</span></span>
+        </div>"""
+    pub = D.publisher(g)
+    # The ToS admission, named to this game's publisher. Same commitment as
+    # D.SAFETY["disclaimer"] (which the guarantee page still carries verbatim);
+    # the order count is read off STATS rather than typed.
+    disclaimer = (
+        "Boosting is against %s's terms of service. We have never had an account actioned in "
+        "%s orders and we recover any that are, but nobody honest will tell you the risk is "
+        "zero — and anyone who does is selling you something." % (pub, D.STATS["boosts"]))
+    return f"""<section class="gp-sec">
+      <div class="wrap gp-inner gp-safety">
+        <div class="gp-safety-copy">
+          {gp_eyebrow("04", "Safety")}
+          <h2 class="gp-h2 gp-h2-safe">Why this doesn't get you banned.</h2>
+          <p class="gp-p">{esc(pub)} flags accounts on patterns, not accusations: a login from the
+          other side of the world, a sudden change in hours, a win rate that doesn't look human. So
+          we don't produce any of those patterns. Your booster connects through an enterprise VPN in
+          your region, plays inside the hours you set, and keeps your settings.</p>
+          <div class="gp-disclaimer">
+            {_ico("warn", 18, "gp-disc-ico")}
+            <span>{esc(disclaimer)}</span>
+          </div>
+        </div>
+        <div class="gp-measure-card">
+          <div class="gp-measure-head">
+            <span class="gp-measure-t">What that means per order</span>
+            <span class="gp-measure-pill">{_ico("seal", 11, "ico", evenodd=True)}Every order</span>
+          </div>
+          {rows}
+        </div>
+      </div>
+    </section>"""
+
+
+def gp_reviews(g, revs):
+    if not revs:
+        return ""
+    cards = ""
+    for r in revs[:3]:
+        try:
+            sc = max(1, min(5, int(str(r["stars"])[0])))
+        except (ValueError, IndexError):
+            sc = 5
+        stars = "".join(_ico("star", 13, "gp-rv-star") for _ in range(sc))
+        cards += f"""<div class="gp-rv-card">
+          <div class="gp-rv-top">
+            <span class="gp-rv-stars">{stars}</span>
+            <span class="gp-rv-climb">{esc(r["rank"])}</span>
+          </div>
+          <p class="gp-rv-body">{esc(r["text"])}</p>
+          <div class="gp-rv-foot">
+            <span class="gp-rv-av" aria-hidden="true">{esc(r.get("initials", ""))}</span>
+            <span class="gp-rv-who"><b>{esc(r.get("by", ""))}</b> · {esc(_ago_days(r.get("days", 1)))}</span>
+            <span class="gp-rv-verified">{_ico("seal", 12, "ico", evenodd=True)}Verified</span>
+          </div>
+        </div>"""
+    rating = D.STATS.get("trustpilot", "").split("/")[0].strip()
+    tp_star = ('<svg class="gp-rv-tp" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" '
+               'focusable="false"><path d="M12 2l2.6 6.8H22l-6 4.5 2.3 7L12 15.9 5.7 20.3 8 13.3 2 8.8h7.4z" '
+               'fill="#00b67a"/></svg>')
+    aside = ""
+    if rating:
+        aside = f"""<div class="gp-rv-aside">
+          <div class="gp-rv-score">
+            <div class="gp-rv-rating"><span class="gp-rv-big">{esc(rating)}</span>
+              <span class="gp-rv-outof">/ 5</span></div>
+            <span class="gp-rv-tpline">{tp_star}<span>{esc(D.STATS["reviews"])} reviews on Trustpilot</span></span>
+          </div>
+          <a class="gp-rv-all" href="/reviews.html">Read them all{_ico("arrow-up-right", 13, "ico", stroke=True)}</a>
+        </div>"""
+    tab = g.get("tab") or g["short"]
+    return f"""<section class="gp-sec">
+      <div class="wrap gp-inner">
+        <div class="gp-head">
+          <div class="gp-head-l">
+            {gp_eyebrow("05", "Reviews")}
+            <h2 class="gp-h2 gp-h2-sm">From {esc(tab)} orders this month.</h2>
+          </div>
+          {aside}
+        </div>
+        <div class="gp-rv-grid">{cards}</div>
+      </div>
+    </section>"""
+
+
+def gp_faq_items(g):
+    """The six questions the handoff draws, per game. Every figure inside them is
+    read off the engine, never typed: the duo uplift from pricing.DUO_MULT, the
+    champions add-on from a real quote difference, the claim time from STATS."""
+    duo = round((pricing.DUO_MULT - 1) * 100)
+    champ = next((a for a in D.ADDONS if a["id"] == "champ"), None)
+    # What ticking "champions" actually costs on this page's default order.
+    base = {"game": g["name"], "service": "division", "from": g["ladder"][0],
+            "to": g["ladder"][min(12, len(g["ladder"]) - 1)], "mode": "Solo"}
+    off = pricing.quote(dict(base, addons=[]))["total"]
+    on = pricing.quote(dict(base, addons=["champ"]))["total"]
+    champ_line = ("It is the second add-on, %s on this order. Your booster plays a pool you pick, "
+                  "which also keeps the match history plausible. You can change the pool mid-order "
+                  "in the thread." % money(on - off)) if champ else ""
+    return [
+        ("Do you need my account login?",
+         "For solo, yes — your booster signs in and plays, through a VPN in your region and inside "
+         "the hours you set. For duo, no: they queue beside you from their own account and never "
+         "see your login at all. Either way we never ask for your email password or your 2FA codes."),
+        ("Can I play while the order is running?",
+         "Pause it first, from the order page. Pausing is free and resumes the same night if a slot "
+         "is open. What you should not do is queue ranked alongside an unpaused solo order — two "
+         "people on one account in the same queue is the fastest way to get flagged."),
+        ("What happens if it goes past the estimate?",
+         "A 15% credit applies automatically once the order runs past its window, and it shows on "
+         "the order page without anyone asking. If it is badly over, we move it to a booster who "
+         "is free."),
+        ("Can I choose the champions they play?", "Yes — " + champ_line),
+        ("Why is duo more expensive?",
+         "It takes longer. Your booster carries a live player rather than playing every role "
+         "freely, so the same climb costs %d%% more and takes longer. It is the safer option and "
+         "we would rather price it honestly than hide the difference." % duo),
+        ("How do I follow the order without an account?",
+         "The confirmation email carries a link that is the login. It never expires, works on any "
+         "device, and opens the same dashboard shown above. Lost it? The demo page resends it to "
+         "the address you paid with."),
+    ]
+
+
+def gp_faq(g, items):
+    """Single-open accordion, item 1 open on load, numbered, with a +/− toggle.
+
+    Native <details>/<summary> so every answer is in the DOM (the FAQPage JSON-LD
+    asserts they are on the page) and the band works with scripting off; the
+    single-open behaviour is one small handler in app.js.
+    """
+    rows = ""
+    for i, (q, a) in enumerate(items):
+        rows += f"""<details class="gp-faq-item"{' open' if i == 0 else ''}>
+          <summary><span class="gp-faq-n">{i + 1:02d}</span><span class="gp-faq-q">{esc(q)}</span>
+            <span class="gp-faq-pm" aria-hidden="true"></span></summary>
+          <p class="gp-faq-a">{esc(a)}</p>
+        </details>"""
+    tab = g.get("tab") or g["short"]
+    return f"""<section class="gp-sec">
+      <div class="wrap gp-inner gp-faq">
+        <div class="gp-faq-copy">
+          {gp_eyebrow("06", "FAQ")}
+          <h2 class="gp-h2 gp-h2-sm">Asked before every {esc(tab)} order</h2>
+          <p class="gp-p gp-p-sm">If yours isn't here, Discord answers in about four minutes and you
+          don't need an order to ask.</p>
+          <a class="gp-outline" href="/support.html">{_discord_mark(16, "ico")}Ask in Discord</a>
+        </div>
+        <div class="gp-faq-list" data-gp-faq>{rows}</div>
+      </div>
+    </section>"""
+
+
+def gp_close():
+    """The last band — headline, two guarantees, the live configuration and total,
+    and the one filled CTA. Reads the same `data-out` hooks the order card does,
+    so the number here and the number in the card are one computation.
+
+    Deliberately not the shared `cta_band()`: that draws a full configuration card
+    (the footer handoff's close), and this page's handoff closes on a single line
+    of read-back beside the button.
+    """
+    return f"""<section class="gp-sec gp-close">
+      <div class="gp-close-glow" aria-hidden="true"></div>
+      <div class="wrap gp-inner gp-close-inner">
+        <div class="gp-close-l">
+          <h2 class="gp-h2 gp-h2-close">Set two ranks. The price is the price.</h2>
+          <div class="gp-close-gtees">
+            <span class="gp-close-g">{_ico("shield-check", 16, "gp-close-ico", stroke=True)}Refunded in full until a booster claims it</span>
+            <span class="gp-close-g">{_ico("timer", 16, "gp-close-ico", stroke=True)}Claimed in {esc(D.STATS["median_claim"].replace("min", "minutes"))} on average</span>
+          </div>
+        </div>
+        <div class="gp-close-r">
+          <div class="gp-close-quote">
+            <span class="gp-close-cfg" data-out="configLine">—</span>
+            <span class="gp-close-total" data-out="price">—</span>
+          </div>
+          <a class="gp-close-cta" href="/checkout.html" data-continue>
+            Continue to checkout{_ico("arrow", 15, "ico", stroke=True)}
+          </a>
+        </div>
+      </div>
+    </section>"""
+
+
 def page_game(g):
     fp = usd(from_price(g))
-    others = [x for x in D.GAMES if x["slug"] != g["slug"]][:6]
     # This game's own boosters, capped: the board is 50 and League alone has 22,
     # which is a page of table inside a section that only has to establish that
     # real people cover this ladder. The full list is /boosters/.
@@ -4044,10 +4702,7 @@ def page_game(g):
         token = r["game"].split(" · ")[0].strip().lower()
         return token in (g["name"].lower(), g["short"].lower()) or g["name"].lower().startswith(token)
     revs = [r for r in D.REVIEWS if _for_game(r)][:6]
-    faq = [(("What do I need to give you for %s?" % g["name"]),
-            "For solo orders: your login and the server. Nothing else — no recovery email, no "
-            "phone number, no password change. For duo, nothing at all; you keep the account and "
-            "queue with the booster.")] + D.FAQ[:6]
+    faq = gp_faq_items(g)
 
     product = {
         "@context": "https://schema.org", "@type": "Product",
@@ -4069,38 +4724,37 @@ def page_game(g):
     # card, next to the delivery estimate, where availability is an argument for
     # ordering now rather than a statistic — and the promo bar's roster count and
     # this row's no longer state two different numbers in one viewport.
+    # Each cell carries a full label and a short one; the phone shows the short
+    # (the handoff abbreviates to "TRUSTPILOT / TO CLAIM / DELIVERED", and the
+    # delivered figure to "92.4k"), CSS picks which. Both are in the DOM because
+    # i18n.js matches whole text nodes.
+    def _short_count(s):
+        """"92,400" → "92.4k". Left alone if it isn't a plain number."""
+        try:
+            n = int(str(s).replace(",", ""))
+        except ValueError:
+            return s
+        if n < 10000:
+            return str(s)
+        return ("%.1fk" % (n / 1000.0)).replace(".0k", "k")
+
     cells = [c for c in (
         (f'<div class="stat"><span class="stat-v"><b>{esc(D.STATS["trustpilot"].split("/")[0].strip())}</b>'
          f'<i>/ {esc(D.STATS["trustpilot"].split("/")[-1].strip())}</i></span>'
-         f'<span>Trustpilot · {esc(D.STATS["reviews"])} reviews</span></div>')
+         f'<span class="stat-k"><span class="stat-k-full">Trustpilot · {esc(D.STATS["reviews"])} reviews</span>'
+         f'<span class="stat-k-sm">Trustpilot</span></span></div>')
         if D.STATS["trustpilot"] and D.STATS["reviews"] else "",
         (f'<div class="stat"><span class="stat-v"><b>{esc(D.STATS["median_claim"].split(" ")[0])}</b>'
          f'<i>{esc(" ".join(D.STATS["median_claim"].split(" ")[1:]))}</i></span>'
-         f'<span>Median time to claim</span></div>') if D.STATS["median_claim"] else "",
-        (f'<div class="stat"><span class="stat-v"><b>{esc(D.STATS["boosts"])}</b></span>'
-         f'<span>Boosts delivered</span></div>') if D.STATS.get("boosts") else "",
+         f'<span class="stat-k"><span class="stat-k-full">Median time to claim</span>'
+         f'<span class="stat-k-sm">To claim</span></span></div>') if D.STATS["median_claim"] else "",
+        (f'<div class="stat"><span class="stat-v">'
+         f'<b class="stat-n-full">{esc(D.STATS["boosts"])}</b>'
+         f'<b class="stat-n-sm">{esc(_short_count(D.STATS["boosts"]))}</b></span>'
+         f'<span class="stat-k"><span class="stat-k-full">Boosts delivered</span>'
+         f'<span class="stat-k-sm">Delivered</span></span></div>') if D.STATS.get("boosts") else "",
     ) if c]
     stat_row = ('<div class="stat-row">%s</div>' % "".join(cells)) if cells else ""
-
-    # Service chips — first one is the page's headline service, the rest read as
-    # "we also do these". Same string that used to run as one dim eyebrow line.
-    svc = [s.strip() for s in g["services"].split("·") if s.strip()]
-    chips = "".join('<span class="svc-chip%s">%s</span>'
-                    % (" is-on" if i == 0 else "", esc(s)) for i, s in enumerate(svc))
-
-    table = booster_table(roster)
-    online = (f'<span class="tag tag-neutral">{D.STATS["online"]} online</span>'
-              if D.STATS["online"] else "")
-    booster_col = f"""<div class="stack" style="gap:20px">
-      <div class="sec-head">
-        <div class="sec-head-copy">
-          <span class="sec-kicker"><span class="sec-kicker-n">02</span><span class="sec-kicker-l">Boosters</span></span>
-          <h2 class="h-sec" style="font-size:clamp(24px,2.6vw,32px)">On shift now</h2>
-        </div>
-        {online}
-      </div>
-      {table}
-    </div>""" if table else ""
 
     ld = [
         product,
@@ -4127,59 +4781,24 @@ def page_game(g):
         <a href="/">Home</a> <span aria-hidden="true">/</span> <a href="/games/">Games</a>
         <span aria-hidden="true">/</span> <span class="crumbs-here">{esc(g['name'])}</span>
       </nav>
-      <div class="svc-chips">{chips}</div>
       <h1 class="h-lg" style="font-size:clamp(38px,5.4vw,68px)">{esc(g['name'])}<br><span class="grad-text">from {fp}.</span></h1>
       <p class="lede">{esc(g['blurb'])}</p>
       {stat_row}
-      <hr class="hero-a-rule">
-      {guarantee_row()}
-      <p class="hero-a-note">{_ico("info", 14, "gtee-ico")}<span>{esc(g['note'])}</span></p>
+      {bundle_strip(g)}
     </div>
     <div id="configure">{wizard(game=g['name'])}</div>
   </div>
 </section>
 
-{marquee()}
-
-<section class="wrap section">
-  <div class="{'split' if booster_col else 'stack'}">
-    <div class="stack" style="gap:26px">
-      {sec_head("01", "How it runs", "Three steps, then<br>it's out of your hands")}
-      {steps_block()}
-    </div>
-    {booster_col}
-  </div>
-</section>
-
-<section class="wrap section-tight">{guarantee_cards()}</section>
-
-{'''<section class="wrap section">
-  <div class="stack" style="gap:24px">
-    %s
-    %s
-  </div>
-</section>''' % (sec_head("03", "Reviews", "%s orders,<br>in players' words" % esc(g['name']), right="Verified orders only"), reviews_grid(revs)) if revs else ''}
-
-<section class="wrap section" style="padding-top:0">
-  <div class="split">
-    <div class="stack" style="gap:14px">
-      {sec_head("04", "FAQ", "Questions people<br>ask before paying")}
-      <p class="t-14" style="max-width:36ch;color:var(--text-5)">If the answer isn't here, Discord
-      replies in minutes{reply_claim}.</p>
-      <a class="btn btn-secondary" href="/support.html" style="align-self:flex-start">Ask us instead</a>
-    </div>
-    {faq_block(faq)}
-  </div>
-</section>
-
-<section class="wrap section" style="padding-top:0">
-  <div class="stack" style="gap:20px">
-    <h2 class="h-sec" style="font-size:clamp(24px,2.6vw,32px)">Other games</h2>
-    {game_cards(others)}
-  </div>
-</section>
-
-{cta_band(live=True, cta=("Continue your order", "/checkout.html"))}"""
+<div class="gp">
+{gp_how(g)}
+{gp_while()}
+{gp_who(g, roster)}
+{gp_safety(g)}
+{gp_reviews(g, revs)}
+{gp_faq(g, faq)}
+{gp_close()}
+</div>"""
 
     return layout("/games/%s.html" % g["slug"],
                   "%s boosting — live price, no account needed | %s" % (g["name"], D.BRAND),
@@ -4409,75 +5028,13 @@ def sg_faq(items):
     return '<div class="sg-faq" data-sg-faq>%s</div>' % out
 
 
-def page_guarantee():
-    # The handoff types "35%" here; this site's duo multiplier is 1.55, and the
-    # label reads it off the constant for the same reason mode_seg() does — a
-    # typed percentage in a policy answer drifts silently from what is charged.
-    duo = round((pricing.DUO_MULT - 1) * 100)
-    faq = [(fid, q, a.replace("{duo}", str(duo))) for fid, q, a in D.GUARANTEE["faq"]]
-    safety_prose = "".join('<p class="sg-prose">%s</p>' % esc(p) for p in D.SAFETY["body"])
-
-    body = f"""<section class="sg">
-  <div class="sg-hatch" aria-hidden="true"></div>
-
-  <div class="sg-band sg-band-1">
-    <div class="sg-glow" aria-hidden="true"></div>
-    <div class="wrap sg-grid-1">
-      <div class="sg-copy">
-        <span class="sg-kicker">Safety &amp; guarantee</span>
-        <h1 class="sg-h1">Written down, not "depends on the order".</h1>
-        <p class="sg-lede">A refund policy that needs a support ticket to explain isn't a
-        policy. Here is the whole thing, in the three cases that actually happen.</p>
-        <a class="btn btn-primary sg-cta" href="/games/">Start an order{_ico("arrow", 15, "ico", stroke=True)}</a>
-        {sg_stats()}
-      </div>
-      {sg_cases()}
-    </div>
-  </div>
-
-  <div class="sg-band sg-band-2" id="safety">
-    <div class="wrap sg-grid-2">
-      <div class="sg-copy">
-        {sec_kicker("02", "Safety")}
-        <h2 class="sg-h2">{esc(D.SAFETY['title'])}</h2>
-        {safety_prose}
-        <div class="sg-disclaimer">
-          {_ico("warn", 18, "sg-disclaimer-i", stroke=True)}
-          <p>{esc(D.SAFETY['disclaimer'])}</p>
-        </div>
-      </div>
-      {sg_measures()}
-    </div>
-  </div>
-
-  <div class="sg-band sg-band-3">
-    <div class="wrap">
-      <div class="sg-head">
-        <div class="sg-head-copy">
-          {sec_kicker("03", "In short")}
-          <h2 class="sg-h2 sg-h2-sm">Three promises, plainly</h2>
-        </div>
-        <a class="sg-terms" href="/legal/terms.html">Read the full terms{_ico("arrow-up-right", 13, "ico", stroke=True)}</a>
-      </div>
-      {promise_cards()}
-    </div>
-  </div>
-
-  <div class="sg-band sg-band-last" id="faq">
-    <div class="wrap sg-grid-4">
-      <div class="sg-copy sg-faq-copy">
-        {sec_kicker("04", "FAQ")}
-        <h2 class="sg-h2 sg-h2-sm">The questions support gets most</h2>
-        <p class="sg-faq-note">{esc(D.GUARANTEE['faq_note'])}</p>
-        <a class="btn btn-outline btn-sm sg-ask" href="/support.html">{_ico("chat", 15, "ico")}Ask support</a>
-      </div>
-      {sg_faq(faq)}
-    </div>
-  </div>
-</section>
-
-{cta_band()}"""
-    js = """<script>
+# The single-open accordion behaviour, shared verbatim by the safety page and
+# the support page — the handoff's "reconcile the FAQ accordion into one
+# component" applied to the script too, not just the markup and CSS. It selects
+# the `.sg-faq` / `[data-sg-item]` markup that sg_faq() emits, so any page that
+# renders that markup gets the same behaviour with one function call.
+def faq_accordion_js():
+    return """<script>
 (function () {
   var root = document.querySelector('[data-sg-faq]');
   if (!root) return;
@@ -4546,6 +5103,77 @@ def page_guarantee():
 })();
 </script>
 """
+
+
+def page_guarantee():
+    # The handoff types "35%" here; this site's duo multiplier is 1.55, and the
+    # label reads it off the constant for the same reason mode_seg() does — a
+    # typed percentage in a policy answer drifts silently from what is charged.
+    duo = round((pricing.DUO_MULT - 1) * 100)
+    faq = [(fid, q, a.replace("{duo}", str(duo))) for fid, q, a in D.GUARANTEE["faq"]]
+    safety_prose = "".join('<p class="sg-prose">%s</p>' % esc(p) for p in D.SAFETY["body"])
+
+    body = f"""<section class="sg">
+  <div class="sg-hatch" aria-hidden="true"></div>
+
+  <div class="sg-band sg-band-1">
+    <div class="sg-glow" aria-hidden="true"></div>
+    <div class="wrap sg-grid-1">
+      <div class="sg-copy">
+        <span class="sg-kicker">Safety &amp; guarantee</span>
+        <h1 class="sg-h1">Written down, not "depends on the order".</h1>
+        <p class="sg-lede">A refund policy that needs a support ticket to explain isn't a
+        policy. Here is the whole thing, in the three cases that actually happen.</p>
+        <a class="btn btn-primary sg-cta" href="/games/">Start an order{_ico("arrow", 15, "ico", stroke=True)}</a>
+        {sg_stats()}
+      </div>
+      {sg_cases()}
+    </div>
+  </div>
+
+  <div class="sg-band sg-band-2" id="safety">
+    <div class="wrap sg-grid-2">
+      <div class="sg-copy">
+        {sec_kicker("02", "Safety")}
+        <h2 class="sg-h2">{esc(D.SAFETY['title'])}</h2>
+        {safety_prose}
+        <div class="sg-disclaimer">
+          {_ico("warn", 18, "sg-disclaimer-i", stroke=True)}
+          <p>{esc(D.SAFETY['disclaimer'])}</p>
+        </div>
+      </div>
+      {sg_measures()}
+    </div>
+  </div>
+
+  <div class="sg-band sg-band-3">
+    <div class="wrap">
+      <div class="sg-head">
+        <div class="sg-head-copy">
+          {sec_kicker("03", "In short")}
+          <h2 class="sg-h2 sg-h2-sm">Three promises, plainly</h2>
+        </div>
+        <a class="sg-terms" href="/legal/terms.html">Read the full terms{_ico("arrow-up-right", 13, "ico", stroke=True)}</a>
+      </div>
+      {promise_cards()}
+    </div>
+  </div>
+
+  <div class="sg-band sg-band-last" id="faq">
+    <div class="wrap sg-grid-4">
+      <div class="sg-copy sg-faq-copy">
+        {sec_kicker("04", "FAQ")}
+        <h2 class="sg-h2 sg-h2-sm">The questions support gets most</h2>
+        <p class="sg-faq-note">{esc(D.GUARANTEE['faq_note'])}</p>
+        <a class="btn btn-outline btn-sm sg-ask" href="/support.html">{_ico("chat", 15, "ico")}Ask support</a>
+      </div>
+      {sg_faq(faq)}
+    </div>
+  </div>
+</section>
+
+{cta_band()}"""
+    js = faq_accordion_js()
     return layout("/guarantee.html", "Refund and safety guarantee — %s" % D.BRAND,
                   "Full refund until a booster claims your order, pro-rated after that, automatic "
                   "refund if nobody claims it in 24 hours. The whole policy on one page.",
@@ -4554,92 +5182,305 @@ def page_guarantee():
                   extra_js=js, nav_outline=True)
 
 
-def page_support():
-    cells = [c for c in (
-        (f'<div class="stat"><b>{esc(D.STATS["reply"])}</b>'
-         f'<span>Median first reply last month</span></div>') if D.STATS["reply"] else "",
-        (f'<div class="stat"><b>{esc(D.STATS["discord"])}</b>'
-         f'<span>Players in the Discord</span></div>') if D.STATS["discord"] else "",
-    ) if c]
-    support_stats = ('<div class="stat-row">%s</div>' % "".join(cells)) if cells else ""
+# ══════════════════════════════════════════════════════════════════════════
+#  /support.html — design_handoff_support
+# ══════════════════════════════════════════════════════════════════════════
+# Most pages here exist to start an order; this one exists to END a worry, and
+# the cheapest way to do that is often not to open a conversation at all. So the
+# page descends by speed: the channel that answers in minutes (Discord), the one
+# that answers in hours (email), then six answers that mean you never wrote in.
+#
+# Seventh scoped port after .hero-a / .co / .gg / .dsh / .rst / .tk — tokens on
+# `.sp`, product radii per element, sentence-case controls, nothing leaking past
+# the scope. It shares its FAQ accordion (sg_faq / faq_accordion_js) and its stat
+# list (.sg-stat*) with the safety page rather than building twins, which is the
+# handoff's explicit instruction — one component, reconciled.
+#
+# Two honesty edits vs the handoff, both documented on D.SUPPORT: the hero runs
+# TWO stats not three (the invented "91%" is dropped), and the status pill reads
+# the real FOOT_SUPPORT_ONLINE seam instead of a hard-coded "6 on shift". The
+# facade form's confirmation says plainly that nothing was emailed — the same
+# call the demo page's "link sent" notice makes, because none is.
+def sp_status():
+    """The hero status pill — a status, not a statistic. Wired to the same
+    FOOT_SUPPORT_ONLINE seam the footer's support card reads, so the two can
+    never disagree about whether anyone is at the keyboard. Online: a pulsing
+    green dot and 'Staffed right now'. Offline: it degrades to the typical
+    reply time rather than lying about someone being on shift."""
+    dot = ('<span class="sp-status-dot" aria-hidden="true">'
+           '<span class="sp-status-core"></span></span>')
+    if FOOT_SUPPORT_ONLINE:
+        return (f'<div class="sp-status">{dot}'
+                '<span class="sp-status-t"><b>Staffed right now</b> — '
+                'someone is in #support</span></div>')
+    reply = D.STATS.get("reply")
+    tail = ' — typical reply <b>%s</b>' % esc(reply) if reply else ""
+    return (f'<div class="sp-status sp-status-away">{dot}'
+            f'<span class="sp-status-t">Away just now{tail}</span></div>')
 
-    body = f"""<section class="wrap section">
-  <div class="split">
-    <div class="stack" style="gap:22px">
-      <span class="kicker">Support</span>
-      <h1 class="h-md">Two ways in.<br>Both are read<br>by people.</h1>
-      <p class="lede">No ticket robot, no "we'll get back to you within 48 hours". Discord is the
-      fast one — that's where this market already lives, and it's where our staff sit all day.</p>
-      {support_stats}
-    </div>
-    <div class="stack" style="gap:12px">
-      <div class="card" id="discord">
-        <span class="card-kicker">Fastest</span>
-        <span class="card-title">Discord — open a ticket in #support</span>
-        <p class="card-body">Public server, private ticket channels. Order questions, refunds,
+
+def sp_stats():
+    """The hero's figure column — the same .sg-stat* component the safety page
+    uses. Each figure is read from D.STATS by key (never typed), so the reply
+    time and the Discord size can't drift from the rest of the site."""
+    rows = ""
+    for key, label in D.SUPPORT["stats"]:
+        fig = D.STATS.get(key, "")
+        if not fig:
+            continue
+        rows += ('<div class="sg-stat"><span class="sg-stat-f">%s</span>'
+                 '<span class="sg-stat-l">%s</span></div>' % (esc(fig), esc(label)))
+    return '<div class="sg-stats sp-stats">%s</div>' % rows if rows else ""
+
+
+def sp_channels():
+    """The two channel cards. Discord is accent-bordered and carries the filled
+    invite — that is the whole recommendation, made without a word of copy;
+    email is the plain card with a copy-address chip. The Discord mark is the
+    site's own Blurple lockup (`_discord_mark`), the one place a brand colour
+    other than the accent appears — kept in step with the auth panel's mark."""
+    reply = D.STATS.get("reply", "")
+    reply_meta = ('<span class="sp-meta-i">%sMedian first reply <b>%s</b></span>'
+                  % (_ico("timer", 16, "sp-meta-ico", stroke=True), esc(reply))) if reply else ""
+    return f"""<div class="sp-channels">
+      <div class="sp-card sp-card-lead" id="discord">
+        <div class="sp-card-head">
+          <span class="sp-tile sp-tile-dcd">{_discord_mark(20, "sp-tile-mark")}</span>
+          <span class="sp-card-heads">
+            <span class="sp-card-k sp-card-k-hot">Fastest</span>
+            <span class="sp-card-t">Discord — open a ticket in #support</span>
+          </span>
+        </div>
+        <p class="sp-card-b">Public server, private ticket channels. Order questions, refunds,
         booster swaps and pre-sales, 24/7. You can also just read what other buyers are saying
         before you order anything, which is rather the point of it being public.</p>
-        <a class="btn btn-primary btn-sm" href="#discord" style="align-self:flex-start">Open the Discord invite</a>
+        <div class="sp-meta">
+          {reply_meta}
+          <span class="sp-meta-i">{_ico("clock-countdown", 16, "sp-meta-ico", stroke=True)}Open 24/7</span>
+        </div>
+        <a class="sp-invite" href="#discord">Open the Discord invite{_ico("arrow-up-right", 15, "ico")}</a>
       </div>
-      <div class="card">
-        <span class="card-kicker">On the record</span>
-        <span class="card-title">Email — support@esportsboost.com</span>
-        <p class="card-body">Better for anything involving a payment dispute or a document. Answered
+
+      <div class="sp-card">
+        <div class="sp-card-head">
+          <span class="sp-tile sp-tile-mail">{_ico("envelope", 20, "sp-tile-ico", stroke=True)}</span>
+          <span class="sp-card-heads">
+            <span class="sp-card-k">On the record</span>
+            <span class="sp-card-t">Email — support@esportsboost.com</span>
+          </span>
+        </div>
+        <p class="sp-card-b">Better for anything involving a payment dispute or a document. Answered
         in under two hours during EU and NA daytime, under six overnight.</p>
+        <div class="sp-meta sp-meta-split">
+          <span class="sp-meta-i">{_ico("paperclip", 16, "sp-meta-ico", stroke=True)}Attachments and receipts welcome</span>
+          <button type="button" class="sp-cc" data-sp-copy="support@esportsboost.com">
+            <span class="sp-cc-t sp-cc-t-idle">Copy address</span>
+            <span class="sp-cc-t sp-cc-t-done">Copied</span>
+            {_ico("copy", 12, "sp-cc-ico sp-cc-ico-c", stroke=True)}{_ico("check", 12, "sp-cc-ico sp-cc-ico-k", stroke=True)}
+          </button>
+        </div>
       </div>
+    </div>"""
+
+
+def sp_include():
+    """"What to put in it" — four rows that cut a round trip out of every ticket.
+    That is the content the form band's left-column void was asking for, and it
+    is worth more than a bigger form. Row 4 is the point of the list."""
+    rows = "".join(
+        f'<li class="sp-inc">{_ico(icon, 19, "sp-inc-ico", stroke=True)}'
+        f'<span class="sp-inc-t"><span class="sp-inc-n">{esc(name)}</span>'
+        f'<span class="sp-inc-note">{esc(note)}</span></span></li>'
+        for icon, name, note in D.SUPPORT["include"])
+    return (f'<div class="sp-include"><span class="sp-inc-h">What to put in it</span>'
+            f'<ul class="sp-inc-list">{rows}</ul></div>')
+
+
+def sp_form():
+    """The contact form. It leads with a topic — five chips — because the topic
+    sets the message placeholder to the thing support needs for that topic and
+    shows or hides the order-number field. That is triage the buyer does for
+    free, in one tap. Both the note line and the copy chip ship their two states
+    as sibling nodes toggled by CSS, so i18n keeps matching whole text nodes."""
+    chips = ""
+    for i, (label, needs, ph) in enumerate(D.SUPPORT["topics"]):
+        sel = " is-sel" if i == 0 else ""
+        chips += (f'<button type="button" class="sp-chip{sel}" data-sp-chip="{i}" '
+                  f'data-sp-needs="{1 if needs else 0}" data-sp-ph="{esc(ph)}" '
+                  f'aria-pressed="{"true" if i == 0 else "false"}">{esc(label)}</button>')
+    first_ph = esc(D.SUPPORT["topics"][0][2])
+    order_hidden = "" if D.SUPPORT["topics"][0][1] else " hidden"
+    return f"""<form class="sp-form" data-sp-form novalidate>
+      <span class="sp-flabel">What's it about</span>
+      <div class="sp-chips">{chips}</div>
+
+      <div class="sp-frow sp-frow-mt">
+        <span class="sp-flabel">Email</span>
+        <span class="sp-tag sp-tag-req">Required</span>
+      </div>
+      <input class="sp-input" type="email" data-sp-email placeholder="you@example.com" autocomplete="email">
+
+      <div class="sp-order" data-sp-order-field{order_hidden}>
+        <div class="sp-frow">
+          <span class="sp-flabel">Order number</span>
+          <span class="sp-tag sp-tag-opt">Optional</span>
+        </div>
+        <input class="sp-input sp-input-code" type="text" data-sp-order-input placeholder="ESB-3F92K1">
+        <span class="sp-help">{_ico("envelope-open", 15, "sp-help-ico", stroke=True)}On your confirmation email, under the total.</span>
+      </div>
+
+      <span class="sp-flabel sp-flabel-mt">Message</span>
+      <textarea class="sp-input sp-textarea" data-sp-msg placeholder="{first_ph}"></textarea>
+
+      <p class="sp-note" data-sp-note>
+        <span class="sp-note-idle">One thread per message. Discord and email land in the same
+        place, so pick either — not both.</span>
+        <span class="sp-note-err">Add an email we can reply to, and a line or two about what happened.</span>
+      </p>
+
+      <button class="sp-send" type="submit">Send message{_ico("arrow", 15, "ico")}</button>
+
+      <div class="sp-sent" data-sp-sent hidden>
+        {_ico("send", 16, "sp-sent-ico", stroke=True)}
+        <span class="sp-sent-t"><b>Noted — this is a preview.</b> Nothing was emailed yet; in
+        production a copy goes to <span data-sp-sent-email>you</span> and replies land there,
+        no account needed.</span>
+      </div>
+
+      <div class="sp-foot">
+        {_ico("lock-simple", 14, "sp-foot-ico", stroke=True)}
+        <span>We never ask for your game password here, or anywhere else.</span>
+      </div>
+    </form>"""
+
+
+def page_support():
+    body = f"""<section class="sp">
+  <div class="sp-hatch" aria-hidden="true"></div>
+
+  <div class="sp-band sp-band-1">
+    <div class="sp-glow" aria-hidden="true"></div>
+    <div class="wrap sp-grid-1">
+      <div class="sp-copy">
+        <span class="sp-kicker">Support</span>
+        <h1 class="sp-h1">Two ways in. Both are read by people.</h1>
+        <p class="sp-lede">No ticket robot, no "we'll get back to you within 48 hours". Discord is
+        the fast one — that's where this market already lives, and it's where our staff sit all day.</p>
+        {sp_status()}
+        {sp_stats()}
+      </div>
+      {sp_channels()}
+    </div>
+  </div>
+
+  <div class="sp-band sp-band-2">
+    <div class="wrap sp-grid-2">
+      <div class="sp-copy">
+        {sec_kicker("02", "Write in")}
+        <h2 class="sp-h2">Or write it here</h2>
+        <p class="sp-lede sp-lede-2">Goes to the same inbox. If you have an order number, include
+        it — it puts the message in front of the person handling that order.</p>
+        {sp_include()}
+      </div>
+      {sp_form()}
+    </div>
+  </div>
+
+  <div class="sp-band sp-band-3">
+    <div class="wrap sp-grid-3">
+      <div class="sp-copy sp-faq-copy">
+        {sec_kicker("03", "FAQ")}
+        <h2 class="sp-h2 sp-h2-faq">Before you write in</h2>
+        <p class="sp-faq-note">Six answers that between them close most of the tickets we get.
+        If yours isn't here, Discord is two clicks away.</p>
+        <a class="btn btn-outline btn-sm sp-ask" href="#discord">{_discord_mark(16, "ico sp-ask-mark")}Ask in Discord</a>
+      </div>
+      {sg_faq(D.SUPPORT["faq"])}
     </div>
   </div>
 </section>
 
-{rule()}
+{cta_band(title="Still stuck? Ask us.", sub="Discord is the fast one — our staff sit in it all day. Or write in above and it lands in the same inbox.", cta=("Ask us", "#discord"))}"""
+    js = faq_accordion_js() + """<script>
+(function () {
+  var form = document.querySelector('[data-sp-form]');
+  if (!form) return;
+  var chips = [].slice.call(form.querySelectorAll('[data-sp-chip]'));
+  var orderField = form.querySelector('[data-sp-order-field]');
+  var email = form.querySelector('[data-sp-email]');
+  var msg = form.querySelector('[data-sp-msg]');
+  var note = form.querySelector('[data-sp-note]');
+  var sent = form.querySelector('[data-sp-sent]');
+  var sentEmail = form.querySelector('[data-sp-sent-email]');
 
-<section class="wrap section">
-  <div class="split">
-    <div class="stack" style="gap:12px">
-      <h2 class="h-sec">Or write<br>it here</h2>
-      <p class="t-14" style="max-width:40ch;color:var(--text-5)">Goes to the same inbox. If you have
-      an order number, include it — it puts the message in front of the person handling that order.</p>
-    </div>
-    <form class="card" data-contact>
-      <div class="field">
-        <label for="c-email">Email</label>
-        <input class="input" id="c-email" type="email" required placeholder="you@example.com">
-      </div>
-      <div class="field">
-        <label for="c-order">Order number (optional)</label>
-        <input class="input" id="c-order" type="text" placeholder="ESB-3F92K1">
-      </div>
-      <div class="field">
-        <label for="c-msg">Message</label>
-        <textarea class="input" id="c-msg" required placeholder="What's going on?"></textarea>
-      </div>
-      <button class="btn btn-primary btn-block" type="submit">Send message</button>
-      <p class="fine" data-contact-note>Local preview — this form doesn't send anything.</p>
-    </form>
-  </div>
-</section>
+  function clearErr() {
+    note.classList.remove('is-err');
+    email.classList.remove('is-err');
+    if (sent) sent.hidden = true;
+  }
 
-<section class="wrap section" style="padding-top:0">
-  <div class="stack" style="gap:20px">
-    <h2 class="h-sec">Before you write in</h2>
-    {faq_block(D.FAQ)}
-  </div>
-</section>
+  // The topic is the cheapest triage on the page: it sets the message
+  // placeholder and shows the order-number field. Changing topic must NOT
+  // clear what has been typed — only the placeholder changes.
+  function selectChip(chip) {
+    chips.forEach(function (c) {
+      var on = c === chip;
+      c.classList.toggle('is-sel', on);
+      c.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    msg.setAttribute('placeholder', chip.getAttribute('data-sp-ph'));
+    if (orderField) orderField.hidden = chip.getAttribute('data-sp-needs') !== '1';
+  }
+  chips.forEach(function (chip) {
+    chip.addEventListener('click', function () { selectChip(chip); clearErr(); });
+  });
+  email.addEventListener('input', clearErr);
+  msg.addEventListener('input', clearErr);
 
-{cta_band()}"""
-    js = """<script>
-document.querySelector('[data-contact]').addEventListener('submit', function (e) {
-  e.preventDefault();
-  document.querySelector('[data-contact-note]').textContent =
-    'Local preview — nothing was sent. In production this posts to the support inbox.';
-  window.esbTrack('generate_lead', { method: 'contact_form' });
-});
+  // Facade: a valid-looking email and a few characters of message flip the
+  // preview confirmation. There is no POST — the confirmation says so rather
+  // than claiming an email went out, the same honesty the demo page keeps.
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var ok = /^[^\\s@]+@[^\\s@]+\\.[a-z]{2,}$/i.test((email.value || '').trim())
+             && (msg.value || '').trim().length > 3;
+    if (!ok) {
+      note.classList.add('is-err');
+      email.classList.add('is-err');
+      if (sent) sent.hidden = true;
+      email.focus();
+      return;
+    }
+    note.classList.remove('is-err');
+    email.classList.remove('is-err');
+    if (sentEmail) sentEmail.textContent = email.value.trim();
+    if (sent) sent.hidden = false;
+    if (window.esbTrack) window.esbTrack('generate_lead', { method: 'contact_form' });
+  });
+
+  // The copy chip copies the address and confirms for ~1.5s, then reverts.
+  var copyBtn = document.querySelector('[data-sp-copy]');
+  if (copyBtn) {
+    var revert;
+    copyBtn.addEventListener('click', function () {
+      var addr = copyBtn.getAttribute('data-sp-copy');
+      function done() {
+        copyBtn.classList.add('is-copied');
+        clearTimeout(revert);
+        revert = setTimeout(function () { copyBtn.classList.remove('is-copied'); }, 1500);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(addr).then(done, done);
+      } else { done(); }
+    });
+  }
+})();
 </script>
 """
     return layout("/support.html", "Support — Discord and email, 24/7 | %s" % D.BRAND,
                   "Discord tickets and email support answered by people who play the game. Median "
-                  "first reply 3m 40s.", body, current=None,
-                  jsonld=[faq_ld(D.FAQ)], extra_js=js)
+                  "first reply %s." % D.STATS.get("reply", ""), body, current=None,
+                  jsonld=[faq_ld([(q, a) for _fid, q, a in D.SUPPORT["faq"]])], extra_js=js)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -4864,6 +5705,318 @@ def page_reviews():
     return layout("/reviews.html", "Reviews — %s" % D.BRAND,
                   "%s from %s verified orders. Unfiltered, one review request per completed order."
                   % (D.STATS["trustpilot"], D.STATS["reviews"]), body, current="/reviews.html")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  the free guides landing — design_handoff_free_guides
+# ══════════════════════════════════════════════════════════════════════════
+# The site's one lead-capture page: two free PDFs for an email. The structural
+# decision the handoff asks to preserve is "two guides is a choice inside ONE
+# funnel, not two funnels on one page" — one hero, one form, one CTA, with the
+# two covers as selectable cards inside the form. Both ticked by default; the
+# selection is a game-preference signal to persist with the address.
+#
+# It uses `chrome_guides()`, a reduced header, for the same reason checkout does
+# — a capture page should not offer five exits. The nav item that points here
+# from every other page is still "Guides" (see NAV). The form is a facade in
+# this build: `initGuides()` in app.js flips a local flag, there is no POST, no
+# ESP, no double opt-in. All figures are placeholders (see data.py's GUIDES).
+
+def _gd_tag(game):
+    """League/Valorant identity tag — the guide's spine colour again."""
+    mod = "gd-tag-lol" if game == "League" else "gd-tag-val"
+    return '<span class="gd-tag %s">%s</span>' % (mod, esc(game))
+
+
+def _gd_cover(g, selected):
+    """The CSS book cover — a dark panel, a coloured spine, the brand lockup and
+    real type. No imagery; if cover art is commissioned it drops into this box
+    and keeps the spine. `--spine` is the guide's own colour."""
+    return f"""<span class="gd-cover">
+          <span class="gd-cover-glow" aria-hidden="true"></span>
+          <span class="gd-cover-spine" aria-hidden="true"></span>
+          <span class="gd-cover-brand"><span class="shard" aria-hidden="true"></span>esports<b>boost</b></span>
+          <span class="gd-cover-game">{esc(g["game"])}</span>
+          <span class="gd-cover-title">{esc(g["cover_title"])}</span>
+          <span class="gd-cover-meta">6 chapters · 6 drills</span>
+        </span>"""
+
+
+def _gd_form(second=False):
+    """The lead form. Rendered twice — the hero card and the closing band's
+    inline capture — sharing one state, so an address typed in one appears in
+    the other (`initGuides()` mirrors every `[data-gd-email]`).
+
+    `second` is the compact closing variant: just the email + a "Send them"
+    button, no guide cards (they were chosen above) and no success swap of its
+    own — submitting either capture flips the hero card to the success state.
+    """
+    G = D.GUIDES
+    if second:
+        return f"""<div class="gd-cap2" data-gd-cap>
+        <div class="gd-cap2-row">
+          <input class="gd-email gd-email-2" type="email" inputmode="email" autocomplete="email"
+                 placeholder="you@example.com" aria-label="Email address" data-gd-email>
+          <button type="button" class="gd-cta gd-cta-2" data-gd-send>
+            <span>Send them</span>{_ico("arrow", 14, "ico", stroke=True)}</button>
+        </div>
+        <span class="gd-cap2-note" data-gd-ctanote>Arrives in about a minute. No card, no account.</span>
+      </div>"""
+
+    cards = ""
+    for g in G["items"]:
+        cards += f"""<button type="button" class="gd-card" data-gd-card="{esc(g['key'])}"
+            data-gd-short="{esc(g['short'])}" aria-pressed="true" style="--spine:{esc(g['accent'])}"
+            aria-label="{esc(g['title'])}">
+          <span class="gd-check" data-gd-check aria-hidden="true">{_ico("check", 11, "ico", stroke=True)}</span>
+          {_gd_cover(g, True)}
+          <span class="gd-card-body">
+            <span class="gd-card-title">{esc(g['title'])}</span>
+            <span class="gd-card-note">{esc(g['note'])}</span>
+          </span>
+        </button>"""
+
+    score = D.STATS.get("trustpilot", "").split("/")[0].strip()
+    return f"""<div class="gd-form" data-gd-form>
+        <div class="gd-form-head">
+          <span class="gd-form-title">Which do you want?</span>
+          <span class="gd-instant"><span class="dot-live dot-ok" aria-hidden="true"></span><span>Instant</span></span>
+        </div>
+        <p class="gd-form-sub">Take both — they're free, and most people play both.</p>
+
+        <div class="gd-cards">{cards}</div>
+        <div class="gd-pick" data-gd-pick aria-live="polite">Both guides, one email, two attachments.</div>
+
+        <span class="gd-label">Email</span>
+        <input class="gd-email" type="email" inputmode="email" autocomplete="email"
+               placeholder="you@example.com" aria-label="Email address" data-gd-email>
+        <div class="gd-note" data-gd-note>Used to send the guides. Nothing else unless you tick the box below.</div>
+
+        <button type="button" class="gd-cta" data-gd-send>
+          <span data-gd-cta>Send me both guides</span>{_ico("arrow", 15, "ico", stroke=True)}</button>
+
+        <button type="button" class="gd-optin" data-gd-optin aria-pressed="true">
+          <span class="gd-optbox" data-gd-optbox aria-hidden="true">{_ico("check", 10, "ico", stroke=True)}</span>
+          <span class="gd-optin-t">Also send me one email a month with new guides and patch notes. Nothing else, and one click unsubscribes.</span>
+        </button>
+
+        <div class="gd-privacy">{_ico("lock", 13, "ico", stroke=True)}<span>We never sell your address. <a href="/legal/privacy.html">Privacy policy</a></span></div>
+      </div>
+
+      <div class="gd-success" data-gd-success hidden>
+        <span class="gd-success-ico" aria-hidden="true">{_ico("send", 24, "ico", stroke=True)}</span>
+        <span class="gd-success-h">Check your inbox.</span>
+        <p class="gd-success-b"><span data-gd-sentline>Both guides are</span> on the way to
+          <b data-gd-email-out>your address</b>. If nothing lands in two minutes, look in promotions — it
+          sometimes goes there first.</p>
+        <button type="button" class="gd-reset" data-gd-reset>{_ico("undo", 13, "ico", stroke=True)}<span>Use a different address</span></button>
+      </div>
+
+      <div class="gd-tp">{_ico("star", 15, "ico gd-tp-star")}<span>From the team behind
+        <b>{esc(D.STATS.get("boosts", ""))} delivered boosts</b> and {esc(score)} / 5 on Trustpilot.</span></div>"""
+
+
+def page_guides():
+    G = D.GUIDES
+    st = G["stats"]
+
+    # ── hero stat row ──
+    stat_cells = [
+        (str(st["downloads"]), "Players downloaded them"),
+        (str(st["chapters"]), "Chapters + %d drills" % st["drills"]),
+    ]
+    stats_html = ""
+    for i, (fig, lab) in enumerate(stat_cells):
+        if i:
+            stats_html += '<span class="gd-stat-div" aria-hidden="true"></span>'
+        stats_html += (f'<div class="gd-stat"><span class="gd-stat-n">{esc(fig)}</span>'
+                       f'<span class="gd-stat-l">{esc(lab)}</span></div>')
+    # The rating cell pairs a figure with its "/ 5" unit, so it rides in its own
+    # node the way the reviews page's does.
+    stats_html += ('<span class="gd-stat-div" aria-hidden="true"></span>'
+                   f'<div class="gd-stat"><span class="gd-stat-rate"><b>{esc(st["rating"])}</b>'
+                   f'<span>/ 5</span></span><span class="gd-stat-l">Reader rating</span></div>')
+
+    guarantees = [
+        ("file", "PDFs, yours to keep"),
+        ("badge", "Free, and they stay free"),
+        ("envelope", "One email, no spam"),
+    ]
+    grow = "".join('<span class="gd-guar">%s<span>%s</span></span>'
+                   % (_ico(ic, 16, "ico gd-guar-ico", stroke=True), esc(t))
+                   for ic, t in guarantees)
+
+    # ── band 01 — what's inside ──
+    toc_cols = ""
+    for g in G["items"]:
+        rows = ""
+        for num, name, note in G["toc"][g["key"]]:
+            rows += f"""<div class="gd-ch">
+            <span class="gd-ch-n">{esc(num)}</span>
+            <span class="gd-ch-body"><span class="gd-ch-name">{esc(name)}</span>
+              <span class="gd-ch-note">{esc(note)}</span></span>
+            <span class="gd-ch-drill">{_ico("target", 11, "ico gd-ch-drill-ico", stroke=True)}<span>Drill</span></span>
+          </div>"""
+        toc_cols += f"""<div class="gd-toc-col">
+          <div class="gd-toc-head">
+            <span class="gd-toc-badge" style="--gd-badge:{esc(g['accent'])}">{esc(g['initial'])}</span>
+            <span class="gd-toc-titles"><span class="gd-toc-title">{esc(g['title'])}</span>
+              <span class="gd-toc-meta">{esc(g['game'])} · 6 chapters, 6 drills</span></span>
+          </div>
+          {rows}
+        </div>"""
+
+    # ── band 02 — who wrote them ──
+    author_rows = "".join(f"""<div class="gd-author">
+          <span class="gd-author-av" aria-hidden="true">{esc(a['initial'])}</span>
+          <span class="gd-author-body"><span class="gd-author-name">{esc(a['name'])}</span>
+            <span class="gd-author-meta">{esc(a['meta'])}</span></span>
+          {_gd_tag(a['game'])}
+        </div>""" for a in G["authors"])
+
+    # ── band 03 — readers ──
+    stars = "".join(_ico("star", 13, "ico gd-q-star") for _ in range(5))
+    quote_cards = "".join(f"""<div class="gd-q">
+          <div class="gd-q-top"><span class="gd-q-stars">{stars}</span>{_gd_tag(q['game'])}</div>
+          <p class="gd-q-body">{esc(q['body'])}</p>
+          <div class="gd-q-foot"><span class="gd-q-av" aria-hidden="true">{esc(q['initials'])}</span>
+            <span class="gd-q-name"><b>{esc(q['name'])}</b> · {esc(q['rank'])}</span></div>
+        </div>""" for q in G["quotes"])
+    rscore = D.STATS.get("trustpilot", "").split("/")[0].strip()
+
+    # ── band 04 — FAQ ──
+    # Native single-open accordion (details[name]) so it reads correctly with no
+    # JS; item 1 opens on load. The number and the +/- marker are CSS. The
+    # answers stay in the DOM, which is what the FAQPage JSON-LD below asserts.
+    faq_rows = ""
+    for i, (fid, q, a) in enumerate(G["faq"]):
+        faq_rows += f"""<details class="gd-faq-item" name="gd-faq" id="guide-faq-{esc(fid)}"{' open' if i == 0 else ''}>
+          <summary class="gd-faq-q"><span class="gd-faq-n">{'0%d' % (i + 1)}</span>
+            <span class="gd-faq-qt">{esc(q)}</span>
+            <span class="gd-faq-mark" aria-hidden="true"><i class="gd-faq-plus"></i><i class="gd-faq-minus"></i></span></summary>
+          <div class="gd-faq-a">{esc(a)}</div>
+        </details>"""
+
+    body = f"""<div class="gd" data-gd>
+  <div class="gd-hatch" aria-hidden="true"></div>
+
+  <section class="gd-hero">
+    <div class="gd-hero-glow" aria-hidden="true"></div>
+    <div class="wrap gd-hero-grid">
+      <div class="gd-hero-copy">
+        <span class="gd-kicker">{_ico("book", 13, "ico gd-kicker-ico", stroke=True)}<span>Free guides</span></span>
+        <h1 class="gd-h1">The two guides our boosters actually wrote.</h1>
+        <p class="gd-lede">One for League, one for Valorant. Six chapters and six drills each, on the
+        things that decide games between Silver and Ascendant. Written by the people on our roster who
+        play those ranks every day.</p>
+        <div class="gd-guars">{grow}</div>
+        <div class="gd-hero-rule" aria-hidden="true"></div>
+        <div class="gd-stats">{stats_html}</div>
+      </div>
+
+      <aside class="gd-hero-form" aria-label="Get the guides">
+        <div class="gd-card-shell">
+          {_gd_form()}
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="gd-band gd-band-toc">
+    <div class="wrap">
+      <div class="gd-band-head">
+        <div class="gd-eyebrow-wrap">
+          <span class="gd-num">01</span><span class="gd-eyebrow-div" aria-hidden="true"></span>
+          <span class="gd-eyebrow">What's inside</span>
+        </div>
+        <h2 class="gd-h2">Six chapters each, no padding.</h2>
+        <p class="gd-band-sub">Every chapter ends with a drill you can run in a custom game in under ten
+        minutes. That is the whole format: read it, then do it.</p>
+      </div>
+      <div class="gd-toc">{toc_cols}</div>
+    </div>
+  </section>
+
+  <section class="gd-band gd-band-authors">
+    <div class="wrap gd-authors-grid">
+      <div class="gd-authors-copy">
+        <div class="gd-eyebrow-wrap">
+          <span class="gd-num">02</span><span class="gd-eyebrow-div" aria-hidden="true"></span>
+          <span class="gd-eyebrow">Who wrote them</span>
+        </div>
+        <h2 class="gd-h2">Written by people who play these ranks for a living.</h2>
+        <p class="gd-band-sub">Not a content team reading patch notes. Boosters from our own roster wrote
+        a chapter each, and every claim is something they do in ranked that week — not theory borrowed
+        from a pro scene you will never play in.</p>
+        <div class="gd-authors-facts">
+          <span class="gd-guar">{_ico("users", 17, "ico gd-guar-ico", stroke=True)}<span>Seven authors across two games</span></span>
+          <span class="gd-guar">{_ico("undo", 17, "ico gd-guar-ico", stroke=True)}<span>Rewritten every patch cycle</span></span>
+        </div>
+      </div>
+      <div class="gd-authors-card">
+        <div class="gd-authors-card-head">
+          <span class="gd-authors-card-t">The authors</span>
+          <span class="gd-verified">{_ico("seal", 11, "ico", evenodd=True)}<span>Verified</span></span>
+        </div>
+        {author_rows}
+      </div>
+    </div>
+  </section>
+
+  <section class="gd-band gd-band-readers">
+    <div class="wrap">
+      <div class="gd-band-head gd-band-head-row">
+        <div>
+          <div class="gd-eyebrow-wrap">
+            <span class="gd-num">03</span><span class="gd-eyebrow-div" aria-hidden="true"></span>
+            <span class="gd-eyebrow">Readers</span>
+          </div>
+          <h2 class="gd-h2">What they changed for them.</h2>
+        </div>
+        <div class="gd-readers-rate">
+          <span class="gd-stat-rate"><b>{esc(rscore)}</b><span>/ 5</span></span>
+          <span class="gd-stat-l">From {esc(str(st["readers"]))} readers</span>
+        </div>
+      </div>
+      <div class="gd-quotes">{quote_cards}</div>
+    </div>
+  </section>
+
+  <section class="gd-band gd-band-faq">
+    <div class="wrap gd-faq-grid">
+      <div class="gd-faq-copy">
+        <div class="gd-eyebrow-wrap">
+          <span class="gd-num">04</span><span class="gd-eyebrow-div" aria-hidden="true"></span>
+          <span class="gd-eyebrow">FAQ</span>
+        </div>
+        <h2 class="gd-h2">Before you hand over an email</h2>
+        <p class="gd-band-sub">Fair questions. We would ask them too.</p>
+      </div>
+      <div class="gd-faq">{faq_rows}</div>
+    </div>
+  </section>
+
+  <section class="gd-close">
+    <div class="gd-close-glow" aria-hidden="true"></div>
+    <div class="wrap gd-close-in">
+      <div class="gd-close-copy">
+        <h2 class="gd-close-h">Two guides. One email address.</h2>
+        <div class="gd-guars">
+          <span class="gd-guar">{_ico("lock", 16, "ico gd-guar-ico", stroke=True)}<span>Never sold, never rented</span></span>
+          <span class="gd-guar">{_ico("check", 16, "ico gd-guar-ico", stroke=True)}<span>One click unsubscribes</span></span>
+        </div>
+      </div>
+      {_gd_form(second=True)}
+    </div>
+  </section>
+</div>"""
+
+    ld = faq_ld([(q, a) for _fid, q, a in G["faq"]])
+    return layout("/guides.html", "Free League & Valorant guides — %s" % D.BRAND,
+                  "Two free field guides written by our boosters — six chapters and six drills each for "
+                  "League and Valorant. One email, no spam, yours to keep.",
+                  body, current="/guides.html", jsonld=[ld],
+                  head=chrome_guides(), foot=foot_min(), body_class="gd-page")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -5096,7 +6249,11 @@ def page_demo():
     three places, or the dashboard section stops being evidence of anything.
     """
     O = demo_order()
-    body = "%s\n%s\n%s" % (_demo_lookup(O), dashboard_section(on_demo=True),
+    # Dashboard band first: this is the demo, so lead with the product screen and
+    # put the order lookup under it. The state switch below toggles the three
+    # sections by selector, not by document order, so the swap is presentation
+    # only — view() still hides lookup + band together and shows the order view.
+    body = "%s\n%s\n%s" % (dashboard_section(on_demo=True), _demo_lookup(O),
                            _demo_order_view(O))
     # The state switch. Two things it is careful about: the resolved order is a
     # real history entry (`?order=`), so Back leaves the page the way the
@@ -5246,14 +6403,14 @@ def _ord_side(g, rank, strong):
 
 
 def _ord_climb(g, frm, to):
-    """`[IV] Gold → [IV] Diamond` — mark + tier per end, the pairing the feed,
+    """`Gold [IV] → Diamond [IV]` — tier then mark per end, the pairing the feed,
     the checkout and the closing band all use (a mark alone only names the
-    division numeral)."""
+    division numeral, so the tier name leads and the mark trails it)."""
     fm, fn = _ord_side(g, frm, False)
     tm, tn = _ord_side(g, to, True)
-    return (f'<span class="ord-climb">{fm}<span class="ord-tier">{esc(fn)}</span>'
+    return (f'<span class="ord-climb"><span class="ord-tier">{esc(fn)}</span>{fm}'
             f'<i class="ord-arw" aria-hidden="true">→</i>'
-            f'{tm}<span class="ord-tier">{esc(tn)}</span></span>')
+            f'<span class="ord-tier">{esc(tn)}</span>{tm}</span>')
 
 
 def order_history(n=6):
@@ -5307,7 +6464,7 @@ def _ord_active_card(O):
     g = _DEMO_GAME
     climb = _ord_climb(g, O["start_rank"], O["target_rank"]) if g else esc(O["summary"] if O.get("summary") else "")
     at = _ord_side(g, O["at_rank"], True) if g else ("", O.get("at_rank", ""))
-    at_html = "%s<span class=\"ord-tier\">%s</span>" % at if g else esc(O.get("at_rank", ""))
+    at_html = "<span class=\"ord-tier\">%s</span>%s" % (at[1], at[0]) if g else esc(O.get("at_rank", ""))
     return f"""<article class="ord-active">
       <div class="ord-active-top">
         <span class="ord-status is-live"><span class="ord-dot" aria-hidden="true"></span><span>In progress</span></span>
@@ -5593,11 +6750,11 @@ def page_checkout():
               <span class="co-lab">Climb</span>
               <span class="co-val co-climb">
                 <span class="co-marks" data-when-service="division" hidden>
-                  <span class="ob-mark" data-mark="from"></span>
                   <span class="co-climb-r" data-tiername="from">—</span>
+                  <span class="ob-mark" data-mark="from"></span>
                   {_ico("arrow", 12, "ico co-mark-arrow", stroke=True)}
-                  <span class="ob-mark" data-mark="to"></span>
                   <span class="co-climb-r is-to" data-tiername="to">—</span>
+                  <span class="ob-mark" data-mark="to"></span>
                 </span>
                 <span class="co-climb-t" data-when-service="division" hidden><i aria-hidden="true">·</i><span data-out="mode">—</span></span>
                 <span class="co-climb-t" data-when-service="units" data-sum="summary" hidden>—</span>
@@ -6009,6 +7166,7 @@ def page_404():
 OPS_TABS = [
     ("overview", "Overview"), ("funnel", "Funnel"), ("configurator", "Configurator"),
     ("journey", "Journey"), ("sessions", "Sessions"), ("accounts", "Accounts"),
+    ("boosters", "Boosters"),
     ("acquisition", "Acquisition"), ("friction", "Friction"), ("abandoned", "Abandoned"),
     ("live", "Live"),
 ]
@@ -6137,6 +7295,18 @@ def client_data():
         "regions": {g["name"]: g["regions"] for g in D.GAMES},
         "addons": D.ADDONS,
         "promos": D.PROMOS,
+        # Coaching — the booking product. Its price never touches the rank
+        # engine, so the client carries the coach rates and pack discounts
+        # directly and quote() reads them for service == "coaching".
+        "coaches": D.COACHES,
+        "coachPacks": D.COACH_PACKS,
+        "coachFocus": D.COACH_FOCUS,
+        "coachSlots": D.COACH_SLOTS,
+        # Per-game bundle climbs (resolved tier-pairs). The client re-quotes each
+        # through the shared engine, so a card can't show a price the order
+        # wouldn't get. Only games with an entry get a strip.
+        "bundles": {g["name"]: D.bundle_climbs(g)
+                    for g in D.GAMES if D.bundle_climbs(g)},
         "boostersFree": D.STATS["free_now"],
         # handle → the one game that booster covers. The client validates
         # ?booster=<handle> against this before showing a name or attaching it
@@ -6144,6 +7314,20 @@ def client_data():
         # <anything>" is a line the page would otherwise print for free.
         "boosters": {b["handle"]: BY_SLUG[b["slug"]]["name"]
                      for b in D.BOOSTERS if b["slug"] in BY_SLUG},
+        # Exact icon SVGs the client roster/rail/feed renderers reuse, so a row
+        # built in JS from /api/boosters is drawn with the same glyphs as the
+        # server-rendered fallback beside it — one source (_ico), no drift.
+        "icons": {
+            "hireArrow": _ico("arrow", 12, "ico", stroke=True),
+            "railArrow": _ico("arrow", 14, "ico", stroke=True),
+            "moreArrow": _ico("arrow-down", 14, "ico", stroke=True),
+            "pillDotRst": _ico("dot", 9, "rst-pill-ico"),
+            "pillHourRst": _ico("hourglass", 10, "rst-pill-ico", stroke=True),
+            "pillDotRc": _ico("dot", 9, "rc-pill-ico"),
+            "pillHourRc": _ico("hourglass", 10, "rc-pill-ico", stroke=True),
+            "feedArrow": _ico("arrow", 12, "lf-arrow", stroke=True),
+            "feedSeal": _ico("seal", 11, "lf-done-ico", evenodd=True),
+        },
     }
     return ("/* generated by build.py — do not edit */\nwindow.ESB_DATA = %s;\n"
             % json.dumps(payload, ensure_ascii=False, indent=2))
@@ -6271,6 +7455,10 @@ def main():
         pages += [(booster_href(b), page_booster(b)) for b in D.BOOSTERS]
     if D.REVIEWS:
         pages.insert(6, ("/reviews.html", page_reviews()))
+    # The lead-capture landing. Guarded on GUIDES the way Reviews/Boosters are on
+    # their placeholder stores — an empty guides page ranks worse than none.
+    if getattr(D, "GUIDES", None):
+        pages.append(("/guides.html", page_guides()))
     pages += [("/legal/%s.html" % s, page_legal(s)) for s in LEGAL]
     pages += [("/games/%s.html" % g["slug"], page_game(g)) for g in D.GAMES]
 

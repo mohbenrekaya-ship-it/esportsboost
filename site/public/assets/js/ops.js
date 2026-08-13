@@ -598,6 +598,9 @@
                 // The sign-up list is fetched on demand (it is PII, kept off the
                 // main payload) and cached until the period changes.
                 accounts: null, accountsLoading: false, accountsError: null,
+                // The roster store — its own separate store, fetched on demand
+                // like the sign-up list and cached until refreshed.
+                boosters: null, boostersLoading: false, boostersError: null,
                 // Auto-refresh: poll the dashboard so the numbers stay live
                 // without a manual Refresh. Default on.
                 live: true };
@@ -661,9 +664,10 @@
         if (res.status === 200) {
           state.data = res.body.data;
           render();
-          // The Accounts panel has its own store, so a data refresh does not
-          // carry it — reload it alongside so "Live" keeps it fresh too.
+          // The Accounts and Boosters panels have their own stores, so a data
+          // refresh does not carry them — reload alongside so "Live" keeps them fresh.
           if (state.tab === "accounts") loadAccounts();
+          if (state.tab === "boosters") loadBoosters();
           return;
         }
         toGate();
@@ -1693,6 +1697,175 @@
     return f;
   }
 
+  /* ── Boosters: the roster store, read-only ───────────────────────────── */
+  function loadBoosters() {
+    if (state.boostersLoading) return;
+    state.boostersLoading = true;
+    state.boostersError = null;
+    api({ action: "boosters", token: state.token, days: state.days }).then(function (res) {
+      state.boostersLoading = false;
+      if (res.status === 200 && res.body.boosters) {
+        state.boosters = res.body.boosters;
+      } else if (res.status === 401) {
+        toGate();
+        return;
+      } else if (res.status === 200) {
+        state.boostersError = "This server doesn't serve the roster store yet — it is running an " +
+          "older build. Restart serve.py (the /api routes only reload on restart), then Refresh.";
+      } else {
+        state.boostersError = "Couldn't load the roster — the server returned " + res.status + ".";
+      }
+      if (state.tab === "boosters") render();
+    }).catch(function () {
+      state.boostersLoading = false;
+      state.boostersError = "Couldn't reach the server. Is it running?";
+      if (state.tab === "boosters") render();
+    });
+  }
+
+  function panelBoosters() {
+    var f = document.createDocumentFragment();
+    var a = state.boosters;
+
+    if (state.boostersError && !a) {
+      var er = document.createElement("div");
+      er.className = "card";
+      er.innerHTML = '<p class="empty">' + esc(state.boostersError) + "</p>";
+      var retry = document.createElement("button");
+      retry.className = "btn btn-sm";
+      retry.type = "button";
+      retry.textContent = "Try again";
+      retry.style.margin = "0 auto 16px";
+      retry.style.display = "block";
+      retry.addEventListener("click", function () { state.boostersError = null; loadBoosters(); render(); });
+      er.appendChild(retry);
+      f.appendChild(er);
+      return f;
+    }
+
+    if (!a) {
+      loadBoosters();
+      var wait = document.createElement("div");
+      wait.className = "card";
+      wait.innerHTML = '<p class="empty">Loading roster…</p>';
+      f.appendChild(wait);
+      return f;
+    }
+
+    // Placeholder banner — the roster is invented (see data.py) and the store is
+    // filled by tools/seed_boosters.py. Say so, like the synthetic-data banner.
+    var note = document.createElement("div");
+    note.className = "banner synthetic";
+    note.innerHTML = '<span class="ico">▲</span><div><strong>Roster store, not a hiring system.</strong> ' +
+      "This is the backend behind the boosters page, the “On shift now” rail and the delivered feed. " +
+      "The rows are placeholder boosters — there is no application or payout flow yet. " +
+      "Wire it to the real roster and clear the store before launch.</div>";
+    f.appendChild(note);
+
+    if (a.synthetic > 0) {
+      var syn = document.createElement("div");
+      syn.className = "banner synthetic";
+      syn.innerHTML = '<span class="ico">▲</span><div><strong>Includes seeded boosters.</strong> ' +
+        num(a.synthetic) + " row(s) were written by tools/seed_boosters.py for testing. Clear the store before launch.</div>";
+      f.appendChild(syn);
+    }
+
+    var kr = document.createElement("div");
+    kr.className = "kpis";
+    kr.appendChild(kpi("On the board", num(a.total), undefined, "", true));
+    kr.appendChild(kpi("Free now", num(a.free)));
+    kr.appendChild(kpi("Busy", num(a.busy)));
+    kr.appendChild(kpi("Games covered", num((a.games || []).length)));
+    f.appendChild(kr);
+
+    // Per-game split — how many boosters cover each ladder, and how many are free.
+    var games = a.games || [];
+    var g = document.createElement("div");
+    g.className = "grid";
+    g.appendChild(card({
+      cls: "half", title: "Boosters per game",
+      sub: "How many cover each ladder on the board right now.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: games.map(function (r) { return { label: r.game, value: r.count }; }),
+          color: SERIES[0], alt: "Boosters per game"
+        });
+      },
+      table: {
+        head: ["Game", "Boosters", "Free now"], num: [1, 2],
+        rows: games.map(function (r) { return [r.game, num(r.count), num(r.free)]; })
+      }
+    }));
+    g.appendChild(card({
+      cls: "half", title: "Availability",
+      sub: "Free vs busy across the whole board.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: [{ label: "Free now", value: a.free }, { label: "Busy", value: a.busy }],
+          color: SERIES[2], alt: "Availability split"
+        });
+      },
+      table: {
+        head: ["State", "Boosters"], num: [1],
+        rows: [["Free now", num(a.free)], ["Busy", num(a.busy)]]
+      }
+    }));
+    f.appendChild(g);
+
+    // The roster itself.
+    var recent = a.recent || [];
+    var el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML =
+      '<div class="card-hd"><h3>Roster</h3><span class="spacer"></span>' +
+      '<button class="btn btn-sm" type="button" data-export-boosters>Export CSV</button></div>' +
+      '<p class="card-sub">Sorted by win rate' +
+      (a.total > recent.length ? ", first " + num(recent.length) + " of " + num(a.total) : "") +
+      ".</p>";
+
+    if (!recent.length) {
+      el.insertAdjacentHTML("beforeend",
+        '<p class="empty">Store is empty. Run <code>python3 site/tools/seed_boosters.py --clear</code>, then Refresh.</p>');
+      f.appendChild(el);
+      return f;
+    }
+
+    var head = ["Handle", "Game", "Region", "Peak", "Win rate", "Orders", "Queue"];
+    var html = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+      head.map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") + "</tr></thead><tbody>";
+    recent.forEach(function (r) {
+      html += "<tr>" +
+        "<td>" + esc(r.handle) + (r.syn ? ' <span class="chip">seeded</span>' : "") + "</td>" +
+        "<td>" + esc(r.game) + "</td>" +
+        '<td class="dim">' + esc(r.region || "—") + "</td>" +
+        "<td>" + esc(r.peak || "—") + "</td>" +
+        "<td>" + esc(r.wr) + "</td>" +
+        '<td class="num">' + num(r.orders) + "</td>" +
+        "<td>" + (r.free ? '<span class="chip">free</span>' : esc(r.queue || "—")) + "</td>" +
+        "</tr>";
+    });
+    el.insertAdjacentHTML("beforeend", html + "</tbody></table></div>");
+
+    el.querySelector("[data-export-boosters]").addEventListener("click", function () {
+      var cols = ["handle", "game", "region", "peak", "win_rate", "win_rate_n", "orders", "queue", "free", "seeded"];
+      var lines = [cols.join(",")];
+      recent.forEach(function (r) {
+        lines.push([r.handle, r.game, r.region, r.peak, r.wr, r.wr_n, r.orders, r.queue, r.free ? "yes" : "no", r.syn ? "yes" : "no"]
+          .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; })
+          .join(","));
+      });
+      var blob = new Blob([lines.join("\n")], { type: "text/csv" });
+      var link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "esb-boosters-" + new Date().toISOString().slice(0, 10) + ".csv";
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+    });
+
+    f.appendChild(el);
+    return f;
+  }
+
   function panelAbandoned(d) {
     var rows = d.abandoned;
     var f = document.createDocumentFragment();
@@ -1787,6 +1960,7 @@
   var PANELS = {
     overview: panelOverview, funnel: panelFunnel, configurator: panelConfigurator,
     journey: panelJourney, sessions: panelSessions, accounts: panelAccounts,
+    boosters: panelBoosters,
     acquisition: panelAcquisition, friction: panelFriction, abandoned: panelAbandoned,
     live: panelLive
   };
@@ -1891,8 +2065,9 @@
         o.setAttribute("aria-selected", o === b ? "true" : "false");
       });
       render();
-      // Entering Accounts pulls its store fresh (it rides its own request).
+      // Entering Accounts / Boosters pulls that store fresh (each rides its own request).
       if (state.tab === "accounts") loadAccounts();
+      if (state.tab === "boosters") loadBoosters();
     });
   });
 

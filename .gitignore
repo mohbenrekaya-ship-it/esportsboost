@@ -24,6 +24,12 @@ accounts.ndjson
 site/orders.log
 orders.log
 
+# Local roster store (the boosters board). Seeded/synthetic in dev — the rows
+# carry `syn` — and production writes to Upstash, same as analytics and
+# accounts (see src/boosters.py). Never committed.
+site/boosters.ndjson
+boosters.ndjson
+
 # Vercel CLI project link (project/org ids). Local-only, never committed.
 .vercel
 

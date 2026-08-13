@@ -52,6 +52,22 @@ def subdivide(tiers, labels, apex=()):
     return out
 
 
+# Who actually enforces the terms of service for each ladder. The game page's
+# safety band names them ("Riot flags accounts on patterns…", "against Riot's
+# terms of service"), because a named publisher is what makes the argument
+# concrete — the generic SAFETY copy still covers every other page.
+PUBLISHERS = {
+    "league-of-legends": "Riot", "valorant": "Riot", "teamfight-tactics": "Riot",
+    "counter-strike-2": "Valve", "dota-2": "Valve",
+    "marvel-rivals": "NetEase", "overwatch-2": "Blizzard",
+    "apex-legends": "EA", "rocket-league": "Psyonix",
+}
+
+
+def publisher(g):
+    return PUBLISHERS.get(g["slug"], "The publisher")
+
+
 def _attach_structure(g):
     """Derive `tiers` (the ladder's main ranks) and `divmap` (tier → its
     ordered sub-ranks) for every game, including flat ladders like CS2 where
@@ -246,6 +262,48 @@ def tier_colors(game):
     return {t: tier_color(game, t) for t in game["tiers"]}
 
 
+def bundle_climbs(g):
+    """Resolve this game's BUNDLES tier-pairs into concrete climbs.
+
+    Each becomes `floorFrom` (the tier's division I — the cheapest start, so the
+    advertised "from" price is a floor the order can only beat) → `target` (the
+    upper tier's division IV). `defFrom` (division IV of the lower tier) is the
+    default endpoint a click drops you on when your current division can't be
+    kept. Skips any pair whose tiers a given game doesn't have, or that doesn't
+    actually climb.
+    """
+    out = []
+    dm = g.get("divmap") or {}
+    ld = g["ladder"]
+    for ft, tt, disc in BUNDLES.get(g["name"], []):
+        if ft not in dm or tt not in dm:
+            continue
+        floor_from, target, def_from = dm[ft][-1], dm[tt][0], dm[ft][0]
+        if ld.index(target) <= ld.index(floor_from):
+            continue
+        out.append(dict(ft=ft, tt=tt, floorFrom=floor_from, target=target,
+                        defFrom=def_from, disc=disc))
+    return out
+
+
+def bundle_discount(g, from_rank, to_rank, idx):
+    """The discount for an opt-in bundle (index `idx`), but only while the current
+    climb still matches it: `from_rank` in the bundle's from-tier and `to_rank`
+    equal to its target. Changing division keeps it; changing tier or target
+    drops it. Returns 0 when no bundle is active or the climb no longer matches —
+    the handoff's rule, enforced on both the server and the client."""
+    if idx is None:
+        return 0.0
+    climbs = bundle_climbs(g)
+    try:
+        b = climbs[int(idx)]
+    except (TypeError, ValueError, IndexError):
+        return 0.0
+    dm = g.get("divmap") or {}
+    from_tier = next((t for t, ranks in dm.items() if from_rank in ranks), None)
+    return b["disc"] if (from_tier == b["ft"] and to_rank == b["target"]) else 0.0
+
+
 # Notes are deliberately one line each: the order card draws them under the
 # add-on name in an 11px row, and the handoff's layout budgets a single line
 # there. A second line pushes the CTA below the fold — see CLAUDE.md.
@@ -259,6 +317,117 @@ ADDONS = [
     dict(id="offline", label="Offline appearance", pct=0.0,
          note="Always on. Friends see you offline for the whole order."),
 ]
+
+# ── Coaching — the fourth configurator product ─────────────────────────────
+# ⚠ PLACEHOLDER, same standing as BOOSTERS/DEMO_ORDER: the four coaches, their
+# rates, ratings and open slots are invented. Coaching is a booking flow, not a
+# rank climb — it does not read the pricing ladder at all. Its price is
+# `rate * pack.hours * (1 - pack.disc)` and nothing else (no duo, no add-ons, no
+# sitewide promo), computed the same way in pricing.py and app.js.
+#
+# The tab renders only on games whose `services` string mentions "coaching"
+# (LoL, Valorant, Marvel Rivals today), so a game we do not coach never offers
+# it. Calendar and payment integration are unbuilt — see CLAUDE.md / the handoff.
+COACHES = [
+    dict(handle="renata", name="Renata", rating="5.0", role="Support main",
+         rank="Challenger", rate=32),
+    dict(handle="kpossan", name="Kossan", rating="4.9", role="Jungle · macro",
+         rank="Grandmaster", rate=28),
+    dict(handle="mireille", name="Mireille", rating="4.9", role="Mid · roams",
+         rank="Master", rate=24),
+    dict(handle="tavi", name="Tavi", rating="4.8", role="Top · matchups",
+         rank="Master", rate=22),
+]
+
+# Hour packs: the only discount coaching ever carries. `disc` is a real, chosen
+# rate reduction for buying more hours up front, not a placeholder percentage.
+COACH_PACKS = [
+    dict(hours=1, disc=0.0),
+    dict(hours=3, disc=0.10),
+    dict(hours=5, disc=0.18),
+]
+
+COACH_FOCUS = ["Laning", "Macro & rotations", "Champion pool", "VOD review"]
+
+# First-session slots offered in the picker. Placeholder wording; a real booking
+# calendar replaces this list.
+COACH_SLOTS = ["Tonight, 20:00", "Tomorrow, 18:00", "Saturday, 15:00", "Sunday, 12:00"]
+
+# ── Bundles — one-click popular climbs ─────────────────────────────────────
+# Each entry is a (from-tier, to-tier) pair naming a common two-tier jump.
+# Clicking a card configures that exact climb (from-tier IV → to-tier IV) on the
+# Division boost tab; the price shown is the LIVE quote for that climb through
+# the shared engine, so it can never advertise a number the checkout won't
+# honour, and the sitewide sale is the only discount in play.
+#
+# Honest deviation from the handoff, which prices bundles at an invented 22–35%
+# "bundle discount" on top of the sale. We keep one discount (the sale), so the
+# strip is a shortcut to a popular climb rather than a fabricated deeper cut —
+# the site's standing rule that a shown discount must be one the order really
+# gets. Introduce a real bundle-only discount by adding a promo code and reading
+# it here first. Games without an entry show no strip.
+#
+# Each entry is (from-tier, to-tier, discount). The discount is a REAL bundle-only
+# cut that the server charges — it replaces the sitewide sale on a matching climb
+# (never stacks), so the "−N%" pill and the struck price are a reduction the order
+# actually gets, not a fabricated one. ⚠ These percentages are a business call:
+# confirm they are the real bundle offer before launch.
+#
+# All nine games carry a set, so no game page is missing the strip. They share one
+# shape — three two-tier jumps through the low ladder, then single-tier jumps where
+# a tier is already a long climb — and one 22 → 35% ramp, so the offer reads the
+# same everywhere until the real per-game economics replace it.
+#
+# One rule holds across all nine and should survive re-tuning: **the top rank of a
+# ladder is never a bundle target.** Predator, Challenger, Immortal, One Above All,
+# Supersonic, Champion, Master (LoL) and 30k are leaderboard- or cutoff-gated, and
+# every game's own `note` says those orders are quoted per order — which is exactly
+# what a fixed advertised bundle price cannot be. Lower apex ranks with a fixed
+# threshold (Apex's Master) are fine.
+BUNDLES = {
+    "League of Legends": [
+        ("Iron", "Silver", 0.22), ("Bronze", "Gold", 0.25), ("Silver", "Platinum", 0.28),
+        ("Gold", "Platinum", 0.30), ("Platinum", "Emerald", 0.32), ("Emerald", "Diamond", 0.35),
+    ],
+    "Valorant": [
+        ("Iron", "Silver", 0.22), ("Bronze", "Gold", 0.25), ("Silver", "Platinum", 0.28),
+        ("Gold", "Platinum", 0.30), ("Platinum", "Diamond", 0.32), ("Diamond", "Ascendant", 0.35),
+    ],
+    "Teamfight Tactics": [
+        ("Iron", "Silver", 0.22), ("Bronze", "Gold", 0.25), ("Silver", "Platinum", 0.28),
+        ("Gold", "Platinum", 0.30), ("Platinum", "Emerald", 0.32), ("Emerald", "Diamond", 0.35),
+    ],
+    "Marvel Rivals": [
+        ("Bronze", "Gold", 0.22), ("Silver", "Platinum", 0.25), ("Gold", "Diamond", 0.28),
+        ("Platinum", "Diamond", 0.30), ("Diamond", "Grandmaster", 0.32),
+        ("Grandmaster", "Celestial", 0.35),
+    ],
+    "Overwatch 2": [
+        ("Bronze", "Gold", 0.22), ("Silver", "Platinum", 0.25), ("Gold", "Diamond", 0.28),
+        ("Platinum", "Diamond", 0.30), ("Diamond", "Master", 0.32),
+        ("Master", "Grandmaster", 0.35),
+    ],
+    "Rocket League": [
+        ("Bronze", "Gold", 0.22), ("Silver", "Platinum", 0.25), ("Gold", "Diamond", 0.28),
+        ("Platinum", "Diamond", 0.30), ("Diamond", "Champion", 0.32),
+        ("Champion", "Grand Champ", 0.35),
+    ],
+    "Dota 2": [
+        ("Herald", "Crusader", 0.22), ("Guardian", "Archon", 0.25), ("Crusader", "Legend", 0.28),
+        ("Archon", "Legend", 0.30), ("Legend", "Ancient", 0.32), ("Ancient", "Divine", 0.35),
+    ],
+    "Apex Legends": [
+        ("Rookie", "Silver", 0.22), ("Bronze", "Gold", 0.25), ("Silver", "Platinum", 0.28),
+        ("Gold", "Platinum", 0.30), ("Platinum", "Diamond", 0.32), ("Diamond", "Master", 0.35),
+    ],
+    # Flat rating ladder — every rung is its own tier, so a bundle names two exact
+    # CS Rating checkpoints rather than "any division of". bundle_strip() reads the
+    # divmap and drops the "from any division" line for exactly this case.
+    "Counter-Strike 2": [
+        ("5k", "13k", 0.22), ("10k", "15k", 0.25), ("13k", "17k", 0.28),
+        ("15k", "19k", 0.30), ("17k", "21k", 0.32), ("19k", "25k", 0.35),
+    ],
+}
 
 # ── placeholder statistics ────────────────────────────────────────────────
 # `trustpilot` and `reviews` are not written here — they are computed from
@@ -555,6 +724,123 @@ BOOSTERS = [
          rating="4.8", ontime="96%", disputes="0",
          review=("Badge order, delivered in two days with the clips to prove it.",
                  "MT", 5.0, 9)),
+
+    # ── added roster — LoL & Valorant, EUW/EU + NA ─────────────────────────
+    # PLACEHOLDER like the rest of this block (see the warning at the top of the
+    # file): invented handles, ranks and figures. wr_n stays at or above WR_FLOOR.
+    dict(handle="riven_ka", slug="league-of-legends", region="EUW", hue=284,
+         peak="Challenger 1015 LP", tier="Challenger", wr_n=79, queue="free",
+         orders=188, role="Mid lane", since="Feb 2023",
+         rating="4.9", ontime="98%", disputes="0"),
+    dict(handle="faelan", slug="league-of-legends", region="NA", hue=118,
+         peak="Grandmaster 700 LP", tier="Grandmaster", wr_n=74, queue="free",
+         orders=142, role="Jungle", since="May 2023",
+         rating="4.8", ontime="96%", disputes="0"),
+    dict(handle="otto_lux", slug="league-of-legends", region="EUW", hue=42,
+         peak="Master 505 LP", tier="Master", wr_n=70, queue="1 order",
+         orders=104, role="Support", since="Sep 2023",
+         rating="4.7", ontime="95%", disputes="0"),
+    dict(handle="vex_adc", slug="league-of-legends", region="NA", hue=350,
+         peak="Challenger 985 LP", tier="Challenger", wr_n=77, queue="free",
+         orders=173, role="ADC", since="Mar 2023",
+         rating="4.9", ontime="98%", disputes="0"),
+    dict(handle="sylric", slug="league-of-legends", region="EUW", hue=200,
+         peak="Grandmaster 660 LP", tier="Grandmaster", wr_n=73, queue="free",
+         orders=131, role="Top", since="Jul 2023",
+         rating="4.8", ontime="96%", disputes="1"),
+    dict(handle="mireille", slug="league-of-legends", region="EUW", hue=312,
+         peak="Master 470 LP", tier="Master", wr_n=69, queue="free",
+         orders=98, role="Mid lane", since="Nov 2023",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="kaelo", slug="league-of-legends", region="NA", hue=88,
+         peak="Master 445 LP", tier="Master", wr_n=66, queue="free",
+         orders=71, role="Jungle", since="Feb 2024",
+         rating="4.6", ontime="94%", disputes="0"),
+    dict(handle="north_lol", slug="league-of-legends", region="NA", hue=222,
+         peak="Grandmaster 640 LP", tier="Grandmaster", wr_n=72, queue="2 orders",
+         orders=126, role="Top", since="Aug 2023",
+         rating="4.7", ontime="95%", disputes="0"),
+    dict(handle="avel", slug="league-of-legends", region="EUW", hue=160,
+         peak="Challenger 1030 LP", tier="Challenger", wr_n=78, queue="free",
+         orders=181, role="Jungle", since="Apr 2023",
+         rating="4.9", ontime="99%", disputes="0"),
+    dict(handle="ryse_ttv", slug="league-of-legends", region="EUW", hue=18,
+         peak="Master 520 LP", tier="Master", wr_n=68, queue="1 order",
+         orders=89, role="ADC", since="Jan 2024",
+         rating="4.7", ontime="95%", disputes="0"),
+    dict(handle="dove", slug="league-of-legends", region="NA", hue=268,
+         peak="Master 480 LP", tier="Master", wr_n=71, queue="free",
+         orders=112, role="Support", since="Oct 2023",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="kilian", slug="league-of-legends", region="EUW", hue=74,
+         peak="Grandmaster 685 LP", tier="Grandmaster", wr_n=75, queue="free",
+         orders=149, role="Mid lane", since="Jun 2023",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="settmain", slug="league-of-legends", region="NA", hue=8,
+         peak="Master 460 LP", tier="Master", wr_n=67, queue="free",
+         orders=83, role="Top", since="Mar 2024",
+         rating="4.6", ontime="94%", disputes="1"),
+    dict(handle="yuna_lol", slug="league-of-legends", region="EUW", hue=330,
+         peak="Challenger 995 LP", tier="Challenger", wr_n=76, queue="free",
+         orders=167, role="Mid lane", since="May 2023",
+         rating="4.9", ontime="98%", disputes="0"),
+
+    dict(handle="reyna_x", slug="valorant", region="NA", hue=6,
+         peak="Radiant #188", tier="Radiant", wr_n=76, queue="free",
+         orders=176, role="Duelist", since="Feb 2023",
+         rating="4.9", ontime="98%", disputes="0"),
+    dict(handle="cirq", slug="valorant", region="EU", hue=210,
+         peak="Immortal 3 · 470 RR", tier="Immortal", wr_n=70, queue="free",
+         orders=101, role="Sentinel", since="Sep 2023",
+         rating="4.7", ontime="95%", disputes="0"),
+    dict(handle="veto", slug="valorant", region="NA", hue=150,
+         peak="Radiant #241", tier="Radiant", wr_n=74, queue="free",
+         orders=158, role="Initiator", since="Apr 2023",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="mila_v", slug="valorant", region="EU", hue=286,
+         peak="Radiant 610 RR", tier="Radiant", wr_n=73, queue="free",
+         orders=139, role="Controller", since="Jun 2023",
+         rating="4.8", ontime="96%", disputes="0"),
+    dict(handle="gale_v", slug="valorant", region="NA", hue=34,
+         peak="Immortal 3 · 505 RR", tier="Immortal", wr_n=68, queue="1 order",
+         orders=94, role="Duelist", since="Dec 2023",
+         rating="4.7", ontime="95%", disputes="0"),
+    dict(handle="sero", slug="valorant", region="EU", hue=192,
+         peak="Radiant #276", tier="Radiant", wr_n=75, queue="free",
+         orders=161, role="Initiator", since="Mar 2023",
+         rating="4.9", ontime="98%", disputes="0"),
+    dict(handle="nova_k", slug="valorant", region="NA", hue=98,
+         peak="Immortal 3 · 430 RR", tier="Immortal", wr_n=67, queue="free",
+         orders=79, role="Sentinel", since="Feb 2024",
+         rating="4.6", ontime="94%", disputes="0"),
+    dict(handle="brimm", slug="valorant", region="EU", hue=246,
+         peak="Immortal 3 · 455 RR", tier="Immortal", wr_n=69, queue="free",
+         orders=97, role="Controller", since="Nov 2023",
+         rating="4.7", ontime="95%", disputes="0"),
+    dict(handle="zeke_v", slug="valorant", region="NA", hue=356,
+         peak="Radiant 655 RR", tier="Radiant", wr_n=72, queue="2 orders",
+         orders=133, role="Duelist", since="Jul 2023",
+         rating="4.7", ontime="95%", disputes="1"),
+    dict(handle="lyric", slug="valorant", region="EU", hue=126,
+         peak="Radiant #302", tier="Radiant", wr_n=74, queue="free",
+         orders=147, role="Initiator", since="May 2023",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="sova_na", slug="valorant", region="NA", hue=180,
+         peak="Immortal 3 · 410 RR", tier="Immortal", wr_n=66, queue="free",
+         orders=72, role="Initiator", since="Mar 2024",
+         rating="4.6", ontime="94%", disputes="0"),
+    dict(handle="kaya_v", slug="valorant", region="EU", hue=64,
+         peak="Immortal 3 · 490 RR", tier="Immortal", wr_n=71, queue="free",
+         orders=113, role="Sentinel", since="Aug 2023",
+         rating="4.8", ontime="96%", disputes="0"),
+    dict(handle="flux_v", slug="valorant", region="NA", hue=320,
+         peak="Radiant #144", tier="Radiant", wr_n=77, queue="free",
+         orders=182, role="Duelist", since="Jan 2023",
+         rating="4.9", ontime="99%", disputes="0"),
+    dict(handle="echo_v", slug="valorant", region="EU", hue=228,
+         peak="Immortal 3 · 445 RR", tier="Immortal", wr_n=68, queue="1 order",
+         orders=91, role="Controller", since="Dec 2023",
+         rating="4.7", ontime="95%", disputes="0"),
 ]
 
 # The page states a floor out loud; a row under it would make the page argue
@@ -717,7 +1003,6 @@ MARQUEE = [
     "4.8 / 5 on Trustpilot — 3,140 reviews",
     "Most orders claimed within 18 min",
     "3,000 players in the Discord",
-    "100% recovery rate on account reviews",
 ]
 
 # ── delivered-today feed ──────────────────────────────────────────────────
@@ -766,11 +1051,11 @@ SAFETY = dict(
         "VPN matched to your region, the booster mirrors your sensitivity and crosshair, and "
         "sessions are scheduled inside the hours you normally play — so the activity pattern on "
         "the account never changes. Duo orders never touch your login at all.",
-        "Across 92,400 completed orders the recovery rate on account reviews is 100%. If a boost "
-        "triggers one, support files the appeal and the order is refunded in full while it runs. "
-        "Your name, email and payment details are never shared with the booster.",
+        "If a boost triggers an account review, support files the appeal and the order is refunded "
+        "in full while it runs. Your name, email and payment details are never shared with the "
+        "booster.",
     ],
-    callout=("100%", "Recovery rate on account reviews"),
+    callout=("97%", "Client satisfaction rate"),
     # (glyph, stroke?, label) — same shape as build.py's DASHBOARD_CHIPS.
     # "globe" is a filled glyph; the other three are linework.
     mechanisms=[
@@ -1045,9 +1330,31 @@ REVIEWS = [
 # closed; build.py turns it into a real date, so the feed ages with the build
 # instead of freezing on whatever month it was written in. Newest first, one
 # day apart, in the order the list is written.
+# ⚠ Reviewer display names are INVENTED, exactly like the review copy above and
+# the fifty booster profiles — a first name and a surname initial, assigned
+# deterministically by position so a rebuild never reshuffles who said what. The
+# game pages draw them beside an initials avatar. They must be replaced with the
+# real corpus (or dropped) before launch, along with everything else in this
+# block; see the placeholder warning at the top of this file.
+_REVIEW_NAMES = (
+    "Marek K.", "Dee R.", "Tomas V.", "Ilias B.", "Sanne D.", "Rafa M.",
+    "Jonas L.", "Priya N.", "Emre A.", "Nils P.", "Owen T.", "Kaisa H.",
+    "Bruno S.", "Lena F.", "Arto V.", "Mateo G.", "Yusuf C.", "Nora W.",
+    "Pavel Z.", "Iris K.",
+)
+
+
+def _initials(name):
+    """"Marek K." → "MK". Two letters at most; the avatar is 26px."""
+    parts = [p for p in str(name).replace(".", " ").split() if p]
+    return "".join(p[0].upper() for p in parts[:2]) or "?"
+
+
 for _i, _r in enumerate(REVIEWS):
     _r.setdefault("stars", 5)
     _r.setdefault("days", _i + 1)
+    _r.setdefault("by", _REVIEW_NAMES[_i % len(_REVIEW_NAMES)])
+    _r.setdefault("initials", _initials(_r["by"]))
 
 
 # ── roster: the derived half ──────────────────────────────────────────────
@@ -1199,8 +1506,6 @@ GUARANTEES = [
 # stay whole translatable text nodes (see CLAUDE.md's i18n rule).
 GUARANTEE = dict(
     stats=[
-        ("100%", "Recovery rate on account reviews, across {n} completed orders",
-         STATS["boosts"]),
         ("5 days", "Refunds land back on the original payment method, no ticket needed", ""),
         ("24 hrs", "Unclaimed after payment? Refunded in full, automatically", ""),
     ],
@@ -1240,10 +1545,8 @@ GUARANTEE = dict(
          "the boost."),
         ("review-or-ban", "What happens if my account gets a review or a ban?",
          "Support files the appeal for you and the order is refunded in full while it runs, "
-         "so you are never paying for an account you cannot use. Across %s completed orders "
-         "the recovery rate on reviews is 100%%. Boosting still breaks every listed game's "
-         "terms of service — the risk is reduced as far as it can be, not removed."
-         % STATS["boosts"]),
+         "so you are never paying for an account you cannot use. Boosting still breaks every "
+         "listed game's terms of service — the risk is reduced as far as it can be, not removed."),
         ("password-and-settings", "Will the booster change my password or my settings?",
          "No. Login details are used to sign in and nothing else — no password changes, no "
          "email changes, no purchases, no rune or loadout edits beyond the champions and "
@@ -1368,4 +1671,203 @@ FAQ = [
      "The card statement reads as a neutral merchant name, not the service."),
 ]
 
+# ── /support — design_handoff_support ──────────────────────────────────────
+# The contact page's content: two channels, a triage form, and a six-item FAQ.
+# Kept next to GUARANTEE because their FAQs overlap (refunds, pausing, playing
+# during an order) and MUST NOT diverge — same facts, different words for a
+# different reader. If a policy number moves in GUARANTEE, move it here too.
+#
+# Two deliberate honesty edits vs the handoff, same standing as the placeholder
+# note at the top of this file:
+#   · the hero runs TWO stats, not three. The handoff's third, "91% closed on
+#     the first reply", has no source, and its own note says to measure it or
+#     drop the row. Both figures here are read from STATS, so they can't drift.
+#   · the status pill is wired to the real FOOT_SUPPORT_ONLINE seam in build.py
+#     rather than hard-coding a headcount ("6 on shift, EU and NA") — an
+#     invented rota number of a kind nothing else on the site carries. If it
+#     cannot be a live read-out, build.py degrades it to the reply time.
+#
+# ⚠ Two lines below are commitments this page invents and ops must confirm
+# before launch (the handoff flags both): the free booster swap ("once per
+# order, at no charge") in the swap FAQ, and — softened here already — the
+# "we won't act on a message that contains one" password line. Where one isn't
+# operationally true, cut it rather than soften it further.
+SUPPORT = dict(
+    # Hero stat list — (STATS key, label). The figure is read from STATS so the
+    # page can't quote a different reply time or Discord size than the rest of
+    # the site. Two, not three; see the note above.
+    stats=[
+        ("reply", "Median first reply last month"),
+        ("discord", "Players in the Discord"),
+    ],
+    # "What to put in it" — four rows that cut a round trip out of every ticket.
+    # (icon, name, note). Row 4 is the point of the list — keep it.
+    include=[
+        ("hash", "The order number",
+         "Anything starting ESB-. It skips triage and lands with the person on that order."),
+        ("target", "What you expected",
+         "The rank, the date, the thing the checkout said you were buying."),
+        ("image-square", "What actually happened",
+         "Screenshots beat descriptions. Paste them straight into the thread."),
+        ("lock-key", "Nothing else",
+         "No passwords, no 2FA codes. Support will never ask for one, and won't act on a "
+         "message that contains one."),
+    ],
+    # Topic chips. (label, needs_order, placeholder). Choosing a topic sets the
+    # message placeholder — the cheapest triage on the page — and shows the
+    # order-number field for the three order-related topics. Changing topic must
+    # not clear what has been typed; only the placeholder changes.
+    topics=[
+        ("Order issue", True,
+         "What the order was meant to do, and what it did instead."),
+        ("Refund", True,
+         "What you want refunded and why. We read the order before replying, so you can "
+         "keep it short."),
+        ("Booster swap", True,
+         "Which order, and whether you want a reason on the record. You do not have to "
+         "give one."),
+        ("Before I buy", False,
+         "Ask anything. Pre-sales questions sit in the same queue as everything else."),
+        ("Something else", False,
+         "What's going on?"),
+    ],
+    # Six answers, ordered by ticket volume — the first two are the majority of
+    # contacts and both resolve without a human. (id, question, answer). The ids
+    # are deep-link targets (support links people at a specific answer), so they
+    # are a public contract: renaming one breaks the links in old tickets.
+    faq=[
+        ("find-order", "Where is my order? I never made an account.",
+         "You do not need one. Guest orders are tracked by the link we emailed when you "
+         "paid — it never expires and works on any device. Lost it? Open the order lookup, "
+         "enter the address you paid with, and we send it again."),
+        ("unclaimed", "Nobody has claimed my order yet.",
+         "Median claim time is %s, and most of the rest go within the hour. If nothing has "
+         "claimed it 24 hours after payment, the order refunds itself automatically — no "
+         "ticket, no asking. Writing in before that does not move it up the board."
+         % STATS["median_claim"]),
+        ("refund", "Can I get a refund?",
+         "In full, any time before a booster claims it. After that it is pro-rated on what "
+         "has not been delivered — you keep the divisions already climbed and get the rest "
+         "back. Money lands on the original payment method within 5 business days."),
+        ("swap", "Can I swap to a different booster?",
+         "Yes, once per order, at no charge. Ask in the order thread. The order goes back "
+         "on the board and is usually re-claimed the same day; if you would rather not say "
+         "why, do not — we do not ask."),
+        ("play-during", "Can I play on my account while an order is running?",
+         "Pause it first, from the order page. Pausing is free and resumes the same night "
+         "if a slot is open. What you should not do is queue ranked alongside an unpaused "
+         "solo order — two people on one account in the same queue is the fastest way to "
+         "get flagged."),
+        ("past-eta", "My order is past the delivery estimate.",
+         "A 15% credit applies automatically once an order runs past its window, and it "
+         "shows on the order page without anyone having to ask. If it is badly over, write "
+         "in and we will move it to a booster who is free."),
+    ],
+)
+
 LEGAL_UPDATED = "10 August 2026"
+
+
+# ── the free guides landing (lead capture) ────────────────────────────────
+# design_handoff_free_guides. The only page whose success metric is a list, not
+# an order: two free PDFs (a League field guide and a Valorant field guide) in
+# exchange for an email. Both guides are ticked by default — the second costs
+# nothing to give and the card selection is a game-preference signal to store
+# with the address.
+#
+# ⚠ PLACEHOLDER like everything else invented in this file (see top). Blocking
+# for launch, specifically:
+#   · the download counts, the reader rating and the three reader quotes are
+#     invented; keep the delivered-boosts figure and the Trustpilot average in
+#     step with STATS above, they are the same claims;
+#   · every author's rank and role is invented. The names obey the site's
+#     roster rule — a booster plays exactly ONE game — so the League authors are
+#     League handles and the Valorant authors are Valorant handles, and none is
+#     listed under two games. In production this list reads from the one roster
+#     source that also feeds BOOSTERS and the profile pages;
+#   · the SIX League chapter titles describe a guide that does not exist yet.
+#     The Valorant guide is real (six chapters, six drills). The hero says "12
+#     chapters + 12 drills" — that is 6+6 twice; do not let the count drift from
+#     the artifact.
+GUIDES = dict(
+    # Hero stat row + reader band. Figures ride in their own nodes in build.py.
+    stats=dict(downloads="14,200", chapters=12, drills=12, rating="4.8", readers="1,100"),
+    # Spine colours are each guide's identity, reused on the chapter badges,
+    # author tags and review tags. `key` keys the toc below and the client state.
+    items=[
+        dict(key="lol", game="League of Legends", short="League", initial="L",
+             title="The League field guide", cover_title="Win the lane you already won.",
+             note="Iron to Diamond · wave control, roams, objectives", accent="#5f93de"),
+        dict(key="val", game="Valorant", short="Valorant", initial="V",
+             title="The Valorant field guide", cover_title="Stop losing rounds you already won.",
+             note="Iron to Ascendant · crosshair, economy, retakes", accent="#c8577a"),
+    ],
+    # Six chapters each, every one ending in a drill. ⚠ the League six are titles
+    # for an unwritten guide.
+    toc=dict(
+        lol=[
+            ("01", "Wave control", "Freeze, slow-push, crash — and which one the minute demands."),
+            ("02", "Trading, not fighting", "Why the lane is won by who spends time better, not who hits harder."),
+            ("03", "Roams that pay", "The three windows where leaving lane gains more than it costs."),
+            ("04", "Objectives as maths", "Dragon, herald and the setup that starts 40 seconds early."),
+            ("05", "Six habits that cap your rank", "Each with the tell you can spot in your own replays."),
+            ("06", "The climb plan", "Twelve ranked games a week, structured."),
+        ],
+        val=[
+            ("01", "Crosshair placement", "Where the dot sits before you peek, not after."),
+            ("02", "Economy you can trust", "When to force, when to save, and why the half-buy loses."),
+            ("03", "Retakes and the four-second rule", "Most retakes are lost before anyone shoots."),
+            ("04", "Utility that buys space", "Smokes and flashes as currency."),
+            ("05", "Six habits that cap your rank", "Each with the tell you can spot in your own VODs."),
+            ("06", "The climb plan", "Twelve ranked games a week, structured."),
+        ],
+    ),
+    # Seven authors across two games. `game` is "League" or "Valorant" — it tints
+    # the tag and must not put one handle under both.
+    authors=[
+        dict(name="vantaa", initial="V", meta="Challenger 1042 LP · Mid", game="League"),
+        dict(name="kirona", initial="K", meta="Grandmaster 604 LP · Jungle", game="League"),
+        dict(name="draeg", initial="D", meta="Master 388 LP · Top", game="League"),
+        dict(name="calla", initial="C", meta="Radiant 412 RR · Duelist", game="Valorant"),
+        dict(name="nyx", initial="N", meta="Immortal 3 · Controller", game="Valorant"),
+        dict(name="perko", initial="P", meta="Immortal 2 · Sentinel", game="Valorant"),
+        dict(name="tovi", initial="T", meta="Radiant 388 RR · Initiator", game="Valorant"),
+    ],
+    # ⚠ Invented reader testimonials. `game` tints the tag so both audiences see
+    # themselves.
+    quotes=[
+        dict(name="Marek K.", initials="MK", rank="Gold 2 → Platinum 3", game="Valorant",
+             body="The economy chapter alone was worth it. I was force-buying every second round and "
+                  "losing the round after. Stopped doing that and climbed a full rank in three weeks."),
+        dict(name="Dee R.", initials="DR", rank="Silver II → Gold IV", game="League",
+             body="The wave control chapter rewired how I think about lane. I had been shoving every "
+                  "wave without knowing why, and the freeze section explained what that was costing me."),
+        dict(name="Tomas V.", initials="TV", rank="Platinum 1 → Diamond 2", game="Valorant",
+             body="The six habits chapter called me out on three of them. Uncomfortable read, which is "
+                  "probably the point."),
+    ],
+    # Five, single-open. Q1 answers motive (the objection on a page asking for
+    # data is "why is this free", not price); Q2 answers the take-both question
+    # the two-guide format creates. ids are stable deep-link anchors.
+    faq=[
+        ("free", "Is it actually free, or free-ish?",
+         "Free. There is no card, no trial, and no upsell inside either PDF. We publish them "
+         "because a player who improves is a player who stays in the game, and some of them buy a "
+         "boost or a coaching hour later. That is the whole business case."),
+        ("both", "Can I take both?",
+         "Yes, and most people do — both are ticked by default. They arrive as two attachments in "
+         "one email, so taking the second one costs you nothing extra, not even another form."),
+        ("email", "What do you do with my email?",
+         "Send you the guides. If you tick the box, one email a month with new guides and patch "
+         "notes. We never sell or rent the list, and one click unsubscribes — the link is in every "
+         "email, not buried in a preference centre."),
+        ("rank", "What rank are these written for?",
+         "Iron through Diamond for League, Iron through Ascendant for Valorant. The early chapters "
+         "do most of the work at lower ranks; the habit and objective chapters matter more once you "
+         "are past Platinum."),
+        ("need-boost", "Do I need to buy boosting to use them?",
+         "No, and neither guide mentions our services beyond one line on the last page. If you would "
+         "rather someone else did the climbing, that is a different page on this site — this one is "
+         "for doing it yourself."),
+    ],
+)

@@ -22,6 +22,7 @@ python3 site/build.py && python3 site/serve.py 4321
 OPS_PASSWORD=some-long-password python3 site/serve.py 4321
 python3 site/tools/seed_analytics.py --clear --days 70 --sessions 1600   # synthetic traffic
 python3 site/tools/seed_analytics.py --clear --sessions 900 --accounts 40 # + synthetic header sign-ups
+python3 site/tools/seed_boosters.py --clear   # fill the roster store from data.py's BOOSTERS
 ```
 
 `.claude/launch.json` defines an `esportsboost` preview server on port 4321 — start it with the
@@ -325,6 +326,113 @@ Things that are load-bearing here:
   this is why the CTA is `<span>Continue to checkout</span><span>·</span><span data-out="price">`
   and why "N of M boosters free now" is split into `of` + `boosters free now` around its `<b>`s.
   Add new card strings to both `fr` and `de` in `i18n.js`.
+
+### The `design_handoff_lol_game_page` port — the whole game page
+
+`page_game()` is a **full port of the LoL game-page handoff** — the hero configurator plus the six
+proof bands and the close. The old below-the-fold layout (three-step block + booster table + guarantee
+cards + reviews grid + FAQ split + "Other games" + marquee) was **replaced wholesale**; only the
+pricing was kept (the shared engine). The bands, in order, are numbered `.gp` sections scoped on their
+own ember token set:
+
+- **01 How it runs** (`gp_how`/`gp_steps`) — four step cards (icon tile, ghosted number, body, a
+  proof line pinned with `margin-top:auto`). Step 02 names the game ("a verified League booster").
+- **02 While it runs** (`gp_while`) — copy + `GP_WHILE_POINTS` (this handoff's three, not the
+  homepage's `D.DASHBOARD_POINTS`), with `dash_mock(gp=True)` on the right. That variant is the
+  handoff's arrangement of the shared card: each rank led by its mark, the "In progress" pill on the
+  climb row (there is no order bar), no match-history title row, "Start ·" captions, and the game
+  count in the footer. Same component as the homepage and `/demo.html`, so they cannot drift.
+- **03 Who plays it** (`gp_who`) — copy + three booster cards from this game's `D.BOOSTERS`, the #1
+  card accent-bordered; "See the roster" → `/boosters/`. The count and the "Master or above" floor
+  are both read off the roster, never typed.
+- **04 Safety** (`gp_safety`) — the ban-pattern argument named to the game's publisher
+  (`D.publisher()` / `D.PUBLISHERS`, e.g. "Riot flags accounts on patterns…"), the ToS admission in a
+  framed plate with a caution-amber (`#c9955f`) glyph, and a five-row "what that means per order"
+  card from `GP_MEASURES` (the handoff's wording of the same commitments `SAFETY["measures"]` states
+  elsewhere — ⚠ each still needs ops sign-off).
+- **05 Reviews** (`gp_reviews`) — three cards: stars, a **neutral** climb tag (not accent — three
+  ember pills would out-shout the reviews), the body, then an initials avatar + reviewer name +
+  relative date and a green Verified mark. Names come from `D.REVIEWS[].by`/`initials`, which
+  `data.py` assigns deterministically from `_REVIEW_NAMES` — ⚠ **invented**, same standing as the
+  review copy. The aside is the rating, the Trustpilot count and "Read them all".
+- **06 FAQ** (`gp_faq`/`gp_faq_items`) — the handoff's six questions, with every figure read off the
+  engine (duo % from `pricing.DUO_MULT`, the champions add-on from a real quote difference). Sticky
+  left column; native `<details>` so all answers are in the DOM for the FAQPage JSON-LD and the band
+  works with no JS, numbered, with a drawn +/− toggle and an ember-bordered open state. Single-open
+  is one `toggle` handler in app.js on `[data-gp-faq]`.
+- **Close** (`gp_close`) — the handoff's close, **not** the shared `cta_band()`: headline, two inline
+  guarantees, the live config line + total, and one uppercase filled CTA. It reads the same
+  `data-out` hooks as the order card, so the two quote one number.
+
+The hero carries **no service-chips row and no guarantee/note rows** — the handoff ends the left
+column at the bundle strip (which sits above a 1px rule). On mobile the stat row stays **above** the
+configurator and abbreviates (`.stat-k-sm` / `.stat-n-sm`: "Trustpilot / To claim / Delivered" and
+92,400 → 92.4k), and the "Home" crumb drops — all per the handoff's 390px screen.
+
+The design prototype renders: copy `redesign_zip*/design_handoff_lol_game_page/` into `site/dist/`
+and open it through the preview server to diff a band against the build. Delete it before shipping
+(a rebuild wipes `dist/` anyway).
+
+Then the three hero-level additions, all layered onto the existing configurator and the **one shared
+pricing engine** (no per-page formula — the deliberate call was to keep `pricing.py` / `app.js quote()`
+authoritative for the whole site, not adopt the handoff's separate PER_TIER model, which League's
+`prices` table already implements anyway):
+
+- **Coaching is the fourth tab** (`data-service="coaching"`), shown only where `offers_coaching(g)`
+  is true (the game's `services` string mentions coaching — LoL/Valorant/Rivals today). It is a
+  booking, not a climb: `pricing.quote()` and `app.js` gain a `service == "coaching"` branch priced
+  as `coach.rate * pack.hours * (1 - pack.disc)` and **nothing else** — no rank, no duo, no add-ons,
+  no sitewide promo. The pack discount rides in the `discount`/`subtotal` fields so the struck price
+  and save line read it like a promo. `D.COACHES` / `COACH_PACKS` / `COACH_FOCUS` / `COACH_SLOTS`
+  are **placeholder** (invented coaches/rates/slots; calendar + payment unbuilt). State: `coach`,
+  `pack` (indices), `focus` (index set), `slot`. The shared summary/CTA re-read per product via
+  `data-hide-service` (hide queue/add-ons/boosters-free/"Continue to checkout" on coaching) and
+  `data-when-service="coaching"` ("First session", the coaches-taking-bookings line, the `bookLabel`
+  = "Book N hours"). Checkout charges coaching correctly (server re-quote), though its summary still
+  labels the row "Climb" and its add-on rows quote +$0 — the handoff flags "what Continue carries
+  into checkout" as not-designed; refine on the checkout page, not here.
+- **Net wins / Placements are a 1–5 grid** (`unit_grid()`), not the old ± stepper — five per order is
+  the product cap (`pricing.UNIT_MAX = 5`), shown as five exposed buttons with a live **"$N per game"**
+  (`data-out="winsUnit"`/`placementsUnit`, quoted at one unit / current rank) and a per-product note.
+  Placements opens with an **"I have a rank / Unranked"** toggle (`data-ranked`); Unranked hides the
+  rank picker (`data-when-ranked`) and shows the plate (`data-when-unranked`), and `state.unranked`
+  prices at the ladder floor (`climb = 1`) on both server and client.
+- **The bundle strip** (`bundle_strip(g)` in the hero, `D.BUNDLES` / `bundle_climbs()`) is the
+  handoff's "Save big on bundles": each card is a two-tier climb at a **real** discount (`(ft, tt,
+  disc)` in `D.BUNDLES`, 22–35%) that **replaces the sitewide sale** on a matching climb — the `−N%`
+  pill and the struck→discounted price are a reduction the checkout actually charges, because
+  `pricing.quote()` reads `state.bundle` and `data.bundle_discount()` re-verifies the match server-side
+  (⚠ confirm the percentages are the real bundle offer before launch). Opt-in, never auto-set:
+  `data-bundle` click sets `state.bundle` + configures the climb (keeps the current division in the
+  lower tier). It **survives a division change, drops on a tier or target change** (`bundleAfter()` in
+  `setNode`, `bundleDiscount()` in `quote`). `aria-pressed` = Applied. On mobile it is a horizontal
+  swipe rail after the configurator (`.hero-copy` order 3). The ladder foot reads "Played in your
+  preferred hours" and the queue control "Duo +55%".
+  - **All nine games carry a set**, so the strip renders on every game page (it still renders nothing
+    for a game with no `BUNDLES` entry). They share one shape and one 22 → 35% ramp until the real
+    per-game economics replace them. One rule should survive that re-tuning: **the top rank of a
+    ladder is never a bundle target** — Predator, Challenger, Immortal, One Above All, Supersonic,
+    Champion, LoL's Master and CS2's 30k are cutoff- or leaderboard-gated, and each game's own `note`
+    says those orders are quoted per order, which a fixed advertised price cannot be.
+  - **Every label is read off the ladder, never typed** — nine ladders number their divisions five
+    different ways (IV–I, 1–3, 1–5, 5–1, I–IV) and CS2 has none. The card names the resolved target
+    rank (`b['target']`), so Valorant reads "Iron → Silver 1"; it used to append a literal `IV` and
+    quoted Valorant a division that does not exist. The sub-line is "From any *tier* division" only
+    where that tier has divisions, else "Starts at *rung*", and the head note swaps "tiers" for
+    "rating bands" on a flat ladder. A card with a single-rung from-tier has `floorFrom == defFrom`.
+  - **The name wraps at the arrow, by construction.** Each end is a nowrap `<span>` and the only
+    break opportunity is a `<wbr>` after the `<i>` arrow, so a long name ("Diamond → Grandmaster
+    III", wider than a 216px card) breaks as "Diamond →" / "Grandmaster III" and never splits a rank
+    from its division, which reads as two ranks. The arrow's `.28em` padding is sized to the two
+    spaces it replaced — widen it and a name that fit before starts wrapping. The grid is
+    `repeat(3, minmax(0, 1fr))`: with auto-min columns a nowrap name grows the track past the copy
+    column and clips the last card's `−N%` pill.
+- **The tier-track ladder** replaced the flat tick strip. `ladder_strip()` emits `data-ladder`;
+  `app.js` builds one `.ob-seg` per tier, striped into its division slots (`--slots`) and filled in
+  that tier's colour (`--tier` from `tierColor()`) across the span, with a hollow `.ob-seg-ring` at
+  `from` and an accent `.ob-seg-dot` at `to`. Generic — it reads `divsOf()`, so it works for flat
+  ladders (CS2: one slot per rung) as well as LoL's divisions. Captions (`data-tier-caps`) are now
+  tinted per tier when in-span. The old `data-ticks` render hook is dead but left in place.
 
 ## The checkout page
 
@@ -940,6 +1048,14 @@ The same rule covers **seeded analytics**: every event written by `tools/seed_an
 any are in the window. Keep that flag. Seeded funnel numbers are exactly the kind of thing that
 quietly becomes a slide in a real meeting. Clear the store before the site takes real traffic.
 
+The **roster store** (`src/boosters.py`, see [The roster store](#the-roster-store--boosters-in-the-backend))
+is the same kind of hazard, now that the boosters board, the "On shift now" rail and the "Delivered
+today" feed read it live instead of from the frozen HTML. `tools/seed_boosters.py` fills it with the
+same fifty invented people and tags every row `syn: 1`; the public `/api/boosters` payload reports
+`syn`, and the `/ops` Boosters tab shows a standing banner. The derived feed is **not** a log of real
+deliveries — it is invented from the roster on the fly. Clear the store and load the real roster
+(wired to the applications queue and the orders table) before launch.
+
 ## Payments (Stripe)
 
 Checkout uses **Stripe Checkout** (hosted redirect). No card data ever touches this codebase. The
@@ -992,7 +1108,9 @@ public/assets/js/analytics.js  ──►  POST /api/collect  ──►  src/anal
 | `site/public/assets/js/ops.js`, `ops.css` | The console. Self-contained; shares nothing with the shop's stylesheets. |
 | `site/tools/seed_analytics.py` | Synthetic traffic for testing. |
 | `site/src/accounts.py` | The header sign-up list — a **separate** store, `POST /api/account` to write, `ops.py`'s `accounts` action to read. Holds name + email, never a password. |
-| `api/collect.py`, `api/account.py`, `api/ops.py` | Vercel shells, mirroring the `serve.py` routes. |
+| `site/src/boosters.py` | The roster store — another **separate** store (operator-write / public-read), `GET /api/boosters` to read, `ops.py`'s `boosters` action for the console. See [The roster store](#the-roster-store--boosters-in-the-backend). |
+| `site/tools/seed_boosters.py` | Fills the roster store from `data.py`'s `BOOSTERS` (tags rows `syn`). |
+| `api/collect.py`, `api/account.py`, `api/boosters.py`, `api/ops.py` | Vercel shells, mirroring the `serve.py` routes. |
 
 **Two stores, chosen by environment.** With `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`
 set, events go to Upstash Redis over its REST API (stdlib `urllib`) — required in production,
@@ -1083,6 +1201,64 @@ sworn never to.
 - **Restart the server after touching these files.** Like the payment and analytics routes, the
   `/api/account` and `accounts` routes live in `serve.py` / `ops.py` and only take effect on a
   process restart — there is no watcher.
+
+### The roster store — boosters in the backend
+
+`src/boosters.py` is the **third sibling** of `analytics.py` and `accounts.py`: same house rules
+(stdlib only, no build step, Upstash Redis in prod / an NDJSON file in dev), same public-write? — no,
+**operator-write / public-read** shape, and a **separate store** (`esb:boosters` / `boosters.ndjson`,
+never analytics' `esb:ev` or accounts' `esb:accounts`; it reuses only analytics' Upstash *transport*).
+It exists because the roster used to be frozen into the HTML at build time — every visitor saw the
+same table, the same five faces on the rail and the same four deliveries in the feed. Now those three
+panels read a live store and vary between loads.
+
+```
+data.py BOOSTERS ──seed_boosters.py──► boosters store ──► GET /api/boosters ──► app.js re-renders
+   (build-time fallback, SEO, counts)     (esb:boosters)    (public, rotating)   the 3 panels live
+```
+
+- **One public read, no public write.** `GET /api/boosters` is anonymous, holds no PII and no secret,
+  and returns the whole board (sorted by win rate, as the server-rendered table is), a **rotating**
+  rail selection, a **rotating derived** feed, and the counts the three panels quote. It is the only
+  thing the site exposes; the store is filled by `tools/seed_boosters.py` (and, later, an admin flow).
+  There is deliberately no public write — boosters are staff records, not visitor submissions.
+- **The three panels are progressive enhancement, not a SPA.** `live_feed()`, `roster_card()` and
+  `roster_board()` still render from `data.py` at build time, so the page is correct with no JS and
+  legible to a crawler. `initBoosters()` in app.js then fetches `/api/boosters`; a **204 (empty
+  store), a non-200 or a network failure leaves the server-rendered fallback in place** — the panels
+  never blank. On success it swaps `.lf-list`, `.rc-list` and `[data-rst-body]` in, re-attaches the
+  feed ticker (`initFeed()` is re-entrant — it clears its prior interval) and re-runs the roster
+  filters (`window.esbRefreshRoster`, which re-reads rows from the DOM each draw).
+- **JS rows are drawn with the server's own glyphs.** `client_data()` ships an `icons` map built from
+  build.py's `_ico()` — the arrow, dot, hourglass and seal the three renderers reuse — so a row built
+  in JS is drawn with the same marks as its server twin. Rank marks are tinted server-side
+  (`markColor` from `D.tier_color()`), so the client renderer never owns a colour and can't drift.
+- **The rotation is deterministic within a time bucket** (`ROTATE_SECS`), so two requests a few
+  seconds apart agree, but a later load differs — that is the "not always the same preview". The
+  **feed is DERIVED, never a log of real orders**: `_derive_feed()` picks a rotating handful of
+  boosters and gives each a plausible climb on their own game's ladder — the same sanctioned trick
+  `demo_order()` and `booster_history()` use, never a claim that those deliveries happened. Flat
+  rating ladders (CS2's Premier numbers) are left out of the feed rather than drawn with a made-up
+  format. `closed_24h` (the feed's "N orders closed in the last 24 hours") is `_closed_24h()` —
+  derived from the roster size with a time-of-day curve and a **coarse** wobble bucket
+  (`CLOSED_BUCKET`, ~2.5 min), so it drifts like a real rolling counter rather than flickering per
+  reload. Still a placeholder — a real figure comes from the orders table.
+- **`clean_booster()` enforces what the page argues.** A real game slug, a unique handle, and a win
+  rate at or above `WR_FLOOR` — a row under the floor would contradict the boosters hero three inches
+  above the table, the same reason `data.py` asserts it at import. `WR_TOP` here is kept in step with
+  build.py's, because the roster's win-rate bar reads both numbers.
+- **`/ops` has a read-only Boosters tab.** A sibling of Accounts (`ops.py`'s `boosters` action →
+  `boosters.summary()`): totals, a free/busy split, a per-game breakdown and the roster itself,
+  fetched on demand and CSV-exportable. A standing banner names it a placeholder store; a second
+  banner appears if any row carries `syn` (the seeder's flag). It is read-only by design — writes go
+  through the seed tool, not the console.
+- **Still placeholder data — blocking for launch.** The seeded roster is the same fifty invented
+  people `data.py` carries (see [Placeholder data](#placeholder-data--do-not-present-as-real)), and
+  the derived feed is not a record of real deliveries. Clear the store and load the real roster —
+  wired to the applications queue and the orders table — before the site takes real traffic.
+- **Restart the server after touching these files.** Like every other `/api` route, `/api/boosters`
+  and the `boosters` ops action live in `serve.py` / `ops.py` and only take effect on a process
+  restart — there is no watcher. `api/boosters.py` is the Vercel shell mirroring the serve.py route.
 
 ## Social sign-in — Google + Discord OAuth
 
