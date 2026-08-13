@@ -1244,32 +1244,47 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
         ld += '<script type="application/ld+json">%s</script>\n' % json.dumps(block, ensure_ascii=False)
     bar = ""
     if mobile_bar:
-        # The sticky quote on the phone. Three rows, in the order the decision is
-        # made: the money and the button, what the money buys, then the two
-        # objections that stop a tap. It used to be one row — price over a mono
-        # config line, with a "Continue" that named no destination — so the bar
-        # asked for a tap while answering none of "how much did I save", "when
-        # does it land" and "is this safe". Every figure is a `data-out` the card
-        # already fills, so the bar and the card cannot quote two prices.
-        bar = f"""<div class="mobile-bar" role="region" aria-label="Live quote">
+        # The persistent quote on the phone — the `design_handoff_sticky_checkout_bar`
+        # port. The configurator is ~1000px tall, so whatever the buyer changes is a
+        # number that scrolls off-screen; the bar keeps cause and effect in one view.
+        # It is the ONLY filled button on the page (the card drops its own CTA below
+        # 1000px), and every figure is a `data-out` the card already fills — two
+        # formatters producing one number is how the label and the total drift apart.
+        #
+        # The handoff's structure: an accent hairline; a price row whose left column
+        # stacks the money over a one-line meta (ETA · config, the config truncating)
+        # with the tall CTA spanning both on the right; then a small assurance row.
+        # Its own home-indicator is mock chrome — a real page uses the safe-area
+        # inset instead (see .mobile-bar in site.css).
+        #
+        # Deviation, deliberate: the handoff specifies `position: sticky`, but this
+        # site ships the bar as `position: fixed` — the handoff's own "one thing that
+        # will break this" is a clipping-overflow ancestor silently killing sticky,
+        # and fixed is immune to it, produces the identical layered result, and is the
+        # site's established pattern. Nothing else about the design changes.
+        bar = f"""<div class="mobile-bar" aria-label="Live quote">
+  <div class="mb-hair" aria-hidden="true"></div>
   <div class="mb-top">
-    <div class="mb-money">
-      <span class="mb-price" data-out="price">—</span>
-      <span class="mobile-was" data-when-discount data-out="was" hidden></span>
-      <span class="mb-save" data-when-discount hidden><span>Save</span> <b data-out="saveAmt"></b></span>
+    <div class="mb-left">
+      <div class="mb-money" aria-live="polite">
+        <span class="mb-price" data-out="price">—</span>
+        <span class="mobile-was" data-when-discount data-out="was" hidden></span>
+        <span class="mb-save" data-when-discount hidden><span>Save</span> <b data-out="saveAmt"></b></span>
+      </div>
+      <span class="mb-meta">
+        {_ico("clock-countdown", 12, "mb-ico", stroke=True)}<span class="mb-eta" data-out="eta">—</span>
+        <span class="mb-dot" aria-hidden="true">·</span>
+        <span class="mb-cfg" data-out="summary">—</span>
+      </span>
     </div>
     <a class="btn btn-primary mb-cta" href="/checkout.html" data-continue>
-      <span>Checkout</span>{_ico("arrow", 15, "ico", stroke=True)}
+      <span data-hide-service="coaching">Checkout</span><span data-when-service="coaching" data-out="bookLabel" hidden></span>{_ico("arrow", 15, "ico", stroke=True)}
     </a>
   </div>
-  <div class="mb-meta">
-    <span class="mb-eta">{_ico("clock-countdown", 13, "mb-ico", stroke=True)}<span data-out="eta">—</span></span>
-    <span class="mb-dot" aria-hidden="true">·</span>
-    <span class="mb-cfg" data-out="summary">—</span>
-  </div>
   <div class="mb-assure">
-    <span class="mb-as">{_ico("lock", 12, "mb-ico", stroke=True)}<span>Secure checkout</span></span>
-    <span class="mb-as mb-as-ok">{_ico("shield-check", 12, "mb-ico", stroke=True)}<span>Money-back guarantee</span></span>
+    <span class="mb-as">{_ico("lock", 11, "mb-ico", stroke=True)}<span>Secure checkout</span></span>
+    <span class="mb-as-div" aria-hidden="true"></span>
+    <span class="mb-as">{_ico("shield-check", 11, "mb-ico", stroke=True)}<span>Money-back guarantee</span></span>
   </div>
 </div>"""
     # `bare` strips the page to brand + padlock + help and drops the footer to a

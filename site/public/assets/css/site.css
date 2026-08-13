@@ -1615,11 +1615,16 @@ body.hd-locked {
 .sum-line { display: flex; justify-content: space-between; gap: 16px; font-size: 13px; padding: 7px 0; }
 .sum-line .text-muted { font-family: var(--body); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
 
-/* ── mobile live-price bar ─────────────────────────────────────────────── */
-/* Three rows: money + button, then what the money buys, then the two
-   objections. `display: flex` here is what the ≤1000px rule switches on — the
-   bar is `none` at desktop width, so the column direction and everything under
-   it only ever paints on a phone. */
+/* ── mobile sticky checkout bar ────────────────────────────────────────── */
+/* The `design_handoff_sticky_checkout_bar` port. An accent hairline, then a
+   price row — the money over a one-line meta on the left, the tall CTA spanning
+   both on the right — then a small assurance row. `display: flex` here is what
+   the ≤1000px rule switches on: the bar is `none` at desktop width, so nothing
+   below only ever paints on a phone.
+
+   `fixed`, not the handoff's `sticky`: the handoff's own headline risk is a
+   clipping-overflow ancestor silently disabling sticky, and fixed is immune to
+   it while producing the identical layered result — it is the site's pattern. */
 .mobile-bar {
   /* Its own copy of the two scoped names it reads. The bar is a child of
      <body>, outside .hero-a and .rail, and an unresolvable var() computes to
@@ -1627,64 +1632,84 @@ body.hd-locked {
      dashboard's live dots transparent. */
   --h-tint: #ffb887;
   --l-good: #8fd6a4;
-  display: none; flex-direction: column; gap: 7px;
+  display: none; flex-direction: column;
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-  background: rgba(10, 10, 17, .94); backdrop-filter: blur(14px);
-  border-top: 1px solid var(--hairline);
-  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  /* Gradient + blur so the page reads *through* the bar as content scrolls
+     under it; the upward shadow is what separates it from that content — the
+     1px border alone was not enough on a dark ground. */
+  background: linear-gradient(180deg, rgba(11, 10, 9, .86), rgba(11, 10, 9, .97));
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, .12);
+  box-shadow: 0 -14px 34px rgba(0, 0, 0, .5);
+  /* Replaces the handoff's mock home indicator: clears the iOS home bar and the
+     Android gesture area. The assurance row owns the 9px base above it. */
+  padding-bottom: env(safe-area-inset-bottom);
 }
-.mb-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-/* Sized so a three-figure price, its struck original and the pill still sit on
-   one line at 375px — the widest the shop quotes in USD. `wrap` is the safety
-   valve behind that, not the plan: EUR formatting is wider, and a pill that
-   drops to a second line is better than one that pushes the button off-screen. */
-.mb-money { display: flex; align-items: baseline; gap: 7px; min-width: 0; flex-wrap: wrap; }
+/* A full-width solid accent line reads as an error; fading it at both ends
+   makes it a highlight. */
+.mb-hair {
+  height: 2px; flex: none;
+  background: linear-gradient(90deg, rgba(255, 90, 31, 0), var(--ember, #ff5a1f), rgba(255, 90, 31, 0));
+}
+.mb-top { display: flex; align-items: center; gap: 12px; padding: 11px 14px 8px; }
+.mb-left { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+/* The money line. `wrap` is the safety valve, not the plan: at 375px a
+   three-figure price, its struck original and the pill sit on one line, and EUR
+   formatting runs wider — a pill that drops below beats one that shoves the
+   struck price off the row. */
+.mb-money { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
 .mb-price {
-  font-family: var(--body); font-weight: 700; font-size: 26px; line-height: 1;
-  letter-spacing: -.02em; color: var(--text);
+  font-family: var(--body); font-weight: 600; font-size: 30px; line-height: 1;
+  letter-spacing: -.03em; color: var(--text);
 }
 .mobile-was {
-  font-size: 14px; font-weight: 600; color: var(--text-6);
+  font-size: 13px; color: var(--text-6);
   text-decoration: line-through; text-decoration-thickness: 1.5px;
 }
-/* The saving is a pill, not a sentence: at this size it has to be readable in
-   the half-second before the thumb moves, and "You save $16 with SPLIT15" is
-   not. The code that produced it is already named in the card above. */
+/* The saving is a pill, not a sentence: at this size it has to read in the
+   half-second before the thumb moves, and "You save $16 with SPLIT15" does not.
+   The code that produced it is named in the card above. Hidden with the struck
+   price when there is no discount — an empty "Save $0" is worse than neither. */
 .mb-save {
   display: inline-flex; align-items: baseline; gap: 4px; flex: none;
-  padding: 3px 7px; border-radius: 999px;
-  font-family: var(--body); font-weight: 700; font-size: 10px;
-  letter-spacing: .07em; text-transform: uppercase;
+  padding: 5px 7px; border-radius: 999px;
+  font-family: var(--body); font-weight: 700; font-size: 9.5px;
+  letter-spacing: .09em; text-transform: uppercase;
   color: var(--h-tint);
-  background: rgba(255, 90, 31, .13); border: 1px solid rgba(255, 90, 31, .3);
+  background: rgba(255, 90, 31, .12); border: 1px solid rgba(255, 90, 31, .3);
 }
-.mb-cta {
-  flex: none; height: 46px; padding: 0 15px; gap: 8px;
-  font-size: 12.5px; letter-spacing: .07em;
-}
-/* Row 2 — the estimate and the configuration, on one line. `.mb-cfg` is the
-   only part allowed to shrink: the delivery estimate is the answer to "when",
-   and a truncated "4 da…" answers nothing. */
+/* The meta line — clock · ETA · config, on one line. The config is the only
+   part that may shrink: it grows with tier names ("Platinum III → Emerald IV ·
+   Duo"), and truncating it is correct because the price and the ETA to its left
+   must never be pushed. The ellipsis is the design. */
 .mb-meta {
   display: flex; align-items: center; gap: 7px; min-width: 0;
-  font-size: 11.5px; color: var(--text-6);
+  font-size: 11.5px; color: var(--text-6); white-space: nowrap;
 }
-.mb-eta { display: inline-flex; align-items: center; gap: 5px; flex: none; color: var(--text-4); }
-.mb-cfg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-eta { flex: none; color: var(--text-6); }
 .mb-dot { flex: none; color: var(--text-7); }
+.mb-cfg { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .mb-ico { flex: none; }
-/* Row 3 — the two objections a grey-market buyer has at the moment of paying.
-   Same claims the hero's guarantee row makes; this is the last place they can
-   still change the answer. */
-.mb-assure {
-  display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap;
-  font-size: 10.5px; color: var(--text-6);
+/* The one filled action on the page. Its label relabels per product — "Book N
+   hours" on coaching, "Checkout" on the three boost tabs — through the same
+   data-hide-service / bookLabel hooks the card's CTA uses. */
+.mb-cta {
+  flex: none; height: 54px; padding: 0 20px; gap: 9px; border-radius: 11px;
+  font-size: 13px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  box-shadow: 0 8px 22px rgba(255, 90, 31, .34);
 }
-/* The glyphs carry the green, the words stay muted. Two green sentences under
-   an ember button is three accents in 40px of bar; the marks alone are enough
-   to read the row as reassurance rather than fine print. */
-.mb-as { display: inline-flex; align-items: center; gap: 5px; }
+.mb-cta:active { filter: brightness(.94); }
+/* The two objections a grey-market buyer has at the instant of tapping — small
+   on purpose, reassurance not a feature list. The glyphs carry the green and
+   the words stay muted, so the row does not become a third accent under the
+   ember button; a 1px rule divides them. */
+.mb-assure {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  padding: 0 14px 9px; font-size: 10.5px; color: var(--text-6);
+}
+.mb-as { display: inline-flex; align-items: center; gap: 6px; }
 .mb-as .mb-ico { color: var(--l-good); }
+.mb-as-div { width: 1px; height: 9px; flex: none; background: rgba(255, 255, 255, .12); }
 
 
 /* Grid tracks default to a min-content floor; without min-width:0 one long
