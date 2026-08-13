@@ -365,6 +365,11 @@
               : T("You save") + " " + usd(q.discount)
                 + (q.promoCode ? " " + T("with") + " " + q.promoCode : ""))
           : "",
+        // The saving as a bare amount, for the sticky bar's "Save $16" pill.
+        // `discount` above is the signed receipt figure ("−$16"); a pill that
+        // opens with a minus reads as a charge, and the word has to stay its
+        // own text node to be translatable.
+        saveAmt: q.discount ? usd(q.discount) : "",
         summaryUpper: q.summary.toUpperCase(),
         // Per-game price for the unit tabs — one win / one placement at the
         // current rank and mode, quoted live so it tracks the rank picker.
@@ -514,16 +519,36 @@
          the wrong test — Dota's eight long names overflow where Valorant's
          eight do not — so this measures once, on the only render that can
          change the labels, and never again. */
-      if (fillCells(root, caps.length, "ob-cap", caps)) {
-        /* Each caption is a 1fr cell with `white-space: nowrap`, so a name too
-           wide for its cell overflows the cell without ever widening the row —
-           the row's own scrollWidth therefore never reports it. Measure the
-           cells instead, and leave a 2px breathing gap so neighbours can't touch. */
-        root.setAttribute("data-dense", "0");
-        var tight = Array.prototype.some.call(root.children, function (c) {
-          return c.scrollWidth > c.clientWidth - 2;
-        });
-        if (tight) root.setAttribute("data-dense", "1");
+      var rebuilt = fillCells(root, caps.length, "ob-cap", caps);
+      if (rebuilt) root.setAttribute("data-dense", "0");
+      /* Measured only when the strip actually has layout. The ladder lives in
+         the Division panel, which is `hidden` on the three other tabs — a pass
+         that runs there measures every cell as zero, concludes nothing fits and
+         latches the smallest size for the rest of the visit, because the answer
+         is cached per game. `data-fit` is that cache, kept separate from
+         fillCells' `data-for` so a skipped measurement is retried rather than
+         remembered. */
+      if ((rebuilt || root.getAttribute("data-fit") !== state.game) && root.clientWidth) {
+        /* Measure the TEXT, not the cell. A caption is a `1fr` flex item, so
+           its box is exactly its track and its own scrollWidth equals its
+           clientWidth whether the name fits or not — the previous test compared
+           those two and was therefore true on every ladder, which pinned every
+           game to the small step and detected nothing. A Range over the
+           contents reports what the words actually measure (and, once they are
+           allowed to wrap, the widest resulting line). 2px of breathing room,
+           so neighbouring captions can never touch. */
+        var probe = document.createRange();
+        var step = 0;
+        for (; step < 2; step++) {
+          root.setAttribute("data-dense", String(step));
+          var fits = Array.prototype.every.call(root.children, function (c) {
+            probe.selectNodeContents(c);
+            return probe.getBoundingClientRect().width <= c.clientWidth - 2;
+          });
+          if (fits) break;
+        }
+        root.setAttribute("data-dense", String(step));
+        root.setAttribute("data-fit", state.game);
       }
       var a = caps.indexOf(tierOf(state.game, state.from));
       var b = caps.indexOf(tierOf(state.game, state.to));
@@ -548,6 +573,33 @@
     each("[data-tiername]", function (el) {
       var rank = el.getAttribute("data-tiername") === "to" ? state.to : state.from;
       el.textContent = tierOf(state.game, rank);
+    });
+
+    /* The rank plate's tier name never ellipses (the configurator handoff's
+       rule, and why it is 17px rather than 19px). That size was measured
+       against League, whose longest name fits; "Grandmaster" and "One Above
+       All" do not, so the plate steps down instead of truncating — the same
+       trade [data-tier-caps] makes for the ladder captions.
+
+       Measured off the game's WIDEST tier name, not the one on screen: sizing
+       to the current name would resize the type under the reader on every tier
+       change, and would leave the two plates at different sizes. Runs once per
+       game, and not at all while the panel is hidden (clientWidth 0). */
+    each("[data-tierfit]", function (root) {
+      var el = root.querySelector("[data-tiername]");
+      if (!el || !root.clientWidth || root.getAttribute("data-for") === state.game) return;
+      root.setAttribute("data-for", state.game);
+      var names = tiersOf(state.game), keep = el.textContent, step = 0;
+      for (; step < 3; step++) {
+        root.setAttribute("data-dense", String(step));
+        var fits = names.every(function (n) {
+          el.textContent = n;
+          return el.scrollWidth <= root.clientWidth;
+        });
+        if (fits) break;
+      }
+      root.setAttribute("data-dense", String(step));
+      el.textContent = keep;
     });
 
     // Whole rank names that carry the tier colour themselves (the closing band's
@@ -788,6 +840,20 @@
     document.dispatchEvent(new CustomEvent("esb:render", { detail: { state: state, quote: q } }));
   }
   window.esbRender = render;
+
+  /* Both text-fitting passes above ([data-tier-caps] and [data-tierfit]) measure
+     once and cache the answer against the game. On a cold cache the first render
+     happens before Inter has loaded, so they would measure the fallback face and
+     keep that verdict for the whole visit — a name that fits in the fallback and
+     not in Inter would then overlap its neighbour and never be re-checked. Drop
+     the caches once the real font is in and render again. */
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () {
+      each("[data-tier-caps]", function (el) { el.removeAttribute("data-fit"); });
+      each("[data-tierfit]", function (el) { el.removeAttribute("data-for"); });
+      render();
+    });
+  }
 
   /* Rebuild a fixed-length strip of spans only when it no longer matches the
      game it was built for — two games can share a rung count (LoL and Rocket
@@ -1205,6 +1271,7 @@
     initBoosters();
     initProfile();
     initReviews();
+    initCatalog();
     initGuides();
     initScrollHints();
 
@@ -2088,6 +2155,152 @@
     draw();
   }
 
+  /* ── /games/ — the catalogue's filter, sort and trust rail ────────────────
+     design_handoff_games_page. Filter and sort are independent and compose:
+     sorting persists across filter changes, filters are single-select with
+     `all` as the reset. Every card is already in the DOM in catalogue order —
+     this only hides and re-orders, the same trade-off the roster board and the
+     reviews feed make, and the reason is the same: this is the page a crawler
+     reads to learn which titles exist.
+
+     There is no empty state because no filter can return zero — the counts are
+     computed off the catalogue at build time and every chip is a real capability
+     with at least one title. If a filter is ever added that can return nothing,
+     that state has to be designed rather than left to collapse the grid. */
+  function initCatalog() {
+    var grid = document.querySelector("[data-gc-grid]");
+    if (!grid) return;
+    var cards = [].slice.call(grid.querySelectorAll("[data-gc-card]"));
+    if (!cards.length) return;
+    var foot = document.querySelector("[data-gc-foot]");
+    var shown = [].slice.call(document.querySelectorAll("[data-gc-shown]"));
+    var sortLabel = document.querySelector("[data-gc-sortlabel]");
+    var st = { filter: "all", sort: "featured" };
+
+    cards.forEach(function (el) {
+      el._order = parseInt(el.getAttribute("data-gc-order"), 10) || 0;
+      el._price = parseInt(el.getAttribute("data-gc-price"), 10) || 0;
+      el._name = el.getAttribute("data-gc-name") || "";
+    });
+
+    function matches(el) {
+      return st.filter === "all" || el.getAttribute("data-gc-" + st.filter) === "1";
+    }
+
+    function draw() {
+      var hits = cards.filter(matches);
+      hits.sort(function (a, b) {
+        if (st.sort === "price") return a._price - b._price || a._order - b._order;
+        if (st.sort === "az") return a._name.localeCompare(b._name);
+        return a._order - b._order;              // Featured — the catalogue's order
+      });
+      cards.forEach(function (el) { el.hidden = true; });
+      hits.forEach(function (el) { grid.appendChild(el); el.hidden = false; });
+      shown.forEach(function (el) { el.textContent = hits.length; });
+      // The footer only exists while a filter is on: an unfiltered page has
+      // nothing to say there and no reset to offer.
+      if (foot) foot.hidden = st.filter === "all";
+    }
+
+    // One state, two controls per dimension — the segmented control and the
+    // native select are both in the DOM at every width (CSS picks one), so both
+    // are always re-marked whichever fired.
+    function mark(attr, value) {
+      each("[data-" + attr + "]", function (btn) {
+        var on = btn.getAttribute("data-" + attr) === value;
+        btn.classList.toggle("is-on", on);
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
+
+    function set(key, value) {
+      st[key] = value;
+      mark("gc-" + key, value);
+      if (key === "sort") {
+        var sel = document.querySelector("[data-gc-sortsel]");
+        if (sel && sel.value !== value) sel.value = value;
+        var opt = sel && sel.options[sel.selectedIndex];
+        if (sortLabel && opt) sortLabel.textContent = opt.textContent;
+      }
+      draw();
+    }
+
+    each("[data-gc-filter]", function (btn) {
+      btn.addEventListener("click", function () { set("filter", btn.getAttribute("data-gc-filter")); });
+    });
+    each("[data-gc-sort]", function (btn) {
+      btn.addEventListener("click", function () { set("sort", btn.getAttribute("data-gc-sort")); });
+    });
+    each("[data-gc-sortsel]", function (sel) {
+      sel.addEventListener("change", function () { set("sort", sel.value); });
+    });
+    // Reset through the chip itself, so the pressed state can never fall out of
+    // step with the grid — the same wiring the roster's "Show everyone" uses.
+    var reset = document.querySelector("[data-gc-reset]");
+    if (reset) reset.addEventListener("click", function () {
+      var all = document.querySelector('[data-gc-filter="all"]');
+      if (all) all.click();
+      grid.scrollIntoView({ block: "start" });
+    });
+
+    initCatalogRail();
+    draw();
+  }
+
+  /* The phone's trust rail: three promise cards on scroll-snap, with dots that
+     FOLLOW the rail rather than drive a timer. The handoff auto-rotates them
+     every 4.6s; these three are the refund, privacy and support promises, and a
+     card that slides itself away mid-sentence is exactly the "a moving element
+     reads as a sales device" rule the guarantee page is built on. */
+  function initCatalogRail() {
+    var dots = document.querySelector("[data-gc-dots]");
+    var rail = document.querySelector(".gc .sg-promises");
+    if (!dots || !rail) return;
+    var buttons = [].slice.call(dots.querySelectorAll("[data-gc-dot]"));
+    var cards = [].slice.call(rail.children);
+    if (buttons.length !== cards.length) return;
+
+    // Card offsets are measured against the rail's own left edge, not the
+    // offsetParent's, so the pair works wherever the rail is placed.
+    function at(el) { return el.offsetLeft - rail.offsetLeft; }
+    function nearest() {
+      var mid = rail.scrollLeft + rail.clientWidth / 2, best = 0, dist = Infinity;
+      cards.forEach(function (el, i) {
+        var d = Math.abs(at(el) + el.offsetWidth / 2 - mid);
+        if (d < dist) { dist = d; best = i; }
+      });
+      return best;
+    }
+    function mark(i) {
+      buttons.forEach(function (b, j) {
+        b.classList.toggle("is-on", i === j);
+        b.setAttribute("aria-pressed", i === j ? "true" : "false");
+      });
+    }
+    // Above 760px the same element is a three-column grid with nothing to
+    // scroll: every card is on screen, so "nearest the centre" would mark the
+    // middle dot for a control CSS has already hidden.
+    function sync() { mark(rail.scrollWidth - rail.clientWidth > 4 ? nearest() : 0); }
+    rail.addEventListener("scroll", function () {
+      clearTimeout(rail._t);
+      rail._t = setTimeout(sync, 80);
+    }, { passive: true });
+    buttons.forEach(function (b, i) {
+      b.addEventListener("click", function () {
+        // Marked here rather than waiting on the scroll event: a tap on the dot
+        // for a card already at the end of the rail scrolls nowhere, and a dot
+        // that does not light up reads as a dead control.
+        mark(i);
+        rail.scrollTo({ left: at(cards[i]), behavior: reduceMotion() ? "auto" : "smooth" });
+      });
+    });
+    sync();
+  }
+
+  function reduceMotion() {
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }
+
   /* ── delivered-today feed: keep the relative times true ───────────────────
      "2 min ago" is only true at the instant the page was built. This is a
      static site and a tab can sit open for an hour, so every row carries the
@@ -2166,6 +2379,26 @@
     });
   }
 
+  /* The face inside the availability ring — build.py's booster_face(), in JS.
+
+     Same order of preference as the server: the real avatar in
+     site/assets-in/avatar/ if this booster has one (D.avatars, keyed by handle
+     because only build.py can see that folder), else the drawn glyph the server
+     names in `face` with the two tints it resolved (see boosters.py's _row), so
+     this never picks a face or a colour of its own and a live row can't be
+     drawn differently than the server-rendered one it replaces. The initial is
+     the last resort — what a data.js cached from before this shipped gives. */
+  function faceMark(b, cls) {
+    var src = D.avatars && D.avatars[b.handle];
+    if (src) {
+      return '<img src="' + escH(src) + '" alt="" width="38" height="38" loading="lazy">';
+    }
+    var g = (D.icons && D.icons.faces && D.icons.faces[b.face]) || "";
+    if (!g) return '<span class="' + cls + '">' + escH(b.initial) + "</span>";
+    return '<span class="' + cls + ' is-face" style="--face:' + escH(b.faceInk) +
+      ";--face-bg:" + escH(b.facePlate) + '">' + g + "</span>";
+  }
+
   function initBoosters() {
     var feedList = document.querySelector(".lf-list");
     var shiftList = document.querySelector(".rc-list");
@@ -2231,7 +2464,7 @@
         (b.free ? (I.pillDotRc || "") : (I.pillHourRc || "")) +
         escH(b.free ? T("Free") : b.queue) + "</span>";
       return '<li><a class="rc-row" href="' + escH(b.href) + '">' +
-        '<span class="rc-ring' + (b.free ? "" : " is-busy") + '"><span class="rc-initial">' + escH(b.initial) + "</span></span>" +
+        '<span class="rc-ring' + (b.free ? "" : " is-busy") + '">' + faceMark(b, "rc-initial") + "</span>" +
         '<span class="rc-who">' +
           '<span class="rc-name">' + escH(b.handle) + chip + "</span>" +
           '<span class="rc-rank">' + escH(b.peakFull) + "</span>" +
@@ -2255,7 +2488,7 @@
       return '<div class="rst-row" data-rst-row data-game="' + escH(b.gameShort) + '"' +
         ' data-free="' + (b.free ? 1 : 0) + '" data-win="' + b.wrN + '"' + (i >= 12 ? " hidden" : "") + ">" +
         '<a class="rst-who" href="' + escH(b.href) + '">' +
-          '<span class="rst-ring' + (b.free ? "" : " is-busy") + '"><span class="rst-initial">' + escH(b.initial) + "</span></span>" +
+          '<span class="rst-ring' + (b.free ? "" : " is-busy") + '">' + faceMark(b, "rst-initial") + "</span>" +
           '<span class="rst-who-t">' +
             '<span class="rst-handle">' + escH(b.handle) + "</span>" +
             '<span class="rst-orders"><b>' + b.orders + "</b> " + T("orders delivered") + "</span>" +
@@ -2293,7 +2526,8 @@
      width, the language and the game's own tab set, and a fade over a row that
      already fits points at nothing. */
   function initScrollHints() {
-    var rails = [].slice.call(document.querySelectorAll(".ob-tabs, .ob-bundles-grid, .rvp-chips, .rst-chips"));
+    var rails = [].slice.call(document.querySelectorAll(
+      ".ob-tabs, .ob-bundles-grid, .rvp-chips, .rst-chips, .gc-chips, .gc-svcs-grid"));
     if (!rails.length) return;
     function sync(el) {
       var over = el.scrollWidth - el.clientWidth;

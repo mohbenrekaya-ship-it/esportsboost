@@ -1244,12 +1244,33 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
         ld += '<script type="application/ld+json">%s</script>\n' % json.dumps(block, ensure_ascii=False)
     bar = ""
     if mobile_bar:
-        bar = """<div class="mobile-bar" role="region" aria-label="Live quote">
-  <div>
-    <div class="p"><span class="mobile-was" data-when-discount data-out="was" hidden></span><span data-out="price">—</span></div>
-    <div class="s" data-out="summary">—</div>
+        # The sticky quote on the phone. Three rows, in the order the decision is
+        # made: the money and the button, what the money buys, then the two
+        # objections that stop a tap. It used to be one row — price over a mono
+        # config line, with a "Continue" that named no destination — so the bar
+        # asked for a tap while answering none of "how much did I save", "when
+        # does it land" and "is this safe". Every figure is a `data-out` the card
+        # already fills, so the bar and the card cannot quote two prices.
+        bar = f"""<div class="mobile-bar" role="region" aria-label="Live quote">
+  <div class="mb-top">
+    <div class="mb-money">
+      <span class="mb-price" data-out="price">—</span>
+      <span class="mobile-was" data-when-discount data-out="was" hidden></span>
+      <span class="mb-save" data-when-discount hidden><span>Save</span> <b data-out="saveAmt"></b></span>
+    </div>
+    <a class="btn btn-primary mb-cta" href="/checkout.html" data-continue>
+      <span>Checkout</span>{_ico("arrow", 15, "ico", stroke=True)}
+    </a>
   </div>
-  <a class="btn btn-primary btn-sm" href="/checkout.html" data-continue>Continue</a>
+  <div class="mb-meta">
+    <span class="mb-eta">{_ico("clock-countdown", 13, "mb-ico", stroke=True)}<span data-out="eta">—</span></span>
+    <span class="mb-dot" aria-hidden="true">·</span>
+    <span class="mb-cfg" data-out="summary">—</span>
+  </div>
+  <div class="mb-assure">
+    <span class="mb-as">{_ico("lock", 12, "mb-ico", stroke=True)}<span>Secure checkout</span></span>
+    <span class="mb-as mb-as-ok">{_ico("shield-check", 12, "mb-ico", stroke=True)}<span>Money-back guarantee</span></span>
+  </div>
 </div>"""
     # `bare` strips the page to brand + padlock + help and drops the footer to a
     # legal line. Set on the pay flow only: its one job is finishing, so it
@@ -1425,6 +1446,36 @@ _ICONS = {
                 "a1.4 1.4 0 0 1-1.4 1.4h-.1a1.4 1.4 0 0 1-1.4-1.4zM19.3 12.8h-1.5"
                 "a1.4 1.4 0 0 0-1.4 1.4v3a1.4 1.4 0 0 0 1.4 1.4h.1a1.4 1.4 0 0 0 1.4-1.4z"
                 "M19.3 17.6v.7a2.8 2.8 0 0 1-2.8 2.8H12"),
+    # ── booster avatar marks (D.FACE_GLYPHS) ──────────────────────────────
+    # One per booster instead of the first letter of their handle. Drawn as
+    # linework in the same 24-box as every other glyph here, so a face is just
+    # _ico(name, …, stroke=True) and inherits the same weight and joins. Eight
+    # of the seventeen are icons this file already had (sword, knight,
+    # shield-chevron, trophy, crosshair, target, bolt, headset) — these nine
+    # are the additions. Reproductions of nothing: generic arcade shapes, the
+    # same trademark rule pay_marks() and the Trustpilot star follow.
+    "gamepad": ("M9.1 7.2h5.8a5.9 5.9 0 0 1 5.8 4.9l.7 4.1a2.7 2.7 0 0 1-5 1.8l-1.2-1.9H8.8"
+                "l-1.2 1.9a2.7 2.7 0 0 1-5-1.8l.7-4.1a5.9 5.9 0 0 1 5.8-4.9Z"
+                "M7.7 10.6v3.2M6.1 12.2h3.2M15.4 11.4h.01M17.6 13.4h.01"),
+    "joystick": ("M12 3.4a3.1 3.1 0 1 0 0 6.2 3.1 3.1 0 0 0 0-6.2M12 9.6v4.8"
+                 "M4.6 20.6l2.2-4.9a1.5 1.5 0 0 1 1.4-.9h7.6a1.5 1.5 0 0 1 1.4.9l2.2 4.9Z"),
+    # A plus alone reads as "add" — the hub circle is what makes it a d-pad.
+    "dpad": ("M9.4 3.6h5.2v5.8h5.8v5.2h-5.8v5.8H9.4v-5.8H3.6V9.4h5.8Z"
+             "M12 9.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8"),
+    "d20": ("M12 2.6 20.4 7.4v9.2L12 21.4 3.6 16.6V7.4ZM12 2.6l5.6 8.6L12 15.8 6.4 11.2Z"
+            "M6.4 11.2 3.6 16.6M17.6 11.2l2.8 5.4M12 15.8v5.6"),
+    "skull": ("M18.6 17.4A8 8 0 1 0 5.4 17.4v2.2a1.6 1.6 0 0 0 1.6 1.6h10a1.6 1.6 0 0 0 1.6-1.6Z"
+              "M7.6 12.4a1.9 1.9 0 1 0 3.8 0 1.9 1.9 0 1 0-3.8 0M12.6 12.4a1.9 1.9 0 1 0 3.8 0"
+              " 1.9 1.9 0 1 0-3.8 0M9.6 18v3.2M14.4 18v3.2"),
+    "rocket": ("M12 2.6c3.4 2.6 5.2 6.2 5.2 10l-2.3 3H9.1l-2.3-3c0-3.8 1.8-7.4 5.2-10Z"
+               "M12 9.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2M7.1 13.6 4.6 16.3l.5 3.4 3.2-1.5"
+               "M16.9 13.6l2.5 2.7-.5 3.4-3.2-1.5M10.3 19.6 12 21.7l1.7-2.1"),
+    "flame": ("M12 21.4a6.2 6.2 0 0 0 6.2-6.2c0-5-4-7.4-6.2-12.6-2.2 5.2-6.2 7.6-6.2 12.6"
+              "a6.2 6.2 0 0 0 6.2 6.2ZM12 21.3a2.9 2.9 0 0 0 2.9-2.9c0-2.3-1.9-3.5-2.9-5.9"
+              "-1 2.4-2.9 3.6-2.9 5.9a2.9 2.9 0 0 0 2.9 2.9Z"),
+    "potion": ("M9.4 3h5.2M10.6 3v5.6L6 16.3a3.5 3.5 0 0 0 3 5.3h6a3.5 3.5 0 0 0 3-5.3"
+               "l-4.6-7.7V3M7.6 14.6h8.8"),
+    "crown": "M3.4 7.2 6.9 11.7 12 4.9l5.1 6.8 3.5-4.5-1.6 10.4H5ZM5.2 20.4h13.6",
     # ── safety & guarantee linework (design_handoff_safety_guarantee) ─────
     # The three refund stages, in order: reverse ("undo", above), part-done,
     # overdue. The pie's cut slice is what "pro-rated" looks like.
@@ -1520,19 +1571,31 @@ _ICONS = {
 }
 
 
-def _ico(name, size=16, cls="ico", stroke=False, evenodd=False):
+def _ico(name, size=16, cls="ico", stroke=False, evenodd=False, sw=2):
     """One icon. Filled by default; `stroke=True` for the linework glyphs.
 
     `evenodd` is for the glyphs whose inner shape is a hole (play, seal) — the
     other filled icons knock theirs out with an opposite arc sweep, which a
     straight-line subpath can't do.
+
+    `sw` is the stroke weight. It exists for the booster faces, which are drawn
+    into a 38px ring rather than beside a line of text: 2 closes up the d-pad's
+    hub and the skull's eyes at that size.
     """
-    paint = ('fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    paint = (f'fill="none" stroke="currentColor" stroke-width="{sw}" stroke-linecap="round" '
              'stroke-linejoin="round"') if stroke else 'fill="currentColor"'
     if evenodd:
         paint += ' fill-rule="evenodd"'
     return (f'<svg class="{cls}" width="{size}" height="{size}" viewBox="0 0 24 24" '
             f'aria-hidden="true" focusable="false"><path d="{_ICONS[name]}" {paint}/></svg>')
+
+
+# A missing glyph would draw an empty ring on every row rather than fail, so the
+# cross-file contract between data.py's pool and this file's linework is checked
+# at import — cheaper than shipping 78 blank avatars.
+assert all(_n in _ICONS for _n in D.FACE_GLYPHS), (
+    "D.FACE_GLYPHS names glyphs _ICONS has not got: %s"
+    % sorted(set(D.FACE_GLYPHS) - set(_ICONS)))
 
 
 # Discord's own brand mark, in Blurple — the real logo, per request. Note this
@@ -1577,6 +1640,36 @@ def guarantee_row():
 _CARET = ('<svg class="ob-caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" '
           'focusable="false"><path d="M2 3.6 5 6.6 8 3.6" fill="none" stroke="currentColor" '
           'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>')
+
+# The two-headed caret on a rank plate's selector row. A plain down-caret reads
+# as "opens a menu below"; this one says the value moves in both directions,
+# which is what a tier list is.
+_CARET_UD = ('<svg class="ob-updown" width="12" height="14" viewBox="0 0 12 14" aria-hidden="true" '
+             'focusable="false"><path d="M3.2 5.4 6 2.6 8.8 5.4M3.2 8.6 6 11.4 8.8 8.6" '
+             'fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" '
+             'stroke-linejoin="round"/></svg>')
+
+# The rank emblem — a winged orb, drawn once and tinted per tier.
+#
+# Riot's (and every other publisher's) tier emblems are their IP, so the mark is
+# hand-drawn, the same rule pay_marks() and the Trustpilot star follow. Nothing
+# here carries a colour: each shape is mixed off `--tier` in CSS (.ob-em-* in
+# site.css), which app.js already sets on the plate through data-rankcolor — so
+# the emblem tints itself for all nine ladders with no per-game code and can
+# never drift from the mark colours the rest of the site draws. The `fill`
+# presentation attributes are the fallback for a browser with no color-mix().
+_EMBLEM = (
+    '<svg class="ob-em" viewBox="0 0 44 24" aria-hidden="true" focusable="false">'
+    '<g class="ob-em-wing" fill="#5d5852">'
+    '<path d="M16.8 8.6 Q10.4 2.8 3 3.4 Q6.1 8.2 13.7 12.2 Z"/>'
+    '<path d="M15.4 13.2 Q9.2 10.4 2.2 12.2 Q6.3 15.5 14 16.8 Z"/></g>'
+    '<g class="ob-em-wing" fill="#5d5852" transform="translate(44,0) scale(-1,1)">'
+    '<path d="M16.8 8.6 Q10.4 2.8 3 3.4 Q6.1 8.2 13.7 12.2 Z"/>'
+    '<path d="M15.4 13.2 Q9.2 10.4 2.2 12.2 Q6.3 15.5 14 16.8 Z"/></g>'
+    '<circle class="ob-em-outer" cx="22" cy="12" r="7" fill="#4a4642"/>'
+    '<circle class="ob-em-inner" cx="22" cy="12" r="5.1" fill="#8d8781"/>'
+    '<circle class="ob-em-glow" cx="20.2" cy="10.1" r="1.7" fill="#ffffff" opacity=".85"/>'
+    '</svg>')
 
 
 def rule():
@@ -1777,16 +1870,10 @@ def marquee():
 </div>"""
 
 
-def guarantee_cards():
-    """The three promises in the plain `cards-3` shell — /games/ and the game
-    pages. The guarantee page draws the same three entries with their icon tile
-    and proof line; see promise_cards()."""
-    cards = "".join(f"""<div class="card">
-      <span class="card-kicker">{esc(k)}</span>
-      <span class="card-title">{esc(t)}</span>
-      <p class="card-body">{esc(b)}</p>
-    </div>""" for _ico_name, _stroke, k, t, b, _proof in D.GUARANTEES)
-    return '<div class="cards-3">%s</div>' % cards
+# The plain `cards-3` copy of D.GUARANTEES retired with the old /games/ page:
+# every surface that draws the three promises now uses promise_cards(), which
+# adds the icon tile and the proof line. One shell, so /games/ and
+# /guarantee.html cannot render the same three promises two ways.
 
 
 def steps_block():
@@ -1907,21 +1994,10 @@ def games_grid():
     return '<div class="gg-grid">%s</div>' % "".join(tiles)
 
 
-def game_cards(games=None):
-    games = games or D.GAMES
-    out = []
-    for g in games:
-        out.append(f"""<a class="tile gamecard" href="/games/{g['slug']}.html">
-      <img src="{img('/assets/img/keyart-%s.svg' % g['slug'])}" alt="{esc(g['name'])} key art" width="1200" height="700" loading="lazy">
-      <span class="tile-scrim" aria-hidden="true"></span>
-      <span class="tile-edge" aria-hidden="true"></span>
-      <span class="tile-body">
-        <span class="tile-title">{esc(g['name'])}</span>
-        <span class="tile-svc">{esc(g['services'])}</span>
-        <span class="tile-from">From {money(from_price(g))}</span>
-      </span>
-    </a>""")
-    return '<div class="gamegrid">%s</div>' % "".join(out)
+# `game_cards()` — the flat nine-tile grid — retired with the old /games/ page.
+# The catalogue is `gc_catalog()` now (filterable, sortable, priced, with the
+# service list on the card); the homepage keeps its own hierarchy in
+# `games_grid()`. Two grids, two jobs, neither a copy of the other.
 
 
 def game_rows():
@@ -2057,14 +2133,10 @@ def roster_card(rows):
                  else _ico("hourglass", 10, "rc-pill-ico", stroke=True),
                  esc("Free" if free else b["queue"])))
         chip = ('<span class="rc-chip">%s</span>' % esc(g["short"])) if g else ""
-        # The handoff's avatar is an initial on a tinted ring — the ring colour
-        # is what carries availability, and a generated portrait is an
-        # unreadable smudge at 38px. A real photograph dropped into
-        # assets-in/avatar/<handle> mounts inside the same ring instead.
-        face = (f'<img src="{img("/assets/img/avatar-%s.svg" % b["handle"])}" alt="" '
-                f'width="38" height="38" loading="lazy">'
-                if drop_in("avatar/" + b["handle"])
-                else '<span class="rc-initial">%s</span>' % esc(b["handle"][:1].upper()))
+        # The ring's colour carries availability; what sits inside it is the
+        # booster's own mark — see booster_face(), shared with the roster board
+        # and the track-order card so one person is one face everywhere.
+        face = booster_face(b, cls="rc-initial")
         body += f"""<li><a class="rc-row" href="{booster_href(b)}">
         <span class="rc-ring{'' if free else ' is-busy'}">{face}</span>
         <span class="rc-who">
@@ -2441,12 +2513,17 @@ DASHBOARD_CHIPS = (
 )
 
 
-def dashboard_section(num=None, on_demo=False):
+def dashboard_section(num=None, on_demo=False, note=None):
     """The whole section: the mock, the three claims, the chips and the CTAs.
 
     `num` numbers the eyebrow on the homepage, where the section is 04 in a run
     of numbered sections; /how-it-works.html has no such run, so it renders the
     same block with no kicker.
+
+    `note` is the paragraph the games-catalogue handoff draws under the heading
+    ("same dashboard on all nine titles"). Only that page passes one: on the
+    homepage the three benefit rows below already carry the argument, and a
+    fourth block of prose there pushes the CTA out of the viewport.
 
     `on_demo` is the demo page's copy of the band — the handoff carries this
     section over verbatim and asks for exactly two changes there: the Example
@@ -2482,6 +2559,7 @@ def dashboard_section(num=None, on_demo=False):
     <div class="dsh-copy">
       {sec_kicker(num, "Dashboard") if num else ""}
       <h2 class="h-sec">You watch the whole thing</h2>
+      {'<p class="dsh-note">%s</p>' % esc(note) if note else ""}
       <div class="dsh-bens">{bens}</div>
       <div class="dsh-chips">{chips}</div>
       <div class="dsh-cta">
@@ -2499,6 +2577,13 @@ def dashboard_section(num=None, on_demo=False):
 _SPOT = getattr(D, "SPOTLIGHT", None) or {}
 SPOT_BOOSTER = next((b for b in D.BOOSTERS if b["handle"] == _SPOT.get("handle")), None)
 SPOT_PORTRAIT = "/assets/img/portrait-%s.svg" % SPOT_BOOSTER["handle"] if SPOT_BOOSTER else ""
+# Where the card's CTA goes: this booster's game with them attached, exactly
+# as the roster's Hire and the profile's request card resolve it. A booster
+# whose slug isn't in the catalogue falls back to the games index rather than
+# a broken /games/.html — the same guard both of those use.
+_SPOT_GAME = BY_SLUG.get(SPOT_BOOSTER["slug"]) if SPOT_BOOSTER else None
+SPOT_HIRE = ("/games/%s.html?booster=%s" % (_SPOT_GAME["slug"], SPOT_BOOSTER["handle"])
+             if _SPOT_GAME else "/games/")
 
 
 def spotlight_card():
@@ -2508,15 +2593,29 @@ def spotlight_card():
     It is now the same surface as every other module on the site, and the one
     dot-separated string is split into two labelled figures.
 
-    Name, order count and portrait come off the roster entry named by
+    Name, game, order count and portrait come off the roster entry named by
     D.SPOTLIGHT, so this card can never quote different numbers than the
     roster panel or the boosters page. No such booster → no card: the handoff
     asks for the month with no qualifying booster to hide it, not to render an
     empty one.
+
+    The game is named from the booster's own `slug` against the catalogue —
+    same rule as the roster chip, so the card can never advertise a ladder
+    this build doesn't sell. It renders the full name rather than the roster's
+    `short` because there is no column to fit here, and because the card is a
+    stranger's introduction: "LoL" is for a table you are already scanning.
+
+    The CTA goes to that game's configurator with the booster attached
+    (?booster=<handle>), the same destination the roster's Hire and the
+    profile's "Order with <handle>" use — the label says order, so the link
+    has to start one. The profile is still one tap away from the name on
+    either of those pages.
     """
     if not SPOT_BOOSTER:
         return ""
     b = SPOT_BOOSTER
+    g = BY_SLUG.get(b["slug"])
+    game = ('<span class="spot-game">%s</span>' % esc(g["name"])) if g else ""
     stats = ""
     for i, (val, label, sub) in enumerate(_SPOT.get("stats", [])):
         if i:
@@ -2534,9 +2633,10 @@ def spotlight_card():
       </div>
       <span class="spot-portrait"><img src="{img(SPOT_PORTRAIT)}" alt="" width="196" height="196" fetchpriority="high"></span>
       <span class="spot-name">{esc(b['handle'])}</span>
+      {game}
       <span class="spot-meta"><span>{b['orders']}</span> orders delivered</span>
       <div class="spot-stats">{stats}</div>
-      <a class="spot-cta" href="{esc(_SPOT.get('href') or booster_href(b))}">{_ico("user", 15)}{esc(_SPOT.get('cta', ''))}</a>
+      <a class="spot-cta" href="{esc(_SPOT.get('href') or SPOT_HIRE)}">{_ico("user", 15)}<span class="spot-cta-t"><span>{esc(_SPOT.get('cta', ''))}</span> <b>{esc(b['handle'])}</b></span></a>
     </aside>"""
 
 
@@ -2642,19 +2742,32 @@ def _wr_frac(b):
     return max(0.06, min(1.0, (b["wr_n"] - D.WR_FLOOR) / span))
 
 
-def booster_face(b, px=38, lazy=True):
-    """What sits inside the availability ring.
+def booster_face(b, px=38, lazy=True, cls="rst-initial", glyph=19):
+    """What sits inside the availability ring — on the rail, the roster board
+    and the track-order card, from one place, so the same person is never drawn
+    two different ways.
 
-    Initials by default: the handoff's design, and a generated portrait is an
-    unreadable smudge at 38px. A real photograph dropped into
-    assets-in/avatar/<handle> mounts inside the same ring — the ring stays
-    either way, because its colour is what encodes free / busy.
+    It used to be the first letter of the handle. That is what a face falls back
+    to when there is nothing to show, and a column of nine grey letters reads as
+    exactly that: nine rows of missing data, on the page whose whole argument is
+    that real people are behind the orders. Each booster now wears one of
+    D.FACE_GLYPHS' marks, picked from their handle and tinted with their own
+    hue — the hue art.avatar() paints their profile portrait with, so the 38px
+    avatar and the 96px portrait belong to the same person.
+
+    A generated portrait is still a smudge at this size, which is why the ring
+    holds a glyph and not art.avatar(). A real photograph dropped into
+    assets-in/avatar/<handle> mounts inside the same ring and wins — the ring
+    stays either way, because its colour is what encodes free / busy.
     """
     if drop_in("avatar/" + b["handle"]):
         return ('<img src="%s" alt="" width="%d" height="%d"%s>'
                 % (img("/assets/img/avatar-%s.svg" % b["handle"]), px, px,
                    ' loading="lazy"' if lazy else ""))
-    return '<span class="rst-initial">%s</span>' % esc(b["handle"][:1].upper())
+    ink, plate = D.face_tint(b["handle"], b.get("hue"))
+    return ('<span class="%s is-face" style="--face:%s;--face-bg:%s">%s</span>'
+            % (cls, esc(ink), esc(plate),
+               _ico(D.face_glyph(b["handle"]), glyph, "face-ico", stroke=True)))
 
 
 def is_free(b):
@@ -3449,10 +3562,20 @@ def addons_block(money=False, paid_only=False):
         else:
             price = '<span class="price">+%d%%</span>' % round(a["pct"] * 100)
         checked = " checked disabled" if free else ""
+        # Phone wording where the handoff shortens it; both variants ride in the
+        # DOM so each stays a whole translatable node (see ADDONS in data.py).
+        name = esc(a["label"])
+        if a.get("label_sm"):
+            name = (f'<span class="opt-t-full">{esc(a["label"])}</span>'
+                    f'<span class="opt-t-sm">{esc(a["label_sm"])}</span>')
+        note = esc(a["note"])
+        if a.get("note_sm"):
+            note = (f'<span class="opt-n-full">{esc(a["note"])}</span>'
+                    f'<span class="opt-n-sm">{esc(a["note_sm"])}</span>')
         rows.append(f"""<label class="opt{' opt-free' if free else ''}">
         <input type="checkbox" data-addon="{esc(a['id'])}"{checked} autocomplete="off">
-        <span><span style="display:block">{esc(a['label'])}</span>
-        <span class="note">{esc(a['note'])}</span></span>
+        <span><span style="display:block">{name}</span>
+        <span class="note">{note}</span></span>
         {price}
       </label>""")
     return '<div class="opts">%s</div>' % "".join(rows)
@@ -3573,31 +3696,67 @@ def promo_field():
     </div>"""
 
 
-def rank_picker(g, which, sfx=""):
-    """One side of the two-step rank control: tier <select> + division buttons.
+def rank_plate(g, which, sfx="", unit=False):
+    """One end of the climb, drawn as the configurator handoff's **rank plate**.
 
-    Replaces the pair of flat `<select>`s the ladder used to be. Two bare lists
-    of 29 ranks gave no sense of the distance being bought, which is the thing
-    the price is for — the tier mark carries the tier's colour and the division
-    numeral, and the divisions sit exposed as a radio row instead of hidden
-    inside a dropdown.
+    Every rank control in the card is this one object. Division boost draws two
+    of them (the climb's ends); Net wins and Placements draw a single one at the
+    card's full width (`unit=True`) for the rank being played from — those tabs
+    used to carry a smaller, differently-shaped control, so the same question
+    ("what rank are you?") was asked with two different widgets one tab apart.
+    `sfx` keeps the `<select>` ids unique when several are in the document.
 
-    `data-sel="fromTier"/"toTier"` and `data-subseg` are both app.js hooks; the
-    options here are only the first paint, refilled per game at runtime.
+    The plate is a framed block: a label, a selector row (emblem tile · tier
+    name · "change tier" · two-headed caret) and the tier's divisions as a row
+    of pips. Five things in it are load-bearing, each replacing something that
+    failed in review — see the handoff's own list:
+
+      · **The tier name is plain text and the `<select>` is invisible on top of
+        the whole row.** A native select is as wide as its widest option, so
+        "Iron" sat a whole "Platinum" away from the rest of the row. The old
+        control worked around that by measuring the label and sizing the select
+        to it in JS; overlaying the real control removes the problem instead of
+        correcting it, and keyboard + screen-reader behaviour still comes from a
+        real select. The row is the hit target.
+      · **The name is `nowrap` and both plate columns are `minmax(0,1fr)`**, so
+        "Diamond" cannot make its plate wider than "Iron" — the two ends must
+        stay identical at every rank.
+      · **Out-of-range tiers arrive as `disabled` options** (app.js fills them),
+        and out-of-range divisions render disabled. The limit is visible before
+        the tap; the end you did not touch is never moved.
+      · The emblem is tinted from `--tier`, set on this element by the
+        `data-rankcolor` hook — no per-game code, and the same colour table as
+        every other rank mark on the site.
+
+    On the climb both label wordings ship in the DOM (desktop "You are" / "You
+    want", phone "Current rank" / "Target rank") and CSS picks one: i18n.js
+    matches whole text nodes, so a label swapped in by JS would arrive
+    untranslated. The unit plate has no second plate to be read against, so it
+    names the rank outright at every width and ships one wording. The label is
+    `aria-hidden` either way because the select carries the full name itself,
+    which is also what keeps the tier name from being announced twice.
     """
     tiers = "".join('<option value="%s">%s</option>' % (esc(t), esc(t)) for t in g["tiers"])
     target = which == "to"
-    label = "Target rank" if target else "Current rank"
+    lab = "Target rank" if target else "Current rank"
     sid = "w-%s-tier%s" % (which, sfx)
-    return f"""<div class="ob-rank{' ob-rank-target' if target else ''}">
-        <label class="ob-lab" for="{sid}">{label}</label>
-        <!-- Tier name only. The division is the button row directly below, so a
-             numeral in the field just says the same thing twice. -->
-        <div class="ob-field">
-          <select class="ob-select" id="{sid}" data-sel="{which}Tier" autocomplete="off">{tiers}</select>
-          {_CARET}
+    label = (f'<span class="ob-plate-lab" aria-hidden="true">{lab}</span>' if unit else
+             f'<span class="ob-plate-lab" aria-hidden="true"'
+             f'><span class="ob-plate-lab-lg">{"You want" if target else "You are"}</span'
+             f'><span class="ob-plate-lab-sm">{lab}</span></span>')
+    return f"""<div class="ob-rank ob-plate{' ob-plate-unit' if unit else ''}{' ob-rank-target' if target else ''}" data-rankcolor="{which}">
+        {label}
+        <div class="ob-selector">
+          <span class="ob-emblem" aria-hidden="true">{_EMBLEM}</span>
+          <span class="ob-sel-txt" data-tierfit aria-hidden="true">
+            <span class="ob-tiername" data-tiername="{which}">{esc(g["tiers"][0])}</span>
+            <span class="ob-change">Change tier</span>
+          </span>
+          {_CARET_UD}
+          <select class="ob-tiersel" id="{sid}" data-sel="{which}Tier"
+                  aria-label="{lab} tier" autocomplete="off">{tiers}</select>
         </div>
-        <div class="ob-divs" data-subseg="{which}" role="group" aria-label="{label} division"></div>
+        <div class="ob-divs ob-pips" data-subseg="{which}" role="group" aria-label="{lab} division"></div>
       </div>"""
 
 
@@ -3834,7 +3993,7 @@ def wizard(game=None):
     hero handoff, ported onto Ashfall's tokens and this build's data contract.
 
     What the redesign changed, and why each one is load-bearing:
-      · the ladder is visible (see rank_picker/ladder_strip) rather than implied
+      · the ladder is visible (see rank_plate/ladder_strip) rather than implied
         by two dropdowns;
       · add-ons moved up from the checkout page and price themselves in dollars
         on *this* order — the buyer never has to multiply a percentage;
@@ -3884,15 +4043,20 @@ def wizard(game=None):
 
       <div data-panel="division">
         <div class="ob-ranks">
-          {rank_picker(g, "from")}
-          <span class="ob-arrow" aria-hidden="true">{_ico("arrow", 16, "ico", stroke=True)}</span>
-          {rank_picker(g, "to")}
+          {rank_plate(g, "from")}
+          <!-- One arrow, two presentations: a ring between the plates on
+               desktop, and on the phone the same ring centred in a hairline
+               rule with the glyph rotated down, since the plates stack. -->
+          <span class="ob-arrow" aria-hidden="true">
+            <span class="ob-arrow-ring">{_ico("arrow", 13, "ico", stroke=True)}</span>
+          </span>
+          {rank_plate(g, "to")}
         </div>
         {ladder_strip(g)}
       </div>
 
       <div data-panel="wins" hidden>
-        <div class="ob-cell ob-unit-rank">{rank_picker(g, "from", "-wins")}</div>
+        {rank_plate(g, "from", "-wins", unit=True)}
         {unit_grid("wins", "How many net wins",
                    "A net win means one win above your losses — five is the cap per order.")}
       </div>
@@ -3902,7 +4066,7 @@ def wizard(game=None):
           <button type="button" class="ob-ranked-opt" data-ranked="1" aria-pressed="true">I have a rank</button>
           <button type="button" class="ob-ranked-opt" data-ranked="0" aria-pressed="false">Unranked</button>
         </div>
-        <div class="ob-cell ob-unit-rank" data-when-ranked>{rank_picker(g, "from", "-pl")}</div>
+        <div data-when-ranked>{rank_plate(g, "from", "-pl", unit=True)}</div>
         <div class="ob-unranked" data-when-unranked hidden>
           {_ico("question", 18, "ob-unranked-ico", stroke=True)}
           <span>Fresh account or a new season — no MMR to read yet. Your booster plays all five and
@@ -3952,6 +4116,10 @@ def wizard(game=None):
         <div class="ob-sum-r">
           <span class="ob-lab"><span data-hide-service="coaching">Delivered in</span><span data-when-service="coaching" hidden>First session</span></span>
           <span class="quote-eta" data-out="eta">—</span>
+        </div>
+        <!-- Availability is its own cell, not a child of the estimate column:
+             on desktop it sits under the days, on the phone it spans the row. -->
+        <div class="ob-sum-free">
           <span data-hide-service="coaching">{free}</span>
           <span class="ob-free" data-when-service="coaching" hidden><span class="live-dot" aria-hidden="true"></span><b>{len(D.COACHES)}</b> <span>coaches taking bookings</span></span>
         </div>
@@ -4280,40 +4448,423 @@ def page_home():
                   body, current=None, jsonld=ld, mobile_bar=True, nav_outline=True)
 
 
-def page_games_index():
-    body = f"""<section class="wrap section">
-  <div class="stack" style="gap:26px">
-    <div class="sec-head">
-      <div class="sec-head-copy">
-        <span class="kicker">Rank boosting · {len(D.GAMES)} games · since 2019</span>
-        <h1 class="h-games">Pick your<br>battlefield.</h1>
+# ══════════════════════════════════════════════════════════════════════════
+#  /games/ — the catalogue — design_handoff_games_page
+# ══════════════════════════════════════════════════════════════════════════
+# Seventh scoped port after .hero-a / .co / .gg / .dsh / .rst / .tk — tokens on
+# `.gc`, product radii per element, nothing leaking past the scope. It replaced
+# a title grid with a paragraph beside it: nine cards that named a game and a
+# price, no way to narrow them, and nothing below the grid except three steps
+# and the three guarantee cards.
+#
+# The page's job is ROUTING, not converting: get the visitor onto the right game
+# page with the right expectation already set. Everything under the grid exists
+# so they arrive at the configurator having answered "which service", "how does
+# it run", "who plays it" and "what if it goes wrong".
+#
+# Three components are SHARED, not re-cut — the handoff says so outright, and
+# each is this site's canonical port of the handoff it came from:
+#   · the order preview is `dash_mock()` through `dashboard_section()` (band 03),
+#     the same card the homepage, /how-it-works and /demo.html draw;
+#   · the FAQ is `sg_faq()` + `faq_accordion_js()`, the safety/support accordion,
+#     so a question here behaves and deep-links exactly like one there;
+#   · the trust cards are `promise_cards()` over D.GUARANTEES — the same three
+#     promises, in the same shell as /guarantee.html.
+# The on-shift panel is `roster_panel()` and the game list is D.GAMES, which is
+# also what the header's Games menu renders. One source, per the handoff.
+#
+# Every figure is read, never typed. The handoff's nine "from" prices, nine order
+# counts, "78 boosters" and "3,000 in the Discord" are flagged there as invented;
+# prices come through `from_price()`/`money()`, the roster counts off BOOSTERS
+# and STATS, the Discord size off STATS, the coaching count off the catalogue.
+#
+# Deviations from the handoff, all deliberate:
+#   · **"Duo available" is not one of the filters.** Duo is offered on all nine
+#     titles here (`mode_seg()` is in every configurator), so that chip would
+#     return the whole catalogue — the handoff's own rule is that a filter has to
+#     mean something. Its slot went to "Valve titles", which is real, is two, and
+#     is the same publisher split the safety copy already argues per title.
+#   · **the default sort is "Featured", not "Most ordered".** Nothing in this
+#     build measures order volume; the handoff's nine order counts are invented
+#     and they are what its default sort reads. Featured is the catalogue's own
+#     editorial order (D.GAMES), which is what it actually is.
+#   · **"Compare all titles" is not drawn.** It is referenced twice in the
+#     handoff and the page it points at does not exist — same rule that keeps the
+#     live feed's rows unlinked. The mobile bar carries the one real action.
+#   · **the mobile trust cards are a snap rail, not a 4.6s auto-rotating
+#     carousel.** These are the refund, privacy and support promises; a card that
+#     slides itself away mid-sentence is the "moving element reads as a sales
+#     device" rule the guarantee page is built on. The dots stay, and track the
+#     rail rather than driving a timer.
+def _gc_price_cents(g):
+    return int(round(from_price(g) * 100))
+
+
+_GC_FACTS = {}
+
+
+def gc_facts():
+    """Everything the page counts, computed once off the catalogue.
+
+    Filters, the FAQ's two price extremes and the service band's coaching count
+    all read this, so the chips' counts and the sentences under them cannot
+    disagree about the same catalogue.
+    """
+    if not _GC_FACTS:
+        by_price = sorted(D.GAMES, key=lambda g: (from_price(g), g["name"]))
+        _GC_FACTS.update(
+            riot=[g for g in D.GAMES if D.publisher(g) == "Riot"],
+            valve=[g for g in D.GAMES if D.publisher(g) == "Valve"],
+            coach=[g for g in D.GAMES if offers_coaching(g)],
+            cheap=by_price[0], dear=by_price[-1])
+    return _GC_FACTS
+
+
+# (key, label, predicate) — single-select, `all` is the reset. Each chip carries
+# its count, and none of them can return zero or the whole catalogue: that is the
+# property that makes the row worth having (see the "Duo available" note above).
+GC_FILTERS = [
+    ("all", "All titles", lambda g: True),
+    ("riot", "Riot titles", lambda g: D.publisher(g) == "Riot"),
+    ("valve", "Valve titles", lambda g: D.publisher(g) == "Valve"),
+    ("coaching", "With coaching", offers_coaching),
+]
+
+# (key, label). "Featured" is the catalogue's own order — see the deviation note.
+GC_SORTS = [("featured", "Featured"), ("price", "Lowest price"), ("az", "A–Z")]
+
+
+def gc_card(g, i, featured=False):
+    """One title. The whole card is the link; the arrow disc is decorative.
+
+    The three booleans the toolbar filters on and the two sort keys ride on the
+    element as `data-*`, so the board keeps working if this grid is ever paged or
+    rendered from a store — the same contract `data-rst-row` gives the roster.
+    """
+    chips = "".join('<span class="gc-svc">%s</span>' % esc(s) for s in services_of(g))
+    # Same badge and the same wording as the homepage mosaic's lead tile: one
+    # claim about order volume, said once, with the standing STATS has. It is
+    # not a second figure — see games_grid().
+    badge = (f'<span class="gc-badge">{_ico("bolt", 11, "ico")}<span>Most ordered</span></span>'
+             if featured else "")
+    go = '<span class="gc-go-l">Configure</span>' if featured else ""
+    # The band crop, not the 1200x700 key art: this art zone is 92px and the
+    # wordmarks do not survive a fifth-of-height crop. See emit_art().
+    return f"""<a class="gc-card{' is-feat' if featured else ''}" href="/games/{g['slug']}.html"
+      data-gc-card data-gc-riot="{1 if D.publisher(g) == 'Riot' else 0}"
+      data-gc-valve="{1 if D.publisher(g) == 'Valve' else 0}"
+      data-gc-coaching="{1 if offers_coaching(g) else 0}"
+      data-gc-order="{i}" data-gc-price="{_gc_price_cents(g)}" data-gc-name="{esc(g['name'])}"
+      style="--h: {g['hue']}">
+      <span class="gc-art">
+        <img src="{img('/assets/img/band-%s.svg' % g['slug'])}" alt="" width="1200" height="300" loading="lazy">
+        <span class="gc-veil" aria-hidden="true"></span>
+        {badge}
+      </span>
+      <span class="gc-body">
+        <!-- No lettermark beside the name: the art above it is the game's own
+             wordmark, so the tile read the title twice — once as a logo and
+             again as an initial in a box. The hue still does its job on the art
+             wash and the hover edge. -->
+        <span class="gc-name-row">
+          <span class="gc-name">{esc(g['name'])}</span>
+        </span>
+        <span class="gc-svcs">{chips}</span>
+        <span class="gc-cardfoot">
+          <span class="gc-price">
+            <span class="gc-from">From</span>
+            <span class="gc-fig">{money(from_price(g))}</span>
+          </span>
+          <span class="gc-go">{go}<span class="gc-arrow" aria-hidden="true">{_ico("arrow", 13, "ico", stroke=True)}</span></span>
+        </span>
+      </span>
+    </a>"""
+
+
+def gc_count(cls=""):
+    """"Showing N of M titles." — the figures in their own nodes so the words
+    around them stay whole translatable text nodes.
+
+    Rendered twice, deliberately: on the phone it belongs beside the sort control
+    above the grid, on desktop it is the centred line under it, and those are two
+    places in the document. One `[data-gc-shown]` selector fills both.
+    """
+    return (f'<span class="gc-count{(" " + cls) if cls else ""}"><span>Showing</span> '
+            f'<b data-gc-shown>{len(D.GAMES)}</b> <span>of</span> <b>{len(D.GAMES)}</b> '
+            f'<span>titles.</span></span>')
+
+
+def gc_toolbar():
+    chips = ""
+    for key, label, pred in GC_FILTERS:
+        on = key == "all"
+        chips += (f'<button type="button" class="gc-chip{" is-on" if on else ""}" '
+                  f'data-gc-filter="{key}" aria-pressed="{"true" if on else "false"}">'
+                  f'<span>{esc(label)}</span>'
+                  f'<b class="gc-chip-n">{sum(1 for g in D.GAMES if pred(g))}</b></button>')
+    segs = "".join(f'<button type="button" class="gc-seg-o{" is-on" if k == "featured" else ""}" '
+                   f'data-gc-sort="{k}" aria-pressed="{"true" if k == "featured" else "false"}">'
+                   f'{esc(lab)}</button>' for k, lab in GC_SORTS)
+    opts = "".join('<option value="%s">%s</option>' % (k, esc(lab)) for k, lab in GC_SORTS)
+    # Both controls are always in the DOM and CSS picks one — the same technique
+    # the Best Sellers band uses for its tier grid and its native select, and for
+    # the same reason: a three-option segmented control does not fit beside the
+    # count at 390px. They write one state; initCatalog() re-marks both.
+    return f"""<div class="gc-tools">
+      <div class="gc-chips" role="group" aria-label="Filter titles">{chips}</div>
+      <div class="gc-sortwrap">
+        {gc_count("gc-count-sm")}
+        <span class="gc-sort-l">Sort</span>
+        <div class="gc-seg" role="group" aria-label="Sort titles">{segs}</div>
+        <div class="gc-sortsel">
+          {_ico("filter", 14, "gc-sortsel-i", stroke=True)}
+          <span class="gc-sortsel-t" data-gc-sortlabel>{esc(GC_SORTS[0][1])}</span>
+          {_CARET}
+          <select class="gc-sortsel-s" data-gc-sortsel aria-label="Sort titles">{opts}</select>
+        </div>
       </div>
-      <p class="sec-note">Prices are per division and shown before you sign in. Placements, net
-      wins, coaching and duo on every title.</p>
+    </div>"""
+
+
+def gc_catalog():
+    """The catalogue band: head, toolbar, grid, and the filtered footer.
+
+    Every card is server-rendered in catalogue order, so the grid is complete and
+    correctly ordered with no JS and legible to a crawler; initCatalog() only
+    hides and re-orders what is already there. Same trade-off the roster board
+    and the reviews feed make, and the same reason: this is the page a search
+    engine reads to learn which titles exist.
+    """
+    lead = D.GAMES[0]
+    cards = "".join(gc_card(g, i, featured=(g is lead)) for i, g in enumerate(D.GAMES))
+    return f"""<section class="gc-band gc-cat">
+  <div class="gc-glow" aria-hidden="true"></div>
+  <div class="wrap gc-inner">
+    <div class="gc-head">
+      <div class="gc-head-l">
+        <span class="gc-kicker">{esc(spell(len(D.GAMES)).capitalize())} titles</span>
+        <h1 class="gc-h1">Pick your battlefield.</h1>
+      </div>
+      <p class="gc-head-p"><span>Prices are per division and shown before you sign in.
+      Placements, net wins and duo on every title, coaching on</span>
+      <b>{len(gc_facts()['coach'])}</b> <span>of them.</span></p>
     </div>
-    {game_cards()}
+    {gc_toolbar()}
+    <div class="gc-grid" data-gc-grid>{cards}</div>
+    <div class="gc-foot" data-gc-foot hidden>
+      {gc_count()}
+      <button type="button" class="gc-reset" data-gc-reset>
+        {_ico("undo", 13, "ico gc-reset-i", stroke=True)}<span>Show all {esc(spell(len(D.GAMES)))}</span>
+      </button>
+    </div>
   </div>
-</section>
+</section>"""
 
-{rule()}
 
-<section class="wrap section">
-  <div class="split">
-    <div class="stack" style="gap:26px">
-      {sec_head("01", "How it runs", "Three steps, then<br>it's out of your hands")}
-      {steps_block()}
+def gc_eyebrow(num, label):
+    """The handoff's numbered marker — the site's shared `.sec-kicker`, restyled
+    inside `.gc` exactly as `.sg` restyles it: an ember figure, a 14px rule, the
+    label in body type. Two ports of the same handoff family, one component."""
+    return sec_kicker(num, label)
+
+
+def gc_services():
+    """Band 01 — the four services, each ending in the "best for" line.
+
+    That line is the whole band: most people cannot tell net wins from
+    placements, and one plain sentence resolves it. Pinned with `margin-top:auto`
+    so the four align across bodies of unequal length.
+
+    The figures in the copy are substituted, not typed — the units cap is
+    `pricing.UNIT_MAX` (the same constant `unit_grid()` draws five buttons from)
+    and the coaching count is the catalogue's.
+    """
+    facts = gc_facts()
+    fills = {"cap": spell(pricing.UNIT_MAX), "coach": spell(len(facts["coach"])),
+             "n": spell(len(D.GAMES))}
+    cards = ""
+    for icon, name, body, best in D.CATALOG_SERVICES:
+        cards += f"""<article class="gc-svc-card">
+          <span class="gc-tile">{_ico(icon, 19, "ico", stroke=True)}</span>
+          <h3 class="gc-svc-t">{esc(name)}</h3>
+          <p class="gc-svc-b">{esc(body.format(**fills))}</p>
+          <span class="gc-best">
+            <span class="gc-best-l">Best for</span>
+            <span class="gc-best-t">{esc(best)}</span>
+          </span>
+        </article>"""
+    return f"""<section class="gc-band">
+  <div class="wrap gc-inner">
+    <div class="gc-head">
+      <div class="gc-head-l">
+        {gc_eyebrow("01", "Which service")}
+        <h2 class="gc-h2">Four ways to buy a climb.</h2>
+      </div>
+      <p class="gc-head-p">Every title sells the first three. If you are not sure which one you
+      want, read the "best for" line — it is usually the whole answer.</p>
+    </div>
+    <div class="gc-svcs-grid">{cards}</div>
+  </div>
+</section>"""
+
+
+def gc_how():
+    """Band 02 — three steps, and the proof beside them.
+
+    The steps are D.STEPS (the site's one copy of them) and the right column is
+    `roster_panel()`: who is on shift now, then the Discord card. That panel is
+    what turns "N boosters" from a claim into something inspectable, and it reads
+    BOOSTERS live through initBoosters() like every other place it renders.
+    """
+    rows = ""
+    for n, t, b in D.STEPS:
+        rows += f"""<div class="gc-step">
+          <span class="gc-step-n">{esc(n)}</span>
+          <span class="gc-step-c">
+            <span class="gc-step-t">{esc(t)}</span>
+            <span class="gc-step-b">{esc(b)}</span>
+          </span>
+        </div>"""
+    return f"""<section class="gc-band gc-how">
+  <div class="gc-glow gc-glow-r" aria-hidden="true"></div>
+  <div class="wrap gc-how-grid">
+    <div class="gc-how-l">
+      {gc_eyebrow("02", "How it runs")}
+      <h2 class="gc-h2 gc-h2-tight">Three steps, then it's out of your hands</h2>
+      <div class="gc-steps">{rows}</div>
     </div>
     {roster_panel()}
   </div>
-</section>
+</section>"""
 
-<section class="wrap section-tight">{guarantee_cards()}</section>
 
-{cta_band()}"""
+def gc_trust():
+    """The trust band — D.GUARANTEES in the guarantee page's own card shell.
+
+    Nothing new is claimed here: `promise_cards()` is the component and the
+    entries are the same three promises, so the objections a buyer would
+    otherwise discover at checkout are answered in the wording the policy page
+    uses. On the phone the three become a snap rail with dots — see the note at
+    the head of this section for why they do not rotate themselves.
+    """
+    # Real controls, so they are labelled and keep their pressed state rather
+    # than being hidden decoration — a focusable button inside an aria-hidden
+    # container is a trap for anyone arriving by keyboard. They are display:none
+    # above 760px, which takes them out of the tab order with the rail.
+    dots = "".join(f'<button type="button" class="gc-dot{" is-on" if i == 0 else ""}" '
+                   f'data-gc-dot="{i}" aria-pressed="{"true" if i == 0 else "false"}" '
+                   f'aria-label="{esc(t)}"></button>'
+                   for i, (_i, _s, _k, t, _b, _p) in enumerate(D.GUARANTEES))
+    return f"""<section class="gc-band">
+  <div class="wrap gc-inner">
+    {promise_cards()}
+    <div class="gc-dots" data-gc-dots role="group" aria-label="Promises">{dots}</div>
+  </div>
+</section>"""
+
+
+def gc_faq_items():
+    """The five questions, with every figure substituted from the engine.
+
+    The two prices in the "why do titles differ" answer are `pricing.quote()`
+    through `from_price()`, and the pair they compare is the catalogue's actual
+    cheapest and dearest — the handoff types "Valorant vs Dota", which stops
+    being the right pair the moment a factor is re-tuned.
+    """
+    facts = gc_facts()
+    code, promo = D.auto_promo()
+    discs = [d for lst in D.BUNDLES.values() for _ft, _tt, d in lst]
+    lo, hi = (min(discs), max(discs)) if discs else (0, 0)
+    # Only assert "the larger of the two" while it is arithmetically true. If a
+    # sitewide code is ever raised past the cheapest bundle, the sentence stops
+    # making the claim instead of quietly becoming false.
+    pct = (promo or {}).get("pct", 0)
+    oneof = ", and it is the larger of the two" if discs and lo >= pct else ""
+    # `usd()`, not `money()`: an answer is one escaped text node and the same
+    # string is asserted verbatim in the FAQPage JSON-LD, so a `.money` span
+    # would print as markup here and ship as markup to search engines. The cost
+    # is that these two figures stay in USD when the currency switches — the
+    # cards above them, which are the buying surface, do convert.
+    fills = {
+        "n": spell(len(D.GAMES)),
+        "cheap": facts["cheap"]["name"], "cp": usd(from_price(facts["cheap"])),
+        "dear": facts["dear"]["name"], "dp": usd(from_price(facts["dear"])),
+        "code": code or "The sitewide code", "pct": "%g%%" % round(pct * 100, 2),
+        "lo": "%g%%" % round(lo * 100), "hi": "%g%%" % round(hi * 100),
+        "oneof": oneof,
+    }
+    return [(fid, q.format(**fills), a.format(**fills)) for fid, q, a in D.CATALOG_FAQ]
+
+
+def gc_faq(items):
+    """Band 04 — the sticky column and the shared accordion.
+
+    `sg_faq()` is the safety/support component: single-open, item 1 open on load,
+    every answer in the DOM (the FAQPage JSON-LD asserts they are on the page, so
+    they have to be) and a stable `#faq-<id>` per item that support can link at.
+    """
+    return f"""<section class="gc-band gc-faq-band" id="faq">
+  <div class="wrap gc-faq-grid">
+    <div class="gc-faq-copy">
+      {gc_eyebrow("04", "FAQ")}
+      <h2 class="gc-h2 gc-h2-sm">Asked on this page</h2>
+      <p class="gc-faq-note">Title-specific questions live on each game's page. These are the
+      ones about all {esc(spell(len(D.GAMES)))}.</p>
+      <a class="btn btn-outline btn-sm gc-ask" href="/support.html">{_ico("chat", 15, "ico")}Ask support</a>
+    </div>
+    {sg_faq(items)}
+  </div>
+</section>"""
+
+
+def gc_bar(lead):
+    """The phone's sticky action bar.
+
+    One action, not the handoff's two: "Compare all titles" has no page behind
+    it. The bar is `position: fixed` rather than sticky — the handoff's frame is
+    860px tall and a real page is not — and it hides itself while the header
+    sheet is open, the same way `.mobile-bar` does.
+    """
+    return f"""<div class="gc-bar" role="region" aria-label="Start an order">
+  <a class="btn btn-primary gc-bar-cta" href="/games/{lead['slug']}.html">
+    <span>Start with {esc(lead.get('tab') or lead['short'])}</span>{_ico("arrow", 15, "ico", stroke=True)}
+  </a>
+</div>"""
+
+
+def page_games_index():
+    lead = D.GAMES[0]
+    faq = gc_faq_items()
+    n = spell(len(D.GAMES)).capitalize()
+    body = f"""<div class="gc">
+  <div class="gc-hatch" aria-hidden="true"></div>
+  {gc_catalog()}
+  {gc_services()}
+  {gc_how()}
+</div>
+
+{dashboard_section("03", note="Same dashboard on all %s titles. It opens from the link we email "
+                              "you — no password, no app — and updates as games finish."
+                              % spell(len(D.GAMES)))}
+
+<div class="gc">
+  {gc_trust()}
+  {gc_faq(faq)}
+</div>
+
+{cta_band(title="%s titles, one guarantee." % n,
+          sub="Refunded in full until a booster claims it, pro-rated after that, and claimed in "
+              "%s on average." % D.STATS["median_claim"],
+          cta=("Start with %s" % (lead.get("tab") or lead["short"]),
+               "/games/%s.html" % lead["slug"]))}
+
+{gc_bar(lead)}"""
     return layout("/games/", "All games — %s" % D.BRAND,
                   "Rank boosting for League of Legends, Valorant, CS2, TFT, Marvel Rivals, Dota 2, "
                   "Apex, Overwatch 2 and Rocket League. Live prices, no account needed.",
-                  body, current="/games/")
+                  body, current="/games/",
+                  jsonld=[faq_ld([(q, a) for _fid, q, a in faq])],
+                  extra_js=faq_accordion_js(), body_class="gc-page")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -4893,29 +5444,6 @@ def page_boosters():
     </div>
     {roster_filters()}
     {roster_board()}
-  </div>
-</section>
-
-<section class="wrap section" style="padding-top:0">
-  <div class="stack" style="gap:24px">
-    <h2 class="h-sec">What we screen for</h2>
-    <div class="cards-3">
-      <div class="card">
-        <span class="card-kicker">Rank</span><span class="card-title">Two brackets above yours</span>
-        <p class="card-body">Nobody is assigned an order inside their own bracket. The gap is what
-        makes the win rate hold up over a long climb.</p>
-      </div>
-      <div class="card">
-        <span class="card-kicker">Behaviour</span><span class="card-title">Clean account history</span>
-        <p class="card-body">No bans, no chat restrictions, no low behaviour score. A booster who
-        gets your account reported is a booster who costs us the refund.</p>
-      </div>
-      <div class="card">
-        <span class="card-kicker">Conduct</span><span class="card-title">One strike on account sharing</span>
-        <p class="card-body">Credentials never leave the order. A booster caught passing an account
-        to anyone else is removed the same day and paid out nothing.</p>
-      </div>
-    </div>
   </div>
 </section>
 
@@ -6124,7 +6652,7 @@ def _demo_rail(O):
     # the site has no meaning here. Same face as the roster otherwise, so a
     # photograph dropped into assets-in/avatar/<handle> lands in both.
     bst = "" if not b else f"""<div class="tko-card tko-bst">
-          <span class="tko-avatar">{booster_face(b, px=40, lazy=False)}</span>
+          <span class="tko-avatar">{booster_face(b, px=40, lazy=False, glyph=21)}</span>
           <span class="tko-bst-c">
             <span class="tko-bst-n">{esc(b['handle'])}</span>
             <span class="tko-bst-m">{esc(b['peak'])}<i aria-hidden="true"> · </i><b>{b['orders']}</b> orders delivered</span>
@@ -7327,7 +7855,19 @@ def client_data():
             "pillHourRc": _ico("hourglass", 10, "rc-pill-ico", stroke=True),
             "feedArrow": _ico("arrow", 12, "lf-arrow", stroke=True),
             "feedSeal": _ico("seal", 11, "lf-done-ico", evenodd=True),
+            # The drawn fallback face, one entry per glyph rather than one per
+            # booster: /api/boosters names the glyph (`face`) and carries the
+            # two tints, so 78 rows cost 17 marks here instead of 78.
+            "faces": {_n: _ico(_n, 19, "face-ico", stroke=True) for _n in D.FACE_GLYPHS},
         },
+        # Which boosters have a real avatar in site/assets-in/avatar/, and where
+        # emit_art() put it. The server-rendered row resolves this through
+        # drop_in(); a row app.js draws from the store has to be told, or the
+        # live rail would fall back to the glyph beside a server-rendered board
+        # showing photographs. Only handles with a real file are listed, so a
+        # booster added without one still gets their glyph rather than a 404.
+        "avatars": {_b["handle"]: img("/assets/img/avatar-%s.svg" % _b["handle"])
+                    for _b in D.BOOSTERS if drop_in("avatar/" + _b["handle"])},
     }
     return ("/* generated by build.py — do not edit */\nwindow.ESB_DATA = %s;\n"
             % json.dumps(payload, ensure_ascii=False, indent=2))

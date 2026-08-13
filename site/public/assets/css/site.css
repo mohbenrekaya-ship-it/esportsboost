@@ -1050,6 +1050,28 @@ body.hd-locked {
   background: #221d19; display: flex; align-items: center; justify-content: center;
 }
 .rc-initial { font-family: var(--display); font-weight: 700; font-size: 14px; color: var(--text-2); }
+
+/* ── booster faces ──────────────────────────────────────────────────────────
+   The mark inside an availability ring, on the three surfaces that draw one:
+   the rail, the roster board and the track-order card. build.py's
+   booster_face() picks the glyph from the handle and hands the two colours
+   down as --face / --face-bg (D.face_tint(), off the booster's own hue).
+
+   The selectors carry their ring on purpose. `.tko-avatar .rst-initial` is a
+   (0,2,0) rule 5,400 lines below this one that repaints the plate; matching it
+   at (0,3,0) is what lets this block sit up here beside the component it first
+   belongs to instead of chasing source order down the file.
+
+   The tint is the booster's identity, never their status: face saturation is
+   capped in face_tint() well under the ring's green / amber, so a booster whose
+   hue lands near either still reads free or busy off the rim and the pill. */
+.rc-ring .rc-initial.is-face,
+.rst-ring .rst-initial.is-face,
+.tko-avatar .rst-initial.is-face {
+  background: linear-gradient(150deg, var(--face-bg), #191512);
+  color: var(--face);
+}
+.face-ico { display: block; }
 .rc-who { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
 .rc-name { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 600; letter-spacing: -.005em; }
 .rc-chip {
@@ -1594,18 +1616,75 @@ body.hd-locked {
 .sum-line .text-muted { font-family: var(--body); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
 
 /* ── mobile live-price bar ─────────────────────────────────────────────── */
+/* Three rows: money + button, then what the money buys, then the two
+   objections. `display: flex` here is what the ≤1000px rule switches on — the
+   bar is `none` at desktop width, so the column direction and everything under
+   it only ever paints on a phone. */
 .mobile-bar {
-  display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+  /* Its own copy of the two scoped names it reads. The bar is a child of
+     <body>, outside .hero-a and .rail, and an unresolvable var() computes to
+     the *initial* value rather than an inherited one — the bug that painted the
+     dashboard's live dots transparent. */
+  --h-tint: #ffb887;
+  --l-good: #8fd6a4;
+  display: none; flex-direction: column; gap: 7px;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
   background: rgba(10, 10, 17, .94); backdrop-filter: blur(14px);
-  border-top: 1px solid var(--hairline); padding: 10px 20px calc(10px + env(safe-area-inset-bottom));
-  align-items: center; justify-content: space-between; gap: 16px;
+  border-top: 1px solid var(--hairline);
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
 }
-.mobile-bar .p { font-family: var(--display); font-weight: 700; font-size: 24px; line-height: 1; }
+.mb-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* Sized so a three-figure price, its struck original and the pill still sit on
+   one line at 375px — the widest the shop quotes in USD. `wrap` is the safety
+   valve behind that, not the plan: EUR formatting is wider, and a pill that
+   drops to a second line is better than one that pushes the button off-screen. */
+.mb-money { display: flex; align-items: baseline; gap: 7px; min-width: 0; flex-wrap: wrap; }
+.mb-price {
+  font-family: var(--body); font-weight: 700; font-size: 26px; line-height: 1;
+  letter-spacing: -.02em; color: var(--text);
+}
 .mobile-was {
-  font-size: 15px; font-weight: 600; color: var(--text-6); margin-right: 7px;
+  font-size: 14px; font-weight: 600; color: var(--text-6);
   text-decoration: line-through; text-decoration-thickness: 1.5px;
 }
-.mobile-bar .s { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-6); }
+/* The saving is a pill, not a sentence: at this size it has to be readable in
+   the half-second before the thumb moves, and "You save $16 with SPLIT15" is
+   not. The code that produced it is already named in the card above. */
+.mb-save {
+  display: inline-flex; align-items: baseline; gap: 4px; flex: none;
+  padding: 3px 7px; border-radius: 999px;
+  font-family: var(--body); font-weight: 700; font-size: 10px;
+  letter-spacing: .07em; text-transform: uppercase;
+  color: var(--h-tint);
+  background: rgba(255, 90, 31, .13); border: 1px solid rgba(255, 90, 31, .3);
+}
+.mb-cta {
+  flex: none; height: 46px; padding: 0 15px; gap: 8px;
+  font-size: 12.5px; letter-spacing: .07em;
+}
+/* Row 2 — the estimate and the configuration, on one line. `.mb-cfg` is the
+   only part allowed to shrink: the delivery estimate is the answer to "when",
+   and a truncated "4 da…" answers nothing. */
+.mb-meta {
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+  font-size: 11.5px; color: var(--text-6);
+}
+.mb-eta { display: inline-flex; align-items: center; gap: 5px; flex: none; color: var(--text-4); }
+.mb-cfg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-dot { flex: none; color: var(--text-7); }
+.mb-ico { flex: none; }
+/* Row 3 — the two objections a grey-market buyer has at the moment of paying.
+   Same claims the hero's guarantee row makes; this is the last place they can
+   still change the answer. */
+.mb-assure {
+  display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap;
+  font-size: 10.5px; color: var(--text-6);
+}
+/* The glyphs carry the green, the words stay muted. Two green sentences under
+   an ember button is three accents in 40px of bar; the marks alone are enough
+   to read the row as reassurance rather than fine print. */
+.mb-as { display: inline-flex; align-items: center; gap: 5px; }
+.mb-as .mb-ico { color: var(--l-good); }
 
 
 /* Grid tracks default to a min-content floor; without min-width:0 one long
@@ -1671,7 +1750,10 @@ body.hd-locked {
   .gamerow img { width: 44px; height: 44px; }
   .gamerow .cfg { display: none; }
   .mobile-bar { display: flex; }
-  body.has-bar { padding-bottom: 78px; }
+  /* Clears the three-row bar (116px at 375, 130 at 320 where the save pill takes
+     its own line) plus the safe-area inset. Measured, not guessed — too small
+     and the footer's last row sits under the bar with no way to reach it. */
+  body.has-bar { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
   .two-up { grid-template-columns: 1fr; }
   .stat-row { gap: 24px; }
   .wizard { padding: 18px 16px; }
@@ -1778,8 +1860,9 @@ body.hd-locked {
 }
 .stat .stat-v i { font-style: normal; font-size: 16px; font-weight: 400; letter-spacing: 0; color: var(--h-dim); }
 /* Long label desktop, short label phone — both in the DOM so i18n can match
-   whole text nodes. Same for the delivered figure (92,400 → 92.4k). */
-.stat-k-sm, .stat-n-sm { display: none; }
+   whole text nodes. Same for the delivered figure (92,400 → 92.4k) and for the
+   add-on names/notes the handoff shortens on the phone. */
+.stat-k-sm, .stat-n-sm, .opt-t-sm, .opt-n-sm { display: none; }
 
 .hero-a-rule {
   height: 1px; border: 0; width: 100%; max-width: 640px; margin: 34px 0 0;
@@ -1909,6 +1992,17 @@ body.hd-locked {
 }
 .spot-portrait img { width: 100%; height: 100%; border-radius: 999px; object-fit: cover; }
 .spot-name { margin-top: 20px; font-size: 30px; font-weight: 600; letter-spacing: -.02em; line-height: 1; }
+/* The ladder this booster plays. A pill rather than another line of muted
+   meta text, because it is the fact that gives the two figures below their
+   meaning — "Challenger 1042 LP" is unreadable until you know which game it
+   is on. Sentence case: it is a product name, not a label, and the roster's
+   uppercase chip only abbreviates because it lives in a table column. */
+.spot-game {
+  margin-top: 11px; padding: 6px 11px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; line-height: 1; letter-spacing: .01em;
+  color: var(--h-text-2);
+  background: rgba(255, 255, 255, .04); border: 1px solid var(--h-line-2);
+}
 .spot-meta { margin-top: 9px; font-size: 13px; color: var(--h-muted); }
 /* Two labelled figures, not one dot-separated string. */
 .spot-stats {
@@ -1933,6 +2027,12 @@ body.hd-locked {
   border-color: rgba(255, 90, 31, .5); background: rgba(255, 90, 31, .08); color: #ffd0b0;
 }
 .spot-cta .ico { flex: none; }
+/* The label and the handle are separate nodes — i18n.js matches whole text
+   nodes, so "Order with" has to stay one and the name has to stay out of it.
+   They are wrapped as ONE flex item so the space between them is a word
+   space and not the row's 9px gap, which at this tracking reads as two. */
+.spot-cta-t { min-width: 0; }
+.spot-cta-t b { font-weight: inherit; }
 
 /* ── responsive ────────────────────────────────────────────────────────── */
 /* The handoff draws 1440 and 390 only and asks for the middle to be confirmed;
@@ -1955,6 +2055,7 @@ body.hd-locked {
     grid-template-areas:
       "portrait head"
       "portrait name"
+      "portrait game"
       "portrait meta"
       "stats    stats"
       "cta      cta";
@@ -1962,6 +2063,13 @@ body.hd-locked {
   .hero-h .spot-head { grid-area: head; width: 100%; }
   .hero-h .spot-portrait { grid-area: portrait; width: 78px; height: 78px; margin-top: 0; }
   .hero-h .spot-name { grid-area: name; margin-top: 8px; font-size: 24px; }
+  /* Four rows beside a 78px disc, so the pill gives up its padding and sits
+     as a line — a bordered chip in the second column pushes the meta past
+     the portrait's foot and the two columns stop reading as one block. */
+  .hero-h .spot-game {
+    grid-area: game; margin-top: 7px; padding: 0; font-size: 12px;
+    background: none; border: 0; color: var(--h-tint);
+  }
   .hero-h .spot-meta { grid-area: meta; margin-top: 6px; font-size: 12.5px; }
   .hero-h .spot-stats { grid-area: stats; margin-top: 16px; padding-top: 14px; }
   .hero-h .spot-cta { grid-area: cta; margin-top: 16px; }
@@ -2064,10 +2172,132 @@ body.hd-locked {
 .ob-tabs .tab[aria-selected="true"] { color: var(--h-text); border-bottom-color: var(--ember); }
 
 /* rank pickers ---------------------------------------------------------- */
-.ob-ranks { display: grid; grid-template-columns: 1fr 34px 1fr; align-items: end; gap: 8px; margin-top: 10px; }
-.ob-ranks-unit { grid-template-columns: 1fr 1fr; gap: 12px; }
+/* `minmax(0,1fr)`, not `1fr`: a bare 1fr track still respects min-content, so
+   the plate holding "Diamond" grew wider than the one holding "Iron" and the
+   pair stopped reading as two ends of one control. `stretch` is what keeps
+   both plates the same height when one tier has fewer divisions than the
+   other. Both are the configurator handoff's, and both are easy to regress. */
+.ob-ranks { display: grid; grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr); align-items: stretch; gap: 6px; margin-top: 10px; }
+.ob-ranks-unit { grid-template-columns: 1fr 1fr; align-items: end; gap: 12px; }
 .ob-rank, .ob-cell, .ob-unit { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-.ob-arrow { display: flex; justify-content: center; color: var(--ember); padding-bottom: 50px; }
+.ob-arrow { display: flex; align-items: center; justify-content: center; }
+.ob-arrow-ring {
+  width: 26px; height: 26px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 999px; color: var(--h-tint-2, #ff8a3d);
+  background: rgba(255, 90, 31, .12); border: 1px solid rgba(255, 90, 31, .34);
+}
+
+/* the rank plate -------------------------------------------------------- */
+/* One end of the climb: label, selector row, pips. Division boost draws two of
+   them side by side; Net wins and Placements draw a single full-width one
+   (.ob-plate-unit), which is the same object rather than a second, smaller rank
+   control — the tabs sit one click apart and asked the same question two ways. */
+.ob-plate {
+  gap: 0; padding: 12px; border-radius: 12px;
+  background: rgba(255, 255, 255, .025); border: 1px solid rgba(255, 255, 255, .1);
+}
+/* The unit tabs have no grid above them to inherit the row's spacing from. */
+.ob-plate-unit { margin-top: 12px; }
+.ob-rank-target.ob-plate {
+  background: linear-gradient(180deg, rgba(255, 90, 31, .1), rgba(255, 90, 31, .035));
+  border-color: rgba(255, 90, 31, .34);
+}
+.ob-plate-lab {
+  font-family: var(--body); font-weight: 600; font-size: 9.5px; line-height: 1;
+  letter-spacing: .15em; text-transform: uppercase; color: var(--h-muted);
+}
+.ob-rank-target > .ob-plate-lab { color: var(--h-tint, #ffb887); }
+/* Both wordings ship in the DOM and CSS picks one — i18n.js matches whole text
+   nodes, so a label swapped in by JS would arrive untranslated. */
+.ob-plate-lab-sm { display: none; }
+
+/* The selector row is the hit target; the <select> is the mechanism, laid over
+   the whole row at opacity 0. A visible select is as wide as its widest option,
+   which is what used to strand "Iron" a whole "Platinum" from the rest of the
+   row. Do not revert it to a visible control. */
+.ob-selector {
+  position: relative; display: flex; align-items: center; gap: 7px;
+  margin-top: 10px; padding: 8px; border-radius: 10px; cursor: pointer;
+  background: rgba(255, 255, 255, .035); border: 1px solid var(--h-line-3);
+}
+.ob-rank-target .ob-selector { background: rgba(255, 90, 31, .07); border-color: rgba(255, 90, 31, .32); }
+.ob-selector:hover { border-color: rgba(255, 255, 255, .22); }
+.ob-rank-target .ob-selector:hover { border-color: rgba(255, 90, 31, .46); }
+.ob-selector:has(.ob-tiersel:focus-visible) { outline: 2px solid var(--ember); outline-offset: 2px; }
+.ob-tiersel {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  appearance: none; -webkit-appearance: none; background: transparent;
+  opacity: 0; cursor: pointer; border: 0; outline: none; color: inherit;
+  /* 16px so mobile Safari does not zoom the viewport when the picker opens.
+     The control is invisible, so the size costs nothing here — but it is the
+     same threshold the MOBILE PASS block enforces on every other field. */
+  font-family: var(--body); font-size: 16px;
+}
+.ob-tiersel option { background: #17140f; color: var(--h-text); }
+
+/* The emblem takes its whole colour from --tier, which app.js sets on the
+   plate through data-rankcolor — so it tints itself on all nine ladders with
+   no per-game code, off the same table every other rank mark reads. */
+/* 36px, where the handoff draws 40. That measurement is a *fit* constraint
+   there, not a style — it went 48 → 40 so that League's longest tier name sat
+   whole beside it. This build runs the same plate against nine ladders whose
+   names go to "One Above All", so the same trade is made one step further and
+   the four pixels go to the name. Re-measure if either changes. */
+.ob-emblem {
+  width: 36px; height: 36px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .16);
+}
+.ob-em { width: 27px; height: auto; display: block; overflow: visible; }
+@supports (background: color-mix(in srgb, red 16%, transparent)) {
+  .ob-emblem {
+    background: linear-gradient(160deg,
+      color-mix(in srgb, var(--tier, #fff) 18%, transparent),
+      color-mix(in srgb, var(--tier, #fff) 6%, transparent));
+    border-color: color-mix(in srgb, var(--tier, #fff) 34%, transparent);
+  }
+  .ob-em-wing { fill: color-mix(in srgb, var(--tier, #fff) 40%, #17140f); }
+  .ob-em-outer { fill: color-mix(in srgb, var(--tier, #fff) 30%, #17140f); }
+  .ob-em-inner { fill: color-mix(in srgb, var(--tier, #fff) 82%, #17140f); }
+  .ob-em-glow { fill: color-mix(in srgb, var(--tier, #fff) 45%, #fff); }
+  /* the target end runs one step brighter — it is the rank being bought */
+  .ob-rank-target .ob-emblem {
+    background: linear-gradient(160deg,
+      color-mix(in srgb, var(--tier, #fff) 26%, transparent),
+      color-mix(in srgb, var(--tier, #fff) 6%, transparent));
+    border-color: color-mix(in srgb, var(--tier, #fff) 52%, transparent);
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--tier, #fff) 18%, transparent);
+  }
+  .ob-rank-target .ob-em-wing { fill: color-mix(in srgb, var(--tier, #fff) 50%, #17140f); }
+  .ob-rank-target .ob-em-outer { fill: color-mix(in srgb, var(--tier, #fff) 34%, #17140f); }
+  .ob-rank-target .ob-em-inner { fill: color-mix(in srgb, var(--tier, #fff) 92%, #17140f); }
+}
+
+.ob-sel-txt { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; overflow: hidden; }
+/* The tier name never ellipses — the handoff's rule, and the reason it is 17px
+   rather than 19px. It was drawn against League, whose longest name ("Platinum",
+   72px) fits at 17px with 18px to spare; this catalogue also has "Grandmaster"
+   (107px) and "One Above All" (116px), which do not. So the size is a per-game
+   step: app.js measures the game's *widest* tier name once and sets data-dense
+   on both plates together. Sized off the widest, not the current name, or the
+   type would resize under the reader every time they changed tier.
+   nowrap at every step — a wrapped name makes one plate's rows sit lower than
+   the other's, which is what the two-column layout exists to prevent. */
+.ob-tiername {
+  font-family: var(--body); font-size: 17px; font-weight: 600; letter-spacing: -.02em;
+  line-height: 20px; color: var(--h-text); white-space: nowrap;
+}
+.ob-sel-txt[data-dense="1"] .ob-tiername { font-size: 15px; letter-spacing: -.015em; }
+.ob-sel-txt[data-dense="2"] .ob-tiername { font-size: 13.5px; letter-spacing: -.01em; }
+.ob-sel-txt[data-dense="3"] .ob-tiername { font-size: 12.5px; letter-spacing: 0; }
+.ob-change {
+  font-family: var(--body); font-weight: 600; font-size: 8.5px; line-height: 1;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--h-faint, #7b746d);
+}
+.ob-updown { color: var(--h-muted); flex: none; }
+
 .ob-lab {
   font-family: var(--body); font-weight: 600; font-size: 10.5px; line-height: 1.3;
   letter-spacing: .13em; text-transform: uppercase; color: var(--h-muted);
@@ -2077,8 +2307,10 @@ body.hd-locked {
   background: rgba(255, 255, 255, .03); border: 1px solid var(--h-line-3); min-width: 0;
 }
 /* The target field is deliberately the accented one — it is the field that
-   decides the price, and the one people reach for first. */
+   decides the price, and the one people reach for first. Its label carries the
+   accent too, so the pair reads as one highlighted control. */
 .ob-rank-target .ob-field { background: rgba(255, 90, 31, .07); border-color: rgba(255, 90, 31, .28); }
+.ob-rank-target > .ob-lab { color: var(--h-tint, #ffb887); }
 .ob-field:hover { border-color: rgba(255, 255, 255, .2); }
 .ob-rank-target .ob-field:hover { border-color: rgba(255, 90, 31, .42); }
 .ob-field:has(:focus-visible) { outline: 2px solid var(--ember); outline-offset: 2px; }
@@ -2124,9 +2356,34 @@ body.hd-locked {
   background: rgba(255, 255, 255, .02); border-color: var(--h-line-2); color: var(--h-faint);
 }
 
+/* The rank plate's divisions are pips: filled with the accent rather than
+   outlined by it, and anything out of range dimmed and inert so the limit is
+   visible before the tap. These have to sit AFTER the .ob-divs block — both
+   sets are (0,4,0) on the pressed state, so source order is what decides, and
+   the unit services keep the outlined row above. */
+.ob-pips { margin-top: 10px; gap: 4px; }
+.ob .ob-pips .seg-sub-opt {
+  height: 30px; padding: 0; border: 0; border-radius: 7px;
+  font-size: 11.5px; letter-spacing: .08em;
+  background: rgba(255, 255, 255, .045); color: #a9a29b;
+}
+.ob .ob-pips .seg-sub-opt[aria-pressed="true"] {
+  background: var(--ember-grad); color: var(--ink);
+  box-shadow: 0 4px 12px rgba(255, 90, 31, .22);
+}
+.ob .ob-pips .seg-sub-opt:not([aria-pressed="true"]):not(:disabled):hover {
+  background: rgba(255, 255, 255, .09); color: var(--h-text);
+}
+.ob .ob-pips .seg-sub-opt:disabled { opacity: .28; cursor: default; }
+/* a flat ladder (CS2) has no divisions — the row says so instead */
+.ob .ob-pips[data-single="true"] .seg-sub-opt {
+  background: rgba(255, 255, 255, .025); border: 1px solid var(--h-line-2);
+  color: var(--h-faint); box-shadow: none; opacity: 1;
+}
+
 /* ladder ---------------------------------------------------------------- */
 .ob-ladder {
-  margin-top: 12px; padding: 9px 11px 7px; border-radius: 10px;
+  margin-top: 12px; padding: 9px 11px 5px; border-radius: 10px;
   background: rgba(255, 255, 255, .02); border: 1px solid rgba(255, 255, 255, .07);
 }
 /* tier-track ladder: one segment per tier, striped into its division slots and
@@ -2136,8 +2393,13 @@ body.hd-locked {
    bottom, the current rank as a hollow 12px ring in its tier's colour and the
    target as a 16px ember dot with a halo. The unfilled track is neutral —
    tinting it per tier is what made the empty tiers read as muddy stripes. */
-.ob-track { display: flex; align-items: flex-end; gap: 3px; height: 30px; }
-.ob-seg { position: relative; flex: 1 1 0; min-width: 0; height: 30px; }
+/* 26px, not the handoff's 30: the tallest thing in the row is the 16px target
+   dot sitting 1px off the bottom, so 4px of the box was pure air — and the
+   ladders whose captions wrap to two lines need those 4px back to keep the CTA
+   above the fold at 1440x900. Anything below 22px starts clipping the dot's
+   halo. */
+.ob-track { display: flex; align-items: flex-end; gap: 3px; height: 26px; }
+.ob-seg { position: relative; flex: 1 1 0; min-width: 0; height: 26px; }
 .ob-seg-track {
   position: absolute; left: 0; right: 0; bottom: 4px; height: 10px;
   border-radius: 3px; overflow: hidden;
@@ -2176,16 +2438,30 @@ body.hd-locked {
    slack the labels need and makes every one of them shrink. */
 /* One caption per segment, on the same 1fr track and the same 3px gap as the
    ladder above it, so a name sits centred under the tier it labels. */
-.ob-tiercaps { display: flex; gap: 3px; margin-top: 8px; }
+.ob-tiercaps { display: flex; gap: 3px; margin-top: 6px; }
 .ob-cap {
   flex: 1 1 0; min-width: 0; text-align: center; white-space: nowrap;
   font-family: var(--body); font-weight: 600; font-size: 9px; line-height: 1;
   letter-spacing: .06em; text-transform: uppercase; color: #6f6862;
   transition: color .18s ease;
+  /* The floor under the size ramp below. Some ladders cannot label every tier
+     at this width at any legible size — "Grandmaster" measures 57px at 7.25px
+     against Marvel Rivals' 43px cell, and it is one word, so no wrap helps.
+     Clipping keeps it inside its own cell; without this it painted straight
+     over its neighbours, which is how the row read as one run-on word. */
+  overflow: hidden;
 }
 /* A long ladder (nine tiers, "One Above All") steps down rather than clipping;
-   measured once per game in app.js. */
-.ob-tiercaps[data-dense="1"] .ob-cap { font-size: 8px; letter-spacing: .01em; }
+   measured once per game in app.js. The steps also release `nowrap`, because no
+   size fixes a two-word tier on its own: "Grand Champ" measures 56px at 7.25px
+   against a 49px cell on Rocket League's eight-tier ladder, so it has to break
+   at its space. A single long word still governs the step it lands on. */
+.ob-tiercaps[data-dense="1"] .ob-cap {
+  font-size: 8px; letter-spacing: .01em; white-space: normal; line-height: 1.15;
+}
+.ob-tiercaps[data-dense="2"] .ob-cap {
+  font-size: 7.25px; letter-spacing: 0; white-space: normal; line-height: 1.15;
+}
 /* an in-span caption takes its own tier's colour, matching the fill above it */
 .ob-cap[data-state="in"] { color: var(--tier, #c9c2bb); }
 .ob-ladder-foot {
@@ -2273,7 +2549,7 @@ body.hd-locked {
 .ob-coach-fmt .ob-ico { color: var(--ember-lit, #ff8a3d); flex: none; }
 
 /* net wins / placements — the 1–5 grid, per-game price and unranked toggle -- */
-.ob-unit-rank { margin-top: 12px; }
+/* The rank on these tabs is .ob-plate-unit, the same plate the climb draws. */
 .ob-unit-block { margin-top: 12px; display: flex; flex-direction: column; gap: 7px; }
 .ob-unit-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .ob-unit-price { font-size: 11.5px; color: var(--h-muted); }
@@ -2384,7 +2660,14 @@ body.hd-locked {
 
 /* queue + server + add-ons ---------------------------------------------- */
 .ob-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* The `> [data-hide-service]` arm is load-bearing, not defensive: the shared
+   queue/server/add-ons block was wrapped in that div when Coaching arrived,
+   which took the add-ons cell out of `.ob > .ob-cell` and left its label sitting
+   flush against the queue control above it. Both arms, or the gap goes again
+   the next time a section is wrapped. 14px above add-ons is the handoff's. */
 .ob-two, .ob > .ob-cell { margin-top: 10px; }
+.ob > [data-hide-service] > .ob-two:first-child { margin-top: 12px; }
+.ob > [data-hide-service] > .ob-cell { margin-top: 14px; }
 /* Queue and Server sit side by side and have to read as one row, so the
    segmented control is sized to the server field's height (33px) rather than
    to its own content: one line, no wrap, and the duo percentage inline. The
@@ -2446,10 +2729,21 @@ body.hd-locked {
   background: linear-gradient(to right, transparent, rgba(255, 255, 255, .14) 20px,
               rgba(255, 255, 255, .14) calc(100% - 20px), transparent);
 }
-.ob-sum { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-top: 10px; }
-.ob-sum-l { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 auto; }
+/* Two columns and a third cell under the right one for availability, so the
+   phone can span that line across the row without re-nesting anything.
+   The left column spans both rows, so the block is as tall as the taller
+   *column* rather than the left column plus the availability line — the
+   configurator handoff draws availability as the third item of the right-hand
+   stack, and the ~24px that arrangement saves is what keeps the CTA above the
+   fold at 1440x900 now that the rank plates are framed. */
+.ob-sum {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto; align-items: end; column-gap: 14px; margin-top: 10px;
+}
+.ob-sum-l { display: flex; flex-direction: column; gap: 6px; min-width: 0; grid-row: 1 / 3; }
 /* never squeezed by a long config line — it holds two unbreakable figures */
-.ob-sum-r { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; flex: none; }
+.ob-sum-r { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; grid-row: 1; }
+.ob-sum-free { grid-column: 2; grid-row: 2; justify-self: end; margin-top: 5px; }
 .ob .price-pair { gap: 9px; }
 .ob .quote-price {
   font-family: var(--body); font-size: 34px; font-weight: 600;
@@ -2560,9 +2854,31 @@ body.hd-locked {
   /* "Home" goes; the phone crumb is Games / <game>, as the handoff draws it */
   .hero-a .crumbs > a:first-child, .hero-a .crumbs > a:first-child + span { display: none; }
   .ob { padding: 14px; }
-  .ob-ranks { grid-template-columns: 1fr; gap: 14px; }
-  .ob-ranks-unit { grid-template-columns: 1fr; }
-  .ob-arrow { display: none; }
+  /* The plates stack, so the arrow stops being a column between them and
+     becomes a rule across the gap with the glyph turned down — it is the same
+     element either way, since emitting it twice is how the two versions drift.
+     gap: 0 because the arrow row carries its own height. */
+  .ob-ranks { grid-template-columns: 1fr; gap: 0; }
+  .ob-ranks-unit { grid-template-columns: 1fr; gap: 14px; }
+  .ob-arrow { height: 34px; gap: 11px; padding: 0 2px; }
+  .ob-arrow::before, .ob-arrow::after {
+    content: ""; height: 1px; flex: 1;
+    background: linear-gradient(to right, transparent, rgba(255, 255, 255, .14));
+  }
+  .ob-arrow::after { background: linear-gradient(to left, transparent, rgba(255, 255, 255, .14)); }
+  .ob-arrow-ring { border-color: rgba(255, 90, 31, .38); }
+  .ob-arrow-ring .ico { transform: rotate(90deg); }
+  /* the phone names the two ends outright; "You are" has no column beside it
+     to be read against once they are stacked */
+  .ob-plate-lab-lg { display: none; }
+  .ob-plate-lab-sm { display: inline; }
+  .ob .ob-pips .seg-sub-opt { height: 44px; }
+  /* Two phrases that fit side by side at 390 do not at 375, and `space-between`
+     broke the left one across two lines ("21 divisions to" / "climb") rather
+     than moving the reassurance down. Wrap the row instead: each phrase stays
+     whole, which is also what keeps them translatable. */
+  .ob-ladder-foot { flex-wrap: wrap; row-gap: 6px; }
+  .ob-ladder-foot > :first-child { flex: none; }
   .ob-two { grid-template-columns: 1fr; }
   .hero-a .stat-row { gap: 20px; }
   .hero-a .stat-row .stat + .stat { padding-left: 20px; }
@@ -2574,7 +2890,30 @@ body.hd-locked {
   .ob .seg-full .seg-opt { min-height: 44px; font-size: 12.5px; }
   .ob .seg-full .seg-opt .seg-pct { font-size: 11px; }
   .ob-two .ob-field { padding: 11px 9px; }
-  .ob-sum { flex-wrap: wrap; }
+  /* Shorter add-on wording, so no row wraps to a second line. */
+  .ob .opt-t-full, .ob .opt-n-full { display: none; }
+  .ob .opt-t-sm, .ob .opt-n-sm { display: inline; }
+
+  /* The summary is a two-column row on the phone, not a stack: the climb and
+     the saving read down the left, "Delivered in" and the estimate down the
+     right, and availability spans underneath. The big total and the CTA come
+     out of the card entirely — the sticky bar carries both, and the handoff is
+     explicit that there is exactly one button on screen. */
+  .ob-sum { column-gap: 12px; }
+  /* back to source order on the phone: the availability line spans the row
+     under both columns rather than tucking under the estimate */
+  .ob-sum-l { gap: 6px; grid-row: auto; }
+  .ob-sum-r { grid-row: auto; }
+  .ob-sum-l .ob-lab-cfg { font-size: 10px; line-height: 1.4; letter-spacing: .11em; }
+  .ob-sum-l .save-line { font-size: 10.5px; letter-spacing: .04em; }
+  .ob-sum-r { gap: 5px; }
+  .ob-sum-r .quote-eta { font-size: 20px; line-height: 1.1; white-space: nowrap; }
+  /* availability spans the row here rather than tucking under the estimate */
+  .ob-sum-free { grid-column: 1 / -1; justify-self: start; margin-top: 10px; font-size: 11.5px; }
+  /* The total and the CTA live in the sticky bar on a phone — the handoff is
+     explicit that exactly one button is on screen, so the card drops both
+     rather than printing the same price twice. */
+  .ob-sum-l .price-pair, .ob-cta, .ob-assure { display: none; }
   /* Bundles become a horizontal swipe rail — three 1fr columns clip the card
      copy at phone width, and the handoff draws them as a rail. */
   .ob-bundles-grid {
@@ -4437,6 +4776,13 @@ body.hd-locked {
 }
 /* No kicker on /how-it-works.html, where there is no numbered run to join. */
 .dsh-copy > .h-sec:first-child { margin-top: 0; }
+/* Optional standfirst — only /games/ passes one (see dashboard_section's
+   `note`). Measured at 44ch so it breaks in the same place as the other
+   handoff columns rather than running the width of the copy column. */
+.dsh-note {
+  margin: 18px 0 0; font-size: 15.5px; line-height: 1.6; color: var(--d-text-2);
+  max-width: 44ch; text-wrap: pretty;
+}
 
 .dsh-bens { display: flex; flex-direction: column; margin-top: 30px; width: 100%; }
 .dsh-ben { display: flex; gap: 14px; align-items: flex-start; padding: 20px 0; border-top: 1px solid rgba(255, 255, 255, .08); }
@@ -6838,6 +7184,404 @@ body.hd-locked {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   GAMES CATALOGUE — design_handoff_games_page
+
+   The eighth scoped port, and the sibling of `.sg` / `.sp`: same ground, same
+   `--g-*` token set, same hatch/band furniture — which is what lets this page
+   REUSE their FAQ accordion (`.sg-faq*`) and the guarantee page's promise cards
+   (`.sg-promise*`) verbatim rather than cutting twins of them. Everything this
+   page owns is scoped under `.gc`.
+
+   Two things here are load-bearing:
+
+     · **a card's accent is one number, not a colour.** Each card carries its
+       game's own `--h` (data.py's `hue`, the same hue its key art is generated
+       from), and the letter mark, the art wash and the hover edge are all
+       `hsl(var(--h) …)`. A second colour table would drift from the art the
+       moment a game is re-tinted;
+     · **the filter chips and the sort control are one state with two
+       presentations.** The segmented control and the native select are both in
+       the DOM at every width and CSS picks one — a three-option segment does not
+       fit beside the count at 390px. Removing the one that is hidden is how the
+       two get out of step, so neither ever leaves the markup.
+
+   Breakpoints follow the site's 1200/1000/760, not the handoff's 1280/1024/768.
+   The handoff draws 1440 and 390 and asks for the middle to be confirmed with
+   the designer.
+   ══════════════════════════════════════════════════════════════════════════ */
+.gc {
+  --ember: #ff5a1f;
+  --ember-lit: #ff8a3d;
+  --ember-grad: linear-gradient(94deg, #ffb03a, #ff5a1f);
+  --ink: #201004;                /* text on the ember fill */
+  --g-text: #f2efec;
+  --g-body: #b6afa9;
+  --g-body-2: #c9c2bb;
+  --g-muted: #8d8781;
+  --g-faint: #6f6862;            /* closed FAQ numbers */
+  --g-faint-2: #7b746d;          /* chip counts */
+  --g-tint: #ffb887;             /* tile glyphs, proof lines, open FAQ */
+  --g-hover: #ffd0b0;
+  --g-good: #8fd6a4;
+  --g-line: rgba(255, 255, 255, .055);
+  --g-line-2: rgba(255, 255, 255, .07);
+  --g-line-3: rgba(255, 255, 255, .09);
+  --g-line-4: rgba(255, 255, 255, .10);
+  --g-line-5: rgba(255, 255, 255, .11);
+  --g-line-6: rgba(255, 255, 255, .16);   /* outline buttons, the eyebrow rule */
+  --g-card: linear-gradient(180deg, #1b1816, #131110);
+  position: relative; isolation: isolate; overflow: hidden;
+  background: #0b0a09; color: var(--g-text);
+}
+/* The page ground, so the two `.gc` blocks and the shared sections between them
+   (the dashboard band, the closing band) sit on one colour rather than on
+   Ashfall's --bg showing through the seams. */
+body.gc-page { background: #0b0a09; }
+.gc-hatch {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0; opacity: .4;
+  background: repeating-linear-gradient(112deg, rgba(255, 255, 255, .045) 0 1px, transparent 1px 54px);
+}
+.gc-band { position: relative; z-index: 1; padding-block: 52px 56px; border-top: 1px solid var(--g-line-2); }
+.gc-cat { border-top: 0; }
+.gc-inner, .gc-how-grid, .gc-faq-grid { position: relative; z-index: 1; }
+.gc-glow {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(900px 480px at 78% 0%, rgba(255, 90, 31, .17), transparent 64%);
+}
+.gc-glow-r { background: radial-gradient(700px 420px at 80% 40%, rgba(255, 90, 31, .12), transparent 66%); }
+/* Rows toggled with `hidden` (the filtered footer) carry a `display` value,
+   which otherwise beats the UA's [hidden]. Same guard as `.sg` / `.sp` / `.co`. */
+.gc [hidden] { display: none; }
+
+/* ── shared type — the page header and the numbered kickers ──────────────── */
+.gc-kicker {
+  font: 600 10.5px/1 var(--display); letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ember-lit);
+}
+.gc .sec-kicker { gap: 14px; }
+.gc .sec-kicker-n {
+  font-family: var(--body); font-weight: 600; font-size: 15px; line-height: 1;
+  letter-spacing: .02em; color: var(--ember);
+}
+.gc .sec-kicker-n::after { height: 14px; margin-left: 14px; background: var(--g-line-6); }
+.gc .sec-kicker-l {
+  font-family: var(--body); font-weight: 600; font-size: 10.5px; line-height: 1;
+  letter-spacing: .16em; color: var(--g-muted);
+}
+.gc-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 48px; }
+.gc-head-l { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.gc-head-p {
+  margin: 0; padding-bottom: 6px; font-size: 14.5px; line-height: 1.6;
+  color: var(--g-body); max-width: 42ch; text-wrap: pretty;
+}
+.gc-head-p b { font-weight: 600; color: var(--g-text); }
+.gc-h1 {
+  margin: 16px 0 0; font-family: var(--display); font-size: 58px; line-height: 1;
+  letter-spacing: -.032em; font-weight: 600; max-width: 13ch; text-transform: none;
+}
+.gc-h2 {
+  margin: 16px 0 0; font-family: var(--display); font-size: 40px; line-height: 1.04;
+  letter-spacing: -.03em; font-weight: 600; text-transform: none;
+}
+.gc-h2-tight { line-height: 1.06; max-width: 17ch; }
+.gc-h2-sm { font-size: 36px; }
+/* The 38px accent tile — the service cards' glyph plate. `.sg-tile` is the 34px
+   one the promise cards draw; both are on this page, so they are two sizes of
+   one idea rather than one rule fighting itself. */
+.gc-tile {
+  width: 38px; height: 38px; flex: none; display: flex; align-items: center;
+  justify-content: center; border-radius: 10px; color: var(--g-tint);
+  background: rgba(255, 90, 31, .09); border: 1px solid rgba(255, 90, 31, .24);
+}
+
+/* ── the toolbar: capability chips + sort ───────────────────────────────── */
+.gc-tools {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  margin-top: 30px; padding-bottom: 18px; border-bottom: 1px solid var(--g-line-3);
+}
+.gc-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.gc-chip {
+  display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 13px;
+  border-radius: 9px; cursor: pointer; font: 600 12.5px/1 var(--body);
+  background: rgba(255, 255, 255, .03); border: 1px solid var(--g-line-4);
+  color: #a9a29b; white-space: nowrap;
+  transition: border-color .16s ease, color .16s ease, background .16s ease;
+}
+.gc-chip:hover { color: var(--g-text); border-color: var(--g-line-6); }
+.gc-chip.is-on {
+  background: linear-gradient(180deg, rgba(255, 176, 58, .20), rgba(255, 90, 31, .08));
+  border-color: rgba(255, 90, 31, .5); color: var(--g-text);
+}
+.gc-chip-n { font: 600 10px/1 var(--body); letter-spacing: .06em; color: var(--g-faint-2); }
+.gc-chip.is-on .gc-chip-n { color: var(--g-tint); }
+.gc-sortwrap { display: flex; align-items: center; gap: 11px; flex: none; }
+.gc-sort-l {
+  font: 600 10px/1 var(--body); letter-spacing: .13em; text-transform: uppercase;
+  color: var(--g-muted);
+}
+.gc-seg {
+  display: flex; gap: 3px; padding: 3px; border-radius: 9px;
+  background: rgba(255, 255, 255, .03); border: 1px solid var(--g-line-4);
+}
+.gc-seg-o {
+  height: 32px; padding: 0 12px; border: 0; border-radius: 7px; cursor: pointer;
+  font: 600 12px/1 var(--body); white-space: nowrap; background: transparent; color: #a9a29b;
+}
+.gc-seg-o:hover { color: var(--g-text); }
+.gc-seg-o.is-on { background: var(--ember-grad); color: var(--ink); }
+.gc-sortsel { display: none; }                 /* the phone's control — see 760 */
+.gc-count { font-size: 13px; color: var(--g-muted); }
+.gc-count b { font-weight: 600; color: var(--g-body-2); }
+.gc-count-sm { display: none; }
+
+/* ── the grid ───────────────────────────────────────────────────────────── */
+.gc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+.gc-card {
+  display: flex; flex-direction: column; overflow: hidden; border-radius: 14px;
+  background: var(--g-card); border: 1px solid var(--g-line-4); color: inherit;
+  text-decoration: none; min-width: 0;
+  transition: border-color .18s ease, transform .18s ease;
+}
+.gc-card:hover { border-color: hsl(var(--h) 62% 62% / .5); transform: translateY(-2px); }
+/* The featured card differs by border and shadow only — one card carries the
+   recommendation without introducing a second colour. */
+.gc-card.is-feat { border-color: rgba(255, 90, 31, .32); box-shadow: 0 18px 44px rgba(0, 0, 0, .42); }
+.gc-card.is-feat:hover { border-color: rgba(255, 90, 31, .55); }
+.gc-art {
+  position: relative; display: block; height: 92px; flex: none; overflow: hidden;
+  background: radial-gradient(280px 130px at 50% 34%, hsl(var(--h) 62% 62% / .22), transparent 72%);
+}
+.gc-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* The veil is what keeps a dropped key art off the title, whatever it is. */
+.gc-veil {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, transparent 40%, rgba(19, 17, 16, .96));
+}
+.gc-badge {
+  position: absolute; top: 12px; left: 12px; display: flex; align-items: center; gap: 6px;
+  padding: 6px 9px; border-radius: 999px; font: 600 9px/1 var(--body);
+  letter-spacing: .14em; text-transform: uppercase; color: var(--g-tint);
+  background: rgba(20, 15, 12, .74); border: 1px solid rgba(255, 90, 31, .42);
+  backdrop-filter: blur(6px);
+}
+.gc-body { display: flex; flex-direction: column; gap: 11px; padding: 14px 16px 16px; flex: 1; min-width: 0; }
+.gc-name-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.gc-name {
+  font-size: 17px; font-weight: 600; letter-spacing: -.015em; line-height: 1.15;
+  color: var(--g-text); min-width: 0;
+}
+.gc-svcs { display: flex; flex-wrap: wrap; gap: 5px; }
+.gc-svc {
+  padding: 6px 9px; border-radius: 999px; font: 600 9.5px/1 var(--body);
+  letter-spacing: .11em; text-transform: uppercase; color: #a9a29b;
+  background: rgba(255, 255, 255, .03); border: 1px solid var(--g-line-3);
+}
+.gc-cardfoot {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 14px;
+  margin-top: auto; padding-top: 6px;
+}
+.gc-price { display: flex; flex-direction: column; gap: 6px; }
+.gc-from {
+  font: 600 9.5px/1 var(--body); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--g-muted);
+}
+.gc-fig {
+  font-family: var(--display); font-size: 21px; font-weight: 600; line-height: 1;
+  letter-spacing: -.025em; color: var(--g-text);
+}
+.gc-go { display: flex; align-items: center; gap: 10px; flex: none; }
+.gc-go-l {
+  font: 700 10.5px/1 var(--body); letter-spacing: .13em; text-transform: uppercase;
+  color: var(--g-tint);
+}
+.gc-arrow {
+  width: 30px; height: 30px; flex: none; display: flex; align-items: center;
+  justify-content: center; border-radius: 999px; color: var(--g-body-2);
+  border: 1px solid var(--g-line-6);
+}
+.gc-card.is-feat .gc-arrow { border-color: rgba(255, 90, 31, .5); color: var(--g-tint); }
+/* The filtered footer exists only while a filter is on — no permanent empty row. */
+.gc-foot { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 18px; }
+.gc-reset {
+  display: inline-flex; align-items: center; gap: 8px; padding: 0; border: 0;
+  background: transparent; cursor: pointer; font: 600 13px/1 var(--body);
+  color: var(--ember-lit); text-decoration: underline; text-underline-offset: 3px;
+}
+.gc-reset:hover { color: var(--g-hover); }
+.gc-reset-i { display: none; }
+
+/* ── band 01: the four services ─────────────────────────────────────────── */
+.gc-svcs-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 30px; }
+.gc-svc-card {
+  display: flex; flex-direction: column; padding: 18px; border-radius: 14px;
+  background: var(--g-card); border: 1px solid var(--g-line-4);
+}
+.gc-svc-t { margin: 16px 0 0; font-size: 17px; font-weight: 600; letter-spacing: -.015em; text-transform: none; }
+.gc-svc-b { margin: 10px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--g-body); text-wrap: pretty; }
+/* Pinned, so the four "best for" lines sit on one baseline across bodies of
+   unequal length — that line is the band's whole argument. */
+.gc-best { display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding-top: 18px; }
+.gc-best-l {
+  font: 600 9.5px/1 var(--body); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--g-muted);
+}
+.gc-best-t { font: 600 12.5px/1.45 var(--body); color: var(--g-tint); }
+
+/* ── band 02: three steps + the on-shift rail ───────────────────────────── */
+.gc-how-grid { display: grid; grid-template-columns: minmax(0, 1fr) 540px; gap: 56px; align-items: start; }
+.gc-how-l { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.gc-steps { display: flex; flex-direction: column; width: 100%; max-width: 540px; margin-top: 26px; }
+.gc-step { display: flex; align-items: flex-start; gap: 18px; padding: 18px 0; border-top: 1px solid var(--g-line-4); }
+.gc-step:last-child { border-bottom: 1px solid var(--g-line-4); }
+.gc-step-n {
+  font: 600 13px/1 var(--body); letter-spacing: .1em; color: var(--ember);
+  min-width: 26px; flex: none; padding-top: 4px;
+}
+.gc-step-c { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
+.gc-step-t { font-size: 16.5px; font-weight: 600; letter-spacing: -.01em; color: var(--g-text); }
+.gc-step-b { font-size: 14px; line-height: 1.6; color: var(--g-body); text-wrap: pretty; }
+
+/* ── the trust band: promise_cards(), plus the phone rail's dots ─────────── */
+.gc-dots { display: none; }
+
+/* ── band 04: the FAQ ───────────────────────────────────────────────────── */
+.gc-faq-grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 56px; align-items: start; }
+.gc-faq-copy { position: sticky; top: 24px; display: flex; flex-direction: column; align-items: flex-start; }
+.gc-faq-note { margin: 16px 0 0; font-size: 14.5px; line-height: 1.6; color: var(--g-body); text-wrap: pretty; }
+.gc .btn-outline.gc-ask {
+  margin-top: 20px; height: 46px; padding: 0 18px; border-radius: 9px;
+  border-color: rgba(255, 90, 31, .5); color: var(--g-tint);
+}
+.gc .btn-outline.gc-ask:hover { background: rgba(255, 90, 31, .12); color: var(--g-hover); }
+
+/* ── the phone's sticky action bar ──────────────────────────────────────── */
+.gc-bar {
+  display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  padding: 11px 14px calc(11px + env(safe-area-inset-bottom));
+  background: rgba(11, 10, 9, .9); border-top: 1px solid var(--g-line-4);
+  backdrop-filter: blur(14px);
+}
+.gc-bar-cta { width: 100%; height: 52px; justify-content: center; border-radius: 10px; }
+/* The header sheet covers the page, so the bar goes with it — the same rule
+   `.mobile-bar` follows, for the same reason: a fixed CTA sitting on top of an
+   open menu offers an action the visitor has navigated away from. */
+.hd[data-sheet] ~ main .gc-bar { display: none; }
+
+@media (max-width: 1200px) {
+  .gc-h1 { font-size: 50px; }
+  .gc-h2 { font-size: 36px; }
+  .gc-h2-sm { font-size: 32px; }
+  .gc-how-grid { grid-template-columns: minmax(0, 1fr) 400px; gap: 40px; }
+  .gc-svcs-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gc-faq-grid { grid-template-columns: 300px minmax(0, 1fr); gap: 40px; }
+}
+@media (max-width: 1000px) {
+  .gc-band { padding-block: 44px 46px; }
+  .gc-head { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .gc-head-p { max-width: 60ch; padding-bottom: 0; }
+  .gc-h1 { font-size: 44px; max-width: none; }
+  .gc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gc-how-grid, .gc-faq-grid { grid-template-columns: minmax(0, 1fr); gap: 30px; }
+  .gc-steps { max-width: none; }
+  .gc-faq-copy { position: static; }
+}
+@media (max-width: 760px) {
+  .gc-band { padding-block: 30px 32px; }
+  .gc-h1 { font-size: 38px; line-height: 1.02; }
+  .gc-h2 { font-size: 27px; line-height: 1.08; }
+  .gc-h2-sm { font-size: 27px; }
+  .gc-head { gap: 13px; }
+  .gc-head-p { font-size: 14px; }
+
+  /* The toolbar splits: the chips become a swipe rail bleeding to both edges
+     (initScrollHints() draws the fade only when it actually overflows), and the
+     count moves up beside a native select. */
+  .gc-tools { flex-direction: column; align-items: stretch; gap: 14px; margin-top: 20px; }
+  .gc-chips {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter);
+  }
+  .gc-chips::-webkit-scrollbar { display: none; }
+  .gc-chip { height: 40px; }
+  .gc-sortwrap { justify-content: space-between; gap: 12px; }
+  .gc-sort-l, .gc-seg { display: none; }
+  .gc-count-sm { display: inline; font-size: 12.5px; }
+  .gc-sortsel {
+    position: relative; display: flex; align-items: center; gap: 8px; height: 40px;
+    padding: 0 11px; border-radius: 9px; background: rgba(255, 255, 255, .03);
+    border: 1px solid var(--g-line-4);
+  }
+  .gc-sortsel-i, .gc-sortsel .ob-caret { color: var(--g-muted); flex: none; }
+  .gc-sortsel-t { font: 600 12.5px/1 var(--body); color: #e7e2dd; white-space: nowrap; }
+  /* 16px, or mobile Safari zooms the viewport on focus and never zooms back —
+     the threshold the MOBILE PASS block enforces on every other control. */
+  .gc-sortsel-s {
+    position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0;
+    border: 0; outline: none; font-size: 16px; cursor: pointer;
+  }
+
+  .gc-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .gc-art { height: 76px; }
+  .gc-name { font-size: 16px; }
+  /* Price and action share one line rather than stacking — the card is
+     full-width here and a two-row foot costs a card per screen. */
+  .gc-cardfoot { align-items: center; }
+  .gc-price { flex-direction: row; align-items: baseline; gap: 7px; }
+  .gc-fig { font-size: 20px; }
+  /* The reset becomes the full-width control the phone screen draws; the count
+     it repeats is already in the toolbar above the grid. */
+  .gc-foot .gc-count { display: none; }
+  .gc-reset {
+    width: 100%; height: 44px; justify-content: center; border-radius: 9px;
+    border: 1px solid var(--g-line-6); color: var(--g-body-2);
+    font: 700 11px/1 var(--body); letter-spacing: .13em; text-transform: uppercase;
+    text-decoration: none;
+  }
+  .gc-reset-i { display: inline-flex; }
+
+  /* Service cards are read once, in order — a rail, not a stack. */
+  .gc-svcs-grid {
+    display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory;
+    scrollbar-width: none; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter);
+  }
+  .gc-svcs-grid::-webkit-scrollbar { display: none; }
+  .gc-svc-card { width: 242px; flex: none; scroll-snap-align: start; }
+
+  .gc-step { gap: 14px; padding: 15px 0; }
+  .gc-step-n { min-width: 22px; }
+  .gc-step-t { font-size: 15.5px; }
+  .gc-step-b { font-size: 13.5px; }
+
+  /* The three promises become the same snap rail, with dots that follow the
+     scroll. Deliberately NOT the handoff's 4.6s auto-rotation: these are the
+     refund, privacy and support promises, and a card that slides itself away
+     mid-sentence is the "a moving element reads as a sales device" rule the
+     guarantee page is built on. */
+  .gc .sg-promises {
+    display: flex; gap: 8px; margin-top: 20px; overflow-x: auto;
+    scroll-snap-type: x mandatory; scrollbar-width: none;
+    margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter);
+  }
+  .gc .sg-promises::-webkit-scrollbar { display: none; }
+  .gc .sg-promise { width: calc(100vw - var(--gutter) * 2); flex: none; scroll-snap-align: center; }
+  .gc-dots { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 13px; }
+  .gc-dot {
+    width: 7px; height: 7px; padding: 0; border: 0; border-radius: 999px; cursor: pointer;
+    background: rgba(255, 255, 255, .16); transition: width .18s ease, background .18s ease;
+  }
+  .gc-dot.is-on { width: 22px; background: var(--ember-grad); }
+
+  .gc .btn-outline.gc-ask { width: 100%; justify-content: center; }
+
+  .gc-bar { display: block; }
+  body.gc-page { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-card, .gc-chip, .gc-dot { transition: none; }
+  .gc-card:hover { transform: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    MOBILE PASS — defects found walking every page at 375px and 320px
    ══════════════════════════════════════════════════════════════════════════
    This block is last in the file on purpose: each rule below is a correction
@@ -6902,6 +7646,13 @@ body.hd-locked {
    page where a stray horizontal scroll is unaffordable, and neither element
    can be dropped — the padlock is the trust mark and the link is the only exit
    `layout(bare=True)` leaves. Both shrink instead. */
+/* The save pill leaves the money row below ~360px, which grows the sticky bar
+   by 14px — the body has to give that back or the footer's last row is
+   permanently under it. */
+@media (max-width: 400px) {
+  body.has-bar { padding-bottom: calc(138px + env(safe-area-inset-bottom)); }
+}
+
 @media (max-width: 400px) {
   .co-nav-in { gap: 10px; }
   .co-nav-r { gap: 10px; font-size: 12px; }

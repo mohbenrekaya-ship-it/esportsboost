@@ -307,10 +307,16 @@ def bundle_discount(g, from_rank, to_rank, idx):
 # Notes are deliberately one line each: the order card draws them under the
 # add-on name in an 11px row, and the handoff's layout budgets a single line
 # there. A second line pushes the CTA below the fold — see CLAUDE.md.
+# `label_sm` / `note_sm` are the phone's wording, where the order card is 358px
+# wide and the long forms wrap to a second line — the handoff's mobile screen
+# shortens exactly these two. Both variants ship in the DOM and CSS picks one,
+# because i18n.js matches whole text nodes.
 ADDONS = [
     dict(id="priority", label="Priority order", pct=0.15,
-         note="First in the claim queue, claimed in about 6 minutes."),
+         note="First in the claim queue, claimed in about 6 minutes.",
+         note_sm="First in the claim queue, about 6 minutes."),
     dict(id="champ", label="Champions, agents & roles", pct=0.10,
+         label_sm="Champions & roles",
          note="Your booster plays the picks you choose."),
     dict(id="stream", label="Live game stream", pct=0.12,
          note="Watch every game from your dashboard."),
@@ -859,6 +865,58 @@ assert len({_b["handle"] for _b in BOOSTERS}) == len(BOOSTERS), "duplicate boost
 STATS["online"] = len(BOOSTERS)
 STATS["free_now"] = sum(1 for _b in BOOSTERS if _b["queue"] == "free")
 
+# ── booster avatars: a gaming glyph, not an initial ───────────────────────────
+# The rail, the roster board and the track-order card all draw a booster inside
+# the availability ring. That used to be the first letter of the handle, which
+# on a 38px row reads as a placeholder and puts nine near-identical grey letters
+# down one column. Each booster now gets one of these marks instead, tinted with
+# their own `hue` — the same hue art.avatar() paints their profile portrait
+# with, so the small avatar and the big one belong to the same person.
+#
+# Load-bearing:
+#   * Every name here MUST be a key of build.py's `_ICONS` — build.py asserts it,
+#     because a missing glyph would render an empty ring rather than fail.
+#   * The pick is a pure function of the handle so the server-rendered row and
+#     the one app.js draws from /api/boosters agree. `boosters.py` puts the
+#     resolved name in its payload; the client never re-derives it.
+#   * Availability stays the loud signal. `face_tint()` caps saturation well
+#     under the ring's green/amber so a booster whose hue lands near either can
+#     never be misread as a status colour — the rim and the pill own that.
+FACE_GLYPHS = (
+    "gamepad", "joystick", "dpad", "d20", "skull", "rocket", "flame", "potion",
+    "crown", "sword", "knight", "shield-chevron", "trophy", "crosshair",
+    "target", "bolt", "headset",
+)
+
+
+def _fnv(s):
+    h = 2166136261
+    for ch in s:
+        h = ((h ^ ord(ch)) * 16777619) & 0xFFFFFFFF
+    return h
+
+
+def face_glyph(handle):
+    """Which glyph this handle wears."""
+    return FACE_GLYPHS[_fnv(handle) % len(FACE_GLYPHS)]
+
+
+def face_tint(handle, hue=None):
+    """The glyph's colour and the plate behind it, from the booster's own hue.
+
+    `hue` is optional because the roster store's `clean_booster()` does not
+    require one: a row that arrives without it would otherwise hand every such
+    booster the same hue-0 red, which is the column of identical avatars this
+    replaces. Falls back to a hue off the handle, so a face is always theirs.
+    """
+    try:
+        hue = int(hue)
+    except (TypeError, ValueError):
+        hue = None
+    if hue is None:
+        hue = (_fnv(handle) >> 8) % 360
+    return ("hsl(%d 40%% 68%%)" % hue, "hsl(%d 26%% 14%%)" % hue)
+
 # ── the vetting funnel (boosters hero) ────────────────────────────────────
 # The right rail of the boosters page: the evidence for the H1's claim, in the
 # shape of last month's intake. It replaced a card that previewed the same five
@@ -917,17 +975,21 @@ HERO = dict(
 # A handle that is not on the roster hides the card — the handoff's fallback
 # for a month with no qualifying booster is no card, never an empty one.
 #
-# `cta` carries the booster's name and i18n.js matches whole text nodes, so
-# changing `handle` means adding the new sentence to fr and de in i18n.js.
+# `cta` is the label WITHOUT the handle — build.py appends it in its own <b>,
+# the way the profile page's own "Order with vantaa" button does. i18n.js
+# matches whole text nodes, so baking the name into the sentence meant every
+# change of `handle` needed a new fr and de string; as a fragment it is one
+# key that already exists and the handle stays data.
 SPOTLIGHT = dict(
     handle="vantaa",
     eyebrow="This month's #1",
     # (figure, label, label suffix) — the suffix is data (a region), kept out
     # of the label's own text node so the label still translates.
     stats=[("1042 LP", "Challenger", ""), ("78%", "Win rate", "EUW")],
-    cta="See vantaa profile",
-    # Left blank: build.py points it at that handle's own profile page, so the
-    # link can't survive a change of SPOTLIGHT["handle"] pointing somewhere else.
+    cta="Order with",
+    # Left blank: build.py points it at that handle's game configurator with
+    # the booster attached (?booster=<handle>), so the destination follows
+    # SPOTLIGHT["handle"] and matches what the button says it does.
     href="",
 )
 
@@ -1640,6 +1702,74 @@ DEMO_ORDER = dict(
     claimed="4 Aug, 21:32", claim_lag=11,   # minutes between payment and claim
     placed="4 Aug, 21:21", paid_on="4 Aug",
 )
+
+# ── /games/ — the catalogue page — design_handoff_games_page ───────────────
+# The two pieces of copy that page owns: the four service explainers (band 01)
+# and the five questions asked about the catalogue rather than about one title
+# (band 04). Everything else on it — prices, counts, the roster, the Discord
+# size, the reply time — is read off the catalogue, the pricing engine, BOOSTERS
+# or STATS by build.py. The handoff's own nine "from" prices, nine order counts,
+# 78-booster figure and "3,000 in the Discord" are flagged there as invented, and
+# this site already computes every one of them.
+#
+# `{...}` markers are figures build.py substitutes so no number is typed here:
+#   {cap}   the units cap (pricing.UNIT_MAX)      {n}      titles in the catalogue
+#   {coach} titles with coaching                  {cheap}  cheapest title, {cp} its price
+#   {code}  the auto promo code, {pct} its cut    {dear}   dearest title,  {dp} its price
+#   {lo}–{hi}  the bundle discount range
+CATALOG_SERVICES = [
+    ("chart-up", "Division boost",
+     "Two ranks, one price. Your booster climbs from where you are to where you want to "
+     "be, and the number never moves after checkout.",
+     "You know the rank you want"),
+    ("plus", "Net wins",
+     "Priced per win above your losses, {cap} to an order. A short push when you are close "
+     "and do not want to commit to a full climb.",
+     "You are one division short"),
+    ("target", "Placements",
+     "We play up to {cap} of your season games, on a ranked account or a fresh one. The "
+     "rank you land is the rank you keep.",
+     "The season just reset"),
+    ("monitor", "Coaching",
+     "An hour with a coach from the roster, live on Discord, screen shared and recorded for "
+     "you to keep. Live on {coach} of the {n} titles.",
+     "You want to climb it yourself"),
+]
+
+# ⚠ Two answers below are commitments, not descriptions, and each is falsifiable
+# by a single order: that a booster plays exactly one title, and that there is no
+# cross-title bundle. The second is a structural claim — if sales ever wants a
+# cross-title discount, this answer has to change first (the handoff says so too).
+# Ids are a public contract: support links people at #faq-<id>, so renaming one
+# breaks the links in old tickets.
+CATALOG_FAQ = [
+    ("titles", "Are these all the titles you cover?",
+     "These {n} are the ones with a live board and enough boosters to claim an order "
+     "quickly. We take one-off requests on other titles in Discord, but there is no page "
+     "and no instant price for them — if the queue cannot claim it, we say so rather than "
+     "take the money."),
+    ("price-differs", "Why is {cheap} cheaper than {dear}?",
+     "A division is not the same amount of work in every game. Ladders are different "
+     "lengths, matches are different lengths, and one rung near the top of a ladder can "
+     "cost several near the bottom of another. Each title carries its own multiplier, and "
+     "it is on screen before you sign in: the cheapest single division is {cp} on {cheap} "
+     "and {dp} on {dear}."),
+    ("one-game", "Does one booster cover several games?",
+     "No. Everyone on the board plays exactly one title, and their profile carries the peak "
+     "rank, the win rate, the on-time record and the orders they have delivered on it. "
+     "Somebody claiming three ladders at once is somebody we did not hire."),
+    ("two-titles", "Can I order two titles at once?",
+     "Yes, as two orders — each gets its own booster, price and dashboard. There is no "
+     "cross-title bundle, because a discount spanning two boosters would be paying one of "
+     "them less."),
+    # `{oneof}` is the "and the bundle is the deeper cut" clause. build.py only
+    # writes it when the cheapest bundle actually beats the sitewide code —
+    # re-tune either and the sentence stops asserting it rather than going stale.
+    ("sale", "Do prices change during a sale?",
+     "{code} takes {pct} off the whole catalogue with nothing to type. Each game page also "
+     "carries bundle climbs at {lo} to {hi} off, and a bundle replaces the code rather than "
+     "adding to it — there is only ever one discount on an order{oneof}."),
+]
 
 FAQ = [
     ("Do I need an account to see the price?",

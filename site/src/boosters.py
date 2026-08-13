@@ -290,6 +290,7 @@ def _row_fields(row):
     color = D.tier_color(g, tier) if g else "#8e8f94"
     handle = row["handle"]
     wr_n = int(row.get("wr_n") or 0)
+    _face_tint = D.face_tint(handle, row.get("hue"))
     return {
         "handle": handle,
         "slug": row.get("slug", ""),
@@ -308,6 +309,12 @@ def _row_fields(row):
         "queue": row.get("queue", "free"),
         "free": row.get("queue") == "free",
         "initial": handle[:1].upper(),
+        # The avatar's glyph and its two colours are resolved here, the same way
+        # markColor is: the client renderer stays dumb and can never draw a
+        # booster a different face than the server-rendered row it replaces.
+        "face": D.face_glyph(handle),
+        "faceInk": _face_tint[0],
+        "facePlate": _face_tint[1],
         "href": "/boosters/%s.html" % handle,
         "hire": ("/games/%s.html?booster=%s" % (row["slug"], handle)) if g else "/games/",
     }

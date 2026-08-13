@@ -245,6 +245,7 @@
       "divisions": "divisions",
       "Cheapest single division": "Division la moins chère",
       "You save": "Vous économisez",
+      "Save": "Économie",
       "with": "avec",
       "Money-back until a booster is assigned": "Remboursé tant qu'aucun booster n'est assigné",
       "No account needed": "Aucun compte requis",
@@ -261,6 +262,9 @@
       "Placements": "Placements",
       "Current rank": "Rang actuel",
       "Target rank": "Rang cible",
+      "You are": "Vous êtes",
+      "You want": "Vous visez",
+      "Change tier": "Changer de palier",
       "How many net wins": "Combien de victoires nettes",
       "How many placement games": "Combien de matchs de placement",
       "One win fewer": "Une victoire de moins",
@@ -280,15 +284,15 @@
 
       /* home hero — the utility bar's roster count and the spotlight card.
          Numbers stay outside these nodes (build.py wraps them in <b>/<span>),
-         so the sentences keep matching. "See vantaa profile" carries the
-         booster's handle: changing data.py's SPOTLIGHT means adding the new
-         sentence here too. */
+         and so does the booster's handle: the card's CTA is "Order with" +
+         <b>vantaa</b>, which is why changing data.py's SPOTLIGHT no longer
+         needs a new sentence here. The game name is data and stays as
+         written, like every other game name on the site. */
       "verified boosters on shift right now": "boosters vérifiés en service maintenant",
       "This month's #1": "N°1 du mois",
       "Verified": "Vérifié",
       "orders delivered": "commandes livrées",
       "boosts delivered": "boosts livrés",
-      "See vantaa profile": "Voir le profil de vantaa",
       "Included": "Inclus",
 
       /* add-ons */
@@ -500,6 +504,67 @@
       "Configure →": "Configurer →",
       "Other games": "Autres jeux",
 
+      /* games catalogue — design_handoff_games_page. Figures ride in their own
+         <b> nodes, so the sentences around them stay whole keys; the two answers
+         quoting a price or a percentage bake the current one in, like every
+         other figure-bearing answer in this file. */
+      "Nine titles": "Neuf jeux",
+      "Pick your battlefield.": "Choisissez votre champ de bataille.",
+      "Prices are per division and shown before you sign in. Placements, net wins and duo on every title, coaching on":
+        "Les prix sont à la division et affichés avant toute connexion. Placements, victoires nettes et duo sur chaque jeu, coaching sur",
+      "of them.": "d'entre eux.",
+      "All titles": "Tous les jeux",
+      "Riot titles": "Jeux Riot",
+      "Valve titles": "Jeux Valve",
+      "With coaching": "Avec coaching",
+      "titles.": "jeux.",
+      "Sort": "Trier",
+      "Featured": "Sélection",
+      "Lowest price": "Prix le plus bas",
+      "Show all nine": "Afficher les neuf",
+      "Which service": "Quel service",
+      "Four ways to buy a climb.": "Quatre façons d'acheter une montée.",
+      "Every title sells the first three. If you are not sure which one you want, read the \"best for\" line — it is usually the whole answer.":
+        "Chaque jeu vend les trois premiers. Si vous ne savez pas lequel choisir, lisez la ligne « idéal pour » — c'est en général toute la réponse.",
+      "Best for": "Idéal pour",
+      "Two ranks, one price. Your booster climbs from where you are to where you want to be, and the number never moves after checkout.":
+        "Deux rangs, un prix. Votre booster grimpe d'où vous êtes jusqu'où vous voulez être, et le montant ne bouge plus après le paiement.",
+      "You know the rank you want": "Vous savez quel rang vous voulez",
+      "Priced per win above your losses, five to an order. A short push when you are close and do not want to commit to a full climb.":
+        "Facturé par victoire au-dessus de vos défaites, cinq par commande. Un coup de pouce quand vous êtes proche et ne voulez pas vous engager sur une montée complète.",
+      "You are one division short": "Il vous manque une division",
+      "We play up to five of your season games, on a ranked account or a fresh one. The rank you land is the rank you keep.":
+        "Nous jouons jusqu'à cinq de vos parties de classement, sur un compte classé ou un compte neuf. Le rang obtenu est le rang que vous gardez.",
+      "The season just reset": "La saison vient de repartir",
+      "An hour with a coach from the roster, live on Discord, screen shared and recorded for you to keep. Live on four of the nine titles.":
+        "Une heure avec un coach du roster, en direct sur Discord, écran partagé et enregistré pour vous. Disponible sur quatre des neuf jeux.",
+      "You want to climb it yourself": "Vous voulez grimper vous-même",
+      "Three steps, then it's out of your hands": "Trois étapes, puis ce n'est plus votre affaire",
+      "Same dashboard on all nine titles. It opens from the link we email you — no password, no app — and updates as games finish.":
+        "Le même tableau de bord sur les neuf jeux. Il s'ouvre depuis le lien envoyé par e-mail — sans mot de passe, sans application — et se met à jour à la fin de chaque partie.",
+      "Asked on this page": "Questions posées sur cette page",
+      "Title-specific questions live on each game's page. These are the ones about all nine.":
+        "Les questions propres à un jeu sont sur sa page. Voici celles qui concernent les neuf.",
+      "Are these all the titles you cover?": "Est-ce là tous les jeux que vous couvrez ?",
+      "These nine are the ones with a live board and enough boosters to claim an order quickly. We take one-off requests on other titles in Discord, but there is no page and no instant price for them — if the queue cannot claim it, we say so rather than take the money.":
+        "Ces neuf-là sont ceux qui ont un tableau actif et assez de boosters pour prendre une commande rapidement. Nous acceptons des demandes ponctuelles sur d'autres jeux via Discord, mais il n'y a ni page ni prix instantané pour eux — si la file ne peut pas la prendre, nous le disons plutôt que d'encaisser.",
+      "Why is Valorant cheaper than Counter-Strike 2?": "Pourquoi Valorant est-il moins cher que Counter-Strike 2 ?",
+      "A division is not the same amount of work in every game. Ladders are different lengths, matches are different lengths, and one rung near the top of a ladder can cost several near the bottom of another. Each title carries its own multiplier, and it is on screen before you sign in: the cheapest single division is $3 on Valorant and $9 on Counter-Strike 2.":
+        "Une division ne représente pas le même travail dans chaque jeu. Les échelles n'ont pas la même longueur, les parties non plus, et un échelon près du sommet d'une échelle peut en coûter plusieurs en bas d'une autre. Chaque jeu a son propre multiplicateur, affiché avant toute connexion : la division la moins chère est à 3 $ sur Valorant et à 9 $ sur Counter-Strike 2.",
+      "Does one booster cover several games?": "Un booster couvre-t-il plusieurs jeux ?",
+      "No. Everyone on the board plays exactly one title, and their profile carries the peak rank, the win rate, the on-time record and the orders they have delivered on it. Somebody claiming three ladders at once is somebody we did not hire.":
+        "Non. Chaque personne du tableau joue exactement un jeu, et son profil affiche le rang maximal, le taux de victoire, la ponctualité et les commandes livrées. Quelqu'un qui prétend tenir trois échelles à la fois est quelqu'un que nous n'avons pas recruté.",
+      "Can I order two titles at once?": "Puis-je commander deux jeux à la fois ?",
+      "Yes, as two orders — each gets its own booster, price and dashboard. There is no cross-title bundle, because a discount spanning two boosters would be paying one of them less.":
+        "Oui, en deux commandes — chacune avec son booster, son prix et son tableau de bord. Il n'existe pas de pack multi-jeux, car une remise à cheval sur deux boosters reviendrait à en payer un moins.",
+      "Do prices change during a sale?": "Les prix changent-ils pendant une promotion ?",
+      "SPLIT15 takes 15% off the whole catalogue with nothing to type. Each game page also carries bundle climbs at 22% to 35% off, and a bundle replaces the code rather than adding to it — there is only ever one discount on an order, and it is the larger of the two.":
+        "SPLIT15 retire 15 % sur tout le catalogue, sans rien à saisir. Chaque page de jeu propose aussi des packs de montée à 22 % à 35 % de remise, et un pack remplace le code au lieu de s'y ajouter — il n'y a jamais qu'une seule remise sur une commande, et c'est la plus avantageuse des deux.",
+      "Nine titles, one guarantee.": "Neuf jeux, une garantie.",
+      "Refunded in full until a booster claims it, pro-rated after that, and claimed in 18 min on average.":
+        "Remboursé intégralement jusqu'à la prise en charge, au prorata ensuite, et pris en charge en 18 min en moyenne.",
+      "Start with League": "Commencer par League",
+
       /* game page */
       "Home": "Accueil",
       "Breadcrumb": "Fil d'Ariane",
@@ -616,19 +681,6 @@
       "Roster": "Effectif",
       "Everyone on shift": "Tous en service",
       "Updated live": "Mis à jour en direct",
-      "What we screen for": "Ce que nous vérifions",
-      "Rank": "Rang",
-      "Two brackets above yours": "Deux paliers au-dessus du vôtre",
-      "Nobody is assigned an order inside their own bracket. The gap is what makes the win rate hold up over a long climb.":
-        "Personne ne se voit attribuer une commande dans son propre palier. C'est cet écart qui maintient le taux de victoire sur une longue montée.",
-      "Behaviour": "Comportement",
-      "Clean account history": "Historique de compte propre",
-      "No bans, no chat restrictions, no low behaviour score. A booster who gets your account reported is a booster who costs us the refund.":
-        "Pas de bannissement, pas de restriction de chat, pas de score de comportement bas. Un booster qui fait signaler votre compte est un booster qui nous coûte le remboursement.",
-      "Conduct": "Conduite",
-      "One strike on account sharing": "Tolérance zéro sur le partage de compte",
-      "Credentials never leave the order. A booster caught passing an account to anyone else is removed the same day and paid out nothing.":
-        "Les identifiants ne quittent jamais la commande. Un booster surpris à transmettre un compte à un tiers est retiré le jour même et n'est pas payé.",
 
       /* guarantee page — design_handoff_safety_guarantee */
       "Safety & guarantee": "Sécurité et garantie",
@@ -1192,6 +1244,7 @@
       "divisions": "Divisionen",
       "Cheapest single division": "Günstigste einzelne Division",
       "You save": "Du sparst",
+      "Save": "Gespart",
       "with": "mit",
       "Money-back until a booster is assigned": "Geld zurück, bis ein Booster zugewiesen ist",
       "No account needed": "Kein Konto nötig",
@@ -1208,6 +1261,9 @@
       "Placements": "Platzierungen",
       "Current rank": "Aktueller Rang",
       "Target rank": "Ziel-Rang",
+      "You are": "Du bist",
+      "You want": "Du willst",
+      "Change tier": "Stufe wechseln",
       "How many net wins": "Wie viele Netto-Siege",
       "How many placement games": "Wie viele Platzierungsspiele",
       "One win fewer": "Ein Sieg weniger",
@@ -1231,7 +1287,6 @@
       "Verified": "Verifiziert",
       "orders delivered": "Bestellungen geliefert",
       "boosts delivered": "Boosts geliefert",
-      "See vantaa profile": "Profil von vantaa ansehen",
       "Included": "Inklusive",
 
       /* add-ons */
@@ -1440,6 +1495,64 @@
       "Configure →": "Konfigurieren →",
       "Other games": "Weitere Spiele",
 
+      /* games catalogue — design_handoff_games_page (see the fr block) */
+      "Nine titles": "Neun Titel",
+      "Pick your battlefield.": "Wähle dein Schlachtfeld.",
+      "Prices are per division and shown before you sign in. Placements, net wins and duo on every title, coaching on":
+        "Die Preise gelten pro Division und stehen vor der Anmeldung fest. Platzierungen, Netto-Siege und Duo bei jedem Titel, Coaching bei",
+      "of them.": "davon.",
+      "All titles": "Alle Titel",
+      "Riot titles": "Riot-Titel",
+      "Valve titles": "Valve-Titel",
+      "With coaching": "Mit Coaching",
+      "titles.": "Titeln.",
+      "Sort": "Sortieren",
+      "Featured": "Empfohlen",
+      "Lowest price": "Niedrigster Preis",
+      "Show all nine": "Alle neun anzeigen",
+      "Which service": "Welcher Service",
+      "Four ways to buy a climb.": "Vier Wege, einen Aufstieg zu kaufen.",
+      "Every title sells the first three. If you are not sure which one you want, read the \"best for\" line — it is usually the whole answer.":
+        "Jeder Titel verkauft die ersten drei. Wenn du unsicher bist, lies die Zeile „Ideal für\" — sie ist meist die ganze Antwort.",
+      "Best for": "Ideal für",
+      "Two ranks, one price. Your booster climbs from where you are to where you want to be, and the number never moves after checkout.":
+        "Zwei Ränge, ein Preis. Dein Booster steigt von deinem Rang zum gewünschten Rang, und die Zahl ändert sich nach dem Bezahlen nicht mehr.",
+      "You know the rank you want": "Du weißt, welchen Rang du willst",
+      "Priced per win above your losses, five to an order. A short push when you are close and do not want to commit to a full climb.":
+        "Pro Sieg über deinen Niederlagen berechnet, fünf pro Bestellung. Ein kurzer Schub, wenn du nah dran bist und dich nicht auf einen ganzen Aufstieg festlegen willst.",
+      "You are one division short": "Dir fehlt eine Division",
+      "We play up to five of your season games, on a ranked account or a fresh one. The rank you land is the rank you keep.":
+        "Wir spielen bis zu fünf deiner Saisonspiele, auf einem gewerteten oder einem frischen Account. Der Rang, auf dem du landest, bleibt dir.",
+      "The season just reset": "Die Saison hat gerade neu begonnen",
+      "An hour with a coach from the roster, live on Discord, screen shared and recorded for you to keep. Live on four of the nine titles.":
+        "Eine Stunde mit einem Coach aus dem Roster, live auf Discord, mit geteiltem Bildschirm und Aufzeichnung für dich. Bei vier der neun Titel verfügbar.",
+      "You want to climb it yourself": "Du willst selbst aufsteigen",
+      "Three steps, then it's out of your hands": "Drei Schritte, dann ist es nicht mehr deine Sache",
+      "Same dashboard on all nine titles. It opens from the link we email you — no password, no app — and updates as games finish.":
+        "Dasselbe Dashboard bei allen neun Titeln. Es öffnet sich über den Link, den wir dir per E-Mail schicken — ohne Passwort, ohne App — und aktualisiert sich, sobald Spiele enden.",
+      "Asked on this page": "Auf dieser Seite gefragt",
+      "Title-specific questions live on each game's page. These are the ones about all nine.":
+        "Titelspezifische Fragen stehen auf der jeweiligen Spielseite. Hier geht es um alle neun.",
+      "Are these all the titles you cover?": "Sind das alle Titel, die ihr abdeckt?",
+      "These nine are the ones with a live board and enough boosters to claim an order quickly. We take one-off requests on other titles in Discord, but there is no page and no instant price for them — if the queue cannot claim it, we say so rather than take the money.":
+        "Diese neun haben ein aktives Board und genug Booster, um eine Bestellung schnell zu übernehmen. Einzelanfragen zu anderen Titeln nehmen wir über Discord an, aber es gibt dafür keine Seite und keinen Sofortpreis — wenn die Warteschlange sie nicht übernehmen kann, sagen wir das, statt das Geld zu nehmen.",
+      "Why is Valorant cheaper than Counter-Strike 2?": "Warum ist Valorant günstiger als Counter-Strike 2?",
+      "A division is not the same amount of work in every game. Ladders are different lengths, matches are different lengths, and one rung near the top of a ladder can cost several near the bottom of another. Each title carries its own multiplier, and it is on screen before you sign in: the cheapest single division is $3 on Valorant and $9 on Counter-Strike 2.":
+        "Eine Division bedeutet nicht in jedem Spiel gleich viel Arbeit. Leitern sind unterschiedlich lang, Matches ebenso, und eine Sprosse nahe der Spitze einer Leiter kann so viel kosten wie mehrere am unteren Ende einer anderen. Jeder Titel hat seinen eigenen Multiplikator, und er steht vor der Anmeldung auf dem Bildschirm: die günstigste einzelne Division kostet 3 $ bei Valorant und 9 $ bei Counter-Strike 2.",
+      "Does one booster cover several games?": "Deckt ein Booster mehrere Spiele ab?",
+      "No. Everyone on the board plays exactly one title, and their profile carries the peak rank, the win rate, the on-time record and the orders they have delivered on it. Somebody claiming three ladders at once is somebody we did not hire.":
+        "Nein. Jede Person auf dem Board spielt genau einen Titel, und ihr Profil zeigt den Höchstrang, die Siegquote, die Pünktlichkeit und die gelieferten Bestellungen. Wer drei Leitern gleichzeitig für sich beansprucht, ist jemand, den wir nicht eingestellt haben.",
+      "Can I order two titles at once?": "Kann ich zwei Titel gleichzeitig bestellen?",
+      "Yes, as two orders — each gets its own booster, price and dashboard. There is no cross-title bundle, because a discount spanning two boosters would be paying one of them less.":
+        "Ja, als zwei Bestellungen — jede mit eigenem Booster, eigenem Preis und eigenem Dashboard. Ein titelübergreifendes Bundle gibt es nicht, denn ein Rabatt über zwei Booster hinweg hieße, einen von beiden schlechter zu bezahlen.",
+      "Do prices change during a sale?": "Ändern sich die Preise während eines Sales?",
+      "SPLIT15 takes 15% off the whole catalogue with nothing to type. Each game page also carries bundle climbs at 22% to 35% off, and a bundle replaces the code rather than adding to it — there is only ever one discount on an order, and it is the larger of the two.":
+        "SPLIT15 zieht 15 % vom gesamten Katalog ab, ohne dass du etwas eingeben musst. Jede Spielseite führt außerdem Bundle-Aufstiege mit 22 % bis 35 % Rabatt, und ein Bundle ersetzt den Code, statt sich dazuzuaddieren — es gibt immer nur einen Rabatt pro Bestellung, und zwar den größeren von beiden.",
+      "Nine titles, one guarantee.": "Neun Titel, eine Garantie.",
+      "Refunded in full until a booster claims it, pro-rated after that, and claimed in 18 min on average.":
+        "Volle Erstattung, bis ein Booster übernimmt, danach anteilig — im Schnitt in 18 Min. übernommen.",
+      "Start with League": "Mit League starten",
+
       /* game page */
       "Home": "Startseite",
       "Breadcrumb": "Brotkrümelnavigation",
@@ -1551,19 +1664,6 @@
       "Roster": "Kader",
       "Everyone on shift": "Alle im Dienst",
       "Updated live": "Live aktualisiert",
-      "What we screen for": "Worauf wir prüfen",
-      "Rank": "Rang",
-      "Two brackets above yours": "Zwei Ligen über deiner",
-      "Nobody is assigned an order inside their own bracket. The gap is what makes the win rate hold up over a long climb.":
-        "Niemand bekommt eine Bestellung in seiner eigenen Liga zugewiesen. Dieser Abstand hält die Siegrate über einen langen Aufstieg stabil.",
-      "Behaviour": "Verhalten",
-      "Clean account history": "Sauberer Konto-Verlauf",
-      "No bans, no chat restrictions, no low behaviour score. A booster who gets your account reported is a booster who costs us the refund.":
-        "Keine Bans, keine Chat-Sperren, kein niedriger Verhaltenswert. Ein Booster, der dein Konto gemeldet bekommt, kostet uns die Rückerstattung.",
-      "Conduct": "Konduite",
-      "One strike on account sharing": "Null Toleranz beim Kontoteilen",
-      "Credentials never leave the order. A booster caught passing an account to anyone else is removed the same day and paid out nothing.":
-        "Zugangsdaten verlassen nie die Bestellung. Ein Booster, der ein Konto an jemand anderen weitergibt, wird noch am selben Tag entfernt und nicht bezahlt.",
 
       /* guarantee page — design_handoff_safety_guarantee */
       "Safety & guarantee": "Sicherheit & Garantie",

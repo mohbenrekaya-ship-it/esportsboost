@@ -20,8 +20,26 @@ assets-in/
 Game slugs: `league-of-legends valorant counter-strike-2 teamfight-tactics
 marvel-rivals dota-2 apex-legends overwatch-2 rocket-league`
 
-Booster handles: `vantaa kx_reid sable orvo nine petrichor mera cobalt_ix
-halden tsuro`
+Booster handles: every `handle` in `data.py`'s `BOOSTERS` (78 today).
+
+## What is already in `avatar/`
+
+All 78 slots are filled: one **Bottts** robot per handle, generated from that
+handle as the seed and downloaded once from DiceBear's API. They are *vendored*
+— the built site serves them from `/assets/img/avatar-<handle>.svg` and makes no
+request to dicebear.com at runtime.
+
+    https://api.dicebear.com/10.x/bottts/svg?seed=<handle>
+
+Bottts is by Pablo Stanley (https://bottts.com/), "free for personal and
+commercial use"; each file carries that statement in its own `<metadata>` block,
+so don't strip it when optimising. Re-run the URL above to regenerate one, or
+drop a real photograph over it — the ring around it is unchanged either way.
+
+**Only `avatar/`, deliberately not `portrait/`.** These read as characters at
+38px and as cartoons at 96px, so the profile header and the home hero's
+spotlight keep the generated rim-lit portrait. Dropping the same files into
+`portrait/<handle>` would put a robot in both.
 
 ## Framing
 

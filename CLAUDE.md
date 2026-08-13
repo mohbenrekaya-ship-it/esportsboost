@@ -102,7 +102,7 @@ reuse these rather than inventing new hooks:
 | Attribute | Role |
 | --- | --- |
 | `data-configurator` (+ `data-game`) | Marks a wizard; the optional game pins the page to one game and fires `view_item` |
-| `data-out="price\|eta\|summary\|summaryUpper\|game\|mode\|region\|free\|headline\|was\|discount\|saveLine\|saveWith\|configLine\|steps\|stepsWord\|promoCode\|promoLabel\|promoEnds\|fromRank\|toRank"` | Text nodes rewritten on every render. `fromRank`/`toRank` are the whole rank names ("Gold IV") — `data-tiername` is the tier alone |
+| `data-out="price\|eta\|summary\|summaryUpper\|game\|mode\|region\|free\|headline\|was\|discount\|saveAmt\|saveLine\|saveWith\|configLine\|steps\|stepsWord\|promoCode\|promoLabel\|promoEnds\|fromRank\|toRank"` | Text nodes rewritten on every render. `fromRank`/`toRank` are the whole rank names ("Gold IV") — `data-tiername` is the tier alone. Three shapes of the same saving: `discount` is the signed receipt figure (`−$16`), `saveAmt` the bare amount for a pill, `saveLine`/`saveWith` the sentences |
 | `data-sel="game\|from\|to\|fromTier\|toTier\|region"` | `<select>` bound to state; ladder/tier/region options are refilled per game. The `*Tier` pair moves one endpoint's tier while keeping its division numeral, then clamps through the same rule as every other rank control |
 | `data-service` / `data-panel` | Tab + panel pair for division / wins / placements |
 | `data-mode`, `data-addon`, `data-stepper` (`data-step`, `data-min`, `data-max`) | Radios, checkboxes, ± counters |
@@ -110,6 +110,8 @@ reuse these rather than inventing new hooks:
 | `data-regions` | Region chips, built by JS from the game's region list |
 | `data-rail` / `data-rail-caps` | Best Sellers rail: fill + two handles, and tier names positioned at each tier's centre node |
 | `data-tiername="from\|to"` | Tier name beside a rank mark. **A mark on its own never names a rank** — it is the division numeral, so a pair of them reads "IV → IV". Every climb readout pairs each mark with one of these |
+| `data-rankcolor="from\|to"` | Sets `--tier` from that end's rank and writes no text — for anything that takes the tier's colour without printing the numeral (the rank plate, whose emblem tints itself off it in CSS; the closing band's rank words) |
+| `data-tierfit` | The rank plate's text column. app.js measures the game's widest tier name in it and sets `data-dense` 0–3, which CSS reads as 17 → 12.5px. Caches on `data-for`, skipped while the plate has no layout |
 | `data-subseg="from\|to"` | Container whose division buttons are built by JS — the sub-ranks of that endpoint's tier. Out-of-range divisions render `disabled` |
 | `data-ticks` / `data-tier-caps` | Game-page ladder strip: one tick per rung with the crossed span filled, and the tier names under it. Both are built by JS and rebuilt when the game changes |
 | `data-mark="from\|to"` | Rank mark — division numeral, tinted via `--tier` from `D.tiercolors` (see `data.py`'s `tier_color()`) |
@@ -125,6 +127,7 @@ reuse these rather than inventing new hooks:
 | `data-ts` / `data-mins` | A relative timestamp, on any `.lf-ago` — the feed's rows and the demo page's order-card footer. `data-ts` (epoch seconds) is what a feed wired to the orders table emits and wins; `data-mins` counts back from page load and is the placeholder stand-in. `initFeed()` selects on the attribute, not on `.lf-row`, and re-derives the relative label and the clock from whichever is present |
 | `data-rst-*` | The roster board. `data-rst-row` carries `data-game` / `data-free` / `data-win` — the filter reads only these, so a server-rendered board keeps working. `data-rst-game\|avail\|sort` are the three controls, `data-rst-body\|shown\|fgame\|ffree\|more\|reset\|empty*` the things `initRoster()` rewrites |
 | `data-bp-*` | A profile's completed orders: `data-bp-row` (+ `data-mode`), `data-bp-filter`, `data-bp-body\|shown\|total\|more` |
+| `data-gc-*` | The catalogue grid on `/games/`. `data-gc-card` carries `data-gc-riot\|valve\|coaching` (the filter reads only these, so a filter is one attribute) plus `data-gc-order\|price\|name` (the three sorts). `data-gc-filter\|sort\|sortsel` are the controls — the segment and the native select write one state and `initCatalog()` re-marks both — and `data-gc-grid\|foot\|shown\|reset\|sortlabel\|dots\|dot` are what it rewrites |
 | `data-rv-stars` / `data-rv-game` | The two facts the reviews page filters and sorts a card on, emitted by `review_card(filterable=True)`. The whole feed reads only these, so a server-paged feed keeps working |
 | `data-rvp-*` | The reviews feed's controls: `data-rvp-game\|rating\|sort` (three radio groups) and `data-rvp-dist` (the distribution rows, `aria-pressed` toggles). Both rating controls write one state — `initReviews()` re-marks both whenever either fires. `data-rvp-grid\|shown\|total\|crumb\|clear\|empty\|more\|more-label` are what it rewrites; `data-rvp-worst` is the hero's "Read the worst first" |
 | `data-when-booster` / `data-out="booster"` / `data-sum="booster"` / `data-booster-clear` | The named booster. Rows that `hidden` themselves when none is set; it is an order attribute, never a price input — `quote()` must not read it |
@@ -208,7 +211,8 @@ without breaking the ordering rule above. Four things in it are load-bearing:
   off it.
 
 `initScrollHints()` is the fifth piece and lives in app.js: the rails that genuinely overflow
-(`.ob-tabs`, `.ob-bundles-grid`, the two chip rows) get `data-scrollhint`, which CSS draws as a
+(`.ob-tabs`, `.ob-bundles-grid`, the chip rows, the catalogue's chips and service rail) get
+`data-scrollhint`, which CSS draws as a
 right-edge fade, and `data-scroll-end` clears it at the end of the scroll. It is set from JS and not
 in the markup because whether a rail overflows depends on the width, the language and the game's own
 tab set — a fade over a row that already fits points at nothing. This is what stopped the game
@@ -320,7 +324,43 @@ with breakpoints, not two.
 
 ## The game-page hero + order card
 
-`page_game()`'s first section is the **"Ladder card"** handoff (`design_handoff_lol_boost_hero`),
+The card's **rank controls** are a later handoff of their own —
+**`design_handoff_configurator`**, "the live-pricing configurator", two screens (desktop in a 470px
+column, mobile at 390). It re-drew the one thing every order goes through, and everything below
+about the card still holds; what it replaced was the rank *field*:
+
+- **Each end of the climb is a framed plate** (`rank_plate()` → `.ob-plate`): a label, a selector
+  row — 40px emblem tile · tier name · "change tier" · a two-headed caret — and the tier's divisions
+  as a row of filled pips. `.ob-rank-target` is the accented one. The unit tabs draw the same object
+  at full width (`unit=True`); see the Net wins / Placements note further down.
+- **The `<select>` is invisible, laid over the whole selector row** (`.ob-tiersel`, `opacity: 0`,
+  `inset: 0`). A visible native select is as wide as its widest option, which stranded "Iron" a
+  whole "Platinum" from the rest of the row; the old control worked around it by measuring the
+  label and sizing the select to it in JS. The row is the hit target, the real control still
+  supplies keyboard and screen-reader behaviour, and `sizeTierSelect()` is gone. Do not revert it
+  to a visible select. It carries `font-size: 16px` for the same reason every other field does —
+  iOS zooms a focused control under 16px, invisible or not.
+- **The emblem is one drawing, tinted per tier in CSS.** `_EMBLEM` is a hand-drawn winged orb (tier
+  emblems are publisher IP — the same rule `pay_marks()` and the Trustpilot star follow). Its four
+  shapes are `color-mix()`ed off `--tier`, which `data-rankcolor` sets on the plate, so it works on
+  all nine ladders with no per-game code and can never drift from the site's other rank marks. The
+  target end runs one step brighter. `fill` presentation attributes are the no-`color-mix` fallback.
+- **The plate's own measurements are 36px emblem / 12px padding / 8px selector padding, where the
+  handoff draws 40 / 14 / 10.** That is not a style tweak: the handoff calls 40px a *fit* constraint
+  (it went 48 → 40 so League's longest tier name sat whole beside it) and asks for a re-measure if
+  the copy changes. It did — nine ladders, up to "One Above All" — so the same trade goes one step
+  further and the pixels go to the name. See the two fitting passes below.
+- **Clamping is unchanged and still load-bearing**: clamp the end the user touched, never move the
+  other one; out-of-range tiers arrive as `disabled` options and out-of-range divisions render
+  disabled, so the limit is visible before the tap. **Bronze IV → Bronze III must stay orderable** —
+  there is no test suite, so check that climb by hand after touching the picker.
+- **On the phone the plates stack**, the labels change from "You are" / "You want" to "Current rank"
+  / "Target rank" (both wordings ship in the DOM and CSS picks one — i18n.js matches whole text
+  nodes), the arrow becomes a ring centred in a hairline rule with its glyph rotated down, and the
+  pips grow to 44px.
+
+`page_game()`'s first section is otherwise the **"Ladder card"** handoff
+(`design_handoff_lol_boost_hero`),
 which replaced two bare rank `<select>`s. It is ported at **full fidelity, including its own tokens**
 — this is the one deliberate exception to "layer on Ashfall". The handoff's palette, radii and
 sentence-case control typography are declared on `.hero-a` in `site.css` and nothing leaks past it:
@@ -337,7 +377,7 @@ sentence-case control typography are declared on `.hero-a` in `site.css` and not
 
 Things that are load-bearing here:
 
-- **The card is generic, not LoL-only.** `rank_picker()`, `ladder_strip()` and `wizard()` read
+- **The card is generic, not LoL-only.** `rank_plate()`, `ladder_strip()` and `wizard()` read
   `tiers`/`divmap`/`prices` out of `data.py`, so all nine game pages get it and a new game needs no
   code. Tier mark colours come from `TIER_COLORS` with a positional ramp fallback — an unnamed tier
   is never a missing colour.
@@ -347,8 +387,15 @@ Things that are load-bearing here:
   is re-tuned.
 - **Duo's "+55%" is read off `pricing.DUO_MULT`**, so the label can't drift from the formula.
 - **The CTA has to clear the fold at 1440×900** (the one measurement the handoff carries from the
-  mock). It currently lands at ~833–883. Anything added to the card comes out of that budget —
-  measure, don't eyeball.
+  mock). It currently lands at **881–895 across the nine games** — the framed rank plates cost ~59px
+  a side and that is where the old ~833–883 slack went. Anything added to the card comes out of what
+  is left, which on Dota 2 and Rocket League is single digits. Measure every game, don't eyeball one:
+  the ladders whose tier captions wrap to two lines are the tall ones.
+  Two things were given back to pay for the plates, and both should survive a re-tune: `.ob-sum`
+  spans its left column across both grid rows, so the block is as tall as its taller *column*
+  rather than the left column plus the availability line (~24px, and it is also how the
+  configurator handoff draws that stack); and `.ob-track` is 26px rather than the handoff's 30,
+  because the tallest thing in it is the 16px target dot 1px off the bottom.
 - **Availability lives in the card, not the hero stat row.** "N of M boosters free now" sits beside
   the delivery estimate, where it argues for ordering now; the hero's third stat is boosts delivered.
   Putting a roster count in both places is how the two conflicting numbers got shipped last time.
@@ -357,9 +404,30 @@ Things that are load-bearing here:
   states the inclusion in its green strip instead, so it is still said out loud in the flow.
 - **Add-on notes must stay one line.** They are `data.py` copy; a second line costs ~14px of the
   fold budget per row.
-- **Tier captions never ellipse.** `data-tier-caps` measures itself once per game and sets
-  `data-dense`, which steps 9.5px → 8px. Tier *count* is not the test — Dota's eight long names
-  overflow where Valorant's eight do not.
+- **Two things in the card size themselves to the game's longest tier name, and both measure the
+  text rather than the box.** Tier *count* is not the test — Dota's eight long names overflow where
+  Valorant's eight do not.
+  - `data-tier-caps` (the ladder captions) steps 9.5 → 8 → 7.25px and releases `nowrap` at the two
+    small steps, because no size fixes a two-word tier on its own: "Grand Champ" measures 56px at
+    7.25px against Rocket League's 49px cell and has to break at its space. A caption cell is a
+    `1fr` flex item, so **its `scrollWidth` always equals its `clientWidth`** whether the name fits
+    or not — the original test compared exactly those two and was therefore true on every ladder,
+    pinning all nine games to the small step and detecting nothing. It measures a `Range` over the
+    contents now. `.ob-cap` carries `overflow: hidden` as the floor under the ramp: a 9-tier ladder
+    cannot label "Grandmaster" (57px at 7.25px, 43px cell) at any legible size, and a clipped
+    caption inside its own cell beats one painted over its neighbours.
+  - `data-tierfit` (the rank plate's tier name) steps 17 → 15 → 13.5 → 12.5px. 17px is the
+    handoff's, and it was drawn against League, whose longest name fits with room to spare;
+    "Grandmaster" and "One Above All" do not, so Marvel Rivals, Overwatch 2 and Rocket League land
+    on 13.5px and the other six stay at 17. It is sized off the game's **widest** name, not the one
+    on screen, or the type would resize under the reader on every tier change and the two plates
+    would disagree.
+  - Both cache the verdict per game, and both re-run on `document.fonts.ready` — a first render
+    measures the fallback face, and a verdict reached there would otherwise stand for the visit.
+    `data-tier-caps` also skips measuring while the Division panel is `hidden` (the other three
+    tabs): every cell reads zero there, which "fits nothing" and latches the smallest step. That is
+    what `data-fit` is for, kept separate from `fillCells`' `data-for` so a skipped measurement is
+    retried rather than remembered.
 - **i18n matches whole text nodes.** `translateTextNode()` looks up a node's entire trimmed value,
   so interpolating a number or a separator into a translatable string silently un-translates it —
   this is why the CTA is `<span>Continue to checkout</span><span>·</span><span data-out="price">`
@@ -434,8 +502,15 @@ authoritative for the whole site, not adopt the handoff's separate PER_TIER mode
   the product cap (`pricing.UNIT_MAX = 5`), shown as five exposed buttons with a live **"$N per game"**
   (`data-out="winsUnit"`/`placementsUnit`, quoted at one unit / current rank) and a per-product note.
   Placements opens with an **"I have a rank / Unranked"** toggle (`data-ranked`); Unranked hides the
-  rank picker (`data-when-ranked`) and shows the plate (`data-when-unranked`), and `state.unranked`
+  rank control (`data-when-ranked`) and shows the plate (`data-when-unranked`), and `state.unranked`
   prices at the ladder floor (`climb = 1`) on both server and client.
+  The rank above each grid is **the same `rank_plate()` the climb draws**, one full-width copy
+  (`rank_plate(g, "from", sfx, unit=True)` → `.ob-plate-unit`, and `sfx` is what keeps the three
+  `<select>` ids unique). It replaced a second, smaller rank control that lived only on these two
+  tabs: one tab apart, the same question was asked with a different widget, a different selected-
+  division treatment (outline vs the plate's filled pip) and a select that needed JS width
+  measurement to sit beside its mark. The unit plate labels itself "Current rank" at every width —
+  it has no second plate beside it for "You are" to be read against.
 - **The bundle strip** (`bundle_strip(g)` in the hero, `D.BUNDLES` / `bundle_climbs()`) is the
   handoff's "Save big on bundles": each card is a two-tier climb at a **real** discount (`(ft, tt,
   disc)` in `D.BUNDLES`, 22–35%) that **replaces the sitewide sale** on a matching climb — the `−N%`
@@ -472,6 +547,126 @@ authoritative for the whole site, not adopt the handoff's separate PER_TIER mode
   `from` and an accent `.ob-seg-dot` at `to`. Generic — it reads `divsOf()`, so it works for flat
   ladders (CS2: one slot per rung) as well as LoL's divisions. Captions (`data-tier-caps`) are now
   tinted per tier when in-span. The old `data-ticks` render hook is dead but left in place.
+
+## The games catalogue (`/games/`)
+
+`page_games_index()` is the **"Games catalog"** handoff (`design_handoff_games_page`), two screens
+(1440 / 390) built as one component with breakpoints. Eighth scoped port after `.hero-a` / `.co` /
+`.gg` / `.dsh` / `.rst` / `.tk` / `.hd` — tokens on `.gc`, product radii per element, nothing leaking.
+It replaced a flat nine-tile grid with a paragraph beside it, three steps and the guarantee cards.
+
+**Its job is routing, not converting.** Everything under the grid exists so the visitor arrives at a
+configurator having already answered "which service", "how does it run", "who plays it" and "what if
+it goes wrong". The bands are: catalogue · 01 which service · 02 how it runs · 03 dashboard ·
+trust · 04 FAQ · close.
+
+- **Three components are shared, not re-cut** — the handoff says so outright, and each is this
+  build's canonical port of the handoff it names: band 03 is `dashboard_section()` (so the mock is
+  the same `dash_mock()` the homepage, `/how-it-works` and `/demo.html` draw); the FAQ is `sg_faq()`
+  + `faq_accordion_js()`, the safety/support accordion, so an answer here deep-links and behaves
+  exactly like one there; the trust cards are `promise_cards()` over `D.GUARANTEES`. The on-shift
+  rail is `roster_panel()` and the title list is `D.GAMES` — the same list the header's Games menu
+  renders. `dashboard_section()` gained one optional `note=` for this page's standfirst; nothing
+  else about it moved.
+- **Every figure is read, never typed.** The handoff's nine "from" prices, nine order counts, "78
+  boosters" and "3,000 in the Discord" are flagged there as invented: prices come through
+  `from_price()` → `money()`, the roster counts off `BOOSTERS`/`STATS`, the coaching count and the
+  FAQ's two price extremes off the catalogue, the sale answer off `PROMOS` and `D.BUNDLES`.
+  `gc_facts()` computes the lot once so the chips' counts and the sentences under them cannot
+  disagree.
+- **"Duo available" is not one of the filters.** Duo is offered on all nine titles here
+  (`mode_seg()` is in every configurator), so that chip would return the whole catalogue — the
+  handoff's own rule is that a filter has to mean something. Its slot went to **Valve titles**, which
+  is real, is two, and is the publisher split `gp_safety()` already argues per title. The four chips
+  are All / Riot / Valve / With coaching, single-select with `all` as the reset, each carrying its
+  count; none can return zero or all nine. **If a filter is ever added that can return nothing, that
+  empty state has to be designed** — the grid must not just collapse.
+- **The default sort is "Featured", not the handoff's "Most ordered".** Nothing in this build
+  measures order volume, and the handoff's nine order counts — which are what its default sort reads
+  — are invented. Featured is the catalogue's own editorial order (`D.GAMES`), which is what it
+  actually is. The lead card still carries the **"Most ordered"** badge: one claim, said once, in the
+  same words `games_grid()`'s lead tile uses, with the standing `STATS` has.
+- **Everything is server-rendered; JS only hides and re-orders.** All nine cards ship in catalogue
+  order, so the page is correct with no JS and legible to a crawler — this is the page a search
+  engine reads to learn which titles exist. `initCatalog()` filters, sorts and counts through the
+  `data-gc-*` contract, the same trade-off the roster board and the reviews feed make.
+- **A card's accent is one number, not a colour.** Each card carries its game's `hue` as `--h`
+  (data.py's, the same hue its key art is generated from) and the art wash and hover edge are both
+  `hsl(var(--h) …)`. A per-title colour table — the handoff ships one — drifts from the art the
+  moment a game is re-tinted. Art is the `band-<slug>.svg` crop, not the 1200×700 key art: the zone
+  is 92px and a wordmark does not survive a fifth-of-height crop.
+- **The name row carries no lettermark.** The handoff puts an initial in a tinted box beside the
+  title, which on this build sits directly under art that already *is* the game's wordmark — so the
+  tile said the name twice, once as a logo and again as a letter. `.gc-name-row` survives as the
+  row's `min-width: 0` wrapper.
+- **The filter chips and the sort control are one state with two presentations.** The segmented
+  control and the native `<select>` are both in the DOM at every width and CSS picks one (a
+  three-option segment does not fit beside the count at 390px); `initCatalog()` re-marks both
+  whichever fired. Same technique as the Best Sellers tier grid, same reason.
+- **"Compare all titles" is not drawn.** It is referenced twice in the handoff and the page behind it
+  does not exist — the rule that keeps the live feed's rows unlinked. The phone's `.gc-bar` carries
+  the one real action ("Start with <lead game>", read off the catalogue). It is `position: fixed`
+  (the handoff's frame is 860px; a real page is not) and hides while the header sheet is open, the
+  same way `.mobile-bar` does.
+- **The mobile trust cards are a snap rail, not a 4.6s auto-rotating carousel.** These are the
+  refund, privacy and support promises; a card that slides itself away mid-sentence is the "a moving
+  element reads as a sales device" rule the guarantee page is built on. The dots stay and follow the
+  rail (`initCatalogRail()`), and the click marks the dot itself so a tap on an already-scrolled-to
+  card is never a dead control. The service cards are a swipe rail for the handoff's own reason —
+  they are read once, in order.
+- **The FAQ ids are a public contract**, like the guarantee page's: support links people at
+  `#faq-<id>`, so renaming one in `D.CATALOG_FAQ` breaks the links in old tickets. Two answers carry
+  a commitment rather than a description — one booster per title, and no cross-title bundle — and the
+  second is structural: if sales ever wants a cross-title discount, that answer changes first.
+  Answers substitute `usd()`, not `money()`: an answer is one escaped text node **and** the same
+  string is asserted verbatim in the FAQPage JSON-LD, so a `.money` span would print as markup on
+  both. The two figures there stay in USD when the currency switches; the cards above them convert.
+- **The sale answer only claims "the larger of the two" while it is true.** `gc_faq_items()` compares
+  the cheapest bundle against the auto promo and drops the clause otherwise, rather than letting a
+  re-tuned code quietly falsify it.
+- **Breakpoints follow the site's 1200/1000/760**, not the handoff's 1280/1024/768: 1200 takes the
+  services to two columns and narrows the rail; 1000 is two card columns, the head stacked and the
+  FAQ column unsticky; 760 is the whole phone pattern (one card per row, chip rail, native sort,
+  service and trust rails, sticky bar). The handoff draws 1440 and 390 and asks for the middle to be
+  confirmed with the designer.
+- **i18n**: every figure rides in its own `<b>` so the sentences stay whole translatable nodes — the
+  head paragraph is split at the coaching count, and "Showing N of M titles." reuses the roster's
+  `Showing` / `of` keys. All card, service, FAQ and close strings are in both `fr` and `de`; game
+  names, ranks and handles are data and stay as written.
+
+Retired with the old page: `game_cards()` (the flat tile grid) and `guarantee_cards()` (the plain
+`cards-3` copy of `D.GUARANTEES` — `promise_cards()` is the one shell now).
+
+## The sticky mobile price bar (`.mobile-bar`)
+
+`layout(mobile_bar=True)` — the nine game pages. It is the phone's copy of the order card's close,
+and below 1000px the card deliberately drops its own total and CTA
+(`.ob-sum-l .price-pair, .ob-cta, .ob-assure { display: none }`) so exactly one button is on screen.
+It is **not** the Best Sellers handoff's own sticky bar, which is still deliberately not built —
+two would stack. `/games/` has no configurator and so no price to pin: its phone bar is `.gc-bar`,
+one CTA into the lead game (see the catalogue section above), and the two never appear together.
+
+Three rows, in the order the decision is made. It used to be one: a price over a mono config line
+with a "Continue" that named no destination, so it asked for a tap while answering none of the three
+questions a buyer has at that moment.
+
+- **Row 1 — the money and the button.** Live total, the struck original, and the saving as a
+  **pill** (`data-out="saveAmt"`, the bare amount — `discount` is the signed receipt figure and a
+  pill opening with a minus reads as a charge). Sized so a three-figure price, its struck original
+  and the pill sit on one line at 375px; `flex-wrap` is the safety valve behind that, not the plan,
+  because EUR runs wider. The button says **Checkout**, not "Continue".
+- **Row 2 — what the money buys.** The delivery estimate and the configuration. Only the
+  configuration may shrink: a truncated "4 da…" answers nothing.
+- **Row 3 — the two objections**, centred: secure checkout, money-back. The **glyphs carry the
+  green and the words stay muted** — two green sentences under an ember button is three accents in
+  40px of bar.
+- **`body.has-bar`'s padding is measured, not guessed**: 124px, and 138px below 400px where the
+  pill takes its own line. Too small and the footer's last row sits under the bar with no way to
+  reach it.
+- It declares its own `--h-tint` / `--l-good`: it is a child of `<body>`, outside `.hero-a` and
+  `.rail`, and an unresolvable `var()` computes to the *initial* value, not an inherited one.
+- Every figure is a `data-out` the order card already fills, so the bar and the card cannot quote
+  two prices. "Save" is its own translatable node with the amount in a `<b>`.
 
 ## The checkout page
 
@@ -560,9 +755,18 @@ the values this handoff sets differently live under `.hero-h` in `site.css`.
 - **The portrait and the Trustpilot star are placeholders.** The handoff requires a real photograph
   in the ring and Trustpilot's licensed mark or widget; the generated avatar and the green star are
   stand-ins, same status as everything else in [Placeholder data](#placeholder-data--do-not-present-as-real).
-- **i18n**: the spotlight CTA carries the booster's handle ("See vantaa profile"), so changing
-  `D.SPOTLIGHT["handle"]` means adding the new sentence to `fr` and `de`. Numbers stay outside the
-  translatable nodes — see the whole-text-node rule above.
+- **The card names the game, and its CTA starts an order.** `.spot-game` is the booster's ladder,
+  resolved from their own `slug` against the catalogue (full `name`, not the roster's `short` — there
+  is no column to fit here), because "Challenger 1042 LP" means nothing until you know which game it
+  is on. The CTA is **"Order with <handle>"** → `/games/<slug>.html?booster=<handle>`, the same
+  destination the roster's Hire and the profile's request card use, so the label and the link agree;
+  the profile is still one tap from the name on either of those pages. `SPOT_HIRE` resolves it once
+  and falls back to `/games/` for a booster whose slug isn't in the catalogue.
+- **i18n**: the CTA is `"Order with"` + the handle in its own `<b>`, wrapped as one flex item so the
+  gap between them is a word space rather than the row's 9px. The handle is data, so changing
+  `D.SPOTLIGHT["handle"]` no longer needs a new `fr`/`de` sentence — that key is already the profile
+  card's. The game name is data too and stays as written. Numbers stay outside the translatable
+  nodes — see the whole-text-node rule above.
 
 ## The stat band + 02 Live / 03 Safety
 
@@ -598,9 +802,9 @@ so nothing leaks. `.rail` carries its own copy because `roster_panel()` also ren
   "FREE" was 9px fine print under an orange win-rate figure. The status pill reads `queue == "free"`,
   and the avatar ring's colour encodes the same fact — keep them in step. Rows link to
   `/boosters.html#b-<handle>` (the table rows carry those ids) until per-booster profiles exist.
-- **Roster avatars are initials.** The handoff's design, and a generated portrait is a smudge at
-  38px. A real photograph dropped into `assets-in/avatar/<handle>` mounts inside the same ring —
-  `roster_card()` checks `drop_in()` and renders the `<img>` instead.
+- **Roster avatars are a face, never a letter** — see [Booster faces](#booster-faces--the-avatar-in-the-ring)
+  below. `booster_face()` is the one implementation, shared by the rail, the board and the
+  track-order card; the ring around it is unchanged and still carries free / busy.
 - **`BOOSTERS[].slug` names the game**, so the chip renders that game's `short` and a booster can
   never advertise a ladder the catalogue doesn't sell. orvo is a Rivals booster precisely because
   the feed has them delivering the Rivals order two columns away.
@@ -870,8 +1074,9 @@ every row's name opens `/boosters/<handle>.html`. Fifth scoped port after `.hero
   are placeholders; shipping them as structured data would put invented review stars in search results.
 - **Portraits are per booster** (`portrait-<handle>.svg`, drop-in slot `portrait/<handle>`); the home
   hero's spotlight reads the same file for whoever `SPOTLIGHT` names, so the card and the page it links
-  to can never show two faces. Roster avatars stay initials — a generated portrait is a smudge at 38px
-  and the ring's colour is what carries free/busy.
+  to can never show two faces. The portrait is a *different* asset from the 38px avatar and stays
+  `art.avatar()`'s rim-lit silhouette — the shipped avatars read as characters in a ring and as
+  cartoons at 96px, which is why `assets-in/portrait/` is deliberately left empty.
 - **Game pages cap their roster at 6** (`page_game()`); League alone has 22 boosters and that section
   only has to establish that real people cover the ladder. The full board is `/boosters/`.
 - **Breakpoints follow the site's 1200/1000/760.** 1200 stacks the hero and moves Peak under the
@@ -881,6 +1086,45 @@ every row's name opens `/boosters/<handle>.html`. Fifth scoped port after `.hero
   mid-sentence and deliberately fall back to English — the profile's "Showing the last N of M orders"
   is translated with English word order, and the roster's count works because "of" is already a
   shared key. New card strings are in both `fr` and `de`.
+
+## Booster faces — the avatar in the ring
+
+Three surfaces draw a booster inside the availability ring: the "On shift now" rail
+(`roster_card()`), the roster board (`roster_board()`) and the track-order card (`.tko-avatar`).
+`booster_face()` in build.py is the **one** implementation all three call, so a person is one face
+everywhere. It used to be the first letter of the handle — which is what a face falls back to when
+there is nothing to show, so the boosters page argued that real people are behind the orders over a
+column of nine grey letters saying the opposite.
+
+The order of preference, server and client alike:
+
+1. **`assets-in/avatar/<handle>.<ext>`** — a real image, resolved through `drop_in()`. All 78 slots
+   are filled today with one DiceBear **Bottts** robot per handle, seeded on the handle and
+   downloaded once. They are **vendored**: the site serves `/assets/img/avatar-<handle>.svg` and
+   makes no runtime request to dicebear.com. Licence, regeneration URL and the reason `portrait/`
+   is deliberately *not* filled are in [site/assets-in/README.md](site/assets-in/README.md).
+2. **A drawn glyph** — `D.FACE_GLYPHS`, seventeen arcade marks (gamepad, d20, skull, potion, crown …)
+   in build.py's `_ICONS`, picked from the handle by `D.face_glyph()` and tinted by `D.face_tint()`
+   from the booster's own `hue` — the hue `art.avatar()` paints their portrait with. This is what a
+   booster added without artwork gets. Never a blank ring.
+3. **The initial** — reachable only from `app.js`, and only against a `data.js` cached from before
+   any of this shipped.
+
+Load-bearing:
+
+- **Every name in `D.FACE_GLYPHS` must be a key of build.py's `_ICONS`** — build.py asserts it at
+  import, because a missing glyph draws 78 empty rings rather than failing.
+- **The client never picks a face or a colour.** `boosters.py`'s `_row()` resolves `face` / `faceInk`
+  / `facePlate` the same way it resolves `markColor`, and `client_data()` ships `avatars` (handle →
+  URL, only for handles that actually have a file) plus `icons.faces` (17 marks, not 78). `faceMark()`
+  in app.js walks the same three steps in the same order, so a row swapped in from `/api/boosters`
+  can't be drawn differently than the server-rendered row it replaces.
+- **`D.face_tint()` takes the handle as well as the hue.** `clean_booster()` does not require `hue`,
+  and a store row without one would otherwise hand every such booster the same hue-0 red.
+- **The tint is identity, never status.** Saturation is capped well under the ring's green / amber so
+  a booster whose hue lands near either still reads free or busy off the rim and the pill. The three
+  `.is-face` CSS selectors carry their ring (`.rst-ring .rst-initial.is-face`, …) to clear the
+  `.tko-avatar .rst-initial` rule 5,400 lines further down — specificity, not source order.
 
 ## The reviews page
 
@@ -1051,7 +1295,11 @@ ranks, ratings, on-time rates, dispute counts, order histories and testimonials.
 personnel record, which is exactly why none of it can go live unverified, and `VETTING`'s 1,840 / 96 /
 11 are load-bearing claims that must be wired to the applications queue (if the real numbers are less
 flattering, ship the real numbers — the page's whole argument is that it doesn't self-report). Both
-handoffs and the README flag this as blocking for launch.
+handoffs and the README flag this as blocking for launch. Their **avatars are placeholders too**: the
+robots in `assets-in/avatar/` are generated from the handle, not photographs of anybody, which is the
+one honest thing to put on an invented profile — a stock photograph of a real person would assert
+that the invented booster exists. Replace them with real photographs of the real roster, not with
+better-looking stock ones (see [Booster faces](#booster-faces--the-avatar-in-the-ring)).
 
 **The header's auth panel is now partly real, not a pure facade.** `build.py`'s `AUTH_PLACEHOLDER`
 block carries the full list. Email/password **login is server-verified**: the form POSTs to
@@ -1081,6 +1329,11 @@ five notes do the same for the VPN estate and the play window. **Each is falsifi
 order.** Legal review the policy numbers and confirm the operational ones with ops before the page
 ships; where one isn't true, cut the line rather than soften it — the page's whole argument is that
 it says the checkable thing.
+
+`CATALOG_FAQ` (the `/games/` answers) carries two of the same kind: that **everyone on the roster
+plays exactly one title**, and that **there is no cross-title bundle**. The first is an intake rule
+ops has to hold; the second is structural — if sales ever wants a cross-title discount, that answer
+has to change before the offer ships.
 
 The same rule covers **seeded analytics**: every event written by `tools/seed_analytics.py` carries
 `"syn": 1`, and `/ops` shows a standing "synthetic data — not real traffic" banner for as long as
