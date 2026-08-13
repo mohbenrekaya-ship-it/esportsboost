@@ -307,6 +307,32 @@
   /* ── render ──────────────────────────────────────────────────────────── */
   function each(sel, fn) { Array.prototype.forEach.call(document.querySelectorAll(sel), fn); }
 
+  /* Scroll lock behind the sheet and the auth panel.
+     `body { overflow: hidden }` alone does not hold on iOS Safari — the page
+     keeps scrolling under the overlay, and closing it leaves the visitor
+     somewhere they never navigated to. Pinning the body is what actually
+     stops touch scrolling there, so the offset is parked in a negative `top`
+     and handed back on release; without that the page jumps to the top every
+     time the menu is opened, which is the bug the naive fix trades for.
+     `.hd-locked` stays on the body for anything already keyed off it. */
+  var lockY = 0, locked = false;
+  function lockScroll(on) {
+    if (on === locked) return;
+    locked = on;
+    var b = document.body;
+    if (on) {
+      lockY = window.pageYOffset || document.documentElement.scrollTop || 0;
+      b.style.top = -lockY + "px";
+      b.classList.add("hd-locked");
+    } else {
+      b.classList.remove("hd-locked");
+      b.style.top = "";
+      // Restore before paint, and instantly: `scroll-behavior: smooth` is
+      // global in ashfall.css, so a plain scrollTo animates the restore.
+      window.scrollTo({ top: lockY, left: 0, behavior: "instant" });
+    }
+  }
+
   function render() {
     var q = quote(state);
     var ladder = ladderOf(state.game);
@@ -1180,6 +1206,7 @@
     initProfile();
     initReviews();
     initGuides();
+    initScrollHints();
 
     if (document.querySelector("[data-configurator]")) track("view_item", itemParams());
   }
@@ -1309,7 +1336,7 @@
         placeSheet();
         closeAccount();
         hd.setAttribute("data-sheet", "");
-        document.body.classList.add("hd-locked");
+        lockScroll(true);
         // The handoff opens section 0 by default — a sheet of five closed rows
         // makes the visitor tap twice to see anything. It cannot be marked open
         // in the HTML: at desktop width that same attribute renders the Games
@@ -1319,7 +1346,7 @@
         }
       } else {
         hd.removeAttribute("data-sheet");
-        document.body.classList.remove("hd-locked");
+        lockScroll(false);
       }
       if (burger) burger.setAttribute("aria-expanded", open ? "true" : "false");
     }
@@ -1404,14 +1431,14 @@
       opener = document.activeElement;
       panel.hidden = false;
       setMode(mode);
-      document.body.classList.add("hd-locked");
+      lockScroll(true);
       var first = panel.querySelector("[data-hd-tab]");
       if (first) first.focus();
     }
     function closeAuth() {
       if (!authOpen()) return;
       panel.hidden = true;
-      document.body.classList.remove("hd-locked");
+      lockScroll(false);
       if (pass) pass.value = "";
       strength();
       // Focus goes back to whatever opened the panel — a modal that dumps focus
@@ -2252,6 +2279,43 @@
     var count = document.querySelector(".rst-count");
     if (count) { var bs = count.querySelectorAll("b"); if (bs[1]) bs[1].textContent = total; }
     if (window.esbRefreshRoster) window.esbRefreshRoster();   // re-run filters/sort/pager over the new rows
+  }
+
+  /* ── horizontal rails: say that there is more to the right ────────────────
+     The configurator's tab row scrolls below 1000px, and on a 375px screen
+     Coaching sat entirely past the right edge — a fourth product with nothing
+     on the row suggesting it moves. The rails that genuinely overflow are
+     marked `data-scrollhint`, which CSS draws as a fade on the right edge, and
+     `data-scroll-end` clears it once there is nothing further to reach, so the
+     fade always means "there is more" rather than being decoration.
+
+     Marked from JS, not in the markup: whether a rail overflows depends on the
+     width, the language and the game's own tab set, and a fade over a row that
+     already fits points at nothing. */
+  function initScrollHints() {
+    var rails = [].slice.call(document.querySelectorAll(".ob-tabs, .ob-bundles-grid, .rvp-chips, .rst-chips"));
+    if (!rails.length) return;
+    function sync(el) {
+      var over = el.scrollWidth - el.clientWidth;
+      if (over <= 4) { el.removeAttribute("data-scrollhint"); return; }
+      el.setAttribute("data-scrollhint", "");
+      // A sub-pixel scrollWidth leaves a fraction that is never reached, so the
+      // end is "within 4px of it" rather than an equality.
+      if (el.scrollLeft >= over - 4) el.setAttribute("data-scroll-end", "");
+      else el.removeAttribute("data-scroll-end");
+    }
+    rails.forEach(function (el) {
+      sync(el);
+      el.addEventListener("scroll", function () { sync(el); }, { passive: true });
+    });
+    var t;
+    window.addEventListener("resize", function () {
+      clearTimeout(t);
+      t = setTimeout(function () { rails.forEach(sync); }, 120);
+    });
+    // The tab set is rebuilt when the game changes, and the bundle rail with
+    // it, so re-measure after a render rather than only at load.
+    document.addEventListener("esb:render", function () { rails.forEach(sync); });
   }
 
   /* ── stat boxes: count-up + rise-in when scrolled into view ──────────── */

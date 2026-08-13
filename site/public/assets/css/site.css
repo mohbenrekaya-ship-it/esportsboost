@@ -433,8 +433,17 @@
    with the nav rather than a second copy of it; CSS picks which width shows
    them, the same way the Best Sellers band picks its tier grid or its select. */
 .hd-burger, .hd-sheet-foot { display: none; }
-/* The scroll lock is not phone-only: the auth modal takes it at every width. */
-body.hd-locked { overflow: hidden; }
+/* The scroll lock is not phone-only: the auth modal takes it at every width.
+   `overflow: hidden` is the desktop half and does not hold on iOS Safari,
+   which keeps scrolling the page under the overlay — pinning the body is what
+   stops it there. `lockScroll()` in app.js owns the `top` offset, so the page
+   does not jump to the top on open, and hands the position back on close. */
+body.hd-locked {
+  overflow: hidden;
+  position: fixed;
+  left: 0; right: 0;
+  width: 100%;
+}
 
 /* ── account popover ───────────────────────────────────────────────────── */
 .hd-account {
@@ -6826,4 +6835,171 @@ body.hd-locked { overflow: hidden; }
   .gd-nav-tag { display: none; }
   .gd-cap2-row { flex-direction: column; }
   .gd-cta-2 { width: 100%; justify-content: center; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOBILE PASS — defects found walking every page at 375px and 320px
+   ══════════════════════════════════════════════════════════════════════════
+   This block is last in the file on purpose: each rule below is a correction
+   that has to beat the component rule it fixes at equal specificity, so the
+   selectors deliberately restate the specificity of what they override
+   (`.ob-two .ob-select`, `.co-code-box .co-input`) rather than relying on
+   source order alone.
+
+   Everything here is bounded by `max-width`, so no rule in this block can
+   reach the desktop layouts the handoffs were ported against. The site's
+   1200/1000/760 ladder is kept; 400 is a new, narrower stop used only where a
+   row genuinely stops fitting (the pay-flow header), and it sits below 760 so
+   it cannot out-order the blocks above it.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* ── 1. 16px form controls — the iOS zoom trap ──────────────────────────────
+   Mobile Safari zooms the viewport whenever a focused input/select/textarea
+   renders below 16px, and it does not zoom back out — the visitor is left
+   pinching a half-visible form. Every control on this site was 13.5–15.5px,
+   so it fired on the checkout form, the support form, the become-a-booster
+   application, the demo lookup, the guides capture, the header auth panel and
+   every rank select. 16px is the threshold, not a preference: 15.5px zooms.
+
+   Applied at ≤1000px (the site's mobile pattern) so desktop type is untouched,
+   and covering phone landscape, which is still a phone. */
+@media (max-width: 1000px) {
+  .hd-input,
+  .ob-select, .ob-two .ob-select,
+  .bs-select,
+  .co-input, .co-select, .co-textarea, .co-code-box .co-input,
+  .sp-input, .sp-textarea,
+  .tk-in, .tk-in-code,
+  .gd-email, .gd-email-2,
+  .input, textarea.input, select.input {
+    font-size: 16px;
+  }
+  /* The code fields carry tracking, which 16px turns into an overflow on a
+     narrow field — the letter-spacing is what makes a code scannable, so the
+     field gives up its horizontal padding instead of the type size. */
+  .co-code-box .co-input, .tk-in-code { letter-spacing: .04em; }
+}
+
+/* ── 2. selects that only answered on their text line ───────────────────────
+   `.ob-field` / `.co-field` / `.bs-tiersel` draw a 33–46px control, but the
+   <select> inside them is `align-items: center` in a flex row, so it was only
+   as tall as its own line box — 15–18px. Every tap on the top or bottom third
+   of a rank or region field did nothing, on the one control the whole order
+   flow depends on. The select is stretched to fill the field it is drawn as;
+   the mark and the caret stay centred, so nothing moves visually. */
+@media (max-width: 1000px) {
+  .ob-field { min-height: 44px; padding-block: 0; }
+  .ob-field > .ob-select { align-self: stretch; }
+  .co-field > .co-select, .bs-tiersel > .bs-select { align-self: stretch; }
+  /* Only the select stretches — these keep their own box. */
+  .ob-field > .ob-mark, .ob-field > .ob-caret, .ob-field > .ico,
+  .co-field > .ico, .co-field > .ob-caret, .bs-tiersel > .ob-caret { align-self: center; }
+}
+
+/* ── 3. the pay-flow header stopped fitting at 320px ────────────────────────
+   `.co-nav` is brand + padlock + "Need a hand?" on one nowrap row; at 320px it
+   measured 328px and scrolled the whole checkout sideways. Checkout is the one
+   page where a stray horizontal scroll is unaffordable, and neither element
+   can be dropped — the padlock is the trust mark and the link is the only exit
+   `layout(bare=True)` leaves. Both shrink instead. */
+@media (max-width: 400px) {
+  .co-nav-in { gap: 10px; }
+  .co-nav-r { gap: 10px; font-size: 12px; }
+  .co-nav .nav-brand { font-size: 15px; gap: 7px; }
+  .co-nav .shard { width: 8px; height: 17px; }
+}
+
+/* ── 4. the reviews filter bar was clipped, not scrollable ──────────────────
+   `.rvp-filters > .rvp-fgroup` is `flex: 0 0 auto` below 760 so the chip row
+   keeps its width — but with nothing able to shrink, the group measured 339px
+   inside 320 and `.rvp` clips, so the last game chips and the sort control
+   were unreachable at 320px. This is the page a sceptic checks the rating on,
+   and its filters are the argument; they have to be reachable. Shrinking is
+   restored and the segmented controls wrap rather than run off the edge. */
+@media (max-width: 760px) {
+  .rvp-filters > .rvp-fgroup { flex: 1 1 auto; min-width: 0; }
+  .rvp-fright { flex-wrap: wrap; width: 100%; }
+  .rvp-seg, .rst-seg { flex-wrap: wrap; }
+  .rvp-chips, .rst-chips { width: 100%; }
+}
+
+/* ── 5. the support address could not be read ───────────────────────────────
+   "Email — support@esportsboost.com" is one unbreakable 252px string in a
+   186px column, so at 320px the domain was cut off by `.sp`'s clip — the
+   support page failing to show the support address. Long tokens wrap. */
+.sp-card-t, .sp-card-heads, .sp-card-sub { overflow-wrap: anywhere; }
+
+/* Wrapping alone leaves the address broken mid-domain ("esportsbo / ost.com"),
+   which is legible but reads as a typo on the one string a visitor is being
+   asked to copy. Below 420px the 40px tile stops sharing the row, which hands
+   the title the card's full width — enough for the address to break at its own
+   space instead, as "Email —" over the address whole. */
+@media (max-width: 420px) {
+  .sp-card-head { align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+  .sp-card-head > .sp-tile { margin-bottom: 2px; }
+  .sp-card-heads { flex: 1 0 100%; }
+  /* 19px leaves the address 21px short of the 238px the card gives it, and a
+     heading is the cheaper thing to give up — the address is the content. */
+  .sp-card-t { font-size: 17px; }
+}
+
+/* ── 6. tap targets under 44px ──────────────────────────────────────────────
+   These are all wide enough and only ever too short, so each grows an
+   invisible hit area instead of being restyled — the same technique
+   `.rv-dot::after` already uses above, and for the same reason: padding on the
+   element itself would be painted by its background or move the row it sits
+   in. The expansion is vertical only, so it can never reach a control beside
+   it, and the insets stop short of the rows above and below. */
+@media (max-width: 1000px) {
+  .hd-forgot, .hd-switch-a, .sg-terms, .ds-cta, .bp-rv-all, .co-code-tog,
+  .hd-code, .loc-btn, .rv-all, .gp-rv-all, .fc-change, .ft-mail-a,
+  .hd-brand, .hd-eye, .hd-x, .tko-bst-go, .rc-all, .bp-chip { position: relative; }
+
+  .hd-forgot::after, .hd-switch-a::after, .sg-terms::after, .ds-cta::after,
+  .bp-rv-all::after, .co-code-tog::after, .rv-all::after, .gp-rv-all::after,
+  .fc-change::after {
+    content: ""; position: absolute; inset: -13px 0; z-index: 0;
+  }
+  .hd-code::after, .loc-btn::after, .ft-mail-a::after, .hd-brand::after,
+  .hd-eye::after, .hd-x::after, .tko-bst-go::after, .rc-all::after {
+    content: ""; position: absolute; inset: -8px 0; z-index: 0;
+  }
+  /* Three of these sit in rows too tight for the shared inset, and an overlay
+     that reaches its neighbour steals that neighbour's taps — on the auth
+     panel, from the password field. Each is clamped to the clearance it
+     actually has, so none reaches 44px: the space is not there without moving
+     the handoff's rows, and a target that grows into the input beside it is
+     worse than a short one. Measured, not guessed — 14/9, 7 and 4px. */
+  .hd-forgot::after  { inset: -14px 0 -9px; }
+  .hd-switch-a::after { inset: -7px 0 -16px; }
+  .hd-eye::after     { inset: -4px 0 -12px; }
+  /* 34 → 44: these are real chips with their own background, so they take the
+     height rather than an overlay. */
+  .bp-chip { min-height: 44px; }
+  .rvp-seg-opt, .rst-seg-opt, .ob-tabs .tab { min-height: 44px; }
+}
+
+/* ── 7. the fourth product was off-screen with nothing saying so ────────────
+   `.ob-tabs` scrolls below 1000px and Coaching sat past the right edge of a
+   375px screen — a whole product invisible on a row that gives no sign it
+   moves. The tabs tighten (which recovers most of the overflow) and the rail
+   carries a fade while there is more to the right; `initScrollHints()` in
+   app.js sets `data-scroll-end` once the end is reached so the fade is a fact
+   about the scroller, not a permanent decoration. */
+@media (max-width: 1000px) {
+  .ob-tabs .tab { padding-inline: 9px; }
+  .ob-tabs, .ob-bundles-grid { scroll-snap-type: x proximity; }
+  .ob-tabs .tab, .ob-bundle { scroll-snap-align: start; }
+  [data-scrollhint]:not([data-scroll-end]) {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 34px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 34px), transparent);
+  }
+}
+
+/* ── 8. the roster rail's climb no longer truncates at 320px ────────────────
+   `.rc-rank` is `nowrap` + ellipsis, which at 320px cut "Diamond IV → Master"
+   down to the first rank and an ellipsis — the climb is the whole content of
+   the row. It wraps to a second line instead; the rail has the height. */
+@media (max-width: 380px) {
+  .rc-rank { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.35; }
 }

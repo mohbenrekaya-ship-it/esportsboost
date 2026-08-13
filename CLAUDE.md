@@ -175,6 +175,45 @@ they only agree by accident otherwise, and `data-addon-price` depends on quoting
   end of the file beats the `max-width: 1000px` block above it on a phone. Bound new blocks with
   `min-width` (`@media (min-width: 1001px) and (max-width: 1200px)`) or re-state what they override.
 
+## Mobile rules — the `MOBILE PASS` block at the foot of site.css
+
+The last section of `site.css` is a set of corrections found by walking every page at 375px and
+320px. Each one is a rule that has to *beat* the component rule it fixes, so the selectors restate
+the specificity of what they override (`.ob-two .ob-select`, `.co-code-box .co-input`) rather than
+relying on source order. Everything in it is bounded by `max-width`, so none of it can reach the
+desktop layouts the handoffs were ported against — that is the property that lets the block sit last
+without breaking the ordering rule above. Four things in it are load-bearing:
+
+- **Form controls are 16px below 1000px, and that is a threshold, not a taste.** Mobile Safari zooms
+  the viewport whenever a focused `input`/`select`/`textarea` renders under 16px and does not zoom
+  back out. Every control on the site was 13.5–15.5px, so it fired on the checkout form, the support
+  form, the application, the demo lookup, the guides capture, the header auth panel and every rank
+  select. 15.5px still zooms. If a new field is added, it goes in that selector list.
+- **A `<select>` in a flex row is only as tall as its own text.** `.ob-field` / `.co-field` /
+  `.bs-tiersel` draw a 33–46px control, but `align-items: center` left the select 15–18px, so taps
+  on the top and bottom thirds of a rank or region field did nothing. The select is stretched
+  (`align-self: stretch`) and the mark and caret are pinned back to centre. Any new field built on
+  that pattern needs the same pair.
+- **Short controls grow an invisible `::after`, never padding** — the technique `.rv-dot::after`
+  already used, because padding on the element itself is painted by its background or moves the row.
+  The expansion is **vertical only** so it can never reach a control beside it, and three of them
+  (`.hd-forgot`, `.hd-switch-a`, `.hd-eye`) carry clamped insets measured against their real
+  clearance: they stop at 35–48px rather than 44 because the space is not there without moving the
+  handoff's rows, and an overlay that reaches the password field steals that field's taps. If you
+  add one, measure the gap above and below first — this is verifiable, not a judgement call.
+- **`body { overflow: hidden }` does not lock scrolling on iOS.** `lockScroll()` in app.js pins the
+  body (`position: fixed`) and parks the offset in a negative `top`, handing it back on close — the
+  naive fix trades a scrolling background for the page jumping to the top every time the menu opens.
+  Both the sheet and the auth modal go through it; `.hd-locked` stays on the body for anything keyed
+  off it.
+
+`initScrollHints()` is the fifth piece and lives in app.js: the rails that genuinely overflow
+(`.ob-tabs`, `.ob-bundles-grid`, the two chip rows) get `data-scrollhint`, which CSS draws as a
+right-edge fade, and `data-scroll-end` clears it at the end of the scroll. It is set from JS and not
+in the markup because whether a rail overflows depends on the width, the language and the game's own
+tab set — a fade over a row that already fits points at nothing. This is what stopped the game
+page's Coaching tab from sitting off-screen with nothing saying the row moved.
+
 ## The site header — every page mounts it
 
 `chrome()` is the **"Site header + authentication"** handoff (`design_handoff_site_header`), two
