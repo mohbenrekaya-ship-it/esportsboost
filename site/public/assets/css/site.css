@@ -2403,11 +2403,9 @@ body.hd-locked {
 .ob .ob-divs .seg-sub-opt:not([aria-pressed="true"]):not(:disabled):hover {
   background: rgba(255, 255, 255, .07); color: #b9b2ac;
 }
-.ob-divs[data-single="true"] { opacity: 1; }
-.ob .ob-divs[data-single="true"] .seg-sub-opt {
-  grid-column: 1 / -1; letter-spacing: .12em; font-size: 9.5px;
-  background: rgba(255, 255, 255, .02); border-color: var(--h-line-2); color: var(--h-faint);
-}
+/* An LP-based tier (Immortal, Master, CS2's flat rungs) has no divisions, so the
+   division row has nothing to offer — hide it rather than draw a dead button. */
+.ob-divs[data-single="true"], .bs-divs[data-single="true"] { display: none; }
 
 /* The rank plate's divisions are pips: filled with the accent rather than
    outlined by it, and anything out of range dimmed and inert so the limit is
@@ -2428,11 +2426,6 @@ body.hd-locked {
   background: rgba(255, 255, 255, .09); color: var(--h-text);
 }
 .ob .ob-pips .seg-sub-opt:disabled { opacity: .28; cursor: default; }
-/* a flat ladder (CS2) has no divisions — the row says so instead */
-.ob .ob-pips[data-single="true"] .seg-sub-opt {
-  background: rgba(255, 255, 255, .025); border: 1px solid var(--h-line-2);
-  color: var(--h-faint); box-shadow: none; opacity: 1;
-}
 
 /* ladder ---------------------------------------------------------------- */
 .ob-ladder {
@@ -3505,12 +3498,6 @@ body.hd-locked {
   background: var(--ember-grad); color: var(--ink); border-color: transparent;
 }
 .bs-divs .seg-sub-opt:disabled { opacity: .32; cursor: default; }
-/* LP-based tiers have exactly one node, so the division row states that
-   instead of offering divisions that do not exist. */
-.bs-divs[data-single="true"] .seg-sub-opt {
-  flex: none; padding: 10px 14px; opacity: 1; color: var(--h-faint);
-  letter-spacing: .02em; font-size: 12px;
-}
 .bs-tiersel { display: none; }
 
 /* ── queue + region ────────────────────────────────────────────────────── */
@@ -3682,7 +3669,6 @@ body.hd-locked {
   /* the frequent choice stays one tap, at a thumb-sized target */
   .bs-divs { gap: 6px; }
   .bs-divs .seg-sub-opt { min-height: 44px; font-size: 13.5px; }
-  .bs-divs[data-single="true"] .seg-sub-opt { font-size: 12.5px; }
 
   .bs .seg-opt { flex: 1; min-height: 44px; font-size: 13px; padding: 9px 10px; }
   .bs .seg { width: 100%; }
@@ -5272,11 +5258,27 @@ body.hd-locked {
   line-height: 1; letter-spacing: -.03em; font-weight: 600;
 }
 /* "Updated live" used to float alone off the heading's baseline with nothing
-   to give it context. The count under it is that context. */
-.rst-live { display: flex; flex-direction: column; align-items: flex-end; gap: 9px; padding-bottom: 5px; }
-.rst-live-t { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--r-good); }
-.rst-live-n { font-size: 13px; color: var(--r-muted); white-space: nowrap; }
-.rst-live-n b { font-weight: 600; color: var(--r-text); }
+   to give it context. It's now a framed live-status chip: the label over the
+   two figures it explains, the free count carrying the green so availability
+   reads first — the same hierarchy the roster rows use. */
+.rst-live {
+  display: inline-flex; flex-direction: column; align-items: flex-start; gap: 11px;
+  padding: 13px 15px; border: 1px solid var(--r-line-4); border-radius: 12px;
+  background: var(--r-card); box-shadow: 0 1px 0 rgba(255, 255, 255, .03) inset;
+}
+.rst-live-t {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--r-good);
+}
+.rst-live-n { display: flex; align-items: stretch; gap: 15px; white-space: nowrap; }
+.rst-live-stat { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--r-muted); }
+.rst-live-stat b {
+  font-family: var(--display); font-size: 23px; font-weight: 600; line-height: 1;
+  letter-spacing: -.02em; color: var(--r-text);
+}
+.rst-live-stat.is-free b { color: var(--r-good); }
+.rst-live-sep { align-self: stretch; width: 1px; background: var(--r-line-4); }
 
 /* ── filters ───────────────────────────────────────────────────────────────
    Shared with the reviews page's filter bar (`.rvp-*`), which is the same
@@ -5599,7 +5601,8 @@ body.hd-locked {
   .rst-hero { padding-block: 40px 36px; }
   .rst-board { padding-block: 40px 48px; }
   .rst-board-head { flex-direction: column; align-items: flex-start; gap: 14px; }
-  .rst-live { align-items: flex-start; padding-bottom: 0; }
+  .rst-live { align-self: stretch; }
+  .rst-live-n { justify-content: space-between; }
   .rst-filters { flex-direction: column; align-items: stretch; gap: 16px; }
   .rst-fright { flex-wrap: wrap; }
   /* Booster / Game / Win / Hire. Queue is carried by the ring's colour and by

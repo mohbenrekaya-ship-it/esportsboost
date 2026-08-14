@@ -981,18 +981,21 @@
   // as an error, not disabled. Kept as a hook so the render sites read the same.
   function nodeOk() { return true; }
 
-  // one division segment (Current / Target): a button per sub-rank of the tier
+  // one division segment (Current / Target): a button per sub-rank of the tier.
+  // An LP-based tier (Immortal, Master, CS2's flat rungs) has no divisions to
+  // pick, so the row renders nothing rather than a dead "no divisions" button —
+  // CSS hides the empty container off data-single.
   function buildSubseg(root, which, opts, current) {
     var single = opts.length <= 1;
     root.setAttribute("data-single", single ? "true" : "false");
     root.innerHTML = "";
+    if (single) return;
     opts.forEach(function (full) {
       var b = document.createElement("button");
       b.type = "button"; b.className = "seg-opt seg-sub-opt";
-      b.textContent = single ? T("LP-based — no divisions") : divOf(state.game, full);
+      b.textContent = divOf(state.game, full);
       b.setAttribute("aria-pressed", full === current ? "true" : "false");
-      if (single) b.disabled = true;
-      else if (!nodeOk(which, nodeAt(full))) b.disabled = true;
+      if (!nodeOk(which, nodeAt(full))) b.disabled = true;
       else b.addEventListener("click", function () { setNode(which, nodeAt(full)); });
       root.appendChild(b);
     });
