@@ -66,6 +66,7 @@ sys.path.insert(0, os.path.join(HERE, "src"))
 import accounts   # noqa: E402  — header sign-up list (also used by /api)
 import analytics  # noqa: E402  — first-party event ingest (also used by /api)
 import boosters   # noqa: E402  — roster store behind /api/boosters (also used by /api)
+import guides     # noqa: E402  — free-guides mailing list behind /api/guides (also used by /api)
 import oauth      # noqa: E402  — social sign-in (Google/Discord), also used by /api
 import ops        # noqa: E402  — gated dashboard API (also used by /api)
 import payments   # noqa: E402  — shared Stripe/pricing logic (also used by /api)
@@ -124,6 +125,18 @@ class Handler(SimpleHTTPRequestHandler):
             # (see accounts.py). Sign-up / sign-in return a small JSON status so
             # the client can act on it; an unknown mode returns an empty 204.
             status, payload = accounts.process_signup(self._read_body(), self.headers.get)
+            if payload is None:
+                self.send_response(status)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            return self._json(status, payload)
+        if route == "/api/guides":
+            # Public, like /api/collect: the free-guides form is on a public page.
+            # A separate store from analytics and accounts (see guides.py); holds
+            # an email + which guides were picked, no credential. Returns a small
+            # JSON status; a bad body answers an empty 204.
+            status, payload = guides.process_lead(self._read_body(), self.headers.get)
             if payload is None:
                 self.send_response(status)
                 self.send_header("Content-Length", "0")

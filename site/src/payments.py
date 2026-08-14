@@ -88,10 +88,6 @@ def new_order_id():
     return "ESB-" + base64.b32encode(os.urandom(4)).decode().rstrip("=")[:6]
 
 
-def _usd(n):
-    return "$%s" % format(int(n), ",d")
-
-
 def build_session(order, base_url):
     """Turn a validated order into Stripe Checkout Session params. The amount
     comes from pricing.quote() — the client-supplied total is ignored."""
@@ -110,11 +106,12 @@ def build_session(order, base_url):
     booster = named if any(b["handle"] == named for b in D.BOOSTERS) else ""
     order_id = new_order_id()
     name = "%s boost" % game
-    desc = "%s · %s" % (q["summary"], region) if region else q["summary"]
-    if q["discount"]:
-        # The line item is charged at the discounted amount, so name the
-        # reduction here or the Stripe receipt won't explain the price.
-        desc += " · %s %s off" % (q["promo_label"], _usd(q["discount"]))
+    # What the customer sees on the Stripe page: the climb (from → to) and the
+    # mode (Solo/Duo) from q["summary"], plus the named booster when they chose
+    # one. Region, promo and the rest still ride in metadata for fulfilment.
+    desc = q["summary"]
+    if booster:
+        desc += " · with %s" % booster
 
     params = {
         "mode": "payment",

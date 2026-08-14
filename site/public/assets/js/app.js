@@ -151,18 +151,39 @@
     var p = D.prices && D.prices[game];
     return p ? (p[tierOf(game, rank)] || 0) : null;
   }
+  // per-tier price of one net win, from the game's win table (or null). Mirrors
+  // pricing.py's win_prices branch — a game without a table falls to the formula.
+  function winUnit(game, rank) {
+    var p = D.winPrices && D.winPrices[game];
+    return p ? (p[tierOf(game, rank)] || 0) : null;
+  }
+  // per-tier price of one placement game, from the game's placement table (or
+  // null). `unranked` reads the ladder floor. Mirrors pricing.py's placement_prices.
+  function placeUnit(game, rank, unranked) {
+    var p = D.placePrices && D.placePrices[game];
+    if (!p) return null;
+    if (unranked) { var t = (D.tiers && D.tiers[game]) || []; return p[t[0]] || 0; }
+    return p[tierOf(game, rank)] || 0;
+  }
 
   /* Reads the add-ons off the state it is given, not the live page state —
      pricing.py's _addon_pct() takes them from its argument, so a quote() over
      any state other than the current one used to silently disagree with the
      amount the server charges. */
-  function addonPct(s) {
-    var pct = 0;
+  /* Dollar cost of the selected add-ons, each floored at $1. An add-on is a
+     percentage of the boost, so on a tiny order (one net win at Iron is ~$3)
+     10–15% rounds below $0.50 and vanishes into the whole-dollar total — the
+     option reads "+$0", as if free. Each selected add-on instead costs at least
+     $1: its real percentage once that is a dollar or more, a flat $1 below that.
+     Summed per add-on so each receipt row and each option's own price stay ≥ $1.
+     Mirrors pricing.py `_addon_total()` — change one, change the other. */
+  function addonTotal(base, s) {
+    var total = 0;
     ((s || state).addons || []).forEach(function (id) {
       var a = D.addons.filter(function (x) { return x.id === id; })[0];
-      if (a) pct += a.pct;
+      if (a && a.pct) total += Math.max(1, Math.round(base * a.pct));
     });
-    return pct;
+    return total;
   }
 
   /* Pick the one discount that applies. Mirrors resolve_promo() in
@@ -207,7 +228,11 @@
     if (s.service === "coaching") {
       var coaches = D.coaches || [], packs = D.coachPacks || [];
       var ci = Math.max(0, Math.min(coaches.length - 1, s.coach | 0));
-      var pi = Math.max(0, Math.min(packs.length - 1, s.pack | 0));
+      // Default pack is index 1 (DEFAULT.pack), matching pricing.py's
+      // _idx(state.get("pack", 1)); only an OMITTED pack falls back — an explicit
+      // 0 is a real selection. Kept in step so a coaching order with no pack in
+      // the POST quotes the same on both sides.
+      var pi = Math.max(0, Math.min(packs.length - 1, s.pack === undefined ? 1 : s.pack | 0));
       var coach = coaches[ci] || { rate: 0, name: "" };
       var pack = packs[pi] || { hours: 1, disc: 0 };
       var listed = coach.rate * pack.hours;
@@ -228,17 +253,30 @@
     if (s.service === "wins") {
       var lw = ladderOf(s.game), iw = lw.indexOf(s.from);
       var w = Math.max(1, s.wins | 0);
-      var climbW = Math.max(1, iw - 1);
-      base = w * per * 0.55 * factor * (1 + climbW * 0.045) * duo;
+      var wUnit = winUnit(s.game, s.from);
+      if (wUnit !== null) {
+        // Per-tier win table: flat price per win within the current tier. No
+        // factor/climb bonus — the table ramps by tier. Mirrors pricing.py.
+        base = w * wUnit * duo;
+      } else {
+        var climbW = Math.max(1, iw - 1);
+        base = w * per * 0.55 * factor * (1 + climbW * 0.045) * duo;
+      }
       days = Math.max(1, Math.round(w * 0.45));
       summary = w + " " + T(w === 1 ? "net win" : "net wins") + " · " + s.from + " · " + T(s.mode);
     } else if (s.service === "placements") {
       var lp = ladderOf(s.game), ip = lp.indexOf(s.from);
       var p = Math.max(1, s.placements | 0);
-      // Unranked: no MMR to read, so there is no starting rank to price the
-      // climb off — fall back to the ladder floor (climb = 1).
-      var climbP = s.unranked ? 1 : Math.max(1, ip - 1);
-      base = p * per * 0.7 * factor * (1 + climbP * 0.045) * duo;
+      var pUnit = placeUnit(s.game, s.from, s.unranked);
+      if (pUnit !== null) {
+        // Per-tier placement table; unranked reads the ladder floor. Mirrors pricing.py.
+        base = p * pUnit * duo;
+      } else {
+        // Unranked: no MMR to read, so there is no starting rank to price the
+        // climb off — fall back to the ladder floor (climb = 1).
+        var climbP = s.unranked ? 1 : Math.max(1, ip - 1);
+        base = p * per * 0.7 * factor * (1 + climbP * 0.045) * duo;
+      }
       days = Math.max(1, Math.round(p * 0.4));
       var where = s.unranked ? T("Unranked") : s.from;
       summary = p + " " + T(p === 1 ? "placement game" : "placement games") + " · " + where + " · " + T(s.mode);
@@ -278,20 +316,25 @@
       summary = s.from + " → " + s.to + " · " + T(s.mode);
     }
 
-    var extra = base * addonPct(s);
-    var subtotal = Math.round(base + extra);
+    var boost = Math.round(base);
+    var extra = addonTotal(base, s);
+    var subtotal = boost + extra;
 
-    // Discount comes off the computed price — the strikethrough is a real
-    // reduction, never a grossed-up reference price. Mirrors pricing.py. A live
+    // Discount comes off the boost only — the strikethrough is a real reduction,
+    // never a grossed-up reference price. Add-ons are à-la-carte and NOT
+    // discounted: on a small order the sale would otherwise grow by the add-on's
+    // $1 floor and cancel it, so a ticked option read "+$0". Charging them on top
+    // of the discounted boost keeps every add-on worth its ≥$1 in the final
+    // total (boost + add-ons − discount = total). Mirrors pricing.py. A live
     // bundle replaces the sitewide sale on a matching division climb.
     var bpct = s.service === "division" ? bundleDiscount(s) : 0;
     var r = bpct ? { code: "BUNDLE", promo: { pct: bpct, label: "Bundle", ends: "" } }
                  : resolvePromo(s.promo);
-    var discount = r.promo ? Math.round(subtotal * r.promo.pct) : 0;
+    var discount = r.promo ? Math.round(boost * r.promo.pct) : 0;
     var total = subtotal - discount;
 
     return {
-      invalid: invalid, total: total, base: Math.round(base), addons: Math.round(extra),
+      invalid: invalid, total: total, base: Math.round(base), addons: extra,
       subtotal: subtotal, discount: discount,
       price: usd(total), wasPrice: discount ? usd(subtotal) : "",
       discountPrice: discount ? "−" + usd(discount) : "",
@@ -1400,11 +1443,24 @@
     items.forEach(function (it) {
       var btn = trigger(it), timer = null;
       btn.addEventListener("click", function (e) {
+        // On a real pointer at desktop width the trigger is a link: hover has
+        // already shown the panel, so let the click follow it to the hub. On
+        // the accordion (narrow) or a touch screen (no hover to reveal the
+        // panel) it stays a disclosure toggle — navigating away on tap would
+        // put the submenu out of reach.
+        if (wide.matches && fine.matches) return;
+        e.preventDefault();
         e.stopPropagation();
         if (it.hasAttribute("data-open")) {
           it.removeAttribute("data-open");
           btn.setAttribute("aria-expanded", "false");
         } else openMenu(it);
+      });
+      // Keyboard: tabbing onto the link opens its panel, the hover equivalent,
+      // so the submenu is reachable without a pointer. Enter still follows the
+      // link to the hub; Tab moves on into the cards.
+      btn.addEventListener("focus", function () {
+        if (wide.matches && fine.matches) openMenu(it);
       });
       // Hover only on a real pointer at desktop width: on the accordion the
       // same gesture is a tap, and opening a section on hover-then-tap would
@@ -2572,7 +2628,7 @@
      already fits points at nothing. */
   function initScrollHints() {
     var rails = [].slice.call(document.querySelectorAll(
-      ".ob-tabs, .ob-bundles-grid, .rvp-chips, .rst-chips, .gc-chips, .gc-svcs-grid"));
+      ".ob-tabs, .ob-bundles-grid, .rvp-chips, .rst-chips, .gc-chips, .gc-svcs-grid, .gp-rv-grid, .gp-dps"));
     if (!rails.length) return;
     function sync(el) {
       var over = el.scrollWidth - el.clientWidth;
@@ -2973,6 +3029,28 @@
       root.querySelectorAll("[data-gd-sentline]").forEach(function (n) { n.textContent = gdT(sent); });
     }
 
+    // Fire-and-forget lead beacon → /api/guides (a separate store from the header
+    // sign-up list; see guides.py). tz/lang let the server resolve a country the
+    // way the analytics session does, never from an IP. The success UI never waits
+    // on it — the guides are "on the way" regardless of whether the store answers.
+    function beacon(chosen) {
+      var optbtn = root.querySelector("[data-gd-optin]");
+      var body = {
+        email: st.email.trim(),
+        guides: chosen.join(","),
+        optin: optbtn ? optbtn.getAttribute("aria-pressed") === "true" : false,
+        tz: (function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; }
+                           catch (e) { return ""; } })(),
+        lang: (window.ESB_LOCALE && window.ESB_LOCALE.lang) || "en"
+      };
+      try {
+        fetch("/api/guides", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body), keepalive: true
+        }).catch(function () {});
+      } catch (e) {}
+    }
+
     function submit() {
       if (!picks().length) { st.pickErr = true; paint(); return; }
       if (!valid()) { st.err = true; paint(); return; }
@@ -2981,7 +3059,9 @@
       paint();
       if (form) form.hidden = true;
       if (success) success.hidden = false;
-      track("generate_lead", { guides: picks().map(function (c) { return c.getAttribute("data-gd-card"); }).join(",") });
+      var chosen = picks().map(function (c) { return c.getAttribute("data-gd-card"); });
+      track("generate_lead", { guides: chosen.join(",") });
+      beacon(chosen);
     }
 
     cards.forEach(function (c) {

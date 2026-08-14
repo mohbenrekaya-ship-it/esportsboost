@@ -30,6 +30,12 @@ orders.log
 site/boosters.ndjson
 boosters.ndjson
 
+# Local guides-mail store (the free-guides landing's mailing list). Holds real
+# emails; production writes to Upstash, same as accounts (see src/guides.py).
+# Never committed.
+site/guides.ndjson
+guides.ndjson
+
 # Vercel CLI project link (project/org ids). Local-only, never committed.
 .vercel
 

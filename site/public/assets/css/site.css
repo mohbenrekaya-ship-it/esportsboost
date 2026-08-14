@@ -285,7 +285,7 @@
 .hd-link {
   display: inline-flex; align-items: center; gap: 7px;
   height: 40px; padding: 0 13px; border: 0; border-radius: 9px; cursor: pointer;
-  background: transparent; color: var(--h-t-3);
+  background: transparent; color: var(--h-t-3); text-decoration: none;
   font: 400 14.5px/1 var(--body); letter-spacing: 0; text-transform: none;
   transition: background-color .16s ease, color .16s ease;
 }
@@ -3071,7 +3071,7 @@ body.hd-locked {
 /* one row — five columns, the auto/fixed tracks constant across rows so the
    stat, role, pill and CTA columns line up vertically down the board */
 .gp-brow {
-  display: grid; grid-template-columns: minmax(120px, 1fr) auto 100px 116px 152px;
+  display: grid; grid-template-columns: minmax(120px, 1fr) auto 100px 116px 180px;
   align-items: center; column-gap: 18px;
   padding: 13px 18px; border-radius: 14px;
   background: var(--gp-card); border: 1px solid rgba(255, 255, 255, .10);
@@ -3125,6 +3125,7 @@ body.hd-locked {
 }
 .gp-brow.is-top .gp-brow-cta { background: rgba(255, 90, 31, .1); }
 .gp-brow-cta:hover { background: rgba(255, 90, 31, .16); color: #ffd0b0; }
+.gp-brow-cta > span { flex: none; white-space: nowrap; }
 .gp-brow-cta b { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gp-brow-cta .ico { flex: none; transition: transform .15s ease; }
 .gp-brow-cta:hover .ico { transform: translateX(3px); }
@@ -3220,14 +3221,18 @@ body.hd-locked {
 .gp-faq-a { margin: 0; padding: 0 18px 18px 56px; font-size: 14.5px; line-height: 1.65; color: var(--gp-t2); max-width: 70ch; text-wrap: pretty; }
 
 /* responsive ------------------------------------------------------------ */
+/* The board wants the full width, or the 2-col split strands the five-column
+   rows in ~700px and the Order-with CTA truncates the handle. Stack copy over
+   board from 1360 down — below that the board can't hold the row beside the
+   340px copy column. */
+@media (max-width: 1360px) {
+  .gp-who { grid-template-columns: 1fr; gap: 34px; }
+  .gp-who-copy { max-width: 640px; }
+}
 @media (max-width: 1200px) {
   .gp-steps, .gp-rv-grid { grid-template-columns: repeat(2, 1fr); }
   .gp-while { grid-template-columns: minmax(0, 1fr) 480px; }
   .gp-safety { grid-template-columns: minmax(0, 1fr) 380px; }
-  /* the board wants the full width below 1200, or the 2-col split strands the
-     rows in ~600px and they overflow — so stack copy over board from here down */
-  .gp-who { grid-template-columns: 1fr; gap: 34px; }
-  .gp-who-copy { max-width: 640px; }
 }
 @media (max-width: 1000px) {
   .gp-inner { padding-block: 44px 48px; }
@@ -3254,8 +3259,40 @@ body.hd-locked {
   .gp-brow-cta { grid-area: cta; justify-self: stretch; }
 }
 @media (max-width: 720px) {
-  .gp-steps, .gp-rv-grid { grid-template-columns: 1fr; }
+  .gp-steps { grid-template-columns: 1fr; }
   .gp-rv-aside { width: 100%; justify-content: space-between; align-items: flex-start; }
+
+  /* Reviews and the "while it runs" feature points are read once, in order, so
+     on the phone they become swipe rails rather than tall stacks — the same
+     bleed-to-gutter snap pattern the catalogue's service cards use. Both bleed
+     to the section edges and get the right-edge "more →" fade from
+     initScrollHints() (app.js), which keys off data-scrollhint. */
+  .gp-rv-grid {
+    display: flex; gap: 12px; overflow-x: auto;
+    scroll-snap-type: x mandatory; scrollbar-width: none;
+    margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter);
+  }
+  .gp-rv-grid::-webkit-scrollbar { display: none; }
+  .gp-rv-card { flex: 0 0 82vw; max-width: 340px; scroll-snap-align: start; }
+
+  /* The three feature points fold from an icon-beside-text list into a row of
+     cards — icon on top, name, note — so the section is one screen, not three.
+     The copy column is a grid item (min-width:auto by default), so without this
+     the 270px cards expand the track past the viewport instead of scrolling. */
+  .gp-while-copy { min-width: 0; }
+  .gp-dps {
+    flex-direction: row; gap: 10px; max-width: none;
+    overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+    border-top: 0; padding-top: 0;
+    margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter);
+  }
+  .gp-dps::-webkit-scrollbar { display: none; }
+  .gp-dp {
+    flex: 0 0 72vw; max-width: 300px; scroll-snap-align: start;
+    flex-direction: column; gap: 10px; padding: 16px;
+    background: var(--gp-card); border: 1px solid rgba(255, 255, 255, .10); border-radius: 12px;
+  }
+
   .gp-faq-a { padding-left: 18px; }
   .gp-close-inner { flex-direction: column; align-items: flex-start; gap: 26px; }
   .gp-close-r { align-items: flex-start; width: 100%; }
@@ -3532,6 +3569,13 @@ body.hd-locked {
 }
 .bs-railcap[data-state="in"] { color: var(--h-cap); }
 
+/* The climb visual is the game pages' segmented tier-track ladder (`.ob-track` /
+   `.ob-tiercaps`, driven by the shared [data-ladder]/[data-tier-caps] JS), not
+   the old single-bar rail. Only the top spacing is band-specific — the `.ob-*`
+   rules carry the rest, and every token they read (--tier, --h-text, --h-muted,
+   --ember-lit) resolves inside `.bs`. */
+.bs-track { margin-top: 13px; }
+
 .bs-div {
   height: 1px; margin-top: 22px;
   background: linear-gradient(to right, transparent, rgba(255, 255, 255, .13) 24px,
@@ -3655,12 +3699,19 @@ body.hd-locked {
   .bs-railcap:last-child { transform: translateX(-100%); left: 100% !important; }
 
   .bs-result { display: block; margin-top: 18px; }
-  .bs-figs { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 0; align-items: start; }
+  /* Both stat cells share row 1; bottom-align them so the delivery ETA and the
+     availability count sit on one baseline even when "Boosters free now" wraps
+     to two lines on a ~320px phone (its label is the widest here). */
+  .bs-figs { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 0; align-items: end; }
   .bs-figs > * + *::before { display: none; }
-  .bs-fig-v { font-size: 21px; }
+  .bs-fig { gap: 6px; }
+  /* Tighten the availability dot so the number reads as one tight unit under
+     its label instead of floating a third of the column away from it. */
+  .bs-fig-v { font-size: 21px; gap: 6px; }
+  .bs-dot { width: 6px; height: 6px; }
   .bs-fig-inc { grid-column: 1 / -1; margin-top: 16px; }
   .bs-figs::after {
-    content: ""; grid-column: 2; grid-row: 1; width: 1px; height: 100%;
+    content: ""; grid-column: 2; grid-row: 1; width: 1px; align-self: stretch;
     background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, .16), transparent);
   }
 
@@ -4219,6 +4270,19 @@ body.hd-locked {
   /* The shared bar's CTA is a link on a game page; here it is the form's submit,
      so borrow the tap feedback the button doesn't inherit from `.mb-cta`. */
   .co-bar .mb-cta.is-busy { opacity: .7; pointer-events: none; }
+  /* "Place the order" is a wide CTA that wraps the money line, so the bar stands
+     ~139px here — like coaching's "Book N hours". Reserve that clearance at
+     checkout's own 900px bar breakpoint: this beats app.js's ≤760 `body.has-bar`
+     (116px) on specificity and also covers 760–900, where that rule can't reach. */
+  body.co-page.has-bar { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+}
+/* Below the 375px baseline the full-width CTA pushes the money line to a third
+   row (price / struck / pill) and the bar balloons to ~166px. Tighten the CTA so
+   the price and its save pill keep to two rows and the bar holds ~139px, matching
+   375. Bounded max-width and placed after the .co ≤900 block it overrides, so it
+   wins at these widths without reaching the desktop layout. */
+@media (max-width: 374px) {
+  .co-bar .mb-cta { padding: 0 14px; gap: 6px; font-size: 12px; letter-spacing: .05em; }
 }
 /* The header is the one band with no room to give: brand + two labelled items
    at 13.5px overflow below ~700px and "Need a hand?" wraps into the gutter.

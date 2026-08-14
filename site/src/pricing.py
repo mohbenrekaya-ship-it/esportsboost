@@ -34,8 +34,21 @@ def _jsround(x):
     return int(math.floor(x + 0.5))
 
 
-def _addon_pct(addons):
-    return sum(ADDON[a]["pct"] for a in (addons or []) if a in ADDON)
+def _addon_total(base, addons):
+    """Dollar cost of the selected add-ons, each floored at $1.
+
+    An add-on is a percentage of the boost, so on a tiny order (a single net win
+    at Iron is ~$3) 10–15% rounds below $0.50 and vanishes into the whole-dollar
+    total — the option then reads "+$0", as if it were free. Each selected add-on
+    instead costs at least $1: its real percentage once that is a dollar or more,
+    a flat $1 below that. Summed per add-on (not as one combined percentage) so
+    the receipt's telescoping rows and each option's own price stay ≥ $1 too.
+    Mirrored in app.js `addonTotal()` — change one, change the other."""
+    total = 0
+    for a in (addons or []):
+        if a in ADDON and ADDON[a]["pct"]:
+            total += max(1, _jsround(base * ADDON[a]["pct"]))
+    return total
 
 
 def resolve_promo(code=None):
@@ -95,8 +108,15 @@ def quote(state):
         if frm not in g["ladder"]:
             return _invalid("Unknown rank")
         w = _clamp(state.get("wins", 1))
-        climb = _climb(g, frm)
-        base = w * per * 0.55 * factor * (1 + climb * 0.045) * duo
+        wp = g.get("win_prices")
+        if wp:
+            # Per-tier win table: flat price per win within the tier the player
+            # is at. No factor/climb bonus — the table already ramps by tier,
+            # exactly like the division `prices` branch. Mirrored in app.js.
+            base = w * _tier_price(g, frm, wp) * duo
+        else:
+            climb = _climb(g, frm)
+            base = w * per * 0.55 * factor * (1 + climb * 0.045) * duo
         days = max(1, _jsround(w * 0.45))
         summary = "%d %s · %s · %s" % (w, "net win" if w == 1 else "net wins", frm, mode)
     elif service == "placements":
@@ -105,9 +125,17 @@ def quote(state):
         if not unranked and frm not in g["ladder"]:
             return _invalid("Unknown rank")
         p = _clamp(state.get("placements", 1))
-        # Unranked has no starting rank to read a climb off — price at the floor.
-        climb = 1 if unranked else _climb(g, frm)
-        base = p * per * 0.7 * factor * (1 + climb * 0.045) * duo
+        pp = g.get("placement_prices")
+        if pp:
+            # Per-tier placement table, same shape as win_prices. Unranked has no
+            # rank to read, so it prices at the ladder floor (first tier).
+            floor = g["tiers"][0]
+            unit = pp.get(floor, 0) if unranked else _tier_price(g, frm, pp)
+            base = p * unit * duo
+        else:
+            # Unranked has no starting rank to read a climb off — price at the floor.
+            climb = 1 if unranked else _climb(g, frm)
+            base = p * per * 0.7 * factor * (1 + climb * 0.045) * duo
         days = max(1, _jsround(p * 0.4))
         where = "Unranked" if unranked else frm
         summary = "%d placement %s · %s · %s" % (p, "game" if p == 1 else "games", where, mode)
@@ -141,12 +169,17 @@ def quote(state):
             days = max(1, _jsround(steps * 0.35 + climb * 0.08))
         summary = "%s → %s · %s" % (frm, to, mode)
 
-    extra = base * _addon_pct(state.get("addons"))
-    subtotal = _jsround(base + extra)
+    boost = _jsround(base)
+    extra = _addon_total(base, state.get("addons"))
+    subtotal = boost + extra
 
-    # Discount comes off the computed price, so the strikethrough shown to the
-    # buyer is a real reduction from what the order would otherwise cost —
-    # never a grossed-up reference price.
+    # Discount comes off the boost only, so the strikethrough shown to the buyer
+    # is a real reduction from what the climb would otherwise cost — never a
+    # grossed-up reference price. Add-ons are à-la-carte and NOT discounted: on a
+    # small order the sale would otherwise grow by exactly the add-on's $1 floor
+    # and cancel it, so a ticked option read "+$0" even after the floor. Charging
+    # them on top of the discounted boost keeps every add-on worth its ≥$1 in the
+    # final total. The receipt still balances: boost + add-ons − discount = total.
     #
     # A bundle (opt-in, division only) REPLACES the sitewide sale when the current
     # climb still matches it — the handoff's rule that only one discount is ever
@@ -157,7 +190,7 @@ def quote(state):
         pcode, promo = "BUNDLE", {"pct": bpct, "label": "Bundle", "ends": ""}
     else:
         pcode, promo = resolve_promo(state.get("promo"))
-    discount = _jsround(subtotal * promo["pct"]) if promo else 0
+    discount = _jsround(boost * promo["pct"]) if promo else 0
     total = subtotal - discount
 
     return dict(
@@ -165,20 +198,25 @@ def quote(state):
         subtotal=subtotal, discount=discount,
         promo_code=pcode or "", promo_label=(promo or {}).get("label", ""),
         promo_pct=(promo or {}).get("pct", 0), promo_ends=(promo or {}).get("ends", ""),
-        base=_jsround(base), addons=_jsround(extra), days=days,
+        base=_jsround(base), addons=extra, days=days,
         summary=summary,
         eta="about 1 day" if days == 1 else "%d days" % days,
     )
 
 
+def _tier_price(g, rank, table):
+    """Look a rank's tier up in a per-tier price table (`prices`, `win_prices`).
+    Returns the price of the tier the rank belongs to, or 0."""
+    for tier, ranks in g["divmap"].items():
+        if rank in ranks:
+            return table.get(tier, 0)
+    return 0
+
+
 def _rung_price(g, rank):
     """Price of a single division rung, from the game's per-tier table: the
     price of the tier the destination rank belongs to."""
-    prices = g.get("prices") or {}
-    for tier, ranks in g["divmap"].items():
-        if rank in ranks:
-            return prices.get(tier, 0)
-    return 0
+    return _tier_price(g, rank, g.get("prices") or {})
 
 
 def _climb(g, frm):

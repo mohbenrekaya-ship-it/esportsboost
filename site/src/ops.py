@@ -30,6 +30,7 @@ from hashlib import sha256
 import accounts
 import analytics
 import boosters
+import guides
 import insights
 
 TOKEN_TTL = 12 * 3600      # a working day, then log in again
@@ -192,5 +193,11 @@ def process_ops(raw):
         # only here. Unlike Accounts it holds no PII, but it is fetched on demand
         # the same way rather than bundled into every dashboard refresh.
         return 200, {"boosters": boosters.summary()}
+
+    if action == "guides":
+        # The free-guides mailing list — its own store again, and like Accounts
+        # it holds emails (PII), so it is fetched on demand rather than bundled
+        # into every dashboard refresh.
+        return 200, {"guides": guides.summary(days)}
 
     return 200, {"data": dashboard_data(days, game)}

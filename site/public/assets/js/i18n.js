@@ -291,6 +291,7 @@
          needs a new sentence here. The game name is data and stays as
          written, like every other game name on the site. */
       "verified boosters on shift right now": "boosters vérifiés en service maintenant",
+      "Pick your booster": "Choisissez votre booster",
       "This month's #1": "N°1 du mois",
       "Verified": "Vérifié",
       "orders delivered": "commandes livrées",
@@ -367,6 +368,9 @@
       "days left": "jours restants",
       "LP across the order": "LP sur toute la commande",
       "LP net": "LP net",
+      "RR across the order": "RR sur toute la commande",
+      "RR net": "RR net",
+      "Competitive": "Compétitif",
       "Order start": "Début de la commande",
       "Now": "Maintenant",
       "Match history": "Historique des parties",
@@ -1293,6 +1297,7 @@
 
       /* home hero — see the note on the French block above. */
       "verified boosters on shift right now": "verifizierte Booster jetzt im Dienst",
+      "Pick your booster": "Wähle deinen Booster",
       "This month's #1": "Nr. 1 des Monats",
       "Verified": "Verifiziert",
       "orders delivered": "Bestellungen geliefert",
@@ -1369,6 +1374,9 @@
       "days left": "Tage übrig",
       "LP across the order": "LP über die Bestellung",
       "LP net": "LP netto",
+      "RR across the order": "RR über die Bestellung",
+      "RR net": "RR netto",
+      "Competitive": "Wettkampf",
       "Order start": "Bestellstart",
       "Now": "Jetzt",
       "Match history": "Spielverlauf",

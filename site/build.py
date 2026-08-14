@@ -536,12 +536,16 @@ def hd_nav(current):
     the menu next to neither anchor. Items are 40px targets with hover, open and
     current states.
 
-    An item with a menu is a `<button>` — the handoff's control, and the thing
-    the mobile accordion needs. That makes the hub page unreachable from the nav
-    itself without JS, so **the first card of every menu is that hub**
-    (/games/, /boosters/, /guarantee.html) and site.css opens the panel on
+    An item with a menu is an `<a>` pointing at its hub (/games/, /boosters/,
+    /guarantee.html), carrying the `data-hd-menu` disclosure hooks. On a real
+    pointer at desktop width the panel opens on hover and a click follows the
+    link to the hub; on the accordion (narrow or coarse-pointer) app.js
+    intercepts the tap to toggle the section instead of navigating, since a hub
+    that leaves the page on tap defeats the accordion. With scripting off the
+    link still reaches the hub and site.css opens the panel on
     `:hover`/`:focus-within` under `.no-js`, which the head script clears the
-    moment scripting is on.
+    moment scripting is on. The hub also stays the first card of every menu, so
+    it is reachable from inside the open panel as well.
     """
     out = ""
     for key, href, label in HD_NAV:
@@ -561,13 +565,13 @@ def hd_nav(current):
                     f'{_ico("caret-right", 15, "ico hd-go", stroke=True)}</a></div>')
             continue
         out += (f'<div class="hd-item" data-hd-item="{key}">'
-                f'<button type="button" class="hd-link" data-hd-menu="{key}"'
+                f'<a class="hd-link" href="{href}" data-hd-menu="{key}"'
                 f' aria-expanded="false" aria-controls="hd-m-{key}"{cur}>'
                 f'<span>{esc(label)}</span>{count}'
                 f'{_ico("caret", 9, "ico hd-caret", stroke=True)}'
                 f'{_ico("plus", 15, "ico hd-acc hd-acc-on", stroke=True)}'
                 f'{_ico("minus", 15, "ico hd-acc hd-acc-off", stroke=True)}'
-                f'</button>{hd_menu(key)}</div>')
+                f'</a>{hd_menu(key)}</div>')
     return out
 
 
@@ -2170,7 +2174,7 @@ def roster_card(rows):
         <span class="rc-count"><b>{n}</b> boosters</span>
       </div>
       <ul class="rc-list">{body}</ul>
-      <a class="rc-all" href="/boosters/"><span>All <b>{n}</b> boosters</span>{_ico("arrow", 14, "ico", stroke=True)}</a>
+      <a class="rc-all" href="/boosters/"><span>Pick your booster</span>{_ico("arrow", 14, "ico", stroke=True)}</a>
     </div>"""
 
 
@@ -2281,8 +2285,11 @@ def safety_block():
 _DEMO_GAME = next((g for g in D.GAMES if g["name"] == D.DEMO_ORDER["game"]), None)
 
 
-def demo_order():
-    """D.DEMO_ORDER with its derived figures resolved. Cached on first call.
+_GAME_BY_NAME = {g["name"]: g for g in D.GAMES}
+
+
+def _resolve_demo(src, g):
+    """A demo-order fixture with its derived figures resolved.
 
     Percentage, days left, the W–L record and the price are COMPUTED from the
     ranks in the fixture and the real formula, never typed. The handoff's whole
@@ -2290,21 +2297,23 @@ def demo_order():
     percentage drifts the moment a ladder gains a tier or a factor is retuned —
     the same property ladder_strip()'s "cheapest single division" has.
 
-    One deliberate divergence from the drawn mock: it reads 62% complete, taken
-    against a League ladder with no Emerald ("12 of ~19 divisions"). On this
-    site's ladder Gold IV → Platinum II is 6 of the 12 rungs to Diamond IV, so
-    the bar reads 50%. The handoff asks for the ladder distance; 62 was its
-    arithmetic for it.
+    `g` is the game the order is on: its `rank_unit` / `queue_name` decide
+    whether the card reads LP / Ranked solo (League, the default) or RR /
+    Competitive (Valorant), so a Valorant order never quotes League terms.
+
+    One deliberate divergence from the drawn League mock: it reads 62% complete,
+    taken against a ladder with no Emerald. On this site's ladder Gold IV →
+    Platinum II is 6 of the 12 rungs to Diamond IV, so the bar reads 50%.
     """
-    if getattr(demo_order, "_v", None):
-        return demo_order._v
-    O = dict(D.DEMO_ORDER)
+    O = dict(src)
     rank = lambda k: (" ".join(O[k])).strip()
     O["start_rank"], O["at_rank"], O["target_rank"] = (rank("start"), rank("at"),
                                                        rank("target"))
+    O["unit"] = (g.get("rank_unit") if g else None) or "LP"
+    O["queue"] = (g.get("queue_name") if g else None) or "Ranked solo"
     pct = 0.0
-    if _DEMO_GAME:
-        L = _DEMO_GAME["ladder"]
+    if g:
+        L = g["ladder"]
         try:
             a, b, c = (L.index(O["start_rank"]), L.index(O["at_rank"]),
                        L.index(O["target_rank"]))
@@ -2332,8 +2341,33 @@ def demo_order():
     newest = O["matches"][0]["when"] if O["matches"] else 0
     O["events"] = ([(O["at"][0], O["at"][1], _ago(newest), "live")]
                    + [(t, d, when, "done") for t, d, when in O.get("milestones", [])])
-    demo_order._v = O
     return O
+
+
+def demo_order():
+    """The League demo order (D.DEMO_ORDER), resolved and cached. Used by the
+    homepage mock, /demo.html, the orders page and checkout — everywhere the
+    site names one concrete order."""
+    if getattr(demo_order, "_v", None):
+        return demo_order._v
+    demo_order._v = _resolve_demo(D.DEMO_ORDER, _DEMO_GAME)
+    return demo_order._v
+
+
+_GAME_DEMO_CACHE = {}
+
+
+def game_demo_order(g):
+    """The demo order for a game page's 'While it runs' mock: the game's own
+    fixture (D.GAME_DEMOS) when it has one — so Valorant shows a Valorant climb
+    in RR — else the League demo_order(), which is what every game page rendered
+    before. Returned with the game it belongs to, so the caller marks it right."""
+    src = D.GAME_DEMOS.get(g["name"])
+    if not src:
+        return demo_order(), _DEMO_GAME
+    if g["name"] not in _GAME_DEMO_CACHE:
+        _GAME_DEMO_CACHE[g["name"]] = _resolve_demo(src, g)
+    return _GAME_DEMO_CACHE[g["name"]], g
 
 
 # The two SVG gradients inside the mock are referenced by id, so two panels on
@@ -2342,7 +2376,7 @@ def demo_order():
 _DASH_N = 0
 
 
-def dash_mock(example=False, live=False, gp=False):
+def dash_mock(example=False, live=False, gp=False, order=None, game=None):
     """The order dashboard, drawn as a static replica of the real screen.
 
     One component, two instances — the marketing band's and the demo page's
@@ -2377,7 +2411,9 @@ def dash_mock(example=False, live=False, gp=False):
     """
     global _DASH_N
     _DASH_N += 1
-    uid, O, g = "dsh%d" % _DASH_N, demo_order(), _DEMO_GAME
+    # order/game default to the League demo — the homepage and /demo.html pass
+    # nothing. The game page passes its own game's order (Valorant in RR).
+    uid, O, g = "dsh%d" % _DASH_N, order or demo_order(), game or _DEMO_GAME
 
     def mark(pair, strong=False, small=False):
         tier, div = pair
@@ -2395,8 +2431,8 @@ def dash_mock(example=False, live=False, gp=False):
     # way spotlight_card()'s do.
     chart = f"""<div class="dm-chart">
           <div class="dm-chart-head">
-            <span class="dm-lab">LP across the order</span>
-            <span class="dm-net"><i>+{O['lp_net']}</i> LP net</span>
+            <span class="dm-lab">{O['unit']} across the order</span>
+            <span class="dm-net"><i>+{O['lp_net']}</i> {O['unit']} net</span>
           </div>
           <svg class="dm-plot" viewBox="0 0 588 104" preserveAspectRatio="none" aria-hidden="true" focusable="false">
             <defs>
@@ -2427,7 +2463,7 @@ def dash_mock(example=False, live=False, gp=False):
         win = m["result"] == "Win"
         rows += f"""<div class="dm-row">
             <span class="dm-champ" style="--champ:{esc(m['champ'])}"></span>
-            <span class="dm-queue">Ranked solo{_ico("play", 14, "dm-replay", evenodd=True)}</span>
+            <span class="dm-queue">{esc(O['queue'])}{_ico("play", 14, "dm-replay", evenodd=True)}</span>
             <span class="dm-res{' is-win' if win else ''}">{esc(m['result'])}</span>
             <span class="dm-kda">{esc(m['kda'])}</span>
             <span class="dm-lp{' is-up' if win else ''}">{esc(m['lp'])}</span>
@@ -2468,10 +2504,14 @@ def dash_mock(example=False, live=False, gp=False):
     # The handoff's game-page card leads each rank with its mark and carries the
     # status pill on that row (there is no order bar above it to hold one).
     if gp:
+        # The header names the FULL rank beside each mark ("Gold 1 → Diamond 1"),
+        # matching the progress row below it ("Platinum 2") rather than the mark +
+        # tier-only pairing. The mock is a static replica, so this is plain text,
+        # not a data-tiername hook.
         climb = f"""<div class="dm-climb dm-climb-gp">
-          <span class="dm-climb-pair">{mark(O['start'])}<span class="dm-climb-t">{esc(O['start'][0])}</span></span>
+          <span class="dm-climb-pair">{mark(O['start'])}<span class="dm-climb-t">{esc(O['start_rank'])}</span></span>
           {_ico("arrow", 16, "dm-climb-arrow", stroke=True)}
-          <span class="dm-climb-pair">{mark(O['target'], strong=True)}<span class="dm-climb-t is-to">{esc(O['target'][0])}</span></span>
+          <span class="dm-climb-pair">{mark(O['target'], strong=True)}<span class="dm-climb-t is-to">{esc(O['target_rank'])}</span></span>
           <span class="dm-status dm-status-gp"><span class="dot-live dot-ok" aria-hidden="true"></span>In progress</span>
         </div>"""
     else:
@@ -2488,7 +2528,7 @@ def dash_mock(example=False, live=False, gp=False):
         {climb}
 
         <div class="dm-prog">
-          <span class="dm-prog-l">{mark(O['at'], small=True)}{esc(O['at_rank'])} · <b>{O['lp']} LP</b></span>
+          <span class="dm-prog-l">{mark(O['at'], small=True)}{esc(O['at_rank'])} · <b>{O['lp']} {O['unit']}</b></span>
           <span class="dm-prog-r"><b>{O['pct']}%</b> complete<i aria-hidden="true"> · </i><b>{O['days_left']}</b> days left</span>
         </div>
         <div class="dm-track"><span class="dm-fill" style="width:{O['pct']}%"></span></div>
@@ -2506,7 +2546,7 @@ def dash_mock(example=False, live=False, gp=False):
         </div>'''}
         <div class="dm-table">
           <div class="dm-row dm-head">
-            <span></span><span>Queue</span><span>Result</span><span>K / D / A</span><span>LP</span>
+            <span></span><span>Queue</span><span>Result</span><span>K / D / A</span><span>{O['unit']}</span>
           </div>
           {rows}
         </div>
@@ -4096,7 +4136,7 @@ def wizard(game=None):
           the rank you land is the rank you keep.</span>
         </div>
         {unit_grid("placements", "How many placement games",
-                   "Ten placements per season; we take up to five of them.")}
+                   "A placement game sets or resets your rank — five is the cap per order.")}
       </div>
 
       {coaching_panel(g) if offers_coaching(g) else ''}
@@ -4107,7 +4147,7 @@ def wizard(game=None):
       <div class="ob-two">
         <div class="ob-cell">
           <span class="ob-lab">How it's played</span>
-          {mode_seg("w-mode", pct=True)}
+          {mode_seg("w-mode", icons=True)}
         </div>
         <div class="ob-cell">
           <label class="ob-lab" for="w-region">Server</label>
@@ -4271,7 +4311,7 @@ def bs_band(games):
       <div class="bs-ranks bs-controls">
         <div class="bs-cell">
           <span class="bs-lab">How it's played</span>
-          {mode_seg("bs-mode", pct=True, icons=True)}
+          {mode_seg("bs-mode", icons=True)}
         </div>
         <span aria-hidden="true"></span>
         <div class="bs-cell">
@@ -4288,12 +4328,8 @@ def bs_band(games):
           <span data-out="stepsWord">divisions</span> to climb</span>
       </div>
 
-      <div class="bs-rail" data-rail aria-hidden="true">
-        <span class="bs-rail-fill"></span>
-        <span class="bs-rail-h bs-rail-h1"></span>
-        <span class="bs-rail-h bs-rail-h2"></span>
-      </div>
-      <div class="bs-railcaps" data-rail-caps aria-hidden="true"></div>
+      <div class="ob-track bs-track" data-ladder aria-hidden="true"></div>
+      <div class="ob-tiercaps bs-tiercaps" data-tier-caps aria-hidden="true"></div>
 
       <div class="bs-div"></div>
 
@@ -4984,25 +5020,31 @@ def gp_how(g):
 
 # 02 — the three things the order page gives you (the handoff's DASH_POINTS,
 # distinct from the homepage's D.DASHBOARD_POINTS).
+# {unit} is the game's ranking unit — "LP" on League, "RR" on Valorant — filled
+# per page in gp_while(), so the bullets never quote League terms on a Valorant
+# page. These strings are English-only (no i18n entries), so the substitution
+# does not un-translate anything.
 GP_WHILE_POINTS = [
-    ("chart-up", "The LP graph, not a percentage",
+    ("chart-up", "The {unit} graph, not a percentage",
      "Every game plotted from the rank you started at, so a bad night is visible instead of "
      "averaged away."),
     ("list-search", "Match history with replays",
-     "Result, KDA and LP for every game, each with a replay link that stays live for 14 days."),
+     "Result, KDA and {unit} for every game, each with a replay link that stays live for 14 days."),
     ("chat", "One thread with your booster",
      "Ask for a champion, a pause or a swap. Support reads the same thread, so nothing gets "
      "repeated."),
 ]
 
 
-def gp_while():
+def gp_while(g):
+    order, gobj = game_demo_order(g)
+    unit = order["unit"]
     points = ""
     for icon, name, note in GP_WHILE_POINTS:
         points += f"""<div class="gp-dp">
           {_ico(icon, 19, "gp-dp-ico", stroke=True)}
-          <span class="gp-dp-txt"><span class="gp-dp-name">{esc(name)}</span>
-          <span class="gp-dp-note">{esc(note)}</span></span>
+          <span class="gp-dp-txt"><span class="gp-dp-name">{esc(name.format(unit=unit))}</span>
+          <span class="gp-dp-note">{esc(note.format(unit=unit))}</span></span>
         </div>"""
     return f"""<section class="gp-sec">
       <div class="gp-while-glow" aria-hidden="true"></div>
@@ -5014,7 +5056,7 @@ def gp_while():
           updates as games finish, so you never have to ask where things are.</p>
           <div class="gp-dps">{points}</div>
         </div>
-        <div class="gp-while-mock">{dash_mock(gp=True)}</div>
+        <div class="gp-while-mock">{dash_mock(gp=True, order=order, game=gobj)}</div>
       </div>
     </section>"""
 
@@ -5208,9 +5250,14 @@ def gp_faq_items(g):
             "to": g["ladder"][min(12, len(g["ladder"]) - 1)], "mode": "Solo"}
     off = pricing.quote(dict(base, addons=[]))["total"]
     on = pricing.quote(dict(base, addons=["champ"]))["total"]
+    # usd(), not money(): the answer is escaped as one text node in gp_faq() AND
+    # asserted verbatim in the FAQPage JSON-LD, so a money() `.money` span would
+    # print as literal markup on the page (and in the structured data). Same
+    # trade-off the /games/ catalogue FAQ makes — this figure stays in USD when
+    # the currency switches.
     champ_line = ("It is the second add-on, %s on this order. Your booster plays a pool you pick, "
                   "which also keeps the match history plausible. You can change the pool mid-order "
-                  "in the thread." % money(on - off)) if champ else ""
+                  "in the thread." % usd(on - off)) if champ else ""
     return [
         ("Do you need my account login?",
          "For solo, yes — your booster signs in and plays, through a VPN in your region and inside "
@@ -5386,7 +5433,7 @@ def page_game(g):
         <a href="/">Home</a> <span aria-hidden="true">/</span> <a href="/games/">Games</a>
         <span aria-hidden="true">/</span> <span class="crumbs-here">{esc(g['name'])}</span>
       </nav>
-      <h1 class="h-lg" style="font-size:clamp(38px,5.4vw,68px)">{esc(g['name'])}<br><span class="grad-text">from {fp}.</span></h1>
+      <h1 class="h-lg" style="font-size:clamp(38px,5.4vw,68px)">{esc(g['name'])} boost<br><span class="grad-text">from {fp}.</span></h1>
       <p class="lede">{esc(g['blurb'])}</p>
       {stat_row}
       {bundle_strip(g)}
@@ -5397,7 +5444,7 @@ def page_game(g):
 
 <div class="gp">
 {gp_how(g)}
-{gp_while()}
+{gp_while(g)}
 {gp_who(g, roster)}
 {gp_safety(g)}
 {gp_reviews(g, revs)}
@@ -7772,11 +7819,13 @@ def page_404():
 #  /ops — the analytics console (deliberately NOT part of the shop)
 # ══════════════════════════════════════════════════════════════════════════
 OPS_TABS = [
+    ("liveview", "Live view"),
     ("overview", "Overview"), ("funnel", "Funnel"), ("configurator", "Configurator"),
     ("journey", "Journey"), ("sessions", "Sessions"), ("accounts", "Accounts"),
+    ("guides", "Guides mails"),
     ("boosters", "Boosters"),
     ("acquisition", "Acquisition"), ("friction", "Friction"), ("abandoned", "Abandoned"),
-    ("live", "Live"),
+    ("live", "Stream"),
 ]
 
 
@@ -7801,6 +7850,9 @@ def page_ops():
         % (days, "true" if days == 30 else "false", esc(label))
         for days, label in ((7, "7 days"), (30, "30 days"), (90, "90 days"), (365, "1 year")))
 
+    brand = ('<span class="brand-mark" aria-hidden="true"></span>'
+             '<span class="brand-word">esports<b>boost</b></span>')
+
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -7809,15 +7861,16 @@ def page_ops():
 <title>Analytics — {esc(D.BRAND)}</title>
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="referrer" content="no-referrer">
-<meta name="theme-color" content="#0a0a0f">
+<meta name="theme-color" content="#08080c">
 <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/assets/css/ops.css">
 </head>
 <body class="ops">
 
-<div class="wrap" data-gate>
+<div class="gate-screen" data-gate>
   <div class="gate">
-    <h2>Analytics</h2>
+    <div class="gate-brand">{brand}</div>
+    <h2>Analytics console</h2>
     <p>{esc(D.BRAND)} — internal. This console is not linked from the site.</p>
     <form>
       <label class="field" style="display:none" for="ops-pw">Password</label>
@@ -7836,31 +7889,37 @@ def page_ops():
   </div>
 </div>
 
-<div class="wrap" data-app hidden>
-  <header class="top">
-    <h1>Analytics</h1>
-    <span class="sub">{esc(D.BRAND)}</span>
-    <span class="spacer"></span>
-    <span data-meta></span>
-    <button class="btn btn-sm live-toggle" type="button" data-live aria-pressed="true"
-            title="Auto-refresh the dashboard"><span class="live-dot"></span><span data-live-label>Live</span></button>
-    <button class="btn btn-sm" type="button" data-refresh>Refresh</button>
-    <button class="btn btn-sm" type="button" data-signout>Sign out</button>
-  </header>
+<div class="shell" data-app hidden>
+  <aside class="side">
+    <a class="brand" href="/" title="{esc(D.BRAND)}">{brand}<span class="brand-tag">Analytics</span></a>
+    <nav class="tabs" role="tablist" aria-label="Dashboard sections">{tabs}</nav>
+    <div class="side-foot">
+      <span class="store-chip" data-meta></span>
+      <button class="btn btn-sm" type="button" data-signout>Sign out</button>
+    </div>
+  </aside>
 
-  <div class="filters">
-    <label for="ops-game">Period</label>
-    <span class="seg" data-range>{ranges}</span>
-    <select class="field" id="ops-game" data-game aria-label="Filter by game">
-      <option value="">All games</option>
-    </select>
-  </div>
+  <main class="main">
+    <header class="topbar">
+      <button class="side-toggle" type="button" data-side-toggle aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+      <h1 class="topbar-title" data-tabtitle>Live view</h1>
+      <span class="spacer"></span>
+      <span class="seg" data-range aria-label="Period">{ranges}</span>
+      <select class="field" id="ops-game" data-game aria-label="Filter by game">
+        <option value="">All games</option>
+      </select>
+      <button class="btn btn-sm live-toggle" type="button" data-live aria-pressed="true"
+              title="Auto-refresh the dashboard"><span class="live-dot"></span><span data-live-label>Live</span></button>
+      <button class="btn btn-sm" type="button" data-refresh title="Refresh now" aria-label="Refresh">
+        <span class="refresh-ico" aria-hidden="true"></span></button>
+    </header>
 
-  <div class="banner synthetic" data-synthetic hidden></div>
+    <div class="banner synthetic" data-synthetic hidden></div>
 
-  <nav class="tabs" role="tablist" aria-label="Dashboard sections">{tabs}</nav>
-
-  <div data-panels></div>
+    <div class="content" data-panels></div>
+  </main>
 </div>
 
 <script src="/assets/js/ops.js"></script>
@@ -7898,6 +7957,8 @@ def client_data():
         "tiercolors": {g["name"]: D.tier_colors(g) for g in D.GAMES},
         "factors": {g["name"]: g["factor"] for g in D.GAMES},
         "prices": {g["name"]: g["prices"] for g in D.GAMES if g.get("prices")},
+        "winPrices": {g["name"]: g["win_prices"] for g in D.GAMES if g.get("win_prices")},
+        "placePrices": {g["name"]: g["placement_prices"] for g in D.GAMES if g.get("placement_prices")},
         "services": {g["name"]: g["services"] for g in D.GAMES},
         "slugs": {g["name"]: g["slug"] for g in D.GAMES},
         "regions": {g["name"]: g["regions"] for g in D.GAMES},

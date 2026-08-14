@@ -92,8 +92,18 @@ GAMES = [
                          apex=("Master",)),
         prices={"Iron": 6, "Bronze": 8, "Silver": 9, "Gold": 12, "Platinum": 19,
                 "Emerald": 30, "Diamond": 48, "Master": 60},
+        # Per-tier price of one net win (flat within a tier), keyed on the rank
+        # the player is currently at. Present → the wins service prices off this
+        # table instead of the shared per/climb formula, the same way `prices`
+        # overrides the division formula. Mirrored in app.js as winPrices.
+        win_prices={"Iron": 3, "Bronze": 3, "Silver": 4, "Gold": 5, "Platinum": 8,
+                    "Emerald": 13, "Diamond": 20, "Master": 40},
+        # Per-tier price of one placement game, same shape as win_prices. Unranked
+        # has no rank to read, so it prices at the ladder floor (Iron → 3).
+        placement_prices={"Iron": 3, "Bronze": 3, "Silver": 4, "Gold": 5, "Platinum": 8,
+                          "Emerald": 13, "Diamond": 20, "Master": 40},
         services="Elo boost · placements · net wins · duo · coaching",
-        regions=["NA", "EUW", "EUNE", "OCE"],
+        regions=["North America", "Europe West", "EU Nordic & East", "Oceania"],
         blurb="Solo/duo and flex, NA to OCE. Your booster plays your account inside your "
               "normal hours with a regional VPN, or queues beside you in duo and never "
               "touches the login at all.",
@@ -104,13 +114,24 @@ GAMES = [
     ),
     dict(
         name="Valorant", slug="valorant", short="VAL", factor=1.15, hue=352,
+        # Valorant ranks up on RR (Rank Rating), not LP, and its ladder queue is
+        # "Competitive". The dashboard mock and the game page read these so the
+        # Valorant order never says "LP" or "Ranked solo". LoL and the rest
+        # default to LP / Ranked solo.
+        rank_unit="RR", queue_name="Competitive",
         ladder=subdivide(["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond",
                           "Ascendant", "Immortal"],
                          ["1", "2", "3"], apex=("Immortal",)),
         prices={"Iron": 4, "Bronze": 4, "Silver": 5, "Gold": 7, "Platinum": 9,
                 "Diamond": 18, "Ascendant": 35, "Immortal": 100},
+        # Per-tier price of one net win (flat within a tier), same shape as LoL's.
+        win_prices={"Iron": 3, "Bronze": 3, "Silver": 4, "Gold": 5, "Platinum": 6,
+                    "Diamond": 10, "Ascendant": 15, "Immortal": 22},
+        # Placements share the win table; unranked prices at the floor (Iron → 3).
+        placement_prices={"Iron": 3, "Bronze": 3, "Silver": 4, "Gold": 5, "Platinum": 6,
+                          "Diamond": 10, "Ascendant": 15, "Immortal": 22},
         services="Rank boost · placements · unrated wins · duo · coaching",
-        regions=["EU", "NA", "AP", "KR", "BR", "LATAM"],
+        regions=["North America", "Europe", "Asia", "Latin America"],
         blurb="Radiant-level boosters with your own crosshair and sensitivity loaded in. "
               "Agent pool on request, and duo runs with voice if you want the coaching "
               "on the way up.",
@@ -123,7 +144,7 @@ GAMES = [
         name="Counter-Strike 2", slug="counter-strike-2", short="CS2", tab="CS2", factor=1.45, hue=32,
         ladder=["5k", "10k", "13k", "15k", "17k", "19k", "21k", "25k", "30k"],
         services="Premier rating · Faceit levels · Wingman · wins",
-        regions=["EU", "NA", "SA", "Asia", "Oceania"],
+        regions=["North America", "Europe", "South America", "Asia", "Oceania"],
         blurb="Premier CS Rating and Faceit levels, run by FPL-adjacent players. Anti-cheat "
               "safe patterns, no smurf stacking, no rating farm scripts.",
         meta="CS2 Premier rating and Faceit level boosting. Live price, verified players, "
@@ -136,7 +157,7 @@ GAMES = [
                           "Diamond", "Master", "Challenger"],
                          ["IV", "III", "II", "I"], apex=("Master", "Challenger")),
         services="Rank boost · placements · double-up",
-        regions=["EUW", "EUNE", "NA", "OCE", "BR", "KR"],
+        regions=["North America", "Europe West", "EU Nordic & East", "Oceania", "Brazil", "Korea"],
         blurb="Set-current comp knowledge, not last patch's. Double-up runs are played with "
               "you, so the climb doubles as a lesson in tempo and econ.",
         meta="TFT rank boosting and double-up. Current-set comps, live pricing, no bots.",
@@ -148,7 +169,7 @@ GAMES = [
                           "Celestial", "Eternity", "One Above All"],
                          ["III", "II", "I"], apex=("Eternity", "One Above All")),
         services="Rank boost · net wins · duo · coaching",
-        regions=["EU", "NA", "Asia", "SA"],
+        regions=["North America", "Europe", "Asia", "South America"],
         blurb="Role-locked or flexible, hero pool respected. Celestial and above are hand-"
               "matched to a booster who actually mains the roles you need covered.",
         meta="Marvel Rivals rank boost to Celestial, Eternity and One Above All. Live price, "
@@ -161,7 +182,7 @@ GAMES = [
                           "Divine", "Immortal"],
                          ["1", "2", "3", "4", "5"], apex=("Immortal",)),
         services="MMR boost · calibration · net wins · duo",
-        regions=["EU West", "EU East", "US East", "US West", "SEA", "China", "SA"],
+        regions=["North America East", "North America West", "Europe West", "Europe East", "Southeast Asia", "China", "South America"],
         blurb="MMR by bracket, calibration runs, and behaviour-score-safe play. Immortal "
               "boosters queue in their own bracket, never above it.",
         meta="Dota 2 MMR boosting and calibration, Herald to Immortal. Transparent per-"
@@ -174,7 +195,7 @@ GAMES = [
                           "Master", "Predator"],
                          ["IV", "III", "II", "I"], apex=("Master", "Predator")),
         services="Rank boost · badges · kills · duo",
-        regions=["EU", "NA", "Asia", "SA", "Oceania"],
+        regions=["North America", "Europe", "Asia", "South America", "Oceania"],
         blurb="RP climbs, 4K and 20-bomb badges, kill thresholds. Legend pool and playstyle "
               "matched so the account keeps looking like yours.",
         meta="Apex Legends rank boost and badge services, Rookie to Predator. Live pricing, "
@@ -187,7 +208,7 @@ GAMES = [
                           "Grandmaster", "Champion"],
                          ["5", "4", "3", "2", "1"], apex=("Champion",)),
         services="Rank boost · placements · net wins · duo",
-        regions=["EU", "NA", "Asia", "SA"],
+        regions=["North America", "Europe", "Asia", "South America"],
         blurb="Per-role SR, open queue or role queue. Your hero pool is respected — the "
               "profile shouldn't read like a different player when it's done.",
         meta="Overwatch 2 competitive rank boost, per role. Bronze to Champion, duo or "
@@ -200,7 +221,7 @@ GAMES = [
                           "Grand Champ", "Supersonic"],
                          ["I", "II", "III", "IV"], apex=("Supersonic",)),
         services="Rank boost · tournament wins · duo · coaching",
-        regions=["EU", "NA East", "NA West", "SAM", "Oceania", "Asia"],
+        regions=["North America East", "North America West", "Europe", "South America", "Oceania", "Asia"],
         blurb="1v1, 2v2 and 3v3 playlists, tournament wins, and duo sessions where the "
               "booster calls rotations live on voice.",
         meta="Rocket League rank boosting and tournament wins, Bronze to Supersonic Legend.",
@@ -1780,6 +1801,35 @@ DEMO_ORDER = dict(
     claimed="4 Aug, 21:32", claim_lag=11,   # minutes between payment and claim
     placed="4 Aug, 21:21", paid_on="4 Aug",
 )
+
+# ── Per-game demo orders for the game page's "While it runs" mock ───────────
+# The homepage and /demo.html render DEMO_ORDER (a League order). The game page's
+# "02 While it runs" band renders the order for THE GAME BEING VIEWED, so a
+# Valorant page shows a Valorant climb in RR, not a League climb in LP. Any game
+# without an entry falls back to DEMO_ORDER — same as before. These are the same
+# kind of placeholder as DEMO_ORDER: an invented order drawn as a product shot.
+# build.py derives pct / days / record / price / timeline from the ranks, exactly
+# as it does for DEMO_ORDER; unit ("RR") and queue ("Competitive") come off the
+# game. Ranks must be rungs of that game's ladder.
+GAME_DEMOS = {
+    "Valorant": dict(
+        id="ESB-7K21RA",
+        game="Valorant", region="EU", mode="Solo", booster="orvo",
+        start=("Gold", "1"),
+        at=("Platinum", "2"), lp=64,        # RR within the current act
+        target=("Diamond", "1"),
+        games=41, lp_net=305,               # net RR across the order
+        chart=(90, 84, 92, 78, 80, 66, 58, 67, 47, 38, 43, 26, 14),
+        # Valorant match records: agent-tint slot, KDA, RR swing per game.
+        matches=[
+            dict(result="Win",  kda="22 / 14 / 6", lp="+24", when=18,  champ="#d05a5a"),
+            dict(result="Win",  kda="18 / 11 / 8", lp="+21", when=52,  champ="#4fa3c7"),
+            dict(result="Loss", kda="9 / 16 / 4",  lp="−17", when=61,  champ="#7a6cd6"),
+            dict(result="Win",  kda="25 / 12 / 7", lp="+26", when=115, champ="#4fb07a"),
+            dict(result="Win",  kda="16 / 9 / 11", lp="+20", when=174, champ="#c79a4f"),
+        ],
+    ),
+}
 
 # ── /games/ — the catalogue page — design_handoff_games_page ───────────────
 # The two pieces of copy that page owns: the four service explainers (band 01)

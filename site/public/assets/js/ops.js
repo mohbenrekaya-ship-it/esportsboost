@@ -593,7 +593,7 @@
   /* ══════════════════════════════════════════════════════════════════════
      state & API
      ══════════════════════════════════════════════════════════════════════ */
-  var state = { token: null, days: 30, game: "", tab: "overview", data: null, busy: false,
+  var state = { token: null, days: 30, game: "", tab: "liveview", data: null, busy: false,
                 sessionId: null, sessionDetail: null,
                 // The sign-up list is fetched on demand (it is PII, kept off the
                 // main payload) and cached until the period changes.
@@ -601,6 +601,9 @@
                 // The roster store — its own separate store, fetched on demand
                 // like the sign-up list and cached until refreshed.
                 boosters: null, boostersLoading: false, boostersError: null,
+                // The free-guides mailing list — another separate store, fetched
+                // on demand (it is PII) and cached until the period changes.
+                guides: null, guidesLoading: false, guidesError: null,
                 // Auto-refresh: poll the dashboard so the numbers stay live
                 // without a manual Refresh. Default on.
                 live: true };
@@ -664,9 +667,11 @@
         if (res.status === 200) {
           state.data = res.body.data;
           render();
-          // The Accounts and Boosters panels have their own stores, so a data
-          // refresh does not carry them — reload alongside so "Live" keeps them fresh.
+          // The Accounts, Guides and Boosters panels have their own stores, so a
+          // data refresh does not carry them — reload alongside so "Live" keeps
+          // them fresh.
           if (state.tab === "accounts") loadAccounts();
+          if (state.tab === "guides") loadGuides();
           if (state.tab === "boosters") loadBoosters();
           return;
         }
@@ -1697,6 +1702,218 @@
     return f;
   }
 
+  /* ── Guides mails — the free-guides mailing list ──────────────────────────
+     A separate store again (see guides.py), fetched on demand because it is the
+     other place emails live. No password here — the guides form drops a lead
+     beacon (see app.js). One address, one row; a repeat is dropped on ingest. */
+  var GUIDE_NAMES = { lol: "League", val: "Valorant" };
+  function guideLabel(k) { return GUIDE_NAMES[k] || k; }
+
+  function loadGuides() {
+    if (state.guidesLoading) return;
+    state.guidesLoading = true;
+    state.guidesError = null;
+    api({ action: "guides", token: state.token, days: state.days }).then(function (res) {
+      state.guidesLoading = false;
+      if (res.status === 200 && res.body.guides) {
+        state.guides = res.body.guides;             // swaps in place; no loading flash
+      } else if (res.status === 401) {
+        toGate();
+        return;
+      } else if (res.status === 200) {
+        // 200 without a `guides` payload means the server is running older code
+        // that doesn't know this action — the exact symptom of a serve.py started
+        // before /api/guides existed. Say so instead of spinning.
+        state.guidesError = "This server doesn't serve the guides list yet — it is running an " +
+          "older build. Restart serve.py (the /api routes only reload on restart), then Refresh.";
+      } else {
+        state.guidesError = "Couldn't load guides mails — the server returned " + res.status + ".";
+      }
+      if (state.tab === "guides") render();
+    }).catch(function () {
+      state.guidesLoading = false;
+      state.guidesError = "Couldn't reach the server. Is it running?";
+      if (state.tab === "guides") render();
+    });
+  }
+
+  function panelGuides() {
+    var f = document.createDocumentFragment();
+    var a = state.guides;
+
+    if (state.guidesError && !a) {
+      var er = document.createElement("div");
+      er.className = "card";
+      er.innerHTML = '<p class="empty">' + esc(state.guidesError) + "</p>";
+      var retry = document.createElement("button");
+      retry.className = "btn btn-sm";
+      retry.type = "button";
+      retry.textContent = "Try again";
+      retry.style.margin = "0 auto 16px";
+      retry.style.display = "block";
+      retry.addEventListener("click", function () { state.guidesError = null; loadGuides(); render(); });
+      er.appendChild(retry);
+      f.appendChild(er);
+      return f;
+    }
+
+    if (!a) {
+      loadGuides();
+      var wait = document.createElement("div");
+      wait.className = "card";
+      wait.innerHTML = '<p class="empty">Loading guides mails…</p>';
+      f.appendChild(wait);
+      return f;
+    }
+
+    // These are real email addresses collected against a facade — the guides
+    // themselves are placeholder content (see data.py), and no mail is actually
+    // sent yet. Say so, the same way the sign-up list banner does.
+    var note = document.createElement("div");
+    note.className = "banner synthetic";
+    note.innerHTML = '<span class="ico">▲</span><div><strong>Mailing list, not a delivery system.</strong> ' +
+      "These are the emails people gave the free-guides landing to receive the League and Valorant guides. " +
+      "No mail is sent yet and the guides are placeholder content — keep them as leads, and as personal data. " +
+      "Wire a real send + unsubscribe flow before mailing them.</div>";
+    f.appendChild(note);
+
+    if (a.synthetic > 0) {
+      var syn = document.createElement("div");
+      syn.className = "banner synthetic";
+      syn.innerHTML = '<span class="ico">▲</span><div><strong>Includes synthetic leads.</strong> ' +
+        num(a.synthetic) + " row(s) were seeded for testing. Clear the store before launch.</div>";
+      f.appendChild(syn);
+    }
+
+    var kr = document.createElement("div");
+    kr.className = "kpis";
+    kr.appendChild(kpi("Guides mails (all time)", num(a.total), undefined, "", true));
+    kr.appendChild(kpi("In this period", num(a.in_window)));
+    kr.appendChild(kpi("Last 24 hours", num(a.last_24h)));
+    kr.appendChild(kpi("Last 7 days", num(a.last_7d)));
+    // How many also ticked the monthly-newsletter opt-in.
+    kr.appendChild(kpi("Opted into monthly mail", num(a.optins)));
+    // Emails are unique by construction (guides.py dedupes on ingest); surface a
+    // repeat only if one ever slips through — it would mean uniqueness broke.
+    if (a.repeat > 0) kr.appendChild(kpi("Duplicate emails ⚠", num(a.repeat)));
+    f.appendChild(kr);
+
+    var g = document.createElement("div");
+    g.className = "grid";
+
+    // Mails per day across the window.
+    var series = a.series || [];
+    g.appendChild(card({
+      cls: "half", title: "Guides mails per day",
+      sub: "New submissions in the selected period, one bar per day.",
+      chart: function (w) {
+        return columns(w, {
+          rows: series.map(function (r) { return { label: shortDate(r.date), value: r.count }; }),
+          color: SERIES[0], alt: "Guides mails per day", valueName: "Mails", xTall: series.length > 20
+        });
+      },
+      table: {
+        head: ["Day", "Mails"], num: [1],
+        rows: series.map(function (r) { return [r.date, num(r.count)]; })
+      }
+    }));
+
+    // Which guide they asked for — a lead can pick both, so picks need not sum to
+    // the lead total.
+    var guides = a.guides || [];
+    g.appendChild(card({
+      cls: "half", title: "Which guide they wanted",
+      sub: "Counts picks, not leads — most people take both.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: guides.map(function (r) { return { label: guideLabel(r.key), value: r.count }; }),
+          color: SERIES[1], alt: "Guides requested"
+        });
+      },
+      table: {
+        head: ["Guide", "Requests"], num: [1],
+        rows: guides.map(function (r) { return [guideLabel(r.key), num(r.count)]; })
+      }
+    }));
+    f.appendChild(g);
+
+    // Country split — same resolution the sessions use (edge / timezone / locale).
+    var countries = a.countries || [];
+    var g2 = document.createElement("div");
+    g2.className = "grid";
+    g2.appendChild(card({
+      cls: "half", title: "Where they signed up",
+      sub: "Country is resolved server-side, never from an IP — see how each was inferred in the table.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: countries.slice(0, 10).map(function (c) {
+            return { label: (flag(c.code) + " " + countryName(c.code)).trim(), value: c.count };
+          }),
+          color: SERIES[2], alt: "Guides mails by country"
+        });
+      },
+      table: {
+        head: ["Country", "Mails"], num: [1],
+        rows: countries.map(function (c) { return [countryName(c.code), num(c.count)]; })
+      }
+    }));
+    f.appendChild(g2);
+
+    // The list itself.
+    var recent = a.recent || [];
+    var el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML =
+      '<div class="card-hd"><h3>Guides mails</h3><span class="spacer"></span>' +
+      '<button class="btn btn-sm" type="button" data-export-guides>Export CSV</button></div>' +
+      '<p class="card-sub">Newest first' +
+      (a.total > recent.length ? ", most recent " + num(recent.length) + " of " + num(a.total) : "") +
+      ". Email, guides picked and opt-in only.</p>";
+
+    if (!recent.length) {
+      el.insertAdjacentHTML("beforeend",
+        '<p class="empty">No guides mails yet. Open /guides.html, submit an email, and hit Refresh.</p>');
+      f.appendChild(el);
+      return f;
+    }
+
+    var head = ["When", "Email", "Guides", "Monthly", "Country"];
+    var html = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+      head.map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") + "</tr></thead><tbody>";
+    recent.forEach(function (r) {
+      var picks = (r.guides || "").split(",").filter(Boolean).map(guideLabel).join(", ");
+      html += "<tr>" +
+        '<td class="dim">' + esc(ago(r.ts)) + "</td>" +
+        "<td>" + esc(r.email) + (r.syn ? ' <span class="chip">synthetic</span>' : "") + "</td>" +
+        "<td>" + esc(picks || "—") + "</td>" +
+        "<td>" + (r.optin ? "Yes" : '<span class="dim">No</span>') + "</td>" +
+        "<td>" + countryCell(r.co, r.cosrc) + "</td>" +
+        "</tr>";
+    });
+    el.insertAdjacentHTML("beforeend", html + "</tbody></table></div>");
+
+    el.querySelector("[data-export-guides]").addEventListener("click", function () {
+      var cols = ["signed_up", "email", "guides", "monthly_optin", "country_code", "country", "country_source", "synthetic"];
+      var lines = [cols.join(",")];
+      recent.forEach(function (r) {
+        var picks = (r.guides || "").split(",").filter(Boolean).map(guideLabel).join(" & ");
+        lines.push([new Date(r.ts * 1000).toISOString(), r.email, picks, r.optin ? "yes" : "no",
+                    r.co, countryName(r.co), r.cosrc, r.syn ? "yes" : "no"]
+          .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; })
+          .join(","));
+      });
+      var blob = new Blob([lines.join("\n")], { type: "text/csv" });
+      var link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "esb-guides-mails-" + new Date().toISOString().slice(0, 10) + ".csv";
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+    });
+
+    f.appendChild(el);
+    return f;
+  }
+
   /* ── Boosters: the roster store, read-only ───────────────────────────── */
   function loadBoosters() {
     if (state.boostersLoading) return;
@@ -1912,6 +2129,236 @@
     return f;
   }
 
+  /* ── Live view: the Shopify-style "right now" panel ────────────────────────
+     Every figure is recomputed server-side each poll (insights._mod_liveview)
+     over its own short windows, so this panel is always "now" regardless of the
+     period selector, and the 10s auto-refresh keeps it moving. Rendered as
+     markup rather than measured charts so it survives a full re-render on every
+     tick with no painter pass. */
+  function lvRankList(rows, opts) {
+    if (!rows || !rows.length) {
+      return '<p class="lv-empty">Nothing in the last ' + opts.mins + " minutes.</p>";
+    }
+    var mx = rows.reduce(function (m, r) { return Math.max(m, opts.val(r)); }, 1);
+    return '<ul class="lv-rank">' + rows.map(function (r) {
+      var v = opts.val(r);
+      return "<li>" +
+        '<span class="lv-rank-l">' + opts.label(r) + "</span>" +
+        '<span class="lv-rank-bar"><i style="width:' + Math.round((v / mx) * 100) + '%"></i></span>' +
+        '<span class="lv-rank-v">' + num(v) + "</span></li>";
+    }).join("") + "</ul>";
+  }
+
+  /* ── world map (self-contained SVG, no external tiles) ─────────────────────
+     A dotted equirectangular map: dim dots trace the continents (rough boxes,
+     enough to read as a world map), bright dots mark where live visitors are,
+     sized by session count. Projection: x = lng + 180, y = 90 − lat, on a
+     360×180 viewBox. The land layer never changes, so it is built once. */
+  var LV_LAND = [
+    [48, 72, -141, -55], [30, 49, -125, -66], [15, 30, -110, -88], [60, 83, -55, -18],
+    [-5, 12, -80, -50], [-35, -5, -75, -40], [-55, -35, -75, -58],
+    [36, 60, -10, 30], [60, 71, 4, 31],
+    [18, 37, -16, 34], [-8, 18, -16, 48], [-35, -8, 10, 40],
+    [12, 42, 34, 60], [20, 55, 60, 120], [42, 62, 60, 140], [55, 73, 60, 180],
+    [8, 30, 68, 90], [5, 25, 95, 122],
+    [-38, -12, 113, 153], [31, 45, 130, 146], [50, 59, -8, 2]
+  ];
+  function lvIsLand(lat, lng) {
+    for (var i = 0; i < LV_LAND.length; i++) {
+      var b = LV_LAND[i];
+      if (lat >= b[0] && lat <= b[1] && lng >= b[2] && lng <= b[3]) return true;
+    }
+    return false;
+  }
+  var LV_CENTROID = {
+    US: [38, -97], CA: [56, -106], MX: [23, -102], BR: [-10, -52], AR: [-38, -63],
+    CL: [-33, -71], CO: [4, -73], PE: [-10, -76], VE: [8, -66],
+    GB: [54, -2], IE: [53, -8], FR: [46, 2], DE: [51, 10], ES: [40, -4], PT: [39, -8],
+    IT: [42, 12], NL: [52, 5], BE: [50, 4], CH: [47, 8], AT: [47, 14],
+    SE: [62, 15], NO: [62, 10], FI: [64, 26], DK: [56, 9], PL: [52, 19], CZ: [49, 15],
+    GR: [39, 22], RO: [46, 25], UA: [49, 32], RU: [61, 90], TR: [39, 35],
+    IL: [31, 35], AE: [24, 54], SA: [24, 45], EG: [26, 30], MA: [32, -6], NG: [9, 8],
+    ZA: [-29, 24], KE: [0, 38], IN: [22, 78], PK: [30, 70], BD: [24, 90], CN: [35, 105],
+    JP: [36, 138], KR: [36, 128], TH: [15, 101], VN: [16, 106], MY: [4, 102],
+    SG: [1, 104], ID: [-2, 118], PH: [13, 122], AU: [-25, 133], NZ: [-42, 172]
+  };
+  var lvMapBase = null;
+  function lvLandLayer() {
+    if (lvMapBase != null) return lvMapBase;
+    var s = "";
+    for (var y = 3; y < 180; y += 4.5) {
+      for (var x = 3; x < 360; x += 4.5) {
+        if (lvIsLand(90 - y, x - 180)) {
+          s += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) +
+            '" r="0.85" class="lv-map-land"/>';
+        }
+      }
+    }
+    lvMapBase = s;
+    return s;
+  }
+  function lvWorldMap(locations) {
+    var rows = (locations || []).filter(function (r) { return LV_CENTROID[r.code]; });
+    var mx = rows.reduce(function (m, r) { return Math.max(m, r.sessions); }, 1);
+    var pts = rows.map(function (r) {
+      var c = LV_CENTROID[r.code];
+      var x = (c[1] + 180).toFixed(1), y = (90 - c[0]).toFixed(1);
+      var rr = 2 + Math.sqrt(r.sessions / mx) * 4.5;
+      return '<circle cx="' + x + '" cy="' + y + '" r="' + (rr + 3).toFixed(1) + '" class="lv-map-halo"/>' +
+        '<circle cx="' + x + '" cy="' + y + '" r="' + rr.toFixed(1) + '" class="lv-map-hit">' +
+        "<title>" + esc(countryName(r.code) + ": " + num(r.sessions)) + "</title></circle>";
+    }).join("");
+    return '<svg class="lv-map-svg" viewBox="0 0 360 180" preserveAspectRatio="xMidYMid meet" ' +
+      'role="img" aria-label="Live visitors by country">' + lvLandLayer() + pts + "</svg>";
+  }
+
+  function panelLiveView(d) {
+    var lv = d.liveview || {};
+    var mins = lv.window_mins || 30;
+    var f = document.createDocumentFragment();
+    var root = document.createElement("div");
+    root.className = "lv";
+
+    /* visitors-now hero + per-minute sparkline */
+    var spark = lv.spark || [];
+    var smax = spark.reduce(function (m, n) { return Math.max(m, n); }, 1);
+    var bars = spark.map(function (n, i) {
+      var h = n ? Math.max(8, Math.round((n / smax) * 100)) : 0;
+      var mAgo = (lv.spark_minutes || spark.length) - 1 - i;
+      var when = mAgo === 0 ? "this minute" : mAgo + " min ago";
+      return '<span class="lv-bar' + (i === spark.length - 1 ? " is-now" : "") +
+        '" style="height:' + h + '%" title="' +
+        esc(num(n) + (n === 1 ? " visitor · " : " visitors · ") + when) + '"></span>';
+    }).join("");
+    var vnow = lv.visitors || 0;
+
+    /* product view — live sessions grouped by game, split by how far they got.
+       This site has no cart, so a per-game stage breakdown replaces the cart
+       funnel. A session is attributed by its order or the /games/<slug> page. */
+    var STAGES = [
+      { key: "browsing",    label: "Browsing" },
+      { key: "configuring", label: "Configuring" },
+      { key: "checkout",    label: "Checking out" },
+      { key: "purchased",   label: "Purchased" }
+    ];
+    var prod = lv.products || [];
+    var games = prod.length ? prod.map(function (r) {
+      var tot = r.sessions || 1;
+      var segs = STAGES.map(function (st) {
+        var n = r[st.key] || 0;
+        if (!n) return "";
+        return '<i class="lv-seg lv-seg-' + st.key + '" style="width:' +
+          (n / tot * 100) + '%" title="' + esc(num(n) + " " + st.label.toLowerCase()) + '"></i>';
+      }).join("");
+      var counts = STAGES.filter(function (st) { return r[st.key]; }).map(function (st) {
+        return '<span class="lv-gc"><i class="lv-dot-' + st.key + '"></i>' +
+          num(r[st.key]) + " " + esc(st.label) + "</span>";
+      }).join("");
+      return '<div class="lv-game">' +
+        '<div class="lv-game-top"><span class="lv-game-name">' + esc(r.name) + "</span>" +
+          '<span class="lv-game-n">' + num(r.sessions) +
+          " session" + (r.sessions === 1 ? "" : "s") + "</span></div>" +
+        '<div class="lv-game-bar">' + segs + "</div>" +
+        '<div class="lv-game-counts">' + counts + "</div></div>";
+    }).join("") : '<p class="lv-empty">No live sessions on any game in the last ' +
+      mins + " minutes.</p>";
+
+    /* customers first vs returning */
+    var c = lv.customers || { first: 0, returning: 0 };
+    var ctot = (c.first + c.returning) || 1;
+
+    /* activity feed — reuse the shared recent-events stream */
+    var feed = (d.live || []).slice(0, 14).map(function (r) {
+      var bits = [r.game, r.summary].filter(Boolean).join(" · ");
+      var val = r.value ? '<span class="lv-feed-val">' + usd(r.value) + "</span>" : "";
+      var fl = r.country ? '<span class="lv-feed-flag" title="' + esc(countryName(r.country)) +
+        '">' + flag(r.country) + "</span>" : "";
+      return '<li class="lv-feed-row lv-ev-' + esc(r.e) + '">' +
+        '<span class="lv-feed-dot"></span>' +
+        '<span class="lv-feed-when">' + esc(ago(r.t)) + "</span>" +
+        '<span class="lv-feed-what">' + esc(r.label) +
+          (bits ? ' <span class="lv-feed-cfg">' + esc(bits) + "</span>" : "") + "</span>" +
+        val + fl + "</li>";
+    }).join("");
+    var t = lv.today || { sessions: 0, orders: 0, revenue: 0 };
+
+    /* funnel boxes — what every live session is doing right now (site-wide) */
+    var beh = lv.behavior || [];
+    var stages = beh.map(function (b) {
+      return '<div class="lv-stage lv-stage-' + esc(b.key) + '">' +
+        '<span class="lv-stage-n">' + num(b.count) + "</span>" +
+        '<span class="lv-stage-l">' + esc(b.label) + "</span></div>";
+    }).join('<span class="lv-stage-sep" aria-hidden="true"></span>');
+
+    /* map legend — top countries as flag chips */
+    var legend = (lv.locations || []).slice(0, 6).map(function (r) {
+      return '<span class="lv-legend-item"><span class="lv-flag">' + flag(r.code) + "</span>" +
+        esc(countryName(r.code) || r.code) + " <b>" + num(r.sessions) + "</b></span>";
+    }).join("");
+
+    root.innerHTML =
+      '<div class="lv-behavior">' + (stages ||
+        '<p class="lv-empty">No live sessions in the last ' + mins + " minutes.</p>") + "</div>" +
+
+      '<div class="grid lv-topgrid">' +
+        '<div class="card twothirds lv-map-card"><div class="card-hd"><h3>Live traffic</h3></div>' +
+          '<p class="card-sub">Where visitors on the site right now are coming from.</p>' +
+          '<div class="lv-map">' + lvWorldMap(lv.locations) + "</div>" +
+          (legend ? '<div class="lv-legend">' + legend + "</div>" : "") + "</div>" +
+        '<div class="card third lv-hero">' +
+          '<div class="lv-now">' +
+            '<div class="lv-now-n">' + num(vnow) + "</div>" +
+            '<div class="lv-now-l"><span class="lv-dot"></span>' +
+              (vnow === 1 ? "Visitor right now" : "Visitors right now") + "</div>" +
+            '<div class="lv-now-sub">Active in the last 5 minutes · ' +
+              num(lv.sessions_live || 0) + " session" + ((lv.sessions_live || 0) === 1 ? "" : "s") +
+              " in the last " + mins + " min</div>" +
+          "</div>" +
+          '<div class="lv-spark" role="img" aria-label="Visitors per minute over the last ' +
+            mins + ' minutes">' +
+            '<div class="lv-spark-bars">' + bars + "</div>" +
+            '<div class="lv-spark-x"><span>' + mins + ' min ago</span><span>now</span></div>' +
+          "</div>" +
+        "</div>" +
+      "</div>" +
+
+      '<div class="kpis lv-kpis">' +
+        '<div class="kpi"><div class="lab">Sessions · 24h</div><div class="val">' +
+          num(t.sessions) + "</div></div>" +
+        '<div class="kpi"><div class="lab">Orders · 24h</div><div class="val">' +
+          num(t.orders) + "</div></div>" +
+        '<div class="kpi"><div class="lab">Revenue · 24h</div><div class="val">' +
+          usd(t.revenue) + "</div></div>" +
+      "</div>" +
+
+      '<div class="card lv-prod-card">' +
+        '<div class="card-hd"><h3>Live by game</h3></div>' +
+        '<p class="card-sub">Sessions on each game in the last ' + mins +
+          " minutes — including anyone still browsing a game page — split by how far along they are.</p>" +
+        '<div class="lv-games">' + games + "</div>" +
+      "</div>" +
+
+      '<div class="grid">' +
+        '<div class="card half"><div class="card-hd"><h3>Customers</h3></div>' +
+          '<p class="card-sub">Live sessions, new vs. returning visitors.</p>' +
+          '<div class="lv-split"><span class="lv-split-first" style="width:' +
+            Math.round((c.first / ctot) * 100) + '%"></span>' +
+          '<span class="lv-split-ret" style="width:' +
+            Math.round((c.returning / ctot) * 100) + '%"></span></div>' +
+          '<div class="lv-split-key">' +
+            '<span><i class="lv-key-first"></i>First-time <b>' + num(c.first) + "</b></span>" +
+            '<span><i class="lv-key-ret"></i>Returning <b>' + num(c.returning) + "</b></span>" +
+          "</div></div>" +
+        '<div class="card half lv-feed-card"><div class="card-hd"><h3>Live activity</h3></div>' +
+          '<p class="card-sub">The raw stream, newest first.</p>' +
+          (feed ? '<ul class="lv-feed">' + feed + "</ul>"
+                : '<p class="lv-empty">No recent activity.</p>') + "</div>" +
+      "</div>";
+
+    f.appendChild(root);
+    return f;
+  }
+
   function panelLive(d) {
     var f = document.createDocumentFragment();
     var g = document.createElement("div");
@@ -1960,9 +2407,9 @@
   var PANELS = {
     overview: panelOverview, funnel: panelFunnel, configurator: panelConfigurator,
     journey: panelJourney, sessions: panelSessions, accounts: panelAccounts,
-    boosters: panelBoosters,
+    guides: panelGuides, boosters: panelBoosters,
     acquisition: panelAcquisition, friction: panelFriction, abandoned: panelAbandoned,
-    live: panelLive
+    liveview: panelLiveView, live: panelLive
   };
 
   function render() {
@@ -1970,12 +2417,18 @@
     if (!d) return;
     painters = [];
 
-    // Meta strip
+    // Store chip — one compact line in the sidebar foot (store + events held).
     var meta = document.querySelector("[data-meta]");
-    meta.innerHTML =
-      '<span class="pill"><span class="dot"></span>' + esc(d.meta.store) + " store</span>" +
-      '<span class="pill">' + esc(num(d.meta.events)) + " events in window</span>" +
-      '<span class="pill">' + esc(num(d.meta.stored)) + " stored</span>";
+    if (meta) {
+      meta.innerHTML =
+        '<span class="dot"></span>' + esc(d.meta.store) + " store" +
+        ' · <b>' + esc(num(d.meta.stored)) + "</b> events";
+    }
+
+    // Topbar reflects the section you are in.
+    var title = document.querySelector("[data-tabtitle]");
+    var activeTab = document.querySelector('.tabs button[data-tab="' + state.tab + '"]');
+    if (title && activeTab) title.textContent = activeTab.textContent;
 
     var banner = document.querySelector("[data-synthetic]");
     if (d.meta.synthetic > 0) {
@@ -2065,11 +2518,26 @@
         o.setAttribute("aria-selected", o === b ? "true" : "false");
       });
       render();
-      // Entering Accounts / Boosters pulls that store fresh (each rides its own request).
+      // On a phone the nav is an overlay; picking a section closes it.
+      shell.classList.remove("side-open");
+      // Entering Accounts / Guides / Boosters pulls that store fresh (each rides its own request).
       if (state.tab === "accounts") loadAccounts();
+      if (state.tab === "guides") loadGuides();
       if (state.tab === "boosters") loadBoosters();
     });
   });
+
+  // Sidebar toggle (mobile) — the nav slides in over the content.
+  var shell = document.querySelector(".shell");
+  var sideToggle = document.querySelector("[data-side-toggle]");
+  if (sideToggle && shell) {
+    sideToggle.addEventListener("click", function () { shell.classList.toggle("side-open"); });
+    document.addEventListener("click", function (e) {
+      if (!shell.classList.contains("side-open")) return;
+      if (e.target.closest(".side") || e.target.closest("[data-side-toggle]")) return;
+      shell.classList.remove("side-open");
+    });
+  }
 
   // A token from a previous page load gets us straight in.
   if (state.token) {

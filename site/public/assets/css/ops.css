@@ -50,7 +50,11 @@
   --pad: 18px;
 
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  background: var(--plane);
+  background:
+    radial-gradient(1100px 620px at 82% -8%, rgba(217, 89, 38, 0.10), transparent 60%),
+    radial-gradient(900px 520px at 0% 0%, rgba(57, 135, 229, 0.08), transparent 55%),
+    var(--plane);
+  background-attachment: fixed;
   color: var(--ink);
   min-height: 100vh;
   font-size: 14px;
@@ -67,26 +71,70 @@
   border-radius: 4px;
 }
 
-.wrap { max-width: 1440px; margin: 0 auto; padding: 0 24px 72px; }
-
-/* ── top bar ─────────────────────────────────────────────────────────── */
-.top {
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  padding: 18px 0 16px; border-bottom: 1px solid var(--hairline); margin-bottom: 20px;
+/* ── brand lockup (shard + wordmark) — self-contained copy of the site mark ── */
+.brand-mark {
+  width: 11px; height: 24px; flex: none; display: inline-block;
+  background: linear-gradient(#ffb046, #ff3d0f);
+  clip-path: polygon(0 0, 100% 18%, 62% 100%, 18% 62%);
 }
-.top h1 { font-size: 16px; }
-.top .sub { color: var(--muted); font-size: 13px; }
-.top .spacer { flex: 1 1 auto; }
+.brand-word { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); }
+.brand-word b { font-weight: 700; color: var(--serious); }
 
-.pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 3px 9px; border-radius: 999px; font-size: 12px;
-  border: 1px solid var(--hairline); color: var(--ink-2); background: var(--surface);
-  white-space: nowrap;
+/* ── app shell: fixed sidebar + scrolling main ───────────────────────────── */
+.shell { display: flex; min-height: 100vh; align-items: stretch; }
+.shell[hidden] { display: none; }
+
+.side {
+  position: sticky; top: 0; align-self: flex-start;
+  width: 232px; flex: none; height: 100vh;
+  display: flex; flex-direction: column;
+  padding: 20px 14px; gap: 6px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border-right: 1px solid var(--hairline);
+  backdrop-filter: blur(10px);
 }
-.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
-.pill.warn { border-color: color-mix(in srgb, var(--warning) 45%, transparent); }
-.pill.warn .dot { background: var(--warning); }
+.brand {
+  display: flex; align-items: center; gap: 9px; text-decoration: none;
+  padding: 4px 8px 16px; margin-bottom: 6px;
+}
+.brand .brand-tag {
+  margin-left: 2px; font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+  border: 1px solid var(--hairline); border-radius: 5px; padding: 2px 5px;
+}
+.side-foot {
+  margin-top: auto; padding-top: 14px; border-top: 1px solid var(--hairline);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.store-chip {
+  display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 11px; color: var(--muted);
+}
+.store-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); flex: none; }
+.store-chip b { color: var(--ink-2); font-weight: 600; }
+.side-foot .btn { justify-content: center; }
+
+.main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.content { padding: 0 28px 72px; }
+.main > .banner { margin: 0 28px 22px; }
+
+/* ── topbar ──────────────────────────────────────────────────────────────── */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 28px; margin-bottom: 22px;
+  background: color-mix(in srgb, var(--plane) 78%, transparent);
+  border-bottom: 1px solid var(--hairline);
+  backdrop-filter: blur(12px);
+}
+.topbar-title { font-size: 19px; letter-spacing: -0.02em; }
+.topbar .spacer { flex: 1 1 auto; }
+.refresh-ico {
+  width: 14px; height: 14px; display: inline-block; border-radius: 50%;
+  border: 2px solid currentColor; border-top-color: transparent;
+  transform: rotate(30deg);
+}
+.side-toggle { display: none; }
 
 /* ── buttons & controls ──────────────────────────────────────────────── */
 .btn {
@@ -118,32 +166,37 @@
 select.field { padding-right: 26px; }
 
 /* ── login gate ──────────────────────────────────────────────────────── */
-.gate { max-width: 380px; margin: 14vh auto; text-align: center; }
-.gate h2 { font-size: 18px; margin-bottom: 6px; }
+.gate-screen { display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 24px; }
+.gate-screen[hidden] { display: none; }
+.gate {
+  width: 100%; max-width: 400px; text-align: center;
+  padding: 34px 30px; border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--hairline);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+.gate-brand { display: inline-flex; align-items: center; gap: 9px; margin-bottom: 20px; }
+.gate h2 { font-size: 20px; margin-bottom: 6px; }
 .gate p { color: var(--muted); margin: 0 0 22px; font-size: 13px; }
 .gate form { display: flex; gap: 8px; }
 .gate .field { flex: 1 1 auto; }
 .gate .err { color: var(--critical); font-size: 13px; margin-top: 14px; min-height: 19px; }
 .gate .note {
-  margin-top: 26px; padding: 14px; text-align: left; font-size: 12px;
-  color: var(--muted); background: var(--surface);
+  margin-top: 22px; padding: 14px; text-align: left; font-size: 12px;
+  color: var(--muted); background: var(--plane);
   border: 1px solid var(--hairline); border-radius: var(--radius);
 }
 .gate code { color: var(--ink-2); }
 
-/* ── filter row — one row, above everything it scopes ────────────────── */
-.filters {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  margin-bottom: 18px;
-}
-.filters label { color: var(--muted); font-size: 12px; }
-.seg { display: inline-flex; border: 1px solid var(--hairline); border-radius: 8px; overflow: hidden; }
+/* ── segmented period control (topbar) ─────────────────────────────────── */
+.seg { display: inline-flex; border: 1px solid var(--hairline); border-radius: 9px; overflow: hidden; }
 .seg button {
   font: inherit; font-size: 13px; cursor: pointer;
-  padding: 6px 12px; border: 0; background: var(--surface); color: var(--ink-2);
+  padding: 6px 12px; border: 0; background: transparent; color: var(--muted);
   border-right: 1px solid var(--hairline);
 }
 .seg button:last-child { border-right: 0; }
+.seg button:hover { color: var(--ink-2); }
 .seg button[aria-pressed="true"] { background: var(--raised); color: var(--ink); }
 
 /* ── banners ─────────────────────────────────────────────────────────── */
@@ -163,18 +216,20 @@ select.field { padding-right: 26px; }
 .banner strong { color: var(--ink); }
 .banner .ico { flex: 0 0 auto; font-size: 14px; }
 
-/* ── tabs ────────────────────────────────────────────────────────────── */
-.tabs {
-  display: flex; gap: 2px; overflow-x: auto; margin-bottom: 20px;
-  border-bottom: 1px solid var(--hairline);
-}
+/* ── sidebar nav (was horizontal tabs) ─────────────────────────────────── */
+.tabs { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 .tabs button {
-  font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
-  padding: 9px 14px; border: 0; background: none; color: var(--muted);
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  font: inherit; font-size: 13px; cursor: pointer; text-align: left;
+  padding: 9px 12px; border: 0; border-radius: 8px;
+  background: none; color: var(--muted); position: relative;
+  transition: background 0.12s ease, color 0.12s ease;
 }
-.tabs button:hover { color: var(--ink-2); }
-.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--s1); }
+.tabs button:hover { color: var(--ink); background: var(--raised); }
+.tabs button[aria-selected="true"] { color: var(--ink); background: var(--raised); font-weight: 600; }
+.tabs button[aria-selected="true"]::before {
+  content: ""; position: absolute; left: 0; top: 8px; bottom: 8px;
+  width: 3px; border-radius: 3px; background: linear-gradient(#ffb046, #ff3d0f);
+}
 
 .panel[hidden] { display: none; }
 
@@ -184,8 +239,9 @@ select.field { padding-right: 26px; }
 .grid { display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); align-items: start; }
 .card {
   grid-column: span 12;
-  background: var(--surface); border: 1px solid var(--hairline);
-  border-radius: var(--radius); padding: var(--pad);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, #fff 4%), var(--surface));
+  border: 1px solid var(--hairline);
+  border-radius: 14px; padding: var(--pad);
   min-width: 0;                     /* let wide children scroll, not stretch */
 }
 .card.half { grid-column: span 6; }
@@ -208,8 +264,9 @@ select.field { padding-right: 26px; }
 /* ── KPI row & stat tiles ────────────────────────────────────────────── */
 .kpis { display: grid; gap: 16px; grid-template-columns: repeat(6, 1fr); margin-bottom: 16px; }
 .kpi {
-  background: var(--surface); border: 1px solid var(--hairline);
-  border-radius: var(--radius); padding: 14px 16px; min-width: 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, #fff 4%), var(--surface));
+  border: 1px solid var(--hairline);
+  border-radius: 12px; padding: 15px 17px; min-width: 0;
 }
 .kpi .lab { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
 /* Proportional figures — tabular-nums makes a standalone number look loose. */
@@ -359,11 +416,193 @@ select.field { padding-right: 26px; }
   .kpis { grid-template-columns: repeat(3, 1fr); }
   .card.half, .card.third, .card.twothirds { grid-column: span 12; }
 }
+
+/* ── responsive shell: sidebar collapses to a slide-in overlay ──────────── */
+@media (max-width: 860px) {
+  .side {
+    position: fixed; top: 0; left: 0; z-index: 40; height: 100vh;
+    transform: translateX(-100%); transition: transform 0.22s ease;
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.5);
+  }
+  .shell.side-open .side { transform: translateX(0); }
+  .side-toggle {
+    display: inline-flex; flex-direction: column; justify-content: center; gap: 4px;
+    width: 34px; height: 34px; padding: 8px; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px;
+  }
+  .side-toggle span { display: block; height: 2px; border-radius: 2px; background: var(--ink-2); }
+  .topbar { padding: 12px 16px; }
+  .content { padding: 0 16px 72px; }
+  .main > .banner { margin: 0 16px 18px; }
+  .topbar-title { font-size: 17px; }
+}
 @media (max-width: 640px) {
-  .wrap { padding: 0 14px 56px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .kpi.hero .val { font-size: 32px; }
+  .seg[data-range] { display: none; }        /* Live view ignores period; free the row on phones */
+  .topbar { gap: 10px; }
+  .topbar-title { min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar [data-refresh] { display: none; }  /* Live already auto-refreshes; save the width */
+  .topbar select.field { max-width: 40vw; }
 }
+/* ── Live view ───────────────────────────────────────────────────────────
+   The Shopify-style "right now" panel. Its own short windows, its own accent
+   language: green = live/purchased, blue = the site's series accent. */
+.lv { display: flex; flex-direction: column; gap: 16px; }
+
+.lv-topgrid { align-items: stretch; }
+.lv-hero { display: flex; flex-direction: column; gap: 18px; }
+.lv-hero .lv-spark { margin-top: auto; }
+.lv-now-n {
+  font-size: 58px; font-weight: 700; letter-spacing: -0.03em; line-height: 1;
+  color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.lv-now-l {
+  display: flex; align-items: center; gap: 8px; margin-top: 10px;
+  font-size: 15px; font-weight: 600; color: var(--ink);
+}
+.lv-now-sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.lv-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--good);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 60%, transparent);
+  animation: ops-live 2.2s ease-in-out infinite; flex: none;
+}
+
+.lv-spark { min-width: 0; }
+.lv-spark-bars {
+  display: flex; align-items: flex-end; gap: 3px; height: 96px;
+  padding: 6px 0; border-bottom: 1px solid var(--hairline);
+}
+.lv-bar {
+  flex: 1 1 0; min-width: 2px; min-height: 2px; border-radius: 2px 2px 0 0;
+  background: var(--s1); opacity: 0.85; transition: height 0.3s ease;
+}
+.lv-bar.is-now { background: var(--good); opacity: 1; }
+.lv-spark-x {
+  display: flex; justify-content: space-between; margin-top: 6px;
+  color: var(--muted); font-size: 11px;
+}
+
+/* funnel boxes — the top row, one box per stage, joined by chevrons */
+.lv-behavior { display: flex; align-items: stretch; gap: 4px; }
+.lv-stage {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 8px;
+  padding: 16px 18px; border-radius: 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, #fff 4%), var(--surface));
+  border: 1px solid var(--hairline);
+}
+.lv-stage-n {
+  font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1;
+  color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.lv-stage-l { color: var(--ink-2); font-size: 12px; }
+.lv-stage-checkout .lv-stage-n { color: var(--s2); }
+.lv-stage-purchased .lv-stage-n { color: var(--good); }
+.lv-stage-sep {
+  align-self: center; flex: none; width: 9px; height: 9px;
+  border-top: 2px solid var(--axis); border-right: 2px solid var(--axis);
+  transform: rotate(45deg);
+}
+
+/* live traffic map — self-contained dotted world (see lvWorldMap in ops.js) */
+.lv-map {
+  border-radius: 10px; overflow: hidden; padding: 8px;
+  background: color-mix(in srgb, var(--plane) 55%, var(--surface));
+  border: 1px solid var(--hairline);
+}
+.lv-map-svg { width: 100%; height: auto; display: block; }
+.lv-map-land { fill: var(--axis); opacity: 0.5; }
+.lv-map-hit { fill: var(--good); }
+.lv-map-halo { fill: color-mix(in srgb, var(--good) 20%, transparent); }
+.lv-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; }
+.lv-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+.lv-legend-item b { color: var(--ink); font-weight: 600; }
+
+/* product view — live sessions per game, split by stage. Stage colours are
+   named once here so the segment bar, the legend dots and the counts agree. */
+.lv {
+  --st-browsing: var(--axis);
+  --st-configuring: var(--s1);
+  --st-checkout: var(--s2);
+  --st-purchased: var(--good);
+}
+.lv-games { display: flex; flex-direction: column; gap: 4px; }
+.lv-game {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px 4px; border-top: 1px solid var(--hairline);
+}
+.lv-game:first-child { border-top: 0; padding-top: 2px; }
+.lv-game-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.lv-game-name { font-size: 14px; font-weight: 600; color: var(--ink); }
+.lv-game-n { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lv-game-bar {
+  display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--grid);
+}
+.lv-seg { display: block; height: 100%; min-width: 2px; }
+.lv-seg-browsing { background: var(--st-browsing); }
+.lv-seg-configuring { background: var(--st-configuring); }
+.lv-seg-checkout { background: var(--st-checkout); }
+.lv-seg-purchased { background: var(--st-purchased); }
+.lv-game-counts { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.lv-gc { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+.lv-gc i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.lv-dot-browsing { background: var(--st-browsing); }
+.lv-dot-configuring { background: var(--st-configuring); }
+.lv-dot-checkout { background: var(--st-checkout); }
+.lv-dot-purchased { background: var(--st-purchased); }
+
+/* ranked bar lists (locations / games) */
+.lv-rank { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.lv-rank li { display: grid; grid-template-columns: minmax(0, 1fr) 90px auto; align-items: center; gap: 12px; }
+.lv-rank-l {
+  display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lv-flag { font-size: 15px; line-height: 1; flex: none; }
+.lv-rank-bar { height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; }
+.lv-rank-bar i { display: block; height: 100%; background: var(--s1); border-radius: 3px; }
+.lv-rank-v { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; }
+.lv-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+
+/* customers split */
+.lv-split {
+  display: flex; height: 12px; border-radius: 6px; overflow: hidden;
+  background: var(--grid); margin-bottom: 12px;
+}
+.lv-split-first { background: var(--s1); }
+.lv-split-ret { background: var(--s7); }
+.lv-split-key { display: flex; gap: 20px; font-size: 12px; color: var(--ink-2); }
+.lv-split-key i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+.lv-split-key b { color: var(--ink); font-weight: 600; margin-left: 4px; }
+.lv-key-first { background: var(--s1); }
+.lv-key-ret { background: var(--s7); }
+
+/* activity feed */
+.lv-feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.lv-feed-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 0;
+  border-top: 1px solid var(--hairline); font-size: 13px;
+}
+.lv-feed-row:first-child { border-top: 0; }
+.lv-feed-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--axis); flex: none; }
+.lv-ev-purchase .lv-feed-dot { background: var(--good); }
+.lv-ev-begin_checkout .lv-feed-dot, .lv-ev-add_payment_info .lv-feed-dot { background: var(--s2); }
+.lv-ev-configure .lv-feed-dot, .lv-ev-view_item .lv-feed-dot { background: var(--s1); }
+.lv-feed-when { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; flex: none; width: 62px; }
+.lv-feed-what { flex: 1 1 auto; min-width: 0; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lv-feed-cfg { color: var(--muted); }
+.lv-feed-val { color: var(--good); font-variant-numeric: tabular-nums; font-weight: 600; flex: none; }
+.lv-feed-flag { font-size: 15px; line-height: 1; flex: none; }
+
+@media (max-width: 640px) {
+  .lv-now-n { font-size: 46px; }
+  .lv-kpis.kpis { grid-template-columns: repeat(3, 1fr); }
+  .lv-behavior { flex-wrap: wrap; }
+  .lv-stage { flex-basis: calc(50% - 2px); }
+  .lv-stage-sep { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ops *, .ops *::before, .ops *::after { transition: none !important; }
+  .lv-dot { animation: none; }
 }

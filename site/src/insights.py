@@ -88,6 +88,7 @@ TIER_OF = _tier_index()
 ADDON_LABEL = {a["id"]: a["label"] for a in D.ADDONS}
 ADDON_PCT = {a["id"]: a["pct"] for a in D.ADDONS}
 GAME_NAMES = [g["name"] for g in D.GAMES]
+SLUG_TO_GAME = {g["slug"]: g["name"] for g in D.GAMES}
 
 
 def norm_path(p):
@@ -672,6 +673,133 @@ def _mod_live(events, limit=40):
     return out
 
 
+# ── the live view ─────────────────────────────────────────────────────────
+# A Shopify-style "right now" panel. Deliberately independent of the dashboard's
+# `days` window: it always reads the last few minutes, so the period selector
+# never changes what it shows. The client polls it every 10s (see ops.js).
+NOW_WINDOW = 5 * 60          # "visitors right now" — active in the last 5 minutes
+LIVE_WINDOW = 30 * 60        # the live session horizon — carts, locations, games
+SPARK_MINUTES = 30           # per-minute visitor bars
+
+
+def _session_game(s):
+    """The game a live session is on — from the configured order if there is
+    one, else from the `/games/<slug>` page it is sitting on. That second path
+    is what lets a visitor still browsing a game page count toward it before
+    they have quoted anything."""
+    g = (s.cfg or {}).get("game") if s.cfg else None
+    if g:
+        return g
+    for ev in s.events:
+        p = (ev.get("p") or "").split("?")[0].split("#")[0]
+        if p.startswith("/games/"):
+            slug = p[len("/games/"):]
+            if slug.endswith(".html"):
+                slug = slug[:-5]
+            slug = slug.strip("/")
+            if slug in SLUG_TO_GAME:
+                return SLUG_TO_GAME[slug]
+    return None
+
+
+def _mod_liveview(events, first_seen, now):
+    """Real-time snapshot: who is on the site now, and what they are doing.
+
+    `first_seen` (anon → earliest timestamp we hold) is reused from compute()
+    so "returning" means the same thing here as everywhere else on the site.
+    """
+    now = int(now)
+    live_start = now - LIVE_WINDOW
+    now_start = now - NOW_WINDOW
+
+    recent = [e for e in events if e.get("t", 0) >= live_start]
+
+    # Visitors right now — distinct anon ids with any beacon in the last 5 min.
+    active = {e.get("a") for e in recent
+              if e.get("a") and e.get("t", 0) >= now_start}
+
+    # Per-minute unique-visitor bars, oldest → newest, so the row reads left to
+    # right like a clock. A minute with nobody in it is a real zero, not a gap.
+    buckets = [set() for _ in range(SPARK_MINUTES)]
+    span = SPARK_MINUTES * 60
+    for e in events:
+        a, t = e.get("a"), e.get("t", 0)
+        if not a or t < now - span or t > now:
+            continue
+        idx = SPARK_MINUTES - 1 - int((now - t) // 60)
+        if 0 <= idx < SPARK_MINUTES:
+            buckets[idx].add(a)
+    spark = [len(b) for b in buckets]
+
+    # Sessionize the live horizon and read where each session got to. `reached`
+    # is the cumulative funnel-key set, so classifying is one membership test.
+    sess = [s for s in sessionize(recent) if s.end >= live_start]
+
+    # Live sessions grouped by game — the "product view". This site has no cart,
+    # so instead of a cart funnel we split each game's live sessions by how far
+    # they got: browsing → configuring → checking out → purchased. A session's
+    # game comes from its order or the /games/<slug> page it is on.
+    games = OrderedDict()
+    loc = defaultdict(set)
+    first = returning = 0
+    # Site-wide behaviour tally — the summary boxes above the per-game view.
+    # Counts every live session by its furthest stage, game page or not.
+    tally = {"browsing": 0, "configuring": 0, "checkout": 0, "purchased": 0}
+    for s in sess:
+        if s.co:
+            loc[s.co].add(s.anon)
+        if first_seen.get(s.anon, s.start) < s.start - 60:
+            returning += 1
+        else:
+            first += 1
+        if s.paid:
+            stage = "purchased"
+        elif "checkout" in s.reached:
+            stage = "checkout"
+        elif "configure" in s.reached:
+            stage = "configuring"
+        else:
+            stage = "browsing"
+        tally[stage] += 1
+        g = _session_game(s)
+        if not g:
+            continue
+        row = games.setdefault(g, {"name": g, "sessions": 0, "browsing": 0,
+                                   "configuring": 0, "checkout": 0, "purchased": 0})
+        row["sessions"] += 1
+        row[stage] += 1
+    behavior = [
+        {"key": "browsing",    "label": "Just browsing", "count": tally["browsing"]},
+        {"key": "configuring", "label": "Configuring",   "count": tally["configuring"]},
+        {"key": "checkout",    "label": "Checking out",  "count": tally["checkout"]},
+        {"key": "purchased",   "label": "Purchased",     "count": tally["purchased"]},
+    ]
+
+    products = sorted(games.values(), key=lambda r: -r["sessions"])[:8]
+    locations = sorted(({"code": k, "sessions": len(v)} for k, v in loc.items()),
+                       key=lambda r: -r["sessions"])[:6]
+
+    # Last 24 hours — the "today"-ish headline totals, always this window
+    # regardless of the period selector.
+    day = sessionize([e for e in events if e.get("t", 0) >= now - DAY])
+    orders = [s for s in day if s.paid]
+
+    return {
+        "now_secs": NOW_WINDOW, "window_mins": LIVE_WINDOW // 60,
+        "visitors": len(active),
+        "sessions_live": len(sess),
+        "spark": spark, "spark_minutes": SPARK_MINUTES,
+        "behavior": behavior,
+        "products": products,
+        "locations": locations,
+        "customers": {"first": first, "returning": returning},
+        "today": {
+            "sessions": len(day), "orders": len(orders),
+            "revenue": _money(sum(s.value for s in orders)),
+        },
+    }
+
+
 def stripe_summary(days=30):
     """Paid orders straight from Stripe — the money's own source of truth,
     independent of whether a beacon ever fired. Returns None when no key is
@@ -772,5 +900,8 @@ def compute(events, days=30, game=None, now=None, with_stripe=True):
         "sessions": _mod_sessions(sess),
         "abandoned": _mod_abandoned(sess),
         "live": _mod_live(window),
+        # The live view is always "right now", not the selected period — it
+        # reads its own short windows off the full store.
+        "liveview": _mod_liveview(events, first_seen, now),
         "stripe": stripe_summary(days) if with_stripe else None,
     }
