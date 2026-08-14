@@ -1644,12 +1644,23 @@ body.hd-locked {
   /* Replaces the handoff's mock home indicator: clears the iOS home bar and the
      Android gesture area. The assurance row owns the 9px base above it. */
   padding-bottom: env(safe-area-inset-bottom);
+  /* Revealed on scroll, not on load: hidden (slid down, inert) until the card's
+     own checkout button has scrolled up out of view — initStickyBar() adds
+     .is-revealed. Keeps exactly one checkout button on screen at a time. */
+  transform: translateY(115%); opacity: 0; visibility: hidden; pointer-events: none;
+  transition: transform .3s cubic-bezier(.4, 0, .2, 1), opacity .3s ease, visibility .3s;
+}
+.mobile-bar.is-revealed {
+  transform: translateY(0); opacity: 1; visibility: visible; pointer-events: auto;
 }
 /* A full-width solid accent line reads as an error; fading it at both ends
    makes it a highlight. */
 .mb-hair {
   height: 2px; flex: none;
-  background: linear-gradient(90deg, rgba(255, 90, 31, 0), var(--ember, #ff5a1f), rgba(255, 90, 31, 0));
+  /* the handoff's #ff5a1f literal, not var(--ember): the bar is outside
+     .hero-a, where --ember is the site's global #ff4a1f, and this line reads
+     against the pill and CTA which are already rgba(255,90,31,…). */
+  background: linear-gradient(90deg, rgba(255, 90, 31, 0), #ff5a1f, rgba(255, 90, 31, 0));
 }
 .mb-top { display: flex; align-items: center; gap: 12px; padding: 11px 14px 8px; }
 .mb-left { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
@@ -1775,10 +1786,14 @@ body.hd-locked {
   .gamerow img { width: 44px; height: 44px; }
   .gamerow .cfg { display: none; }
   .mobile-bar { display: flex; }
-  /* Clears the three-row bar (116px at 375, 130 at 320 where the save pill takes
-     its own line) plus the safe-area inset. Measured, not guessed — too small
-     and the footer's last row sits under the bar with no way to reach it. */
-  body.has-bar { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
+  /* Clears the bar (109px at 375) plus the safe-area inset. Measured, not
+     guessed — too small and the footer's last row sits under the bar with no
+     way to reach it. Below 400px the save pill wraps to its own line and the
+     bar grows; see the override there. */
+  body.has-bar { padding-bottom: calc(116px + env(safe-area-inset-bottom)); }
+  /* Coaching pages: the "Book 3 hours" CTA squeezes the money line into a wrap,
+     so the bar reaches ~139px on that tab. Reserved only where the tab exists. */
+  body.has-bar-coach { padding-bottom: calc(146px + env(safe-area-inset-bottom)); }
   .two-up { grid-template-columns: 1fr; }
   .stat-row { gap: 24px; }
   .wizard { padding: 18px 16px; }
@@ -2213,6 +2228,19 @@ body.hd-locked {
   background: rgba(255, 90, 31, .12); border: 1px solid rgba(255, 90, 31, .34);
 }
 
+/* Inline error when the target sits at or below the current rank. No rank is
+   locked any more — every tier/division is selectable and an impossible pair
+   surfaces here instead, shown only while [data-when-invalid] is unhidden. */
+.ob-err {
+  display: flex; align-items: center; gap: 8px; margin-top: 10px;
+  padding: 9px 11px; border-radius: 9px;
+  border: 1px solid rgba(255, 90, 31, .4);
+  background: rgba(255, 90, 31, .1);
+  color: #ffb9a0; font-size: 13px; font-weight: 600;
+}
+.ob-err[hidden] { display: none; }
+.ob-err-ico { flex: none; color: #ff7a4a; }
+
 /* the rank plate -------------------------------------------------------- */
 /* One end of the climb: label, selector row, pips. Division boost draws two of
    them side by side; Net wins and Placements draw a single full-width one
@@ -2579,13 +2607,16 @@ body.hd-locked {
 .ob-unit-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .ob-unit-price { font-size: 11.5px; color: var(--h-muted); }
 .ob-unit-price b { font-weight: 600; color: var(--h-text); }
-.ob-counts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.ob-counts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
 .ob-count {
-  padding: 10px 0; border-radius: 8px; cursor: pointer;
-  font-family: var(--body); font-weight: 600; font-size: 14px; color: var(--h-muted);
+  padding: 6px 0; border-radius: 7px; cursor: pointer;
+  font-family: var(--body); font-weight: 600; font-size: 12.5px; color: var(--h-muted);
   background: rgba(255, 255, 255, .03); border: 1px solid var(--h-line-3);
   transition: border-color .16s ease, background .16s ease, color .16s ease;
 }
+/* On the unit tabs the rank plate's pips (IV–I) sit tighter than the climb
+   plate's — this is a compact secondary control, not the primary rank field. */
+.ob .ob-plate-unit .ob-pips .seg-sub-opt { height: 28px; font-size: 11px; }
 .ob-count:hover { border-color: rgba(255, 255, 255, .2); color: #b9b2ac; }
 .ob-count[aria-pressed="true"] {
   background: linear-gradient(94deg, #ffb03a, #ff5a1f); border-color: transparent; color: #201004;
@@ -2935,10 +2966,11 @@ body.hd-locked {
   .ob-sum-r .quote-eta { font-size: 20px; line-height: 1.1; white-space: nowrap; }
   /* availability spans the row here rather than tucking under the estimate */
   .ob-sum-free { grid-column: 1 / -1; justify-self: start; margin-top: 10px; font-size: 11.5px; }
-  /* The total and the CTA live in the sticky bar on a phone — the handoff is
-     explicit that exactly one button is on screen, so the card drops both
-     rather than printing the same price twice. */
-  .ob-sum-l .price-pair, .ob-cta, .ob-assure { display: none; }
+  /* The card keeps its own total, CTA and assurances on the phone: that in-flow
+     button is the "main" checkout action. The sticky bar mirrors it but stays
+     hidden until this button scrolls up out of view (initStickyBar in app.js),
+     so only ever one checkout button is on screen — the handoff's rule, kept by
+     revealing the bar rather than by dropping the card's button. */
   /* Bundles become a horizontal swipe rail — three 1fr columns clip the card
      copy at phone width, and the handoff draws them as a rail. */
   .ob-bundles-grid {
@@ -3022,26 +3054,95 @@ body.hd-locked {
 .gp-dp-name { font-size: 14.5px; font-weight: 600; color: var(--gp-t); }
 .gp-dp-note { font-size: 13px; line-height: 1.5; color: var(--gp-mut); text-wrap: pretty; }
 
-/* 03 who plays it ------------------------------------------------------- */
+/* 03 who plays it — a roster BOARD of rows (the game-page port of the boosters
+   table), not three cards. Each row: availability ring · name + rank ·
+   Orders / Rating / On-time · role · queue pill · Order-with CTA, then a
+   "N more … See all" foot. Reuses .rst-ring and queue_pill() so the ring colour
+   and the pill read the same `queue` the rest of the site does. */
 .gp-who { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 56px; align-items: start; }
 .gp-who-copy { display: flex; flex-direction: column; align-items: flex-start; }
-.gp-who-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.gp-who-card { display: flex; flex-direction: column; padding: 18px; border-radius: 14px; background: var(--gp-card); border: 1px solid rgba(255, 255, 255, .10); }
-.gp-who-card.is-top { border-color: rgba(255, 90, 31, .5); }
-.gp-who-id { display: flex; align-items: center; gap: 12px; }
-.gp-who-av { width: 44px; height: 44px; flex: none; border-radius: 999px; padding: 2px; background: linear-gradient(150deg, rgba(255, 176, 58, .5), rgba(255, 255, 255, .06)); }
-.gp-who-av span { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #221d19; font-weight: 700; font-size: 16px; color: var(--gp-cap); }
-.gp-who-meta { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.gp-who-name { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; letter-spacing: -.015em; color: var(--gp-t); }
-.gp-who-top { flex: none; font-weight: 600; font-size: 9px; letter-spacing: .11em; text-transform: uppercase; color: var(--gp-tint); background: rgba(255, 90, 31, .10); border: 1px solid rgba(255, 90, 31, .26); border-radius: 999px; padding: 5px 7px; }
-.gp-who-rank { font-size: 12.5px; color: var(--gp-mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gp-who-stats { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, .08); }
-.gp-who-div { background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, .16), transparent); }
-.gp-who-stat { display: flex; flex-direction: column; gap: 6px; }
-.gp-who-v { display: flex; align-items: center; gap: 6px; font-size: 18px; font-weight: 600; letter-spacing: -.02em; line-height: 1; color: var(--gp-t); }
-.gp-who-star { color: #e0ac3e; flex: none; }
-.gp-who-k { font-weight: 600; font-size: 9.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--gp-mut); }
-.gp-who-spec { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 12.5px; color: var(--gp-t2); }
+.gp-who-rule { width: 100%; max-width: 420px; height: 1px; margin: 22px 0 18px; background: rgba(255, 255, 255, .09); }
+.gp-who-feats { list-style: none; margin: 0 0 26px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.gp-who-feats li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--gp-t2); }
+.gp-who-feats .gp-dp-ico { flex: none; color: var(--gp-tint); }
+
+.gp-who-board { display: flex; flex-direction: column; gap: 10px; }
+
+/* one row — five columns, the auto/fixed tracks constant across rows so the
+   stat, role, pill and CTA columns line up vertically down the board */
+.gp-brow {
+  display: grid; grid-template-columns: minmax(120px, 1fr) auto 100px 116px 152px;
+  align-items: center; column-gap: 18px;
+  padding: 13px 18px; border-radius: 14px;
+  background: var(--gp-card); border: 1px solid rgba(255, 255, 255, .10);
+}
+.gp-brow.is-top { border-color: rgba(255, 90, 31, .5); }
+
+/* who — ring + name/rank, the whole block a link to the profile */
+.gp-brow-who { display: flex; align-items: center; gap: 13px; min-width: 0; text-decoration: none; }
+.gp-brow-ring { flex: none; }
+.gp-brow-id { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.gp-brow-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 16px; font-weight: 600; letter-spacing: -.015em; color: var(--gp-t); }
+.gp-brow-who:hover .gp-brow-name { color: var(--gp-tint); }
+.gp-brow-top {
+  flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px;
+  font: 700 8.5px/1 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--gp-tint);
+  background: rgba(255, 90, 31, .1); border: 1px solid rgba(255, 90, 31, .3); border-radius: 999px;
+}
+.gp-brow-top .ico { flex: none; }
+.gp-brow-rank { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; color: var(--gp-mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gp-brow-rank i { font-style: normal; }
+.gp-brow-tdot { flex: none; width: 7px; height: 7px; border-radius: 999px; background: var(--tier, var(--gp-mut)); }
+
+/* stats — fixed inner metrics so the group's width is constant row to row */
+.gp-brow-stats { display: flex; gap: 18px; }
+.gp-brow-stat { display: flex; flex-direction: column; gap: 6px; }
+.gp-brow-stat b { display: flex; align-items: center; gap: 5px; font: 600 16px/1 var(--display); letter-spacing: -.02em; color: var(--gp-t); }
+.gp-brow-stat > span { font-weight: 600; font-size: 9px; letter-spacing: .13em; text-transform: uppercase; color: var(--gp-mut); }
+.gp-brow-star { color: #e0ac3e; flex: none; }
+.gp-brow-ontime b { color: var(--gp-good); }
+
+/* role */
+.gp-brow-role { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12.5px; color: var(--gp-t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gp-brow-role .gp-dp-ico { flex: none; }
+
+/* availability pill — queue_pill() output, styled green/muted to match the ring */
+.gp-brow-pill {
+  justify-self: start; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px;
+  font: 600 9.5px/1 var(--display); letter-spacing: .09em; text-transform: uppercase;
+  color: var(--gp-good); background: rgba(143, 214, 164, .1);
+  border: 1px solid rgba(143, 214, 164, .28); border-radius: 999px; white-space: nowrap;
+}
+.gp-brow-pill-ico { flex: none; }
+.gp-brow-pill.is-busy { color: var(--gp-cap); background: rgba(255, 255, 255, .05); border-color: rgba(255, 255, 255, .14); }
+
+/* Order-with CTA — an ember outline; the hero owns the one filled button */
+.gp-brow-cta {
+  justify-self: end; width: 100%; height: 40px; display: inline-flex; align-items: center;
+  justify-content: center; gap: 6px; padding: 0 12px; border-radius: 10px; text-decoration: none;
+  border: 1px solid rgba(255, 90, 31, .5); background: transparent;
+  font: 600 12.5px/1 var(--display); color: var(--gp-tint); transition: background .15s ease;
+}
+.gp-brow.is-top .gp-brow-cta { background: rgba(255, 90, 31, .1); }
+.gp-brow-cta:hover { background: rgba(255, 90, 31, .16); color: #ffd0b0; }
+.gp-brow-cta b { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gp-brow-cta .ico { flex: none; transition: transform .15s ease; }
+.gp-brow-cta:hover .ico { transform: translateX(3px); }
+
+/* foot — "N more … See all N", counted, never a dead pointer */
+.gp-brow-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 2px;
+  padding: 13px 18px; border-radius: 12px; border: 1px dashed rgba(255, 255, 255, .14); background: rgba(255, 255, 255, .02);
+}
+.gp-brow-foot-t { display: flex; align-items: center; gap: 9px; min-width: 0; font-size: 13px; color: var(--gp-mut); }
+.gp-brow-foot-t .gp-dp-ico { flex: none; color: var(--gp-t2); }
+.gp-brow-foot-t b { font-weight: 700; color: var(--gp-t); }
+.gp-brow-foot-t i { font-style: normal; }
+.gp-brow-all { flex: none; display: inline-flex; align-items: center; gap: 5px; font: 600 13px/1 var(--display); color: var(--gp-tint); text-decoration: none; }
+.gp-brow-all b { font-weight: 700; }
+.gp-brow-all .ico { transition: transform .15s ease; }
+.gp-brow-all:hover .ico { transform: translateX(3px); }
+@media (prefers-reduced-motion: reduce) { .gp-brow-cta .ico, .gp-brow-all .ico { transition: none; } }
 
 /* 04 safety ------------------------------------------------------------- */
 .gp-safety { display: grid; grid-template-columns: minmax(0, 1fr) 452px; gap: 56px; align-items: start; }
@@ -3120,9 +3221,13 @@ body.hd-locked {
 
 /* responsive ------------------------------------------------------------ */
 @media (max-width: 1200px) {
-  .gp-steps, .gp-who-cards, .gp-rv-grid { grid-template-columns: repeat(2, 1fr); }
+  .gp-steps, .gp-rv-grid { grid-template-columns: repeat(2, 1fr); }
   .gp-while { grid-template-columns: minmax(0, 1fr) 480px; }
   .gp-safety { grid-template-columns: minmax(0, 1fr) 380px; }
+  /* the board wants the full width below 1200, or the 2-col split strands the
+     rows in ~600px and they overflow — so stack copy over board from here down */
+  .gp-who { grid-template-columns: 1fr; gap: 34px; }
+  .gp-who-copy { max-width: 640px; }
 }
 @media (max-width: 1000px) {
   .gp-inner { padding-block: 44px 48px; }
@@ -3132,10 +3237,25 @@ body.hd-locked {
   .gp-while-copy { order: 1; }
   .gp-while-mock { order: 2; }
   .gp-faq-copy { position: static; }
+  /* the aside stacks under the heading now, so the score reads left-to-right
+     with the section, not right-aligned into the middle of the row */
+  .gp-rv-score { align-items: flex-start; }
+  /* a row won't hold five columns in one phone width — refold it into a card:
+     ring+name and pill on top, stats and role beneath, CTA full width */
+  .gp-brow {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "who pill" "stats role" "cta cta";
+    row-gap: 14px; column-gap: 16px; padding: 16px 18px;
+  }
+  .gp-brow-who { grid-area: who; }
+  .gp-brow-pill { grid-area: pill; justify-self: end; align-self: start; }
+  .gp-brow-stats { grid-area: stats; gap: 22px; }
+  .gp-brow-role { grid-area: role; justify-self: end; align-self: center; }
+  .gp-brow-cta { grid-area: cta; justify-self: stretch; }
 }
 @media (max-width: 720px) {
-  .gp-steps, .gp-who-cards, .gp-rv-grid { grid-template-columns: 1fr; }
-  .gp-rv-aside { width: 100%; justify-content: space-between; }
+  .gp-steps, .gp-rv-grid { grid-template-columns: 1fr; }
+  .gp-rv-aside { width: 100%; justify-content: space-between; align-items: flex-start; }
   .gp-faq-a { padding-left: 18px; }
   .gp-close-inner { flex-direction: column; align-items: flex-start; gap: 26px; }
   .gp-close-r { align-items: flex-start; width: 100%; }
@@ -3376,6 +3496,16 @@ body.hd-locked {
 .bs-regionbtn { min-width: 52px; height: auto; padding: 11px 12px; letter-spacing: .04em; }
 
 /* ── climb readout + rail ──────────────────────────────────────────────── */
+.bs-err {
+  display: flex; align-items: center; gap: 8px; margin-top: 16px;
+  padding: 10px 12px; border-radius: 9px;
+  border: 1px solid rgba(255, 90, 31, .4);
+  background: rgba(255, 90, 31, .1);
+  color: #ffb9a0; font-size: 13px; font-weight: 600;
+}
+.bs-err[hidden] { display: none; }
+.bs-err-ico { flex: none; color: #ff7a4a; }
+
 .bs-climb { display: flex; align-items: center; gap: 12px; margin-top: 20px; }
 .bs-climb-val { font-size: 14.5px; font-weight: 600; color: var(--h-tint); }
 .bs-climb-rule {
@@ -4078,17 +4208,33 @@ body.hd-locked {
   .co-apply { padding: 0 20px; }
   .co-div-push { margin-top: 22px; }
   /* The total and the CTA detach into a sticky bar, so the price is never
-     scrolled off while the form is being filled. */
+     scrolled off while the form is being filled. It is revealed on scroll, not
+     on load: hidden until the form's own "Place the order" button scrolls up out
+     of view (initStickyBar in app.js), so only one order button is ever shown. */
   .co-bar {
     display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
     align-items: center; justify-content: space-between; gap: 14px;
     background: rgba(11, 10, 9, .96); backdrop-filter: blur(14px);
     border-top: 1px solid var(--c-line-5);
     padding: 10px 20px calc(10px + env(safe-area-inset-bottom));
+    transform: translateY(115%); opacity: 0; visibility: hidden; pointer-events: none;
+    transition: transform .3s cubic-bezier(.4, 0, .2, 1), opacity .3s ease, visibility .3s;
   }
+  .co-bar.is-revealed {
+    transform: translateY(0); opacity: 1; visibility: visible; pointer-events: auto;
+  }
+  .co-bar-l { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
   .co-bar-p { display: flex; align-items: baseline; gap: 8px; }
   .co-bar-p .co-total { font-size: 24px; }
   .co-bar-p .co-was { font-size: 14px; }
+  /* The boosting facts under the price. Only the game may shrink and truncate:
+     the ETA to its left is the more time-sensitive fact and must stay whole. */
+  .co-bar-meta { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--c-muted); }
+  .co-bar-meta .ico { flex: none; color: var(--c-dim); }
+  .co-bar-eta { flex: none; }
+  .co-bar-eta b { font-weight: 600; }
+  .co-bar-dot { flex: none; color: var(--c-dim); }
+  .co-bar-cfg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .co-bar .co-cta { margin-top: 0; width: auto; flex: none; height: 46px; padding: 0 18px; font-size: 14px; }
 }
 /* The header is the one band with no room to give: brand + two labelled items
@@ -7671,11 +7817,14 @@ body.gc-page { background: #0b0a09; }
    page where a stray horizontal scroll is unaffordable, and neither element
    can be dropped — the padlock is the trust mark and the link is the only exit
    `layout(bare=True)` leaves. Both shrink instead. */
-/* The save pill leaves the money row below ~360px, which grows the sticky bar
-   by 14px — the body has to give that back or the footer's last row is
-   permanently under it. */
-@media (max-width: 400px) {
-  body.has-bar { padding-bottom: calc(138px + env(safe-area-inset-bottom)); }
+/* On a narrow phone the "Checkout" money line runs out of room and the save
+   pill drops to its own line (~139px bar). It happens below ~363px — 375/390px
+   keep the pill on one line, so the wider reserve is bounded here rather than at
+   400px, where it would waste ~37px on the two commonest phone widths. Coaching
+   pages carry their own taller reserve at every width (has-bar-coach), because
+   the wider CTA wraps the line at 375 too. */
+@media (max-width: 360px) {
+  body.has-bar { padding-bottom: calc(146px + env(safe-area-inset-bottom)); }
 }
 
 @media (max-width: 400px) {

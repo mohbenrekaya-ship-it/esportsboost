@@ -181,14 +181,18 @@
   }
   window.esbPromo = resolvePromo;
 
-  /* The active bundle's discount, but only while the current climb still matches
-     it — mirrors data.bundle_discount() in ../../../src/data.py. A division
-     change keeps it (same from-tier); a tier or target change drops it. */
-  function bundleDiscount(s) {
-    if (s.bundle === null || s.bundle === undefined) return 0;
+  /* The active bundle for a state, but only while the current climb still
+     matches it — mirrors data.active_bundle() in ../../../src/data.py. A
+     division change keeps it (same from-tier); a tier or target change drops it. */
+  function activeBundle(s) {
+    if (s.bundle === null || s.bundle === undefined) return null;
     var b = ((D.bundles && D.bundles[s.game]) || [])[s.bundle | 0];
-    if (!b) return 0;
-    return (tierOf(s.game, s.from) === b.ft && s.to === b.target) ? b.disc : 0;
+    if (!b) return null;
+    return (tierOf(s.game, s.from) === b.ft && s.to === b.target) ? b : null;
+  }
+  function bundleDiscount(s) {
+    var b = activeBundle(s);
+    return b ? b.disc : 0;
   }
 
   function quote(s) {
@@ -240,7 +244,15 @@
       summary = p + " " + T(p === 1 ? "placement game" : "placement games") + " · " + where + " · " + T(s.mode);
     } else {
       var ladder = ladderOf(s.game);
-      var i = ladder.indexOf(s.from), j = ladder.indexOf(s.to);
+      // A matching bundle is a FLAT price across its whole from-tier: every
+      // division quotes as the FULL two-tier climb (the from-tier's bottom
+      // division → target), so Emerald I → Diamond IV costs the same as the
+      // real Emerald IV → Diamond IV work — the "two tiers up" the card
+      // advertises, discounted, never a sliver of it. The buyer's real ranks
+      // still show in the summary. Mirrors pricing.py.
+      var bundle = s.service === "division" ? activeBundle(s) : null;
+      var priceFrom = bundle ? bundle.defFrom : s.from;
+      var i = ladder.indexOf(priceFrom), j = ladder.indexOf(s.to);
       var steps = j - i;
       if (steps <= 0) {
         return {
@@ -441,16 +453,18 @@
       el.hidden = !(state.service === "placements" && state.unranked);
     });
 
-    /* Bundle cards. The struck price is the floor climb at full price (Solo, no
-       add-ons, no discount); the price beside it is that same climb with the
-       bundle's real discount applied. Applied = this bundle is the active one and
-       the current climb still matches it. */
+    /* Bundle cards. The struck price is the FULL two-tier climb at full price
+       (Solo, no add-ons, no discount) — the from-tier's bottom division up to
+       the target; the price beside it is that same climb with the bundle's real
+       discount applied, and it is what every division in the tier is charged.
+       Applied = this bundle is the active one and the current climb still
+       matches it. */
     each("[data-bundle]", function (el) {
       var i = +el.getAttribute("data-bundle");
       var disc = parseFloat(el.getAttribute("data-bundle-disc")) || 0;
       var full = quote(Object.assign({}, state, {
         service: "division", mode: "Solo", addons: [], promo: "", bundle: null,
-        from: el.getAttribute("data-bundle-floor"), to: el.getAttribute("data-bundle-to")
+        from: el.getAttribute("data-bundle-def"), to: el.getAttribute("data-bundle-to")
       })).subtotal;
       var listEl = el.querySelector("[data-bundle-list]");
       var priceEl = el.querySelector("[data-bundle-price]");
@@ -774,6 +788,11 @@
       if (map[k] !== undefined) el.textContent = map[k];
     });
 
+    // Inline error, shown only when the chosen pair is invalid (target at or
+    // below the current rank). Its text is the whole translatable node
+    // "Target must sit above your current rank".
+    each("[data-when-invalid]", function (el) { el.hidden = !q.invalid; });
+
     // Money rows that only exist when they carry a number.
     each("[data-when-addons]", function (el) { el.hidden = !q.addons; });
     each("[data-when-no-discount]", function (el) { el.hidden = !!q.discount; });
@@ -903,19 +922,21 @@
 
   function setNode(which, i) {
     var l = ladderOf(state.game);
+    // Every rank is selectable: set exactly the end the user touched (clamped
+    // only to the ladder's own range) and never move the other one. A target
+    // at or below the current rank is allowed through and surfaces as an inline
+    // error via quote().invalid, rather than being blocked before the tap.
+    i = Math.min(Math.max(0, i), l.length - 1);
     if (which === "to") {
-      i = Math.max(Math.min(l.length - 1, i), nodeAt(state.from) + 1);
       if (l[i] !== state.to) set({ to: l[i], bundle: bundleAfter(state.from, l[i]) }, "add_to_cart");
     } else {
-      i = Math.min(Math.max(0, i), nodeAt(state.to) - 1);
       if (l[i] !== state.from) set({ from: l[i], bundle: bundleAfter(l[i], state.to) }, "add_to_cart");
     }
   }
 
-  // Is this node reachable for this end, given where the other end sits?
-  function nodeOk(which, i) {
-    return which === "to" ? i > nodeAt(state.from) : i < nodeAt(state.to);
-  }
+  // Every rank is now reachable for either end — an out-of-range pair is shown
+  // as an error, not disabled. Kept as a hook so the render sites read the same.
+  function nodeOk() { return true; }
 
   // one division segment (Current / Target): a button per sub-rank of the tier
   function buildSubseg(root, which, opts, current) {
@@ -944,12 +965,9 @@
     return nodeAt(next[Math.min(off, next.length - 1)]);
   }
 
-  // A tier is out of range when none of its nodes can serve this end.
-  function tierOk(which, tier) {
-    var nodes = divsOf(state.game, tier).map(nodeAt);
-    return which === "to" ? nodes[nodes.length - 1] > nodeAt(state.from)
-                          : nodes[0] < nodeAt(state.to);
-  }
+  // Every tier is selectable for either end now; an impossible pair errors
+  // rather than disabling the tile. Kept so the render sites read one hook.
+  function tierOk() { return true; }
 
   function setTier(which, tier) { setNode(which, tierNode(which, tier)); }
 
@@ -1214,6 +1232,22 @@
         var l = ladderOf(state.game);
         if (l.indexOf(from) >= l.indexOf(to)) from = def;
         set({ service: "division", from: from, to: to, bundle: i }, "select_item");
+        // A bundle starts "from any division" in the lower tier, so the visitor
+        // still has to name their current division. Send them up to the "from"
+        // rank plate in the configurator, which the bundle strip sits below on
+        // the phone, so the one input they must confirm is on screen.
+        // scrollIntoView is unusable here: .hero-a is overflow:hidden and traps
+        // it, so compute the target and scroll the window past the sticky header.
+        var plate = document.querySelector(
+          '[data-panel="division"] [data-rankcolor="from"]');
+        if (plate) {
+          var hd = document.querySelector("[data-hd]");
+          var pad = (hd ? hd.getBoundingClientRect().height : 0) + 16;
+          var top = plate.getBoundingClientRect().top + window.pageYOffset - pad;
+          window.scrollTo(
+            { top: Math.max(0, top), left: 0,
+              behavior: reduceMotion() ? "auto" : "smooth" });
+        }
       });
     });
 
@@ -1257,7 +1291,17 @@
       });
     });
 
-    if (document.querySelector(".mobile-bar")) document.body.classList.add("has-bar");
+    if (document.querySelector(".mobile-bar")) {
+      document.body.classList.add("has-bar");
+      // Coaching's CTA ("Book 3 hours") is a wider label than "Checkout", so on
+      // that tab the money line wraps the save pill and the sticky bar grows
+      // ~30px. Only the three coaching-capable games have that tab; flag them so
+      // the page reserves the taller clearance without wasting it on the six
+      // that can never reach it.
+      if (document.querySelector('[data-service="coaching"]')) {
+        document.body.classList.add("has-bar-coach");
+      }
+    }
 
     initHeader();
     initOrders();
@@ -1274,6 +1318,7 @@
     initCatalog();
     initGuides();
     initScrollHints();
+    initStickyBar();
 
     if (document.querySelector("[data-configurator]")) track("view_item", itemParams());
   }
@@ -2550,6 +2595,43 @@
     // The tab set is rebuilt when the game changes, and the bundle rail with
     // it, so re-measure after a render rather than only at load.
     document.addEventListener("esb:render", function () { rails.forEach(sync); });
+  }
+
+  /* ── sticky checkout bar: reveal on scroll ───────────────────────────────
+     The fixed bar (.mobile-bar on a game page, .co-bar on checkout) mirrors the
+     page's own primary checkout button but stays hidden until that button has
+     scrolled up out of view — so only ever one checkout button is on screen.
+     Scrolling back up to the button hides the bar again. */
+  function initStickyBar() {
+    var bar = document.querySelector(".mobile-bar, .co-bar");
+    if (!bar) return;
+    // The in-flow "main" button the bar shadows: the card's own CTA on a game
+    // page, the form's submit on checkout (never the one inside the bar itself).
+    var anchor = bar.classList.contains("co-bar")
+      ? [].filter.call(document.querySelectorAll(".co-cta"),
+          function (b) { return !b.closest(".co-bar"); })[0]
+      : document.querySelector(".ob-cta");
+    if (!anchor) return;
+    var shown = false, ticking = false;
+    function sweep() {
+      ticking = false;
+      var r = anchor.getBoundingClientRect();
+      // Reveal once the button's bottom edge has passed above the viewport top.
+      // A display:none anchor (desktop) reports 0, which never crosses — the bar
+      // is display:none there anyway, so the class is harmless.
+      var past = r.bottom < 0;
+      if (past === shown) return;
+      shown = past;
+      bar.classList.toggle("is-revealed", past);
+    }
+    function onScroll() {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(sweep);
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    sweep();
   }
 
   /* ── stat boxes: count-up + rise-in when scrolled into view ──────────── */

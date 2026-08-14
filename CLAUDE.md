@@ -637,36 +637,54 @@ trust · 04 FAQ · close.
 Retired with the old page: `game_cards()` (the flat tile grid) and `guarantee_cards()` (the plain
 `cards-3` copy of `D.GUARANTEES` — `promise_cards()` is the one shell now).
 
-## The sticky mobile price bar (`.mobile-bar`)
+## The sticky mobile checkout bar (`.mobile-bar`)
 
-`layout(mobile_bar=True)` — the nine game pages. It is the phone's copy of the order card's close,
-and below 1000px the card deliberately drops its own total and CTA
-(`.ob-sum-l .price-pair, .ob-cta, .ob-assure { display: none }`) so exactly one button is on screen.
-It is **not** the Best Sellers handoff's own sticky bar, which is still deliberately not built —
+`layout(mobile_bar=True)` — the nine game pages. It is the **`design_handoff_sticky_checkout_bar`**
+port: the persistent bottom bar that keeps the live price, ETA, configuration and the one CTA in view
+while the ~1000px configurator scrolls. Below 1000px the card deliberately drops its own total and
+CTA (`.ob-sum-l .price-pair, .ob-cta, .ob-assure { display: none }`) so exactly one filled button is
+on screen. It is **not** the Best Sellers handoff's own sticky bar, still deliberately not built —
 two would stack. `/games/` has no configurator and so no price to pin: its phone bar is `.gc-bar`,
-one CTA into the lead game (see the catalogue section above), and the two never appear together.
+one CTA into the lead game, and the two never appear together.
 
-Three rows, in the order the decision is made. It used to be one: a price over a mono config line
-with a "Continue" that named no destination, so it asked for a tap while answering none of the three
-questions a buyer has at that moment.
+Structure (handoff anatomy, top to bottom):
 
-- **Row 1 — the money and the button.** Live total, the struck original, and the saving as a
-  **pill** (`data-out="saveAmt"`, the bare amount — `discount` is the signed receipt figure and a
-  pill opening with a minus reads as a charge). Sized so a three-figure price, its struck original
-  and the pill sit on one line at 375px; `flex-wrap` is the safety valve behind that, not the plan,
-  because EUR runs wider. The button says **Checkout**, not "Continue".
-- **Row 2 — what the money buys.** The delivery estimate and the configuration. Only the
-  configuration may shrink: a truncated "4 da…" answers nothing.
-- **Row 3 — the two objections**, centred: secure checkout, money-back. The **glyphs carry the
-  green and the words stay muted** — two green sentences under an ember button is three accents in
-  40px of bar.
-- **`body.has-bar`'s padding is measured, not guessed**: 124px, and 138px below 400px where the
-  pill takes its own line. Too small and the footer's last row sits under the bar with no way to
-  reach it.
-- It declares its own `--h-tint` / `--l-good`: it is a child of `<body>`, outside `.hero-a` and
+- **Accent hairline** (`.mb-hair`) — 2px, ember faded to transparent at both ends. A full-width solid
+  accent line reads as an error; the fade makes it a highlight. It uses the `#ff5a1f` literal, not
+  `var(--ember)`: the bar is outside `.hero-a`, where `--ember` is the site's global `#ff4a1f`.
+- **Price row** (`.mb-top`) — the money over a one-line meta on the **left** (`.mb-left`), the tall
+  CTA spanning both on the **right**. The money line is the 30px total, the struck original, and the
+  saving as a **pill** (`data-out="saveAmt"` — `discount` is the signed receipt figure, and a pill
+  opening with a minus reads as a charge). The meta is `clock · ETA · config`; only the config
+  (`.mb-cfg`) may shrink — it grows with tier names and truncating it is correct, because the price
+  and ETA to its left must never be pushed. `.mb-money` wraps as the safety valve (EUR runs wider).
+- **CTA** (`.mb-cta`) — 54px, the one filled button. It **relabels per product** through the card's
+  own hooks: `data-hide-service="coaching"` hides "Checkout" and `data-out="bookLabel"` shows
+  "Book 3 hours" on coaching, where the meta's `days` also becomes the session day ("Tonight, 20:00").
+- **Assurance row** (`.mb-assure`) — centred, secure-checkout / money-back with a 1px divider. The
+  **glyphs carry the green, the words stay muted** — two green sentences under an ember button is a
+  third accent in 40px of bar.
+
+Load-bearing:
+
+- **`position: fixed`, not the handoff's `sticky`.** The handoff's own headline risk is a
+  clipping-overflow ancestor silently disabling sticky; fixed is immune, produces the identical
+  layered result, and is the site's established pattern. This is the one deliberate deviation.
+- **The ground is a gradient + `blur(16px)` + an *upward* shadow** (`0 -14px 34px`), so the page reads
+  *through* the bar as content scrolls under it and the shadow separates it — the 1px border alone
+  was not enough on a dark ground.
+- **The home indicator is mock chrome; production uses the safe-area inset.** The root carries
+  `padding-bottom: env(safe-area-inset-bottom)` so the CTA clears the iOS home bar.
+- **`body.has-bar` padding is measured, not guessed**: 116px (bar is 109px at ≥363px). Below 360px
+  the "Checkout" money line wraps the pill and the bar reaches ~139px → `body.has-bar` 146px there.
+  Coaching pages carry `has-bar-coach` (146px at every width), because the wider "Book 3 hours" CTA
+  wraps the line at 375px too — `initHeader`/app.js sets that class when a `[data-service="coaching"]`
+  tab exists, so the six non-coaching games never pay the taller reserve.
+- **It declares its own `--h-tint` / `--l-good`**: a child of `<body>`, outside `.hero-a` and
   `.rail`, and an unresolvable `var()` computes to the *initial* value, not an inherited one.
-- Every figure is a `data-out` the order card already fills, so the bar and the card cannot quote
-  two prices. "Save" is its own translatable node with the amount in a `<b>`.
+- **Every figure is a `data-out` the order card already fills**, so the bar and the card cannot quote
+  two prices — the handoff's "do not recompute" rule. `.mb-money` is `aria-live="polite"` so a screen
+  reader announces the new total after an input change. "Save" is its own translatable node.
 
 ## The checkout page
 

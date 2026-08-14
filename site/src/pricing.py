@@ -116,7 +116,15 @@ def quote(state):
         frm, to = state.get("from"), state.get("to")
         if frm not in ladder or to not in ladder:
             return _invalid("Unknown rank")
-        i, j = ladder.index(frm), ladder.index(to)
+        # A matching bundle is a FLAT price across its whole from-tier: every
+        # division quotes as the FULL two-tier climb (the from-tier's bottom
+        # division → target), so Emerald I → Diamond IV costs the same as the
+        # real Emerald IV → Diamond IV work — the "two tiers up in one order"
+        # the card advertises, discounted, never a sliver of it. The buyer's
+        # real ranks still show in the summary. Mirrored in app.js.
+        bundle = D.active_bundle(g, frm, to, state.get("bundle"))
+        price_from = bundle["defFrom"] if bundle else frm
+        i, j = ladder.index(price_from), ladder.index(to)
         steps = j - i
         if steps <= 0:
             return _invalid("Target must sit above your current rank")

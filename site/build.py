@@ -509,9 +509,9 @@ def hd_live(cls=""):
         return ""
     return (f'<p class="hd-live{(" " + cls) if cls else ""}">'
             f'<span class="hd-live-halo" aria-hidden="true"><span class="hd-live-dot"></span></span>'
-            f'<span class="hd-live-txt"><b>Online now</b><i aria-hidden="true">—</i>'
+            f'<span class="hd-live-txt"><b>Online Now</b><i aria-hidden="true">—</i>'
             f'<b class="hd-live-n" data-live="online" data-live-min="36" '
-            f'data-raw="{n}">{n}</b><span>verified boosters</span></span></p>')
+            f'data-raw="{n}">{n}</b><span>Verified Boosters</span></span></p>')
 
 
 def hd_menu(key):
@@ -3942,8 +3942,12 @@ def bundle_strip(g):
             else "Two tiers up in one order, from wherever you are")
     cards = ""
     for i, b in enumerate(climbs):
+        # Price the FULL two-tier climb (from-tier's bottom division → target),
+        # not the cheapest sub-climb: the bundle is a flat price every division
+        # in the tier pays, so the advertised figure has to be the real "two
+        # tiers up" work, discounted — see pricing.py / app.js.
         q = pricing.quote({"game": g["name"], "service": "division",
-                           "from": b["floorFrom"], "to": b["target"],
+                           "from": b["defFrom"], "to": b["target"],
                            "mode": "Solo", "addons": []})
         full = q["subtotal"]
         price = pricing._jsround(full * (1 - b["disc"]))
@@ -4066,6 +4070,10 @@ def wizard(game=None):
             <span class="ob-arrow-ring">{_ico("arrow", 13, "ico", stroke=True)}</span>
           </span>
           {rank_plate(g, "to")}
+        </div>
+        <div class="ob-err" data-when-invalid role="alert" hidden>
+          {_ico("warn", 15, "ob-err-ico", stroke=True)}
+          <span>Target must sit above your current rank</span>
         </div>
         {ladder_strip(g)}
       </div>
@@ -4253,6 +4261,11 @@ def bs_band(games):
           <span class="bs-arrow-d">{_ico("arrow-down", 16, "ico", stroke=True)}</span>
         </span>
         {rank_panel(g, "to")}
+      </div>
+
+      <div class="bs-err" data-when-invalid role="alert" hidden>
+        {_ico("warn", 15, "bs-err-ico", stroke=True)}
+        <span>Target must sit above your current rank</span>
       </div>
 
       <div class="bs-ranks bs-controls">
@@ -5006,27 +5019,37 @@ def gp_while():
     </section>"""
 
 
+def gp_brow(g, b, top=False):
+    """One booster row on the game page's roster board. A <div> holding two
+    independent targets — the name links to the profile, the CTA carries the
+    booster into this game's configurator (?booster=<handle>, the same link the
+    roster's Hire and the spotlight card use; it never touches the price). The
+    availability ring and the queue pill both read `queue`, so they can't drift.
+    """
+    order_href = "/games/%s.html?booster=%s" % (g["slug"], b["handle"])
+    tint = D.tier_color(g, b["tier"])
+    badge = (f'<span class="gp-brow-top">{_ico("crown", 11, "ico", stroke=True)}'
+             f'<span>Top booster</span></span>') if top else ""
+    return f"""<div class="gp-brow{' is-top' if top else ''}">
+      <a class="gp-brow-who" href="{booster_href(b)}">
+        <span class="gp-brow-ring rst-ring{'' if is_free(b) else ' is-busy'}">{booster_face(b)}</span>
+        <span class="gp-brow-id">
+          <span class="gp-brow-name">{esc(b["handle"])}{badge}</span>
+          <span class="gp-brow-rank"><i class="gp-brow-tdot" style="--tier:{esc(tint)}" aria-hidden="true"></i>{esc(b["peak"])} <i aria-hidden="true">·</i> {esc(b["region"])}</span>
+        </span>
+      </a>
+      <div class="gp-brow-stats">
+        <span class="gp-brow-stat"><b>{esc(str(b["orders"]))}</b><span>Orders</span></span>
+        <span class="gp-brow-stat"><b>{_ico("star", 12, "gp-brow-star")}{esc(b["rating"])}</b><span>Rating</span></span>
+        <span class="gp-brow-stat gp-brow-ontime"><b>{esc(b["ontime"])}</b><span>On time</span></span>
+      </div>
+      <span class="gp-brow-role">{_ico("crosshair", 14, "gp-dp-ico", stroke=True)}{esc(b["role"])}</span>
+      {queue_pill(b, "gp-brow-pill")}
+      <a class="gp-brow-cta" href="{esc(order_href)}"><span>Order with</span> <b>{esc(b["handle"])}</b>{_ico("arrow", 14, "ico", stroke=True)}</a>
+    </div>"""
+
+
 def gp_who(g, roster):
-    cards = ""
-    for i, b in enumerate(roster[:3]):
-        top = '<span class="gp-who-top">#1</span>' if i == 0 else ""
-        cards += f"""<div class="gp-who-card{' is-top' if i == 0 else ''}">
-          <div class="gp-who-id">
-            <span class="gp-who-av" aria-hidden="true"><span>{esc(b["handle"][0].upper())}</span></span>
-            <span class="gp-who-meta">
-              <span class="gp-who-name">{esc(b["handle"])}{top}</span>
-              <span class="gp-who-rank">{esc(b["peak"])} · {esc(b["region"])}</span>
-            </span>
-          </div>
-          <div class="gp-who-stats">
-            <div class="gp-who-stat"><span class="gp-who-v">{esc(str(b["orders"]))}</span>
-              <span class="gp-who-k">Orders</span></div>
-            <span class="gp-who-div" aria-hidden="true"></span>
-            <div class="gp-who-stat"><span class="gp-who-v">{_ico("star", 13, "gp-who-star")}{esc(b["rating"])}</span>
-              <span class="gp-who-k">Rating</span></div>
-          </div>
-          <span class="gp-who-spec">{_ico("crosshair", 15, "gp-dp-ico", stroke=True)}{esc(b["role"])}</span>
-        </div>"""
     n = len([b for b in D.BOOSTERS if b["slug"] == g["slug"]]) or len(roster)
     tab = g.get("tab") or g["short"]
     # The floor the board is held to, read off the roster rather than typed:
@@ -5034,6 +5057,17 @@ def gp_who(g, roster):
     own = [b for b in D.BOOSTERS if b["slug"] == g["slug"]] or roster
     floor_tier = min((b["tier"] for b in own),
                      key=lambda t: g["tiers"].index(t) if t in g["tiers"] else 99)
+    shown = roster[:3]
+    rows = "".join(gp_brow(g, b, top=(i == 0)) for i, b in enumerate(shown))
+    # "N more on the roster" — counted, never typed; the link lands on the same
+    # full board "See the roster" does. Only drawn when there is genuinely more
+    # behind it, so it is never a dead pointer to nothing.
+    rest = max(0, n - len(shown))
+    noun = "booster" if rest == 1 else "boosters"
+    foot = (f"""<div class="gp-brow-foot">
+        <span class="gp-brow-foot-t">{_ico("users", 15, "gp-dp-ico", stroke=True)}<span><b>{rest}</b> more {esc(tab)} {noun}</span> <i aria-hidden="true">on the roster, all {esc(floor_tier)} or above.</i></span>
+        <a class="gp-brow-all" href="/boosters/">See all <b>{n}</b>{_ico("arrow", 13, "ico", stroke=True)}</a>
+      </div>""") if rest else ""
     return f"""<section class="gp-sec">
       <div class="wrap gp-inner gp-who">
         <div class="gp-who-copy">
@@ -5042,9 +5076,14 @@ def gp_who(g, roster):
           <p class="gp-p gp-p-sm">{spell(n).capitalize()} of them, {esc(tab)} only — {esc(floor_tier)}
           or above, with a clean account history and a name you can look up. Order without naming
           anyone and it goes to whoever is free; name one and it waits for them.</p>
+          <span class="gp-who-rule" aria-hidden="true"></span>
+          <ul class="gp-who-feats">
+            <li>{_ico("seal", 15, "gp-dp-ico", evenodd=True)}<span>Rank verified every month</span></li>
+            <li>{_ico("undo", 15, "gp-dp-ico", stroke=True)}<span>One free swap, no reason needed</span></li>
+          </ul>
           <a class="gp-outline" href="/boosters/">See the roster{_ico("arrow", 14, "ico", stroke=True)}</a>
         </div>
-        <div class="gp-who-cards">{cards}</div>
+        <div class="gp-who-board">{rows}{foot}</div>
       </div>
     </section>"""
 
@@ -5363,8 +5402,8 @@ def page_game(g):
 {gp_safety(g)}
 {gp_reviews(g, revs)}
 {gp_faq(g, faq)}
-{gp_close()}
-</div>"""
+</div>
+{cta_band(live=True, cta=("Continue your order", "/checkout.html"))}"""
 
     return layout("/games/%s.html" % g["slug"],
                   "%s boosting — live price, no account needed | %s" % (g["name"], D.BRAND),
@@ -7259,9 +7298,20 @@ def page_checkout():
           guarantee</a></p>
 
           <div class="co-bar" role="region" aria-label="Live total">
-            <span class="co-bar-p">
-              <span class="co-was" data-when-discount data-sum="was" hidden></span>
-              <span class="co-total" data-sum="total">—</span>
+            <span class="co-bar-l">
+              <span class="co-bar-p">
+                <span class="co-was" data-when-discount data-sum="was" hidden></span>
+                <span class="co-total" data-sum="total">—</span>
+              </span>
+              <!-- The gap beside the price was dead space; fill it with the two
+                   boosting facts the buyer is deciding on — how long the climb
+                   takes and which game it is on. Both read the same data-sum
+                   hooks the summary card does, so one render() fills all three. -->
+              <span class="co-bar-meta">
+                {_ico("clock-countdown", 12, "ico", stroke=True)}<span class="co-bar-eta" data-sum="eta">—</span>
+                <span class="co-bar-dot" aria-hidden="true">·</span>
+                <span class="co-bar-cfg" data-sum="game">—</span>
+              </span>
             </span>
             <button class="co-cta" type="submit"><span data-btn-label>Place the order</span></button>
           </div>

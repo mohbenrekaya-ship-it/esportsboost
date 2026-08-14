@@ -212,6 +212,8 @@
       "Legal": "Mentions légales",
       "24/7 Customer Support": "Support client 24/7",
       "Online now": "En ligne",
+      "Online Now": "En ligne",
+      "Verified Boosters": "boosters vérifiés",
       "Typical reply": "Réponse habituelle en",
       "Need help? Our support team is available anytime to assist you with your orders and questions.":
         "Besoin d'aide ? Notre équipe de support est disponible à tout moment pour vos commandes et vos questions.",
@@ -650,6 +652,12 @@
       "Completed orders": "Commandes terminées",
       "Completed": "Terminée",
       "Rating": "Note",
+      "On time": "À l'heure",
+      "Top booster": "Meilleur booster",
+      "Rank verified every month": "Rang vérifié chaque mois",
+      "One free swap, no reason needed": "Un changement gratuit, sans justification",
+      "See the roster": "Voir l'effectif",
+      "See all": "Tout voir",
       "day": "jour",
       "Request": "Demander",
       "Name them at checkout and your order waits for them instead of going to the open board.":
@@ -1211,6 +1219,8 @@
       "Legal": "Rechtliches",
       "24/7 Customer Support": "24/7-Kundensupport",
       "Online now": "Jetzt online",
+      "Online Now": "Jetzt online",
+      "Verified Boosters": "verifizierte Booster",
       "Typical reply": "Antwort typischerweise in",
       "Need help? Our support team is available anytime to assist you with your orders and questions.":
         "Brauchst du Hilfe? Unser Support-Team ist jederzeit für deine Bestellungen und Fragen da.",
@@ -1637,6 +1647,12 @@
       "Completed orders": "Abgeschlossene Bestellungen",
       "Completed": "Abgeschlossen",
       "Rating": "Bewertung",
+      "On time": "Pünktlich",
+      "Top booster": "Top-Booster",
+      "Rank verified every month": "Rang jeden Monat überprüft",
+      "One free swap, no reason needed": "Ein kostenloser Wechsel, ohne Angabe von Gründen",
+      "See the roster": "Kader ansehen",
+      "See all": "Alle ansehen",
       "day": "Tag",
       "Request": "Anfrage:",
       "Name them at checkout and your order waits for them instead of going to the open board.":

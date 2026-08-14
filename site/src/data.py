@@ -286,22 +286,28 @@ def bundle_climbs(g):
     return out
 
 
-def bundle_discount(g, from_rank, to_rank, idx):
-    """The discount for an opt-in bundle (index `idx`), but only while the current
-    climb still matches it: `from_rank` in the bundle's from-tier and `to_rank`
-    equal to its target. Changing division keeps it; changing tier or target
-    drops it. Returns 0 when no bundle is active or the climb no longer matches —
-    the handoff's rule, enforced on both the server and the client."""
+def active_bundle(g, from_rank, to_rank, idx):
+    """The opt-in bundle climb (index `idx`), but only while the current climb
+    still matches it: `from_rank` in the bundle's from-tier and `to_rank` equal
+    to its target. Changing division keeps the match; changing tier or target
+    drops it. Returns the climb dict, or None — the handoff's rule, enforced on
+    both the server and the client."""
     if idx is None:
-        return 0.0
+        return None
     climbs = bundle_climbs(g)
     try:
         b = climbs[int(idx)]
     except (TypeError, ValueError, IndexError):
-        return 0.0
+        return None
     dm = g.get("divmap") or {}
     from_tier = next((t for t, ranks in dm.items() if from_rank in ranks), None)
-    return b["disc"] if (from_tier == b["ft"] and to_rank == b["target"]) else 0.0
+    return b if (from_tier == b["ft"] and to_rank == b["target"]) else None
+
+
+def bundle_discount(g, from_rank, to_rank, idx):
+    """The discount for a matching opt-in bundle, else 0. See active_bundle()."""
+    b = active_bundle(g, from_rank, to_rank, idx)
+    return b["disc"] if b else 0.0
 
 
 # Notes are deliberately one line each: the order card draws them under the
@@ -678,6 +684,14 @@ BOOSTERS = [
          peak="FPL-C, 25k Premier", peak_full="FPL-C · 25k Premier · NA", tier="25k",
          wr_n=69, queue="free", orders=108, role="IGL", since="Mar 2023",
          rating="4.7", ontime="95%", disputes="0"),
+    dict(handle="krios", slug="counter-strike-2", region="EU", hue=14,
+         peak="FPL, 26k Premier", peak_full="FPL · 26k Premier · EU", tier="30k",
+         wr_n=72, queue="free", orders=167, role="Rifler", since="Aug 2021",
+         rating="4.9", ontime="98%", disputes="0"),
+    dict(handle="talo", slug="counter-strike-2", region="NA", hue=204,
+         peak="FPL-C, 24k Premier", peak_full="FPL-C · 24k Premier · NA", tier="25k",
+         wr_n=68, queue="1 order", orders=124, role="Entry", since="Feb 2023",
+         rating="4.7", ontime="95%", disputes="1"),
     # Rivals, not LoL: orvo delivers the Marvel Rivals order in LIVE_FEED below,
     # and a roster that calls the same person a League booster contradicts the
     # feed two columns away.
@@ -691,6 +705,14 @@ BOOSTERS = [
          peak="Celestial 410 LP", tier="Celestial", wr_n=71, queue="free",
          orders=118, role="Strategist", since="Jan 2025",
          rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="vellum", slug="marvel-rivals", region="EU", hue=280,
+         peak="Eternity 300 LP", tier="Eternity", wr_n=72, queue="1 order",
+         orders=142, role="Duelist", since="Dec 2024",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="sunder", slug="marvel-rivals", region="NA", hue=40,
+         peak="Celestial 520 LP", tier="Celestial", wr_n=70, queue="free",
+         orders=109, role="Duelist", since="Jan 2025",
+         rating="4.8", ontime="96%", disputes="0"),
     dict(handle="nine", slug="dota-2", region="SEA", hue=16,
          peak="Immortal 8.4k", tier="Immortal", wr_n=73, queue="1 order",
          orders=203, role="Mid / carry", since="Jun 2021",
@@ -701,6 +723,14 @@ BOOSTERS = [
          peak="Divine 5", tier="Divine", wr_n=66, queue="1 order",
          orders=91, role="Offlane", since="Sep 2023",
          rating="4.6", ontime="93%", disputes="0"),
+    dict(handle="veya", slug="dota-2", region="EU East", hue=286,
+         peak="Immortal 7.1k", tier="Immortal", wr_n=71, queue="free",
+         orders=156, role="Carry", since="Mar 2022",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="rurik", slug="dota-2", region="NA", hue=100,
+         peak="Immortal 6.6k", tier="Immortal", wr_n=69, queue="2 orders",
+         orders=118, role="Support", since="Nov 2022",
+         rating="4.7", ontime="95%", disputes="0"),
     # TFT has no head-to-head win: its equivalent metric is the top-4 rate, so
     # the row prints that and `wr_n` is the figure inside its own string. Both
     # sides of the column have to say the same number — the bar is normalised on
@@ -712,24 +742,72 @@ BOOSTERS = [
          rating="4.9", ontime="99%", disputes="0",
          review=("Current-set comps, not last patch's. Double-up runs were the best part.",
                  "EO", 5.0, 1)),
+    dict(handle="vior", slug="teamfight-tactics", region="KR", hue=160,
+         peak="Challenger 1010 LP", tier="Challenger", wr="Top-4 69%", wr_n=69,
+         queue="free", orders=134, role="Flex / tempo", since="Oct 2023",
+         rating="4.9", ontime="98%", disputes="0"),
+    dict(handle="octa", slug="teamfight-tactics", region="NA", hue=20,
+         peak="Challenger 940 LP", tier="Challenger", wr="Top-4 66%", wr_n=66,
+         queue="1 order", orders=88, role="Fast 8", since="Jul 2024",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="pyra_tft", slug="teamfight-tactics", region="EUW", hue=318,
+         peak="Master 410 LP", tier="Master", wr="Top-4 64%", wr_n=64,
+         queue="free", orders=61, role="Reroll", since="Feb 2025",
+         rating="4.7", ontime="95%", disputes="0"),
     dict(handle="cobalt_ix", slug="overwatch-2", region="NA", hue=212,
          peak="Champion, 4520 SR", peak_full="Champion 4520 SR · NA", tier="Champion",
          wr_n=70, queue="1 order", orders=132, role="Main tank", since="Sep 2022",
          rating="4.7", ontime="94%", disputes="1",
          review=("Tank rank only, exactly as ordered, and the profile still looks like "
                  "mine afterwards.", "BR", 4.5, 7)),
+    dict(handle="volk", slug="overwatch-2", region="NA", hue=24,
+         peak="Champion, 4460 SR", peak_full="Champion 4460 SR · NA", tier="Champion",
+         wr_n=72, queue="1 order", orders=147, role="Flex support", since="Jul 2022",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="rhyme", slug="overwatch-2", region="EU", hue=190,
+         peak="Grandmaster, 4200 SR", peak_full="Grandmaster 4200 SR · EU", tier="Grandmaster",
+         wr_n=68, queue="free", orders=101, role="Hitscan", since="Apr 2023",
+         rating="4.8", ontime="96%", disputes="0"),
+    dict(handle="ilse", slug="overwatch-2", region="EU", hue=300,
+         peak="Grandmaster, 4050 SR", peak_full="Grandmaster 4050 SR · EU", tier="Grandmaster",
+         wr_n=66, queue="2 orders", orders=79, role="Off-tank", since="Jan 2024",
+         rating="4.6", ontime="94%", disputes="1"),
     dict(handle="halden", slug="rocket-league", region="EU", hue=224,
          peak="SSL 1885 MMR", tier="Supersonic", wr_n=76, queue="free",
          orders=119, role="2v2 / 3v3", since="May 2021",
          rating="4.9", ontime="98%", disputes="0",
          review=("Called rotations on voice the whole way up. I can hold the rank he "
                  "left me at, which is the point.", "FK", 5.0, 3)),
+    dict(handle="dain", slug="rocket-league", region="NA", hue=140,
+         peak="SSL 1820 MMR", tier="Supersonic", wr_n=74, queue="free",
+         orders=133, role="1v1 / 2v2", since="Jun 2022",
+         rating="4.9", ontime="98%", disputes="0"),
+    dict(handle="mox_rl", slug="rocket-league", region="NA", hue=30,
+         peak="SSL 1795 MMR", tier="Supersonic", wr_n=71, queue="free",
+         orders=112, role="3v3", since="Nov 2021",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="quor", slug="rocket-league", region="EU", hue=260,
+         peak="GC3 1610 MMR", tier="Grand Champ", wr_n=68, queue="1 order",
+         orders=96, role="2v2 / 3v3", since="Mar 2023",
+         rating="4.7", ontime="95%", disputes="0"),
     dict(handle="tsuro", slug="apex-legends", region="EU", hue=6,
          peak="Predator #740", tier="Predator", wr_n=68, queue="2 orders",
          orders=64, role="Fragger", since="Oct 2024",
          rating="4.8", ontime="96%", disputes="0",
          review=("Badge order, delivered in two days with the clips to prove it.",
                  "MT", 5.0, 9)),
+    dict(handle="rev_apex", slug="apex-legends", region="NA", hue=8,
+         peak="Predator #610", tier="Predator", wr_n=70, queue="free",
+         orders=97, role="IGL", since="Feb 2024",
+         rating="4.8", ontime="96%", disputes="0"),
+    dict(handle="kryo", slug="apex-legends", region="EU", hue=210,
+         peak="Predator #920", tier="Predator", wr_n=67, queue="1 order",
+         orders=72, role="Fragger", since="Sep 2024",
+         rating="4.7", ontime="95%", disputes="0"),
+    dict(handle="wisp_ax", slug="apex-legends", region="NA", hue=48,
+         peak="Master, 41k RP", tier="Master", wr_n=66, queue="free",
+         orders=58, role="Support / recon", since="Jan 2025",
+         rating="4.7", ontime="94%", disputes="0"),
 
     # ── added roster — LoL & Valorant, EUW/EU + NA ─────────────────────────
     # PLACEHOLDER like the rest of this block (see the warning at the top of the
