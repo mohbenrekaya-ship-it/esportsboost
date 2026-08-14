@@ -55,6 +55,11 @@ SESSION_TTL = 30 * 86400   # "signed in for 30 days" — matches the panel's cop
 STATE_COOKIE = "esb_oauth_state"
 SESSION_COOKIE = "esb_session"
 HTTP_TIMEOUT = 20
+# Discord's API sits behind Cloudflare, which 403s the default `Python-urllib`
+# User-Agent (Cloudflare error 1010). Every server-side call needs a real UA or
+# the token exchange / userinfo fetch fails — Google's endpoints don't care, so
+# this only ever mattered for Discord.
+USER_AGENT = "esportsboost-oauth/1.0 (+https://esportsboost.com)"
 
 # Per-provider endpoints and the userinfo shape. `norm` maps a provider's raw
 # profile JSON onto the two facts this site keeps — a display name and a
@@ -206,6 +211,7 @@ def _post_form(url, params):
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
     req.add_header("Accept", "application/json")
+    req.add_header("User-Agent", USER_AGENT)
     with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
         return json.loads(resp.read().decode())
 
@@ -214,6 +220,7 @@ def _get_json(url, access_token):
     req = urllib.request.Request(url, method="GET")
     req.add_header("Authorization", "Bearer " + access_token)
     req.add_header("Accept", "application/json")
+    req.add_header("User-Agent", USER_AGENT)
     with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
         return json.loads(resp.read().decode())
 
