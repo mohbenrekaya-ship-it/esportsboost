@@ -3531,6 +3531,9 @@ body.hd-locked {
 .bs .seg-pct { font-size: 12.5px; font-weight: 600; }
 .bs-regions { display: flex; flex-wrap: wrap; gap: 5px; width: 100%; }
 .bs-regionbtn { flex: 1 1 52px; min-width: 52px; height: auto; padding: 11px 12px; letter-spacing: .04em; }
+/* Full label on wide chips; the short code takes over only where the flex chips
+   go to a 4-up grid at phone width (below 760px) and full names truncate. */
+.bs-region-abbr { display: none; }
 
 /* ── climb readout + rail ──────────────────────────────────────────────── */
 .bs-err {
@@ -3734,6 +3737,15 @@ body.hd-locked {
   .bs-total { font-size: 30px; }
   .bs-save { font-size: 10.5px; margin-left: auto; }
   .bs-cta { width: 100%; height: 52px; }
+}
+
+/* Phone: the region chips are too narrow for full names ("North A…"), so the
+   homepage band's chips swap to the short code. Only the band does this — the
+   game-page region SELECT keeps full names. Placed before the 360px block so
+   that block's grid-column change still wins where both match. */
+@media (max-width: 760px) {
+  .bs-region-full { display: none; }
+  .bs-region-abbr { display: inline; }
 }
 
 @media (max-width: 360px) {

@@ -229,6 +229,28 @@ GAMES = [
     ),
 ]
 
+# Short region codes — full names read best in the game-page region SELECT, but
+# the homepage Best Sellers band draws its regions as CHIPS, which truncate at
+# phone width ("North A…"). buildRegions() in app.js falls back to these on the
+# chips only (CSS picks short below 760px); anything not listed keeps its full
+# name. Shipped as `regionShort` in client_data.
+REGION_SHORT = {
+    "North America": "NA",
+    "North America East": "NA E",
+    "North America West": "NA W",
+    "Europe": "EU",
+    "Europe West": "EUW",
+    "EU Nordic & East": "EUNE",
+    "Europe East": "EUE",
+    "Oceania": "OCE",
+    "Southeast Asia": "SEA",
+    "China": "CN",
+    "Latin America": "LATAM",
+    "South America": "SA",
+    "Brazil": "BR",
+    "Korea": "KR",
+}
+
 # Site-wide display order (games index, footer, dropdowns, client data). Change
 # this one list to re-rank the games everywhere. The homepage mosaic has its own
 # hand-tuned layout — see TILE_ORDER.

@@ -27,6 +27,27 @@ UNIT_MIN, UNIT_MAX = 1, 5
 # app.js — change one, change the other.
 DUO_MULT = 1.55
 
+# Display/charge FX rates, MIRRORED EXACTLY from i18n.js `window.ESB_RATES`. The
+# quote is computed in USD, but the customer sees — and is charged in — whichever
+# currency they picked, converted at these fixed rates. The Stripe session is
+# created in that same currency at the same rate, so the amount on the Stripe page
+# equals the amount on the button. Change one, change the other (see CLAUDE.md).
+CHARGE_RATES = {"usd": 1.0, "eur": 0.92}
+
+
+def charge_for(total_usd, currency):
+    """(currency_code, integer minor units) for the Stripe line item.
+
+    The button shows the total as `esbMoney(total)` — a WHOLE currency unit (no
+    decimals), i.e. `round(total_usd * rate)`. We charge that exact figure so
+    Stripe never quotes a different number than the customer clicked. Unknown
+    currencies fall back to USD (the base the quote is already in)."""
+    cur = str(currency or "usd").strip().lower()
+    if cur not in CHARGE_RATES:
+        cur = "usd"
+    whole_units = _jsround(total_usd * CHARGE_RATES[cur])
+    return cur, whole_units * 100
+
 
 def _jsround(x):
     """Match JavaScript's Math.round (round-half-up) so the price the browser

@@ -690,7 +690,7 @@
         buildRegions(root);
       }
       Array.prototype.forEach.call(root.children, function (b) {
-        b.setAttribute("aria-pressed", b.textContent === state.region ? "true" : "false");
+        b.setAttribute("aria-pressed", b.getAttribute("data-region") === state.region ? "true" : "false");
       });
     });
 
@@ -1030,11 +1030,19 @@
   // region chips (Best Sellers band)
   function buildRegions(root) {
     var list = D.regions[state.game] || [];
+    var shortMap = D.regionShort || {};
     root.innerHTML = "";
     list.forEach(function (r) {
       var b = document.createElement("button");
       b.type = "button"; b.className = "bs-regionbtn";
-      b.textContent = r;
+      b.setAttribute("data-region", r);
+      // Both labels ship; CSS shows the short one only where the chips truncate
+      // (phone width). The value carried into state is always the full name.
+      var full = document.createElement("span");
+      full.className = "bs-region-full"; full.textContent = r;
+      var abbr = document.createElement("span");
+      abbr.className = "bs-region-abbr"; abbr.textContent = shortMap[r] || r;
+      b.appendChild(full); b.appendChild(abbr);
       b.addEventListener("click", function () { set({ region: r }); });
       root.appendChild(b);
     });

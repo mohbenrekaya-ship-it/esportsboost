@@ -4,7 +4,10 @@
    Loaded BEFORE app.js so window.esbMoney / window.ESB_LOCALE exist when the
    runtime takes its first quote. Two independent dimensions, both persisted:
 
-     currency : USD | EUR   (display only — the Stripe charge stays USD)
+     currency : USD | EUR   (both display AND the Stripe charge — the checkout
+                             POSTs this and payments.py charges in it at the same
+                             fixed ESB_RATES rate, so the Stripe page matches the
+                             button. Amount is still recomputed server-side.)
      language : en | fr | de
 
    Language is applied by walking the DOM and swapping any text node / attribute
@@ -29,8 +32,10 @@
   window.ESB_LOCALE = locale;
 
   /* ── currency ─────────────────────────────────────────────────────────── */
-  // Fixed display rate. The amount actually charged is recomputed server-side
-  // in USD (pricing.py) — this only converts what the customer sees.
+  // Fixed FX rate for both the displayed price AND the Stripe charge. The amount
+  // is recomputed server-side (pricing.py) in USD, then converted to the picked
+  // currency at THIS rate for the charge — pricing.CHARGE_RATES mirrors this map,
+  // so change one, change the other, or the Stripe page won't match the button.
   window.ESB_RATES = { USD: 1, EUR: 0.92 };
 
   var LOCALE_TAG = { en: "en-US", fr: "fr-FR", de: "de-DE" };

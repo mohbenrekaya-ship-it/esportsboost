@@ -7556,6 +7556,9 @@ def page_checkout():
       wins: s.wins, placements: s.placements, region: s.region, addons: s.addons,
       promo: s.promo || '',
       booster: s.booster || '',
+      // Charge in the currency the customer is viewing prices in. The amount is
+      // still recomputed server-side; only the currency choice rides along.
+      currency: (window.ESB_LOCALE && window.ESB_LOCALE.currency) || 'USD',
       email: mail.value.trim(),
       hours: (form.querySelector('#k-hours') || {}).value || '',
       notes: (form.querySelector('#k-notes') || {}).value || ''
@@ -7620,7 +7623,17 @@ def page_checkout_success():
   var bodyEl = document.querySelector('[data-state-body]');
   var receipt = document.querySelector('[data-receipt]');
   function set(k, t, b) { kicker.textContent = k; title.textContent = t; bodyEl.textContent = b; }
-  var usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+  // Format in whatever currency Stripe actually charged (returned by /api/session),
+  // so the receipt matches the button — not always a dollar sign.
+  function fmtMoney(amount, cur) {
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency', currency: (cur || 'usd').toUpperCase()
+      }).format(amount);
+    } catch (e) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+    }
+  }
 
   if (!sid) {
     set('No order', 'Nothing to show here', 'This page confirms a completed payment. Start an order to continue.');
@@ -7634,7 +7647,7 @@ def page_checkout_success():
       set('Payment received', 'You\\'re all set', 'Your order is on the booster board. We\\'ve emailed your one-click tracking link.');
       document.querySelector('[data-r="order"]').textContent = d.order_id || '—';
       document.querySelector('[data-r="amount"]').textContent =
-        (typeof d.amount_total === 'number') ? usd.format(d.amount_total / 100) : '—';
+        (typeof d.amount_total === 'number') ? fmtMoney(d.amount_total / 100, d.currency) : '—';
       document.querySelector('[data-r="detail"]').textContent = d.detail || '—';
       document.querySelector('[data-r="eta"]').textContent = d.eta || '—';
       receipt.hidden = false;
@@ -7643,6 +7656,7 @@ def page_checkout_success():
         var p = window.esbItemParams();
         p.transaction_id = d.order_id;
         if (typeof d.amount_total === 'number') p.value = d.amount_total / 100;
+        if (d.currency) p.currency = String(d.currency).toUpperCase();
         window.esbTrack('purchase', p);
       } catch (e) {}
       try { localStorage.removeItem('esb.order.v1'); } catch (e) {}
@@ -7962,6 +7976,7 @@ def client_data():
         "services": {g["name"]: g["services"] for g in D.GAMES},
         "slugs": {g["name"]: g["slug"] for g in D.GAMES},
         "regions": {g["name"]: g["regions"] for g in D.GAMES},
+        "regionShort": D.REGION_SHORT,
         "addons": D.ADDONS,
         "promos": D.PROMOS,
         # Coaching — the booking product. Its price never touches the rank

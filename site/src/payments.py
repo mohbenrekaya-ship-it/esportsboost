@@ -113,14 +113,20 @@ def build_session(order, base_url):
     if booster:
         desc += " · with %s" % booster
 
+    # Charge in the currency the customer was quoted in (USD/EUR), at the same
+    # fixed rate app.js displayed — so the Stripe page shows the amount on the
+    # button, not a raw-USD figure the buyer never saw. Server-side conversion
+    # only; the client's number is never trusted for the amount.
+    charge_cur, charge_amount = pricing.charge_for(q["total"], order.get("currency"))
+
     params = {
         "mode": "payment",
         "success_url": base_url + "/checkout/success.html?session_id={CHECKOUT_SESSION_ID}",
         "cancel_url": base_url + "/checkout.html?canceled=1",
         "client_reference_id": order_id,
         "line_items[0][quantity]": 1,
-        "line_items[0][price_data][currency]": "usd",
-        "line_items[0][price_data][unit_amount]": q["total_cents"],
+        "line_items[0][price_data][currency]": charge_cur,
+        "line_items[0][price_data][unit_amount]": charge_amount,
         "line_items[0][price_data][product_data][name]": name,
         "line_items[0][price_data][product_data][description]": desc,
         # order details ride along so fulfilment (webhook) has what it needs
@@ -133,6 +139,7 @@ def build_session(order, base_url):
         "metadata[hours]": (order.get("hours") or "")[:490],
         "metadata[notes]": (order.get("notes") or "")[:490],
         "metadata[eta]": q["eta"],
+        "metadata[currency]": charge_cur,
         "metadata[promo]": q["promo_code"],
         "metadata[discount]": str(q["discount"]),
         "metadata[subtotal]": str(q["subtotal"]),
