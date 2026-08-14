@@ -222,8 +222,64 @@ def process_webhook(raw, sig_header):
                 f.write(json.dumps(record) + "\n")
         except OSError:
             pass
+        # Also record it into the orders store, so the /ops Orders tab shows real
+        # fulfilments alongside (or instead of) the seeded placeholders. Every
+        # field the checkout put in Stripe metadata rides along. Best-effort by
+        # design — a store hiccup must never fail the webhook (Stripe would retry
+        # a non-200 and we'd double-fulfil), so it is wrapped and swallowed.
+        try:
+            _record_order(md, obj)
+        except Exception as e:               # noqa: BLE001 — never break fulfilment
+            sys.stderr.write("orders store write skipped: %s\n" % e)
         sys.stderr.write("paid order → %s\n" % record.get("order_id"))
     return 200, {"received": True}
+
+
+def _record_order(md, obj):
+    """Turn a completed Stripe session's metadata into an orders-store row. Kept
+    out of the webhook body so its import is lazy — the store module is only
+    needed on the fulfilment path, not on every checkout/session call."""
+    import orders  # noqa: E402 — lazy: only the webhook needs the store
+    frm, to = "", ""
+    detail = md.get("detail") or ""
+    if "→" in detail:                        # "Gold IV → Platinum II · Solo"
+        climb = detail.split("·")[0]
+        frm, _, to = climb.partition("→")
+        frm, to = frm.strip(), to.strip()
+    mode = "Duo queue" if "duo" in detail.lower() else "Piloted"
+    orders.append([{
+        "order_id": obj.get("client_reference_id") or md.get("order_id"),
+        "at": int(time.time()),
+        "status": "paid",
+        "game": md.get("game", ""),
+        "service": md.get("service", "division"),
+        "from_rank": frm, "to_rank": to,
+        "mode": mode,
+        "region": md.get("region", ""),
+        "currency": md.get("currency", "usd"),
+        "booster": md.get("booster", ""),
+        "promo": md.get("promo", ""),
+        "eta": md.get("eta", ""),
+        "email": (obj.get("customer_details") or {}).get("email", ""),
+        "notes": md.get("notes", ""),
+        "subtotal": _cents_to_whole(md.get("subtotal")),
+        "discount": _cents_to_whole(md.get("discount")),
+        "total": _amount_whole(obj.get("amount_total")),
+    }])
+
+
+def _cents_to_whole(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _amount_whole(cents):
+    try:
+        return round(int(cents) / 100)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _verify_sig(payload, header):

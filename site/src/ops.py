@@ -32,6 +32,7 @@ import analytics
 import boosters
 import guides
 import insights
+import orders
 
 TOKEN_TTL = 12 * 3600      # a working day, then log in again
 MIN_PASSWORD = 12          # refuse to protect the dashboard with less
@@ -199,5 +200,22 @@ def process_ops(raw):
         # it holds emails (PII), so it is fetched on demand rather than bundled
         # into every dashboard refresh.
         return 200, {"guides": guides.summary(days)}
+
+    if action == "orders":
+        # The orders store — the receipts fulfilment writes (and the seeder
+        # fills). Holds PII (a customer email, a country), so it is fetched on
+        # demand like Accounts, never bundled into the dashboard payload.
+        return 200, {"orders": orders.summary(days)}
+
+    if action == "order":
+        # One order's full detail, fetched on click — the same on-demand pattern
+        # as a session timeline, kept off the list payload.
+        oid = body.get("order_id")
+        if not isinstance(oid, str) or not orders.ORDER_ID_RE.match(oid.upper()):
+            return 400, {"error": "bad_order"}
+        det = orders.detail(oid)
+        if det is None:
+            return 404, {"error": "not_found"}
+        return 200, {"order": det}
 
     return 200, {"data": dashboard_data(days, game)}

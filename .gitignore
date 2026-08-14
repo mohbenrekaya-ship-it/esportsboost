@@ -24,6 +24,12 @@ accounts.ndjson
 site/orders.log
 orders.log
 
+# Local orders store (the /ops Orders tab). Holds order + customer data (PII),
+# seeded rows carry `syn`; production writes to Upstash, same as accounts (see
+# src/orders.py). Never committed.
+site/orders.ndjson
+orders.ndjson
+
 # Local roster store (the boosters board). Seeded/synthetic in dev — the rows
 # carry `syn` — and production writes to Upstash, same as analytics and
 # accounts (see src/boosters.py). Never committed.

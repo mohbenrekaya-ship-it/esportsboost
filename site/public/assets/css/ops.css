@@ -594,6 +594,37 @@ select.field { padding-right: 26px; }
 .lv-feed-val { color: var(--good); font-variant-numeric: tabular-nums; font-weight: 600; flex: none; }
 .lv-feed-flag { font-size: 15px; line-height: 1; flex: none; }
 
+/* ── Orders tab ───────────────────────────────────────────────────────────
+   Status pill + the order drill-down (hero, receipt). Status colours are the
+   reserved status tokens, never the categorical series, so an order state never
+   reads as a chart hue. */
+.ostat {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  border: 1px solid transparent;
+}
+.ostat-paid        { color: #cde2fb; border-color: color-mix(in srgb, var(--s1) 55%, transparent); background: color-mix(in srgb, var(--s1) 16%, transparent); }
+.ostat-assigned    { color: #cfe6da; border-color: color-mix(in srgb, var(--s3) 55%, transparent); background: color-mix(in srgb, var(--s3) 16%, transparent); }
+.ostat-in_progress { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 55%, transparent); background: color-mix(in srgb, var(--warning) 14%, transparent); }
+.ostat-delivered   { color: var(--good); border-color: color-mix(in srgb, var(--good) 55%, transparent); background: color-mix(in srgb, var(--good) 15%, transparent); }
+.ostat-unclaimed   { color: var(--serious); border-color: color-mix(in srgb, var(--serious) 55%, transparent); background: color-mix(in srgb, var(--serious) 14%, transparent); }
+.ostat-refunded    { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 55%, transparent); background: color-mix(in srgb, var(--critical) 14%, transparent); }
+
+.order-hero { background:
+    linear-gradient(120deg, color-mix(in srgb, var(--s1) 10%, transparent), transparent 62%),
+    var(--surface); }
+.order-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.order-id { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.order-line { color: var(--ink-2); font-size: 14px; margin-top: 5px; }
+.order-line b { color: var(--ink); }
+.order-hero-r { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.order-total { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+.order-cur { font-size: 13px; font-weight: 600; color: var(--muted); }
+
+.tbl.receipt { max-width: 420px; }
+.tbl.receipt td:first-child { color: var(--ink-2); }
+.tbl.receipt .receipt-total td { font-weight: 700; color: var(--ink); border-top: 1px solid var(--axis); font-size: 15px; }
+
 @media (max-width: 640px) {
   .lv-now-n { font-size: 46px; }
   .lv-kpis.kpis { grid-template-columns: repeat(3, 1fr); }

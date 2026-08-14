@@ -604,6 +604,11 @@
                 // The free-guides mailing list — another separate store, fetched
                 // on demand (it is PII) and cached until the period changes.
                 guides: null, guidesLoading: false, guidesError: null,
+                // The orders store — receipts fulfilment writes (PII), fetched on
+                // demand. `orderId`/`orderDetail` drive the click-through drill-down,
+                // the same master-detail shape as Sessions.
+                orders: null, ordersLoading: false, ordersError: null,
+                orderId: null, orderDetail: null,
                 // Auto-refresh: poll the dashboard so the numbers stay live
                 // without a manual Refresh. Default on.
                 live: true };
@@ -673,6 +678,7 @@
           if (state.tab === "accounts") loadAccounts();
           if (state.tab === "guides") loadGuides();
           if (state.tab === "boosters") loadBoosters();
+          if (state.tab === "orders" && !state.orderId) loadOrders();
           return;
         }
         toGate();
@@ -2083,6 +2089,326 @@
     return f;
   }
 
+  /* ── Orders — the fulfilment/receipt store ────────────────────────────────
+     A master-detail tab: a list of every order, and clicking an order id opens
+     its full configuration — game, climb, booster, add-ons, region, country,
+     currency, price breakdown. Its own store (src/orders.py), fetched on demand
+     like Accounts because it holds PII. Detail is a second on-click request, the
+     same pattern Sessions uses, so the list payload never carries every order's
+     full record. */
+  var CUR_SYM = { usd: "$", eur: "€", gbp: "£" };
+  function money(n, cur) {
+    var sym = CUR_SYM[(cur || "usd").toLowerCase()] || "$";
+    return sym + fmtNum.format(Math.round(n || 0));
+  }
+  var STATUS_LABEL = {
+    paid: "Paid", assigned: "Assigned", in_progress: "In progress",
+    delivered: "Delivered", unclaimed: "Unclaimed", refunded: "Refunded"
+  };
+  function statusChip(s) {
+    return '<span class="ostat ostat-' + esc(s) + '">' + esc(STATUS_LABEL[s] || s) + "</span>";
+  }
+  var SERVICE_LABEL = {
+    division: "Rank boost", wins: "Net wins", placements: "Placements", coaching: "Coaching"
+  };
+
+  function loadOrders() {
+    if (state.ordersLoading) return;
+    state.ordersLoading = true;
+    state.ordersError = null;
+    api({ action: "orders", token: state.token, days: state.days }).then(function (res) {
+      state.ordersLoading = false;
+      if (res.status === 200 && res.body.orders) {
+        state.orders = res.body.orders;
+      } else if (res.status === 401) {
+        toGate();
+        return;
+      } else if (res.status === 200) {
+        state.ordersError = "This server doesn't serve the orders store yet — it is running an " +
+          "older build. Restart serve.py (the /api routes only reload on restart), then Refresh.";
+      } else {
+        state.ordersError = "Couldn't load orders — the server returned " + res.status + ".";
+      }
+      if (state.tab === "orders") render();
+    }).catch(function () {
+      state.ordersLoading = false;
+      state.ordersError = "Couldn't reach the server. Is it running?";
+      if (state.tab === "orders") render();
+    });
+  }
+
+  function openOrder(id) {
+    state.orderId = id;
+    state.orderDetail = null;
+    render();
+    api({ action: "order", token: state.token, order_id: id }).then(function (res) {
+      if (res.status === 200) {
+        state.orderDetail = res.body.order;
+      } else {
+        state.orderId = null;
+      }
+      render();
+    }).catch(function () {
+      state.orderId = null;
+      render();
+    });
+  }
+
+  function panelOrders() {
+    if (state.orderId) return panelOrderDetail();
+
+    var f = document.createDocumentFragment();
+    var a = state.orders;
+
+    if (state.ordersError && !a) {
+      var er = document.createElement("div");
+      er.className = "card";
+      er.innerHTML = '<p class="empty">' + esc(state.ordersError) + "</p>";
+      var retry = document.createElement("button");
+      retry.className = "btn btn-sm"; retry.type = "button"; retry.textContent = "Try again";
+      retry.style.cssText = "margin:0 auto 16px;display:block";
+      retry.addEventListener("click", function () { state.ordersError = null; loadOrders(); render(); });
+      er.appendChild(retry);
+      f.appendChild(er);
+      return f;
+    }
+    if (!a) {
+      loadOrders();
+      var wait = document.createElement("div");
+      wait.className = "card";
+      wait.innerHTML = '<p class="empty">Loading orders…</p>';
+      f.appendChild(wait);
+      return f;
+    }
+
+    // Placeholder banner — the seeded orders are invented (see data.py). Only real
+    // Stripe fulfilments should be read as real, and those are unseeded rows.
+    if (a.synthetic > 0) {
+      var note = document.createElement("div");
+      note.className = "banner synthetic";
+      note.innerHTML = '<span class="ico">▲</span><div><strong>Includes placeholder orders.</strong> ' +
+        num(a.synthetic) + " of " + num(a.total) + " orders here were written by " +
+        "<code>site/tools/seed_orders.py</code> for the preview — invented configurations about " +
+        "invented boosters. Real orders arrive through the Stripe webhook. Clear the store before launch.</div>";
+      f.appendChild(note);
+    }
+
+    var kr = document.createElement("div");
+    kr.className = "kpis";
+    kr.appendChild(kpi("Orders", num(a.total), undefined, "", true));
+    kr.appendChild(kpi("Revenue", usd(a.revenue)));
+    kr.appendChild(kpi("Avg order", usd(a.aov)));
+    kr.appendChild(kpi("Refunded", num(a.refunded)));
+    kr.appendChild(kpi("Games", num((a.games || []).length)));
+    f.appendChild(kr);
+
+    var statuses = (a.statuses || []).filter(function (s) { return s.count > 0; });
+    var games = a.games || [];
+    var g = document.createElement("div");
+    g.className = "grid";
+    g.appendChild(card({
+      cls: "half", title: "By status",
+      sub: "Where every order in this window sits in the lifecycle.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: statuses.map(function (s) { return { label: STATUS_LABEL[s.status] || s.status, value: s.count }; }),
+          color: SERIES[0], alt: "Orders by status"
+        });
+      },
+      table: {
+        head: ["Status", "Orders"], num: [1],
+        rows: statuses.map(function (s) { return [STATUS_LABEL[s.status] || s.status, num(s.count)]; })
+      }
+    }));
+    g.appendChild(card({
+      cls: "half", title: "Revenue by game",
+      sub: "Which ladders the money came from (refunds excluded).",
+      chart: function (w) {
+        return barsH(w, {
+          rows: games.map(function (r) { return { label: r.game, value: r.revenue }; }),
+          color: SERIES[2], alt: "Revenue by game", fmt: function (n) { return usd(n); }
+        });
+      },
+      table: {
+        head: ["Game", "Orders", "Revenue"], num: [1, 2],
+        rows: games.map(function (r) { return [r.game, num(r.count), usd(r.revenue)]; })
+      }
+    }));
+    f.appendChild(g);
+
+    var recent = a.recent || [];
+    var el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML =
+      '<div class="card-hd"><h3>Every order</h3><span class="spacer"></span>' +
+      '<button class="btn btn-sm" type="button" data-export-orders>Export CSV</button></div>' +
+      '<p class="card-sub">Newest first' +
+      (a.total > recent.length ? ", first " + num(recent.length) + " of " + num(a.total) : "") +
+      ". Click an order id to see the full configuration — the climb, add-ons, booster, region and price.</p>";
+
+    if (!recent.length) {
+      el.insertAdjacentHTML("beforeend",
+        '<p class="empty">No orders in this period. Run <code>python3 site/tools/seed_orders.py --clear</code>, then Refresh.</p>');
+      f.appendChild(el);
+      return f;
+    }
+
+    var head = ["When", "Order", "Game", "Product", "Config", "Booster", "Region", "Country", "Status", "Total"];
+    var html = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+      head.map(function (h, i) { return '<th class="' + (i === 9 ? "num" : "") + '">' + esc(h) + "</th>"; }).join("") +
+      "</tr></thead><tbody>";
+    recent.forEach(function (r) {
+      html += "<tr>" +
+        '<td class="dim">' + esc(ago(r.at)) + "</td>" +
+        '<td><button class="link-btn" type="button" data-order="' + esc(r.order_id) + '">' + esc(r.order_id) + "</button>" +
+          (r.syn ? ' <span class="chip">seeded</span>' : "") + "</td>" +
+        "<td>" + esc(r.game) + "</td>" +
+        "<td>" + esc(SERVICE_LABEL[r.service] || r.service) + '<span class="dim"> · ' + esc(r.mode || "") + "</span></td>" +
+        '<td class="wrap-cell">' + esc(r.summary) + "</td>" +
+        "<td>" + (r.booster ? esc(r.booster) : '<span class="dim">unassigned</span>') + "</td>" +
+        '<td class="dim">' + esc(r.region || "—") + "</td>" +
+        "<td>" + countryCell(r.country) + "</td>" +
+        "<td>" + statusChip(r.status) + "</td>" +
+        '<td class="num">' + esc(money(r.total, r.currency)) + "</td>" +
+        "</tr>";
+    });
+    el.insertAdjacentHTML("beforeend", html + "</tbody></table></div>");
+
+    el.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-order]");
+      if (b) openOrder(b.getAttribute("data-order"));
+    });
+
+    el.querySelector("[data-export-orders]").addEventListener("click", function () {
+      var cols = ["when", "order_id", "game", "service", "mode", "config", "booster",
+                  "region", "country", "currency", "status", "total", "seeded"];
+      var lines = [cols.join(",")];
+      recent.forEach(function (r) {
+        lines.push([new Date(r.at * 1000).toISOString(), r.order_id, r.game, r.service, r.mode,
+                    r.summary, r.booster, r.region, r.country, r.currency, r.status, r.total,
+                    r.syn ? "yes" : "no"]
+          .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; }).join(","));
+      });
+      var link = document.createElement("a");
+      link.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+      link.download = "esb-orders-" + new Date().toISOString().slice(0, 10) + ".csv";
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+    });
+
+    f.appendChild(el);
+    return f;
+  }
+
+  function panelOrderDetail() {
+    var f = document.createDocumentFragment();
+
+    var back = document.createElement("button");
+    back.className = "btn btn-sm back-btn"; back.type = "button";
+    back.textContent = "← All orders";
+    back.addEventListener("click", function () {
+      state.orderId = null; state.orderDetail = null; render();
+    });
+    f.appendChild(back);
+
+    var o = state.orderDetail;
+    if (!o) {
+      var wait = document.createElement("div");
+      wait.className = "card";
+      wait.innerHTML = '<p class="empty">Loading order…</p>';
+      f.appendChild(wait);
+      return f;
+    }
+
+    // Hero — the order id, the product line, and the status, big.
+    var hero = document.createElement("div");
+    hero.className = "card order-hero";
+    hero.innerHTML =
+      '<div class="order-hero-top">' +
+        '<div><div class="order-id">' + esc(o.order_id) + (o.syn ? ' <span class="chip">seeded</span>' : "") + "</div>" +
+          '<div class="order-line">' + esc(o.game) + ' · <b>' + esc(o.summary) + "</b></div></div>" +
+        '<div class="order-hero-r">' + statusChip(o.status) +
+          '<div class="order-total">' + esc(money(o.total, o.currency)) +
+          ' <span class="order-cur">' + esc((o.currency || "usd").toUpperCase()) + "</span></div></div>" +
+      "</div>";
+    f.appendChild(hero);
+
+    // The boost — everything about what was ordered.
+    var boost = document.createElement("div");
+    boost.className = "card";
+    boost.innerHTML = '<div class="card-hd"><h3>The boost</h3></div>';
+    var bf = [
+      ["Game", o.game],
+      ["Product", SERVICE_LABEL[o.service] || o.service],
+      ["Queue", o.mode]
+    ];
+    if (o.service === "division") {
+      bf.push(["From rank", o.from_rank]);
+      bf.push(["To rank", o.to_rank]);
+    } else if (o.service === "wins" || o.service === "placements") {
+      bf.push([o.unranked ? "Starting" : "Current rank", o.unranked ? "Unranked" : o.from_rank]);
+      bf.push([o.service === "wins" ? "Net wins" : "Placement games", String(o.units || "—")]);
+    } else if (o.service === "coaching") {
+      bf.push(["Coach", o.coach || "—"]);
+      bf.push(["Hours", String(o.hours || "—")]);
+    }
+    bf.push(["Region", o.region || "—"]);
+    bf.push(["Rank system", o.rankUnit]);
+    bf.push(["Booster", o.booster || "Unassigned"]);
+    bf.push(["ETA quoted", o.eta || "—"]);
+    boost.insertAdjacentHTML("beforeend",
+      '<div class="facts">' + bf.map(function (r) { return fact(r[0], r[1]); }).join("") + "</div>");
+    f.appendChild(boost);
+
+    // Options / add-ons — the chosen extras, each with its cost on this order.
+    var opt = document.createElement("div");
+    opt.className = "card";
+    opt.innerHTML = '<div class="card-hd"><h3>Options chosen</h3></div>';
+    if (!o.addons || !o.addons.length) {
+      opt.insertAdjacentHTML("beforeend", '<p class="empty">No add-ons on this order.</p>');
+    } else {
+      var oh = '<div class="scroll-x"><table class="tbl"><thead><tr><th>Add-on</th><th class="num">Uplift</th><th class="num">Cost on this order</th></tr></thead><tbody>';
+      o.addons.forEach(function (ad) {
+        oh += "<tr><td>" + esc(ad.label) + "</td>" +
+          '<td class="num">' + (ad.pct ? "+" + Math.round(ad.pct * 100) + "%" : "included") + "</td>" +
+          '<td class="num">' + (ad.cost == null ? "—" : (ad.cost === 0 ? "included" : usd(ad.cost))) + "</td></tr>";
+      });
+      opt.insertAdjacentHTML("beforeend", oh + "</tbody></table></div>");
+    }
+    f.appendChild(opt);
+
+    // Price — the receipt, adds up: subtotal − discount = total.
+    var price = document.createElement("div");
+    price.className = "card";
+    price.innerHTML = '<div class="card-hd"><h3>Payment</h3></div>';
+    var pr = '<table class="tbl receipt"><tbody>';
+    pr += '<tr><td>Subtotal</td><td class="num">' + esc(money(o.subtotal, o.currency)) + "</td></tr>";
+    if (o.discount) {
+      pr += '<tr><td>Discount' + (o.promo ? ' <span class="chip">' + esc(o.promo) + "</span>" : "") +
+        '</td><td class="num">−' + esc(money(o.discount, o.currency)) + "</td></tr>";
+    }
+    pr += '<tr class="receipt-total"><td>Total charged</td><td class="num">' +
+      esc(money(o.total, o.currency)) + " " + esc((o.currency || "usd").toUpperCase()) + "</td></tr>";
+    price.insertAdjacentHTML("beforeend", pr + "</tbody></table>");
+    f.appendChild(price);
+
+    // Customer & provenance — the PII and where the order came from.
+    var cust = document.createElement("div");
+    cust.className = "card";
+    cust.innerHTML = '<div class="card-hd"><h3>Customer & provenance</h3></div>' +
+      '<div class="facts">' +
+        fact("Email", o.email || "—") +
+        '<div class="fact"><span class="fact-l">Country</span><span class="fact-v">' +
+          countryCell(o.country, o.cosrc) + "</span></div>" +
+        fact("Placed", ago(o.at) + " · " + new Date(o.at * 1000).toLocaleString()) +
+        fact("Order id", o.order_id) +
+      "</div>" +
+      (o.notes ? '<p class="card-sub" style="margin-top:14px"><b>Notes:</b> ' + esc(o.notes) + "</p>" : "");
+    f.appendChild(cust);
+
+    return f;
+  }
+
   function panelAbandoned(d) {
     var rows = d.abandoned;
     var f = document.createDocumentFragment();
@@ -2406,7 +2732,8 @@
      ══════════════════════════════════════════════════════════════════════ */
   var PANELS = {
     overview: panelOverview, funnel: panelFunnel, configurator: panelConfigurator,
-    journey: panelJourney, sessions: panelSessions, accounts: panelAccounts,
+    journey: panelJourney, sessions: panelSessions, orders: panelOrders,
+    accounts: panelAccounts,
     guides: panelGuides, boosters: panelBoosters,
     acquisition: panelAcquisition, friction: panelFriction, abandoned: panelAbandoned,
     liveview: panelLiveView, live: panelLive
@@ -2510,20 +2837,23 @@
   document.querySelectorAll(".tabs button").forEach(function (b) {
     b.addEventListener("click", function () {
       state.tab = b.getAttribute("data-tab");
-      // Leaving Sessions drops the open drill-down, so coming back lands on
-      // the list rather than on whichever session was open last time.
+      // Leaving Sessions/Orders drops the open drill-down, so coming back lands
+      // on the list rather than on whichever row was open last time.
       state.sessionId = null;
       state.sessionDetail = null;
+      state.orderId = null;
+      state.orderDetail = null;
       document.querySelectorAll(".tabs button").forEach(function (o) {
         o.setAttribute("aria-selected", o === b ? "true" : "false");
       });
       render();
       // On a phone the nav is an overlay; picking a section closes it.
       shell.classList.remove("side-open");
-      // Entering Accounts / Guides / Boosters pulls that store fresh (each rides its own request).
+      // Entering Accounts / Guides / Boosters / Orders pulls that store fresh (each rides its own request).
       if (state.tab === "accounts") loadAccounts();
       if (state.tab === "guides") loadGuides();
       if (state.tab === "boosters") loadBoosters();
+      if (state.tab === "orders") loadOrders();
     });
   });
 

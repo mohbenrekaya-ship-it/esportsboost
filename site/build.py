@@ -5529,7 +5529,11 @@ def page_boosters():
     n, free = D.STATS.get("online") or len(D.BOOSTERS), D.STATS.get("free_now")
     live = f"""<div class="rst-live">
       <span class="rst-live-t"><span class="dot-live dot-ok" aria-hidden="true"></span>Updated live</span>
-      <span class="rst-live-n"><b>{esc(str(n))}</b> <span>on the board</span><i aria-hidden="true"> · </i><b>{esc(str(free))}</b> <span>free right now</span></span>
+      <span class="rst-live-n">
+        <span class="rst-live-stat"><b>{esc(str(n))}</b> <span>on the board</span></span>
+        <i class="rst-live-sep" aria-hidden="true"></i>
+        <span class="rst-live-stat is-free"><b>{esc(str(free))}</b> <span>free right now</span></span>
+      </span>
     </div>""" if n else ""
 
     body = f"""{roster_hero()}
@@ -7835,7 +7839,8 @@ def page_404():
 OPS_TABS = [
     ("liveview", "Live view"),
     ("overview", "Overview"), ("funnel", "Funnel"), ("configurator", "Configurator"),
-    ("journey", "Journey"), ("sessions", "Sessions"), ("accounts", "Accounts"),
+    ("journey", "Journey"), ("sessions", "Sessions"), ("orders", "Orders"),
+    ("accounts", "Accounts"),
     ("guides", "Guides mails"),
     ("boosters", "Boosters"),
     ("acquisition", "Acquisition"), ("friction", "Friction"), ("abandoned", "Abandoned"),
