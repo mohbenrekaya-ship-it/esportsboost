@@ -3492,8 +3492,8 @@ body.hd-locked {
 .bs .seg-opt:not(:has(input:checked)):hover { background: rgba(255, 255, 255, .05); color: var(--h-text); }
 .bs .seg-ico { flex: none; }
 .bs .seg-pct { font-size: 12.5px; font-weight: 600; }
-.bs-regions { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
-.bs-regionbtn { min-width: 52px; height: auto; padding: 11px 12px; letter-spacing: .04em; }
+.bs-regions { display: flex; flex-wrap: wrap; gap: 5px; width: 100%; }
+.bs-regionbtn { flex: 1 1 52px; min-width: 52px; height: auto; padding: 11px 12px; letter-spacing: .04em; }
 
 /* ── climb readout + rail ──────────────────────────────────────────────── */
 .bs-err {
@@ -4208,34 +4208,17 @@ body.hd-locked {
   .co-apply { padding: 0 20px; }
   .co-div-push { margin-top: 22px; }
   /* The total and the CTA detach into a sticky bar, so the price is never
-     scrolled off while the form is being filled. It is revealed on scroll, not
-     on load: hidden until the form's own "Place the order" button scrolls up out
-     of view (initStickyBar in app.js), so only one order button is ever shown. */
-  .co-bar {
-    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-    align-items: center; justify-content: space-between; gap: 14px;
-    background: rgba(11, 10, 9, .96); backdrop-filter: blur(14px);
-    border-top: 1px solid var(--c-line-5);
-    padding: 10px 20px calc(10px + env(safe-area-inset-bottom));
-    transform: translateY(115%); opacity: 0; visibility: hidden; pointer-events: none;
-    transition: transform .3s cubic-bezier(.4, 0, .2, 1), opacity .3s ease, visibility .3s;
-  }
-  .co-bar.is-revealed {
-    transform: translateY(0); opacity: 1; visibility: visible; pointer-events: auto;
-  }
-  .co-bar-l { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  .co-bar-p { display: flex; align-items: baseline; gap: 8px; }
-  .co-bar-p .co-total { font-size: 24px; }
-  .co-bar-p .co-was { font-size: 14px; }
-  /* The boosting facts under the price. Only the game may shrink and truncate:
-     the ETA to its left is the more time-sensitive fact and must stay whole. */
-  .co-bar-meta { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--c-muted); }
-  .co-bar-meta .ico { flex: none; color: var(--c-dim); }
-  .co-bar-eta { flex: none; }
-  .co-bar-eta b { font-weight: 600; }
-  .co-bar-dot { flex: none; color: var(--c-dim); }
-  .co-bar-cfg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .co-bar .co-cta { margin-top: 0; width: auto; flex: none; height: 46px; padding: 0 18px; font-size: 14px; }
+     scrolled off while the form is being filled. It is the games page's own
+     `.mobile-bar` component (styled in the header section — hairline, big price,
+     save pill, tall CTA, assurance row); everything below is only what checkout
+     adds on top of it. It reveals on scroll, not on load: hidden until the form's
+     own "Place the order" button scrolls up out of view (initStickyBar in
+     app.js), so only one order button is ever on screen. `.co-bar` is a marker
+     class the shared bar carries here — the `.mb-*` styling does the drawing. */
+  .co-bar { display: flex; }
+  /* The shared bar's CTA is a link on a game page; here it is the form's submit,
+     so borrow the tap feedback the button doesn't inherit from `.mb-cta`. */
+  .co-bar .mb-cta.is-busy { opacity: .7; pointer-events: none; }
 }
 /* The header is the one band with no room to give: brand + two labelled items
    at 13.5px overflow below ~700px and "Need a hand?" wraps into the gutter.

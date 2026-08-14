@@ -93,8 +93,8 @@ GAMES = [
         prices={"Iron": 6, "Bronze": 8, "Silver": 9, "Gold": 12, "Platinum": 19,
                 "Emerald": 30, "Diamond": 48, "Master": 60},
         services="Elo boost · placements · net wins · duo · coaching",
-        regions=["EUW", "EUNE", "NA", "OCE", "BR", "LAN", "TR", "KR"],
-        blurb="Solo/duo and flex, EUW to KR. Your booster plays your account inside your "
+        regions=["NA", "EUW", "EUNE", "OCE"],
+        blurb="Solo/duo and flex, NA to OCE. Your booster plays your account inside your "
               "normal hours with a regional VPN, or queues beside you in duo and never "
               "touches the login at all.",
         meta="LoL elo boost from Iron to Master. Live price before you sign in, "
@@ -1258,7 +1258,7 @@ TILE_ORDER = [
     ("marvel-rivals", ""),
     ("teamfight-tactics", ""),
     ("overwatch-2", "tile-span-2"),
-    ("rocket-league", ""),
+    ("dota-2", ""),
 ]
 
 # ⚠ Placeholder reviews — invented, not real customer testimony (see top of file).

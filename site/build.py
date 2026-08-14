@@ -7297,23 +7297,38 @@ def page_checkout():
           claims it</span><span aria-hidden="true">·</span><a href="/guarantee.html">Read the
           guarantee</a></p>
 
-          <div class="co-bar" role="region" aria-label="Live total">
-            <span class="co-bar-l">
-              <span class="co-bar-p">
-                <span class="co-was" data-when-discount data-sum="was" hidden></span>
-                <span class="co-total" data-sum="total">—</span>
-              </span>
-              <!-- The gap beside the price was dead space; fill it with the two
-                   boosting facts the buyer is deciding on — how long the climb
-                   takes and which game it is on. Both read the same data-sum
-                   hooks the summary card does, so one render() fills all three. -->
-              <span class="co-bar-meta">
-                {_ico("clock-countdown", 12, "ico", stroke=True)}<span class="co-bar-eta" data-sum="eta">—</span>
-                <span class="co-bar-dot" aria-hidden="true">·</span>
-                <span class="co-bar-cfg" data-sum="game">—</span>
-              </span>
-            </span>
-            <button class="co-cta" type="submit"><span data-btn-label>Place the order</span></button>
+          <!-- The live total detaches into the games-page sticky bar: the same
+               `.mobile-bar` + `.mb-*` component the nine game pages carry, so the
+               two surfaces ship one bar design (hairline · big price · save pill ·
+               tall CTA · assurance row). It is dual-classed `.co-bar` only so
+               initStickyBar() shadows the form's own submit (a game page shadows
+               `.ob-cta`) and so `.co`'s CSS reveals it at this page's 900px
+               breakpoint. Every figure is a data hook render() already fills — the
+               struck price, the save pill and the total can't quote three numbers.
+               The CTA stays a real submit so it drives the pay form; `data-btn-label`
+               keeps it in step with the main button's "Contacting payment…" swap. -->
+          <div class="co-bar mobile-bar" role="region" aria-label="Live total">
+            <div class="mb-hair" aria-hidden="true"></div>
+            <div class="mb-top">
+              <div class="mb-left">
+                <div class="mb-money" aria-live="polite">
+                  <span class="mb-price" data-sum="total">—</span>
+                  <span class="mobile-was" data-when-discount data-sum="was" hidden></span>
+                  <span class="mb-save" data-when-discount hidden><span>Save</span> <b data-out="saveAmt"></b></span>
+                </div>
+                <span class="mb-meta">
+                  {_ico("clock-countdown", 12, "mb-ico", stroke=True)}<span class="mb-eta" data-sum="eta">—</span>
+                  <span class="mb-dot" aria-hidden="true">·</span>
+                  <span class="mb-cfg" data-sum="summary">—</span>
+                </span>
+              </div>
+              <button class="btn btn-primary mb-cta" type="submit"><span data-btn-label>Place the order</span>{_ico("arrow", 15, "ico", stroke=True)}</button>
+            </div>
+            <div class="mb-assure">
+              <span class="mb-as">{_ico("lock", 11, "mb-ico", stroke=True)}<span>Secure checkout</span></span>
+              <span class="mb-as-div" aria-hidden="true"></span>
+              <span class="mb-as">{_ico("shield-check", 11, "mb-ico", stroke=True)}<span>Money-back guarantee</span></span>
+            </div>
           </div>
         </form>
 
