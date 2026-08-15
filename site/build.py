@@ -1765,7 +1765,7 @@ def fc_card():
     """
     return f"""<aside class="fc-card">
       <div class="fc-card-head">
-        <span class="fc-card-t">Your configuration</span>
+        <span class="fc-card-t">Your boost</span>
         <a class="fc-change" href="#top">Change</a>
       </div>
       <div class="fc-rows">

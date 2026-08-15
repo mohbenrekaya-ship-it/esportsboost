@@ -399,7 +399,7 @@
       "Set two ranks and the price is on screen before you sign up. No account, no quote request.":
         "Choisissez deux rangs et le prix s'affiche avant toute inscription. Sans compte, sans devis.",
       "Talk to support": "Contacter le support",
-      "Your configuration": "Votre configuration",
+      "Your boost": "Votre boost",
       "Change": "Modifier",
       "Queue · Server": "File · Serveur",
       "Money-back guarantee": "Satisfait ou remboursé",
@@ -1405,7 +1405,7 @@
       "Set two ranks and the price is on screen before you sign up. No account, no quote request.":
         "Zwei Ränge wählen und der Preis steht da, noch vor jeder Anmeldung. Kein Konto, keine Angebotsanfrage.",
       "Talk to support": "Support kontaktieren",
-      "Your configuration": "Deine Konfiguration",
+      "Your boost": "Dein Boost",
       "Change": "Ändern",
       "Queue · Server": "Warteschlange · Server",
       "Money-back guarantee": "Geld zurück",

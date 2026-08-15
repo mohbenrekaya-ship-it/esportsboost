@@ -103,7 +103,7 @@ GAMES = [
         placement_prices={"Iron": 3, "Bronze": 3, "Silver": 4, "Gold": 5, "Platinum": 8,
                           "Emerald": 13, "Diamond": 20, "Master": 40},
         services="Elo boost · placements · net wins · duo · coaching",
-        regions=["North America", "Europe West", "EU Nordic & East"],
+        regions=["North America", "Europe West", "EU Nordic & East", "Oceania"],
         blurb="Solo/duo and flex, across NA and EU. Your booster plays your account inside your "
               "normal hours with a regional VPN, or queues beside you in duo and never "
               "touches the login at all.",
@@ -131,7 +131,7 @@ GAMES = [
         placement_prices={"Iron": 3, "Bronze": 3, "Silver": 4, "Gold": 5, "Platinum": 6,
                           "Diamond": 10, "Ascendant": 15, "Immortal": 22},
         services="Rank boost · placements · unrated wins · duo · coaching",
-        regions=["North America", "Europe"],
+        regions=["North America", "Europe", "Asia", "Latin America"],
         blurb="Radiant-level boosters with your own crosshair and sensitivity loaded in. "
               "Agent pool on request, and duo runs with voice if you want the coaching "
               "on the way up.",
@@ -607,6 +607,14 @@ BOOSTERS = [
          peak="Master 470 LP", tier="Master", wr_n=66, queue="2 orders",
          orders=92, role="Top", since="Jan 2025",
          rating="4.7", ontime="94%", disputes="0"),
+    dict(handle="kasai", slug="league-of-legends", region="OCE", hue=170,
+         peak="Challenger 905 LP", tier="Challenger", wr_n=75, queue="free",
+         orders=138, role="Jungle", since="Aug 2023",
+         rating="4.9", ontime="98%", disputes="0"),
+    dict(handle="mako_oce", slug="league-of-legends", region="OCE", hue=88,
+         peak="Grandmaster 690 LP", tier="Grandmaster", wr_n=72, queue="free",
+         orders=121, role="Mid lane", since="Oct 2023",
+         rating="4.8", ontime="97%", disputes="0"),
 
     # ── Valorant ───────────────────────────────────────────────────────────
     dict(handle="kx_reid", slug="valorant", region="NA", hue=352,
@@ -665,6 +673,14 @@ BOOSTERS = [
          peak="Immortal 3 · 440 RR", tier="Immortal", wr_n=66, queue="free",
          orders=79, role="Controller", since="Jun 2024",
          rating="4.7", ontime="94%", disputes="0"),
+    dict(handle="renji_v", slug="valorant", region="Asia", hue=190,
+         peak="Immortal 3 · 470 RR", tier="Immortal", wr_n=71, queue="free",
+         orders=104, role="Duelist", since="Sep 2023",
+         rating="4.8", ontime="97%", disputes="0"),
+    dict(handle="solano_v", slug="valorant", region="LATAM", hue=22,
+         peak="Immortal 2 · 380 RR", tier="Immortal", wr_n=69, queue="free",
+         orders=86, role="Initiator", since="Dec 2023",
+         rating="4.7", ontime="96%", disputes="0"),
 
     # ── the other seven ladders ────────────────────────────────────────────
     # One booster covers one game, and `slug` is what the roster chip reads —
