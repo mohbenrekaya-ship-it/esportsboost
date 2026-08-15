@@ -34,6 +34,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from html import escape as _esc   # the confirmation mail's HTML part
 
 import data as D  # noqa: E402  — the roster a named booster is resolved against
 import pricing  # noqa: E402  — authoritative price, never trust the client
@@ -59,9 +60,13 @@ class StripeError(Exception):
     pass
 
 
-def stripe_call(path, params=None, method="POST"):
+def stripe_call(path, params=None, method="POST", idempotency_key=None):
     """One authenticated call to Stripe's REST API. Returns parsed JSON.
-    Raises StripeError with the message Stripe gave us on a 4xx/5xx."""
+    Raises StripeError with the message Stripe gave us on a 4xx/5xx.
+
+    `idempotency_key` is passed through on writes: a double-clicked Pay button
+    or a retried POST then resolves to the SAME Checkout Session instead of
+    creating a second one for the same order."""
     url = STRIPE_API + path
     data = urllib.parse.urlencode(params or {}, doseq=True).encode() if params else None
     if method == "GET" and params:
@@ -70,6 +75,8 @@ def stripe_call(path, params=None, method="POST"):
     req = urllib.request.Request(url, data=data, method=method)
     auth = base64.b64encode((stripe_key() + ":").encode()).decode()
     req.add_header("Authorization", "Basic " + auth)
+    if idempotency_key:
+        req.add_header("Idempotency-Key", idempotency_key)
     if data:
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
     try:
@@ -94,6 +101,23 @@ def build_session(order, base_url):
     q = pricing.quote(order)
     if q["invalid"]:
         raise StripeError(q["summary"])
+
+    # Charge exactly what the checkout page showed the customer. The browser
+    # sends the total it displayed (`client_total`, in whole USD before currency
+    # conversion); we recompute the price authoritatively above and REFUSE the
+    # charge if the two disagree — so Stripe can never show an amount the buyer
+    # didn't see, and a tampered client figure can't move the price either. The
+    # amount charged is always the server's `q["total"]`; the client number is
+    # only ever compared, never trusted as the price.
+    shown = order.get("client_total")
+    if isinstance(shown, (int, float)) and not isinstance(shown, bool):
+        if int(shown) != q["total"]:
+            sys.stderr.write(
+                "[checkout] price mismatch: shown=%s server=%s order=%s\n"
+                % (int(shown), q["total"], q["summary"]))
+            raise StripeError(
+                "The price updated since you configured this order. "
+                "Please refresh the page and try again.")
 
     game = order.get("game", "")
     region = order.get("region", "")
@@ -167,7 +191,10 @@ def process_checkout(raw, base_url):
         return 400, {"error": "Malformed request"}
     try:
         params, order_id, q = build_session(order, base_url)
-        session = stripe_call("/checkout/sessions", params)
+        # Keyed on the order id we just minted, so a retry of THIS request
+        # resolves to the same Session while a genuinely new order gets a new one.
+        session = stripe_call("/checkout/sessions", params,
+                              idempotency_key="esb-" + order_id)
     except StripeError as e:
         return 400, {"error": str(e)}
     return 200, {"url": session.get("url"), "order_id": order_id, "total": q["total"]}
@@ -195,15 +222,33 @@ def process_session(sid):
 
 
 def process_webhook(raw, sig_header):
-    """POST /api/webhook → (status, payload). Verifies the Stripe signature when
-    STRIPE_WEBHOOK_SECRET is set, then fulfils checkout.session.completed."""
-    if webhook_secret() and not _verify_sig(raw, sig_header):
+    """POST /api/webhook → (status, payload). Verifies the Stripe signature and
+    then fulfils checkout.session.completed.
+
+    **This route fails CLOSED.** With no STRIPE_WEBHOOK_SECRET set it refuses
+    everything rather than trusting the body: the endpoint is public, and an
+    unverified `checkout.session.completed` is a free order — anyone who can
+    reach the URL could inject a paid row for the most expensive climb on the
+    board, with an address they control. An unconfigured secret is a deployment
+    mistake, so it has to read as one instead of quietly opening the door.
+    Set ESB_ALLOW_UNSIGNED_WEBHOOK=1 to replay unsigned events locally."""
+    if not webhook_secret():
+        if os.environ.get("ESB_ALLOW_UNSIGNED_WEBHOOK", "").strip() != "1":
+            sys.stderr.write(
+                "[webhook] refused: STRIPE_WEBHOOK_SECRET is not set\n")
+            return 400, {"error": "webhook_not_configured"}
+    elif not _verify_sig(raw, sig_header):
         return 400, {"error": "Bad signature"}
     try:
         event = json.loads((raw or b"").decode() or "{}")
     except (ValueError, UnicodeDecodeError):
         return 400, {"error": "Malformed event"}
     if event.get("type") == "checkout.session.completed":
+        # Stripe retries until it gets a 200, so the same event arrives more
+        # than once as a matter of course. The orders store already dedupes on
+        # order_id; this keeps the log and the stderr line honest too.
+        if _seen_event(event.get("id")):
+            return 200, {"received": True, "duplicate": True}
         obj = event.get("data", {}).get("object", {})
         md = obj.get("metadata") or {}
         record = {
@@ -215,8 +260,8 @@ def process_webhook(raw, sig_header):
             "region": md.get("region"), "notes": md.get("notes"),
         }
         # Fulfilment hook: in production this is where the order joins the
-        # booster board and the confirmation email leaves. Here we log it —
-        # to a file when the FS is writable, and always to stderr.
+        # booster board. Here we log it — to a file when the FS is writable,
+        # and always to stderr.
         try:
             with open(order_log_path(), "a") as f:
                 f.write(json.dumps(record) + "\n")
@@ -231,8 +276,38 @@ def process_webhook(raw, sig_header):
             _record_order(md, obj)
         except Exception as e:               # noqa: BLE001 — never break fulfilment
             sys.stderr.write("orders store write skipped: %s\n" % e)
+        # The buyer's confirmation, and a copy to the support mailbox. Wrapped
+        # for the same reason the store write is: a mail server having a bad
+        # minute must not turn into a non-200, because Stripe answers a non-200
+        # by redelivering the event and we would fulfil the order twice to send
+        # one email. `mailer.send()` already swallows its own errors; this is
+        # the belt for anything raised while composing.
+        try:
+            _send_order_mail(record, md, obj)
+        except Exception as e:               # noqa: BLE001 — never break fulfilment
+            sys.stderr.write("order mail skipped: %s\n" % e)
         sys.stderr.write("paid order → %s\n" % record.get("order_id"))
     return 200, {"received": True}
+
+
+_SEEN_EVENTS = []
+_SEEN_MAX = 512
+
+
+def _seen_event(event_id):
+    """True if this Stripe event id has already been fulfilled in this process.
+
+    Deliberately in-memory and bounded: it is a de-duplicator for the retry
+    burst that follows one delivery, not a durable ledger. The store's own
+    order_id dedupe is what survives a restart."""
+    if not event_id:
+        return False
+    if event_id in _SEEN_EVENTS:
+        return True
+    _SEEN_EVENTS.append(event_id)
+    if len(_SEEN_EVENTS) > _SEEN_MAX:
+        del _SEEN_EVENTS[:len(_SEEN_EVENTS) - _SEEN_MAX]
+    return False
 
 
 def _record_order(md, obj):
@@ -268,6 +343,172 @@ def _record_order(md, obj):
     }])
 
 
+# ── the confirmation mail ──────────────────────────────────────────────────
+# Two messages leave on a paid order: the buyer's receipt, and a copy to the
+# support mailbox so the operator sees the order land without watching /ops.
+# Both go through mailer.py, both are best-effort, and neither can fail the
+# webhook — see the call site.
+#
+# What they may say is bounded by what this build can actually do:
+#
+#   · **No tracking link.** The site's own FAQ promises orders are tracked by an
+#     emailed link, and that page does not exist yet — /demo.html renders one
+#     invented fixture. A link here would open somebody else's demo order. When
+#     a real per-order page ships, it goes in `_order_text`/`_order_html` and
+#     that FAQ answer becomes true.
+#   · **⚠ One operational commitment.** "We'll email you when a booster claims
+#     it" is a promise ops has to keep — nothing in this codebase sends that
+#     mail yet. It reads as the next thing to build, not as a claim about
+#     today; if ops can't hold it, cut the line rather than soften it.
+#   · Policy is linked, never restated. A refund window quoted in an email is a
+#     number that cannot be corrected after it is sent.
+CURRENCY_SIGNS = {"usd": "$", "eur": "€", "gbp": "£"}
+
+
+SITE_ORIGIN_FALLBACK = "https://esportsboost.com"
+
+
+def site_origin():
+    """The public origin for links in outbound mail. The webhook has no request
+    to infer one from — Stripe called it, not the buyer — so this is env-only
+    and falls back to the production domain rather than to a Host header.
+
+    SITE_URL first, because that is the canonical origin the build writes every
+    other URL against. A **localhost** value is skipped whichever variable holds
+    it: PUBLIC_BASE_URL is routinely a dev origin, and a link to 127.0.0.1 in a
+    customer's inbox is wrong in a way no environment makes right."""
+    for name in ("SITE_URL", "PUBLIC_BASE_URL"):
+        v = os.environ.get(name, "").strip().rstrip("/")
+        if not v.startswith("http"):
+            continue
+        host = v.split("//", 1)[-1].split("/")[0].split(":")[0]
+        if host in ("localhost", "127.0.0.1", "0.0.0.0"):
+            continue
+        return v
+    return SITE_ORIGIN_FALLBACK
+
+
+def _money(cents, currency):
+    """Stripe's minor units as the buyer saw them. Never re-converted: this is
+    the amount the card was actually charged, in the currency it was charged
+    in."""
+    try:
+        amount = int(cents) / 100.0
+    except (TypeError, ValueError):
+        return ""
+    cur = (currency or "usd").lower()
+    sign = CURRENCY_SIGNS.get(cur)
+    return (sign + "{:,.2f}".format(amount) if sign
+            else "{:,.2f} {}".format(amount, cur.upper()))
+
+
+def _order_rows(record, md):
+    """The facts both messages state, in one place so they cannot disagree.
+    Only rows with something in them survive."""
+    rows = [
+        ("Order", record.get("order_id") or ""),
+        ("Game", md.get("game") or ""),
+        ("Boost", md.get("detail") or ""),
+        ("Region", md.get("region") or ""),
+        ("Estimated", md.get("eta") or ""),
+        ("Booster", md.get("booster") or ""),
+        ("Paid", _money(record.get("amount_total"), md.get("currency"))),
+        # "Notes", not "Your notes" — one row list feeds both messages, and the
+        # operator's copy is not the buyer's.
+        ("Notes", md.get("notes") or ""),
+    ]
+    return [(k, str(v)) for k, v in rows if str(v).strip()]
+
+
+def _order_text(rows, origin):
+    body = "\n".join("%-11s%s" % (k, v) for k, v in rows)
+    return """Thanks — your payment went through and your order is on the board.
+
+%s
+
+What happens next
+A verified booster claims it, and we email you when they do. Nothing about
+your account changes before that.
+
+Questions, or want to change something? Reply to this mail. Quoting the order
+number puts it in front of whoever is handling it.
+
+The guarantee, in full: %s/guarantee.html
+eSports Boost
+""" % (body, origin)
+
+
+def _order_html(rows, origin):
+    """The buyer's copy, as HTML. Every value is escaped: `detail`, `notes` and
+    the rest arrive from Stripe metadata, which the browser filled in.
+
+    Deliberately table-based with inline styles — an email client is not a
+    browser, and half of them still drop <style> blocks."""
+    cells = "".join(
+        '<tr><td style="padding:6px 16px 6px 0;color:#6b6b76;font-size:13px;'
+        'white-space:nowrap;vertical-align:top">%s</td>'
+        '<td style="padding:6px 0;color:#16161a;font-size:14px;font-weight:600">%s</td></tr>'
+        % (_esc(k), _esc(v)) for k, v in rows)
+    return """<!doctype html><html><body style="margin:0;padding:24px;background:#f5f5f7;
+ font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+<table role="presentation" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;
+ background:#fff;border-radius:10px;border:1px solid #e4e4ea">
+<tr><td style="padding:26px 26px 8px">
+  <p style="margin:0 0 4px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+   color:#ff4a1f;font-weight:700">Order confirmed</p>
+  <h1 style="margin:0 0 14px;font-size:20px;color:#16161a">Your payment went through.</h1>
+  <p style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#4a4a55">
+   Your order is on the board. A verified booster claims it, and we email you when
+   they do — nothing about your account changes before that.</p>
+  <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%%;
+   border-top:1px solid #ececf1;border-bottom:1px solid #ececf1;margin:0 0 18px">%s</table>
+  <p style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#4a4a55">
+   Questions, or want to change something? Just reply to this mail — quoting the
+   order number puts it in front of whoever is handling it.</p>
+  <p style="margin:0 0 22px"><a href="%s/guarantee.html"
+   style="display:inline-block;padding:10px 16px;border-radius:6px;background:#ff4a1f;
+   color:#fff;text-decoration:none;font-size:14px;font-weight:600">Read the guarantee</a></p>
+</td></tr>
+<tr><td style="padding:14px 26px 22px;border-top:1px solid #ececf1;font-size:12px;color:#8a8a95">
+  eSports Boost · <a href="%s" style="color:#8a8a95">esportsboost.com</a>
+</td></tr>
+</table></body></html>""" % (cells, origin, origin)
+
+
+def _send_order_mail(record, md, obj):
+    """Send the buyer their confirmation and the support mailbox its copy.
+
+    Silent and harmless when SMTP is not configured — the same degradation the
+    rest of the payment seam has, so a preview deploy takes payments without
+    pretending mail went out.
+    """
+    import mailer  # noqa: E402 — lazy: only the fulfilment path sends mail
+    if not mailer.configured():
+        return
+    order_id = record.get("order_id") or ""
+    rows = _order_rows(record, md)
+    origin = site_origin()
+
+    buyer = record.get("email") or (obj.get("customer_details") or {}).get("email") or ""
+    if mailer.valid(buyer):
+        ok, err = mailer.send(
+            buyer, "Your order is confirmed — %s" % order_id,
+            _order_text(rows, origin), html=_order_html(rows, origin))
+        if not ok:
+            sys.stderr.write("[mail] confirmation for %s failed: %s\n" % (order_id, err))
+
+    # The operator's copy. Reply-To is the buyer, so answering the notification
+    # answers the customer — the same property the support form's ticket has.
+    op_rows = rows + [("Customer", buyer)] if buyer else rows
+    mailer.send(
+        mailer.support_addr(),
+        "New paid order — %s%s" % (order_id, " · %s" % md.get("game") if md.get("game") else ""),
+        "A payment cleared. The order is in the store and on the log.\n\n"
+        + "\n".join("%-11s%s" % (k, v) for k, v in op_rows)
+        + "\n\nReply to this mail to answer the customer.\n",
+        reply_to=buyer)
+
+
 def _cents_to_whole(v):
     try:
         return int(v)
@@ -300,11 +541,20 @@ def _verify_sig(payload, header):
 
 def base_url_from(get_header, fallback_host):
     """Build the public origin from request headers. Prefers PUBLIC_BASE_URL,
-    then the forwarded proto + Host (Vercel sits behind TLS termination)."""
+    then the forwarded proto + Host (Vercel sits behind TLS termination).
+
+    The Host fallback is a convenience for local work, not a production path:
+    `Host` is attacker-controlled, so without PUBLIC_BASE_URL a forged header
+    puts an arbitrary origin into Stripe's success/cancel URLs. Set it in
+    production — DEPLOY.md lists it as required, and this warns if it is not."""
     env = os.environ.get("PUBLIC_BASE_URL", "").strip()
     if env:
         return env.rstrip("/")
     host = get_header("host") or fallback_host
+    if host.split(":")[0] not in ("localhost", "127.0.0.1", "0.0.0.0"):
+        sys.stderr.write(
+            "[checkout] PUBLIC_BASE_URL is not set — falling back to the Host "
+            "header (%s), which the caller controls. Set it.\n" % host)
     fwd = get_header("x-forwarded-proto")
     if fwd:
         proto = fwd.split(",")[0].strip()

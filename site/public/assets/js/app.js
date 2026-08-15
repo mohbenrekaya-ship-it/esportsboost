@@ -83,12 +83,25 @@
     booster: ""
   };
 
+  /* How long a saved configuration still describes what the visitor wants.
+     The ranks are worth remembering across a session or a day — someone who
+     comes back to compare is mid-decision. A named booster and a bundle are
+     not: they are choices made in a moment, and three weeks later the page
+     greets a returning visitor with "Ordering with vantaa" and a bundle
+     discount applied to a climb they have no memory of picking. Ranks persist;
+     the two attached commitments expire. */
+  var STATE_TTL = 36 * 3600 * 1000;      // 36h — over a night, not over a month
+
   function load() {
     try {
       var raw = localStorage.getItem(KEY);
       if (!raw) return Object.assign({}, DEFAULT);
       var s = Object.assign({}, DEFAULT, JSON.parse(raw));
       if (!D.ladders[s.game]) return Object.assign({}, DEFAULT);
+      if (!s.savedAt || (Date.now() - s.savedAt) > STATE_TTL) {
+        s.booster = DEFAULT.booster;
+        s.bundle = DEFAULT.bundle;
+      }
       var l = D.ladders[s.game];
       var i = l.indexOf(s.from), j = l.indexOf(s.to);
       // A stored pair can only be invalid through tampering or a stale schema;
@@ -99,6 +112,10 @@
       }
       if ((D.regions[s.game] || []).indexOf(s.region) < 0) s.region = (D.regions[s.game] || ["EU"])[0];
       if (s.mode !== "Solo" && s.mode !== "Duo queue") s.mode = "Solo";  // migrate old "Piloted"
+      // Drop anything the catalogue no longer sells (the retired stream option)
+      // and anything belonging to the other queue — a stored state predates
+      // both the mode split and the picks add-on going free.
+      s.addons = addonsFor(s.addons, s.mode);
       if (!s.slot) s.slot = (D.coachSlots && D.coachSlots[0]) || "";
       // Grid caps at five now; migrate a stored 6–20 from the old stepper.
       s.wins = Math.max(1, Math.min(5, s.wins | 0));
@@ -109,7 +126,12 @@
 
   var state = load();
 
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function save() {
+    try {
+      state.savedAt = Date.now();          // stamps the TTL load() reads
+      localStorage.setItem(KEY, JSON.stringify(state));
+    } catch (e) {}
+  }
 
   function set(patch, evt) {
     Object.assign(state, patch);
@@ -177,11 +199,51 @@
      $1: its real percentage once that is a dollar or more, a flat $1 below that.
      Summed per add-on so each receipt row and each option's own price stay ≥ $1.
      Mirrors pricing.py `_addon_total()` — change one, change the other. */
+  function addonById(id) {
+    return (D.addons || []).filter(function (x) { return x.id === id; })[0];
+  }
+
+  /* An add-on's name on the game this order is for. Only the picks add-on
+     varies — League picks champions, Valorant agents, Rocket League a playlist
+     — and its per-game wording is `picks` on the game. Mirrors data.py's
+     addon_label() / picks_label(). Picker rows do NOT go through this: they
+     ship every wording in the DOM behind [data-when-game], because i18n.js
+     matches whole text nodes. This is for the receipt strings, which are
+     rebuilt each render anyway. */
+  function addonLabel(a, game) {
+    if (a.id !== "champ") return a.label;
+    return (D.picks && D.picks[game || state.game]) || a.label;
+  }
+
+  /* Whether a mode-conditional add-on belongs on an order in this queue. Solo
+     orders are offered "Solo only queue", duo orders "Play on your schedule";
+     an add-on with no `mode` is on offer in both. The test is duo-or-not, the
+     same one DUO_MULT makes, so any non-duo mode string reads as solo.
+     Mirrors data.py `addon_applies()`. The server refuses to charge a total the
+     page did not show, so the two filters agreeing is what keeps checkout from
+     erroring on a perfectly valid order. */
+  function addonApplies(want, mode) {
+    return !want || (mode === "Duo queue") === (want === "Duo queue");
+  }
+
+  /* The add-ons that survive into `mode`: known ids only, and none belonging to
+     the other queue. Used on every mode change and once at load, so a stored
+     order can never list — or be charged for — an option its queue does not
+     offer, or one the catalogue has stopped selling. */
+  function addonsFor(list, mode) {
+    return (list || []).filter(function (id) {
+      var a = addonById(id);
+      return !!a && addonApplies(a.mode, mode);
+    });
+  }
+
   function addonTotal(base, s) {
-    var total = 0;
-    ((s || state).addons || []).forEach(function (id) {
-      var a = D.addons.filter(function (x) { return x.id === id; })[0];
-      if (a && a.pct) total += Math.max(1, Math.round(base * a.pct));
+    var st = s || state, total = 0;
+    (st.addons || []).forEach(function (id) {
+      var a = addonById(id);
+      if (a && a.pct && addonApplies(a.mode, st.mode)) {
+        total += Math.max(1, Math.round(base * a.pct));
+      }
     });
     return total;
   }
@@ -211,9 +273,34 @@
     if (!b) return null;
     return (tierOf(s.game, s.from) === b.ft && s.to === b.target) ? b : null;
   }
+  /* A bundle stores a hand-set flat PRICE (data.py BUNDLES); `disc` is that
+     price expressed as a fraction of the full climb, derived server-side in
+     pricing.bundle_pct() and shipped in data.js. Reading it rather than
+     recomputing it is what keeps this mirror exact: both engines then multiply
+     the same double by the same boost and round it the same way. */
   function bundleDiscount(s) {
     var b = activeBundle(s);
-    return b ? b.disc : 0;
+    return b ? (b.disc || 0) : 0;
+  }
+
+  /* The delivery schedule — a fixed start-up allowance (the claim and the first
+     session, before any rung moves) plus a per-rung rate, and on the games with
+     no per-tier price table a per-climb term so a high-rank rung costs more time
+     than a low-rank one. Mirrors DAYS_* in ../../../src/pricing.py — change one,
+     change the other. */
+  var DAYS_SETUP = 0.5, DAYS_PER_RUNG = 0.18, DAYS_PER_CLIMB = 0.045;
+  var DAYS_PER_WIN = 0.3, DAYS_PER_PLACEMENT = 0.26;
+
+  /* Past three days a single figure is false precision — an order that could
+     land anywhere across a week cannot honestly be quoted "7 days" — so the
+     estimate is a band opening ON the computed value: "7–9 days". The figures
+     ride outside the translated word, per the whole-text-node i18n rule.
+     Mirrors eta_text() in pricing.py. */
+  function etaText(days) {
+    if (days <= 1) return T("about 1 day");
+    if (days <= 3) return days + " " + T("days");
+    var span = Math.max(2, Math.round(days * 0.3));
+    return days + "–" + (days + span) + " " + T("days");
   }
 
   function quote(s) {
@@ -252,7 +339,12 @@
 
     if (s.service === "wins") {
       var lw = ladderOf(s.game), iw = lw.indexOf(s.from);
-      var w = Math.max(1, s.wins | 0);
+      // Clamped to the same 1–5 window pricing.py's _clamp() enforces. load()
+      // already migrates a stored value, so this is not reachable from the UI —
+      // but quote() is the mirror of the server's formula, and a mirror that
+      // agrees only because a caller sanitised its input is not a mirror. With
+      // this the two functions return the same number for ANY state.
+      var w = Math.max(1, Math.min(5, s.wins | 0));
       var wUnit = winUnit(s.game, s.from);
       if (wUnit !== null) {
         // Per-tier win table: flat price per win within the current tier. No
@@ -262,11 +354,11 @@
         var climbW = Math.max(1, iw - 1);
         base = w * per * 0.55 * factor * (1 + climbW * 0.045) * duo;
       }
-      days = Math.max(1, Math.round(w * 0.45));
+      days = Math.max(1, Math.round(w * DAYS_PER_WIN));
       summary = w + " " + T(w === 1 ? "net win" : "net wins") + " · " + s.from + " · " + T(s.mode);
     } else if (s.service === "placements") {
       var lp = ladderOf(s.game), ip = lp.indexOf(s.from);
-      var p = Math.max(1, s.placements | 0);
+      var p = Math.max(1, Math.min(5, s.placements | 0));   // see wins, above
       var pUnit = placeUnit(s.game, s.from, s.unranked);
       if (pUnit !== null) {
         // Per-tier placement table; unranked reads the ladder floor. Mirrors pricing.py.
@@ -277,7 +369,7 @@
         var climbP = s.unranked ? 1 : Math.max(1, ip - 1);
         base = p * per * 0.7 * factor * (1 + climbP * 0.045) * duo;
       }
-      days = Math.max(1, Math.round(p * 0.4));
+      days = Math.max(1, Math.round(p * DAYS_PER_PLACEMENT));
       var where = s.unranked ? T("Unranked") : s.from;
       summary = p + " " + T(p === 1 ? "placement game" : "placement games") + " · " + where + " · " + T(s.mode);
     } else {
@@ -307,17 +399,29 @@
         base = 0;
         for (var k = i + 1; k <= j; k++) base += rungPrice(s.game, ladder[k]);
         base *= duo;
-        days = Math.max(1, Math.round(steps * 0.35));
+        days = Math.max(1, Math.round(DAYS_SETUP + steps * DAYS_PER_RUNG));
       } else {
         var climb = Math.max(1, i - 1);
         base = steps * (D.perStep || per) * factor * (1 + climb * 0.045) * duo;
-        days = Math.max(1, Math.round(steps * 0.35 + climb * 0.08));
+        days = Math.max(1, Math.round(DAYS_SETUP + steps * DAYS_PER_RUNG
+                                      + climb * DAYS_PER_CLIMB));
       }
       summary = s.from + " → " + s.to + " · " + T(s.mode);
     }
 
+    // Resolved BEFORE the add-ons, because on a bundle it is what they are a
+    // percentage of. Mirrors pricing.py.
+    var bpct = s.service === "division" ? bundleDiscount(s) : 0;
+
     var boost = Math.round(base);
-    var extra = addonTotal(base, s);
+    // An add-on is a percentage of the boost the buyer is paying for. On a
+    // bundle that is the bundle's flat PRICE, not the list climb it is
+    // discounted from — a bundle prices every division of its from-tier as the
+    // tier's full climb, so charging 15% of that list figure billed priority on
+    // a $98 order the buyer is paying $67 for, and ticking it made "Apply
+    // bundle" cost MORE than not applying it. The sitewide sale deliberately
+    // does NOT do this (see below). Mirrors pricing.py.
+    var extra = addonTotal(bpct ? base * (1 - bpct) : base, s);
     var subtotal = boost + extra;
 
     // Discount comes off the boost only — the strikethrough is a real reduction,
@@ -327,7 +431,6 @@
     // of the discounted boost keeps every add-on worth its ≥$1 in the final
     // total (boost + add-ons − discount = total). Mirrors pricing.py. A live
     // bundle replaces the sitewide sale on a matching division climb.
-    var bpct = s.service === "division" ? bundleDiscount(s) : 0;
     var r = bpct ? { code: "BUNDLE", promo: { pct: bpct, label: "Bundle", ends: "" } }
                  : resolvePromo(s.promo);
     var discount = r.promo ? Math.round(boost * r.promo.pct) : 0;
@@ -341,7 +444,7 @@
       promoCode: r.code || "", promoLabel: r.promo ? r.promo.label : "",
       promoEnds: r.promo ? (r.promo.ends || "") : "",
       summary: summary, days: days,
-      eta: days === 1 ? T("about 1 day") : days + " " + T("days")
+      eta: etaText(days)
     };
   }
   window.esbQuote = quote;
@@ -498,13 +601,15 @@
 
     /* Bundle cards. The struck price is the FULL two-tier climb at full price
        (Solo, no add-ons, no discount) — the from-tier's bottom division up to
-       the target; the price beside it is that same climb with the bundle's real
-       discount applied, and it is what every division in the tier is charged.
-       Applied = this bundle is the active one and the current climb still
-       matches it. */
+       the target; the price beside it is the bundle's own hand-set figure, and
+       it is what every division in the tier is charged. That price is read off
+       the card, not recomputed: it is a number somebody set, so re-deriving it
+       from a percentage here is one rounding step away from the strip quoting a
+       dollar the checkout doesn't. Applied = this bundle is the active one and
+       the current climb still matches it. */
     each("[data-bundle]", function (el) {
       var i = +el.getAttribute("data-bundle");
-      var disc = parseFloat(el.getAttribute("data-bundle-disc")) || 0;
+      var amt = parseFloat(el.getAttribute("data-bundle-amt")) || 0;
       var full = quote(Object.assign({}, state, {
         service: "division", mode: "Solo", addons: [], promo: "", bundle: null,
         from: el.getAttribute("data-bundle-def"), to: el.getAttribute("data-bundle-to")
@@ -512,7 +617,7 @@
       var listEl = el.querySelector("[data-bundle-list]");
       var priceEl = el.querySelector("[data-bundle-price]");
       if (listEl) listEl.textContent = usd(full);
-      if (priceEl) priceEl.textContent = usd(Math.round(full * (1 - disc)));
+      if (priceEl) priceEl.textContent = usd(amt);
       var applied = state.bundle === i && state.service === "division"
         && state.to === el.getAttribute("data-bundle-to")
         && tierOf(state.game, state.from) === el.getAttribute("data-bundle-tier");
@@ -792,11 +897,22 @@
     // addons
     each("input[data-addon]", function (el) {
       var id = el.getAttribute("data-addon");
-      var a = D.addons.filter(function (x) { return x.id === id; })[0];
+      var a = addonById(id);
       // A zero-cost add-on is always on, and is never carried in state.addons —
       // it has to render ticked or "Included" sits next to an empty box and
       // reads as the opposite of what it says.
       el.checked = (a && a.pct === 0) || (state.addons || []).indexOf(id) >= 0;
+    });
+
+    /* The mode-conditional pair, and the per-game name of the picks add-on.
+       Both ship every variant in the DOM with all but one hidden, rather than
+       being written in by JS: i18n.js matches whole text nodes, so a label this
+       pass invented would arrive untranslated. */
+    each("[data-when-mode]", function (el) {
+      el.hidden = !addonApplies(el.getAttribute("data-when-mode"), state.mode);
+    });
+    each("[data-when-game]", function (el) {
+      el.hidden = el.getAttribute("data-when-game") !== state.game;
     });
 
     // continue buttons disabled on an impossible pair
@@ -824,8 +940,8 @@
            and take the mode from [data-out="mode"], so the row is markup and
            the unit services read [data-sum="summary"] directly. */
         addonlist: (state.addons || []).map(function (id) {
-          var a = D.addons.filter(function (x) { return x.id === id; })[0];
-          return a ? T(a.label) : id;
+          var a = addonById(id);
+          return a ? T(addonLabel(a)) : id;
         }).join(", ") || T("None")
       };
       if (map[k] !== undefined) el.textContent = map[k];
@@ -861,22 +977,24 @@
        is what reconciles the two. */
     each("[data-addon-lines]", function (root) {
       var ids = (state.addons || []).filter(function (id) {
-        var a = D.addons.filter(function (x) { return x.id === id; })[0];
-        return a && a.pct !== 0;
+        var a = addonById(id);
+        // Never a row for something the quote does not charge — a free
+        // inclusion, or an option belonging to the queue this order is not in.
+        return a && a.pct !== 0 && addonApplies(a.mode, state.mode);
       });
       root.innerHTML = "";
       if (q.invalid) return;
       var running = [];
       var prev = quote(Object.assign({}, state, { addons: [] })).subtotal;
       ids.forEach(function (id) {
-        var a = D.addons.filter(function (x) { return x.id === id; })[0];
+        var a = addonById(id);
         running = running.concat([id]);
         var now = quote(Object.assign({}, state, { addons: running })).subtotal;
         var row = document.createElement("div");
         row.className = "co-line";
         var lab = document.createElement("span");
         lab.className = "co-lab";
-        lab.textContent = T(a.label);
+        lab.textContent = T(addonLabel(a));
         var val = document.createElement("span");
         val.className = "co-val";
         val.textContent = usd(now - prev);
@@ -1191,7 +1309,13 @@
     });
 
     each("input[data-mode]", function (el) {
-      el.addEventListener("change", function () { if (el.checked) set({ mode: el.value }, "select_item"); });
+      el.addEventListener("change", function () {
+        // Switching queue takes the other queue's add-on off the order with it.
+        // Leaving it in state would list a row on the receipt that the server
+        // (which applies the same filter) does not charge for.
+        if (el.checked) set({ mode: el.value, addons: addonsFor(state.addons, el.value) },
+                            "select_item");
+      });
     });
 
     each("[role=tab][data-service]", function (el) {
@@ -1363,7 +1487,6 @@
     initStats();
     initReveal();
     initCarousel();
-    initLiveStats();
     initFeed();
     initRoster();
     initBoosters();
@@ -2515,7 +2638,10 @@
     var feedList = document.querySelector(".lf-list");
     var shiftList = document.querySelector(".rc-list");
     var board = document.querySelector("[data-rst-body]");
-    if (!feedList && !shiftList && !board) return;
+    // [data-live] is in the header, so it is on every page — the fetch has to
+    // run for it even where none of the three panels do.
+    var live = document.querySelector("[data-live]");
+    if (!feedList && !shiftList && !board && !live) return;
 
     fetch("/api/boosters", { headers: { Accept: "application/json" } })
       .then(function (r) { return r.status === 200 ? r.json() : null; })
@@ -2524,6 +2650,12 @@
         if (feedList && data.feed && data.feed.length) renderFeed(feedList, data);
         if (shiftList && data.shift && data.shift.length) renderShift(shiftList, data);
         if (board && data.boosters && data.boosters.length) renderBoard(board, data);
+        // The header's roster count comes from the same payload the rail and the
+        // board are drawn from, so the page can never quote two of them.
+        if (data.stats) {
+          setLiveStat("online", data.stats.online);
+          setLiveStat("free", data.stats.free_now);
+        }
       })
       .catch(function () {});                      // network error → keep the fallback
   }
@@ -2720,6 +2852,15 @@
       var m = raw.match(/^([^\d]*)(\d[\d,]*(?:\.\d+)?)(.*)$/);
       if (!m) return;
       var pre = m[1], numStr = m[2], suf = m[3];
+      /* A rating must not count up from zero. "92,400 delivered" ticking up
+         reads as momentum; the same easing on "4.8 / 5" spends the first
+         second of every load advertising 0.4, 1.2, 2.6 out of 5 — on the pages
+         whose entire job is trust, and for longer than that on a slow device
+         or a tab that was opened in the background. Ratings render final. */
+      if (parseFloat(numStr.replace(/,/g, "")) <= 5 && numStr.indexOf(".") >= 0) {
+        el.textContent = raw;
+        return;
+      }
       var decimals = (numStr.split(".")[1] || "").length;
       var comma = numStr.indexOf(",") >= 0;
       var target = parseFloat(numStr.replace(/,/g, ""));
@@ -2915,58 +3056,36 @@
     });
   }
 
-  /* ── live counts wander so the page reads live ───────────────────────────
-     Every [data-live] number drifts on its own timer: "boosters free now" and
-     the header's "N verified boosters". A data-live-min sets the floor (and
-     pins the ceiling at the rendered figure, so the header never claims more
-     than the roster's real count); otherwise it wanders ±a few off its base.
-     On every change the figure flashes ember (.is-up) before easing back. */
-  function initLiveStats() {
-    var els = document.querySelectorAll("[data-live]");
-    if (!els.length) return;
-    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) return;
-    Array.prototype.forEach.call(els, function (el) { wanderStat(el); });
+  /* ── live counts ─────────────────────────────────────────────────────────
+     These used to WANDER: every [data-live] figure drifted ±1–2 on a 4–8s timer
+     so the page would "read live". Three problems, all of them the kind this
+     build exists to avoid. It moved with nothing behind it — no order, no shift
+     change, just Math.random() dressed as activity. Its floor was
+     data-live-min="36" against a true roster of 88, so the header could claim
+     less than half the real board. And it drifted out of step with the numbers
+     beside it: the header said 87 while the "On shift now" rail (reading the
+     real store) said 84 and the server-rendered HTML said 88 — three roster
+     counts on one screen, which is exactly the bug counting from BOOSTERS was
+     introduced to kill.
+
+     A figure here now only ever changes when the store says so. initBoosters()
+     fetches /api/boosters and calls this with the real counts; until then the
+     server-rendered number stands. */
+  function setLiveStat(kind, value) {
+    if (typeof value !== "number" || !isFinite(value) || value < 0) return;
+    each("[data-live=\"" + kind + "\"]", function (el) {
+      var was = parseInt((el.getAttribute("data-raw") || el.textContent || "")
+                         .replace(/[^\d-]/g, ""), 10);
+      el.setAttribute("data-raw", String(value));
+      el.textContent = String(value);
+      if (was === value) return;
+      var host = el.closest ? el.closest("[data-live-stat]") : null;
+      if (host) { host.classList.add("bump"); setTimeout(function () { host.classList.remove("bump"); }, 260); }
+      el.classList.add("is-up");
+      setTimeout(function () { el.classList.remove("is-up"); }, 500);
+    });
   }
-
-  function wanderStat(el) {
-    var host = el.closest ? el.closest("[data-live-stat]") : null;
-    var base = parseInt((el.getAttribute("data-raw") || el.textContent || "").replace(/[^\d-]/g, ""), 10);
-    if (isNaN(base)) return;
-    var min = parseInt(el.getAttribute("data-live-min"), 10);
-    var hasMin = !isNaN(min);
-    var cur = base;
-    var lo = hasMin ? min : Math.max(1, base - 3);
-    var hi = hasMin ? base : base + 4;          // min-based: never above the true count
-    if (hi <= lo) return;
-    var upT;
-
-    function tween(to) {
-      var from = cur, t0 = null, dur = 650;
-      if (host) host.classList.add("bump");
-      el.classList.add("is-up");                // flash ember while it moves
-      clearTimeout(upT);
-      function step(ts) {
-        if (t0 === null) t0 = ts;
-        var k = Math.min(1, (ts - t0) / dur);
-        el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3)));
-        if (k < 1) requestAnimationFrame(step);
-        else { el.textContent = to; el.setAttribute("data-raw", String(to)); cur = to;
-               if (host) setTimeout(function () { host.classList.remove("bump"); }, 260);
-               upT = setTimeout(function () { el.classList.remove("is-up"); }, 500); }
-      }
-      requestAnimationFrame(step);
-    }
-
-    function tick() {
-      var next = cur + (Math.random() < 0.5 ? -1 : 1) * (1 + Math.floor(Math.random() * 2));
-      next = Math.max(lo, Math.min(hi, next));
-      if (next !== cur) tween(next);
-      schedule();
-    }
-    function schedule() { setTimeout(tick, 3800 + Math.random() * 4200); }
-    schedule();                          // first wander lands after the count-up settles
-  }
+  window.esbSetLiveStat = setLiveStat;
 
   /* ── free guides landing ── design_handoff_free_guides ────────────────────
      The lead form. Two guides is a choice inside ONE funnel: one email, one CTA,

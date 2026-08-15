@@ -30,10 +30,15 @@ Load-bearing rules:
 `/api/account` is public and unauthenticated, like `/api/collect`: the auth form
 is on every page. So everything is length-capped and validated below, nothing is
 stored that did not survive `clean_signup()`, and the list is read only through
-the password-gated `/ops` API. A real login endpoint is necessarily an
-authentication oracle (a wrong password is distinguishable from an unknown
-email is avoided — both answer the same 401 — but a valid pair is not); a
-production deployment needs rate limiting on this route.
+the password-gated `/ops` API.
+
+A real login endpoint is necessarily an authentication oracle, so two things
+defend it and both are load-bearing: failures are **rate limited** per
+(identity, client) — Upstash in production, an in-process counter under
+`serve.py` — and an unknown email pays the **same PBKDF2** as a known one via
+`decoy_hash()`. Matching response bodies alone were not enough: an early return
+on a missing credential made an unregistered address ~2000× faster to answer,
+which enumerates the customer list regardless of what the body says.
 """
 import hashlib
 import hmac
@@ -54,6 +59,18 @@ MAX_EMAIL = 160
 
 MAX_PASSWORD = 256          # cap before hashing — a huge string would DoS PBKDF2
 MIN_PASSWORD = 6            # enforced on signup, client and server
+
+# ── rate limiting ─────────────────────────────────────────────────────────
+# `/api/account` is public and is a real login endpoint, so it is a
+# credential-stuffing target. Failures are counted per (email, client) and the
+# route locks that pair out for a window. Upstash carries the counter in
+# production (shared across serverless invocations); locally `serve.py` is one
+# long-running process, so the in-memory fallback is genuine protection there
+# rather than a no-op the way ops.py's throttle degrades.
+MAX_ATTEMPTS = 8
+ATTEMPT_WINDOW = 900        # 15 minutes
+_MEM_FAILS = {}             # {key: (count, window_start)} — local fallback
+_MEM_FAILS_MAX = 4096       # bound the dict; a flood must not grow it forever
 
 LIST_KEY = "esb:accounts"
 # One address signs up once. This SET mirrors the emails already in LIST_KEY and
@@ -79,6 +96,23 @@ def hash_password(password):
     salt = secrets.token_bytes(_SALT_BYTES)
     dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, _PBKDF2_ITERS)
     return "%s$%d$%s$%s" % (_PBKDF2_ALGO, _PBKDF2_ITERS, salt.hex(), dk.hex())
+
+
+_DECOY = None
+
+
+def decoy_hash():
+    """A throwaway hash used to equalise the cost of an unknown email.
+
+    Without it `_login()` returns immediately when no credential exists, so a
+    registered address costs a full PBKDF2 (~75ms) and an unregistered one ~0ms
+    — a 2000× timing gap that enumerates the whole customer list however
+    identical the response bodies are. Verifying against this decoy makes both
+    paths pay the same work. Built once, lazily, so import stays cheap."""
+    global _DECOY
+    if _DECOY is None:
+        _DECOY = hash_password(secrets.token_urlsafe(16))
+    return _DECOY
 
 
 def verify_password(password, encoded):
@@ -315,17 +349,85 @@ def clean_signup(body, now, ctx):
     return row
 
 
-def _login(email, password):
+def _throttle_key(kind, who, client):
+    """One counter per (route, identity, client) — hashed so no address is
+    written into a store key."""
+    raw = "%s|%s|%s" % (kind, who, client)
+    return "esb:acct:fails:" + hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def _too_many(key, now=None):
+    now = int(now or time.time())
+    if analytics.upstash_config()[0]:
+        try:
+            res = analytics._upstash([["GET", key]])
+            return int(res[0] or 0) >= MAX_ATTEMPTS
+        except (analytics.StoreError, TypeError, ValueError, IndexError):
+            return False                      # a store hiccup must not lock people out
+    hit = _MEM_FAILS.get(key)
+    if not hit:
+        return False
+    count, start = hit
+    if now - start > ATTEMPT_WINDOW:
+        _MEM_FAILS.pop(key, None)
+        return False
+    return count >= MAX_ATTEMPTS
+
+
+def _note_failure(key, now=None):
+    now = int(now or time.time())
+    if analytics.upstash_config()[0]:
+        try:
+            analytics._upstash([["INCR", key], ["EXPIRE", key, ATTEMPT_WINDOW]])
+        except analytics.StoreError:
+            pass
+        return
+    count, start = _MEM_FAILS.get(key, (0, now))
+    if now - start > ATTEMPT_WINDOW:
+        count, start = 0, now
+    _MEM_FAILS[key] = (count + 1, start)
+    if len(_MEM_FAILS) > _MEM_FAILS_MAX:
+        cutoff = now - ATTEMPT_WINDOW
+        for k, v in list(_MEM_FAILS.items()):
+            if v[1] < cutoff:
+                _MEM_FAILS.pop(k, None)
+
+
+def _clear_failures(key):
+    """A correct password ends the lockout for that pair."""
+    if analytics.upstash_config()[0]:
+        try:
+            analytics._upstash([["DEL", key]])
+        except analytics.StoreError:
+            pass
+        return
+    _MEM_FAILS.pop(key, None)
+
+
+def _login(email, password, client=""):
     """Verify an email + password against the store. `(200, {...})` on a match,
-    `(401, {"error": "invalid"})` otherwise. The same 401 answers an unknown
-    email and a wrong password, so the endpoint is not a bare account-existence
-    oracle; the returned name lets the client greet the account by its handle."""
+    `(401, {"error": "invalid"})` otherwise, `(429, …)` once a pair has burned
+    through MAX_ATTEMPTS in the window.
+
+    The same 401 answers an unknown email and a wrong password — and the two now
+    cost the same wall time as well (see `decoy_hash()`), because a body that
+    says nothing while the clock says everything is still an enumeration oracle.
+    The returned name lets the client greet the account by its handle."""
     email = _s(email, MAX_EMAIL).lower()
     if not _EMAIL_RE.match(email) or not password:
         return 401, {"error": "invalid"}
+    key = _throttle_key("signin", email, client)
+    if _too_many(key):
+        return 429, {"error": "throttled"}
     enc = credential(email)
-    if not enc or not verify_password(password, enc):
+    if not enc:
+        verify_password(password, decoy_hash())   # equalise the cost of an unknown email
+        _note_failure(key)
         return 401, {"error": "invalid"}
+    if not verify_password(password, enc):
+        _note_failure(key)
+        return 401, {"error": "invalid"}
+    _clear_failures(key)
     name = ""
     for r in read():
         if r.get("email") == email:
@@ -350,10 +452,12 @@ def process_signup(raw, header_get):
         nothing stored — the create flow tells the visitor to log in instead.
       · **signin, valid credentials** → `(200, {"ok": True, "email", "name"})`.
       · **signin, bad credentials** → `(401, {"error": "invalid"})`.
+      · **too many failures for that pair** → `(429, {"error": "throttled"})`.
       · unknown mode / unparseable body → `(204, None)`.
 
-    NB both create-exists (409) and login are authentication oracles by nature;
-    a production deployment needs rate limiting on this route (module header).
+    Both create-exists (409) and login are authentication oracles by nature, so
+    the route is rate limited per (identity, client) and an unknown email costs
+    the same PBKDF2 as a known one — see `_too_many()` and `decoy_hash()`.
     """
     if not raw or len(raw) > MAX_BODY:
         return 204, None
@@ -367,12 +471,24 @@ def process_signup(raw, header_get):
     mode = _s(body.get("mode"), 8)
     password = str(body.get("password") or "")[:MAX_PASSWORD]
 
+    get = header_get or (lambda *_a, **_k: "")
+    # Client identity for the throttle: the edge's forwarded address, else the
+    # direct peer. Only ever hashed into a counter key — never stored on a row,
+    # which is what keeps this store's promise about what it holds.
+    client = _s((get("x-forwarded-for") or "").split(",")[0].strip()
+                or get("x-real-ip") or "", 64)
+
     if mode == "signin":
-        return _login(body.get("email"), password)
+        return _login(body.get("email"), password, client)
     if mode != "signup":
         return 204, None                     # unknown mode records nothing
 
-    get = header_get or (lambda *_a, **_k: "")
+    # Sign-up is throttled per client too: without it the route is a free
+    # account-creation firehose, and the 409 answers "is this email taken?".
+    su_key = _throttle_key("signup", "", client)
+    if _too_many(su_key):
+        return 429, {"error": "throttled"}
+
     edge = _s(get("x-vercel-ip-country") or "", 2).upper()
     tz = _s(body.get("tz"), 64)
     lang = _s(body.get("lang"), 12)
@@ -382,10 +498,12 @@ def process_signup(raw, header_get):
     }
     row = clean_signup(body, int(time.time()), ctx)
     if row is None:
+        _note_failure(su_key)
         return 400, {"error": "email"}
     if len(password) < MIN_PASSWORD:
         return 400, {"error": "weak"}
     if email_exists(row["email"]):
+        _note_failure(su_key)                # the 409 is an existence oracle
         return 409, {"error": "exists"}
     create_account(row, hash_password(password))   # re-checks uniqueness itself
     return 200, {"created": True, "email": row["email"], "name": row["name"]}

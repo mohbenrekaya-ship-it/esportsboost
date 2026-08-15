@@ -8,8 +8,10 @@ No dependencies. Every page is generated from src/data.py; every image from
 src/art.py. The homepage is the v2 immersive design; the rest of the site
 carries the same system.
 """
+import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 from datetime import datetime, timedelta
@@ -333,7 +335,7 @@ def hd_games_cards():
         # "+4" — how many ladders the five cards above don't name. The short
         # names are data and stay in their own node, so "are live too" survives
         # as a whole translatable phrase beside them.
-        cards += hd_card("/games/", "grid", "All %s ladders" % spell(len(D.GAMES)),
+        cards += hd_card("/games/", "grid", "All %s games" % spell(len(D.GAMES)),
                          tag="+%d" % len(rest),
                          note_html='<b class="hd-card-fig">%s</b><span>are live too</span>'
                                    % esc(", ".join(rest)))
@@ -403,7 +405,7 @@ def hd_rail():
         lines.append(("users", [("b", n), "boosters on shift"]))
     claim = D.STATS.get("median_claim")
     if claim:
-        lines.append(("hourglass", ["Median claim", ("b", claim)]))
+        lines.append(("hourglass", ["Time to claim", ("b", claim)]))
     lines.append(("shield-check", ["Money-back until claimed"]))
     rows = ""
     for ico, parts in lines:
@@ -423,7 +425,7 @@ def hd_rail():
 
 # key → (nav label, mega-menu section label, cards builder, sheet count)
 HD_MENUS = [
-    ("games", "Games", "Pick a ladder", hd_games_cards, lambda: str(len(D.GAMES))),
+    ("games", "Games", "Pick your game", hd_games_cards, lambda: str(len(D.GAMES))),
     ("boosters", "Boosters", "Who plays your order", hd_boosters_cards,
      lambda: str(D.STATS.get("online") or "")),
     ("safety", "Safety", "Before you buy", hd_safety_cards, lambda: ""),
@@ -935,6 +937,7 @@ def chrome_guides():
 
 
 TRUSTPILOT_URL = getattr(D, "TRUSTPILOT_URL", "")
+DISCORD_URL = getattr(D, "DISCORD_URL", "")
 
 _tp_id = [0]
 
@@ -976,9 +979,22 @@ def rating_ld():
     """`aggregateRating` for JSON-LD — `{}` unless a real rating exists.
 
     Search engines render this as star ratings in results, so an invented value
-    here is a fabricated review signal published to every crawler. Returning an
-    empty dict lets callers `update()` unconditionally.
+    here is a fabricated review signal published to every crawler — which is
+    exactly why the booster profiles emit `Person`/`ProfilePage` and no rating
+    at all. The same rule has to hold here: `STATS["trustpilot"]` and
+    `STATS["reviews"]` are computed from `REVIEW_DIST`, which is invented, so
+    "is STATS populated?" was never the question — it always is.
+
+    The gate is `TRUSTPILOT_URL`, the signal the badge and the reviews page
+    already use for "this rating is ours and checkable". While it is empty the
+    figures still render on the page as marketing copy, but nothing is asserted
+    to a crawler as structured data; the moment a real profile is wired up, the
+    rating starts emitting with no code change. Fabricated review markup is a
+    manual-action risk, and it is the one claim on the site a crawler acts on
+    directly.
     """
+    if not TRUSTPILOT_URL:
+        return {}
     if not D.STATS.get("trustpilot") or not D.STATS.get("reviews"):
         return {}
     return {"aggregateRating": {
@@ -993,8 +1009,12 @@ def trustpilot_badge(label="Excellent"):
     Renders nothing without a real rating in STATS — the badge puts Trustpilot's
     name and logo behind whatever score it is given, so it must never be built
     from a placeholder.
+
+    The count is `trustpilot_reviews`, not `reviews`: the site's corpus is
+    Trustpilot plus the order-page rating, and only the Trustpilot part of it
+    may be counted under Trustpilot's logo.
     """
-    if not D.STATS.get("trustpilot") or not D.STATS.get("reviews"):
+    if not D.STATS.get("trustpilot") or not D.STATS.get("trustpilot_reviews"):
         return ""
     rating = D.STATS["trustpilot"].split("/")[0].strip()
     try:
@@ -1004,13 +1024,13 @@ def trustpilot_badge(label="Excellent"):
     _tp_id[0] += 1
     stars = _tp_stars_svg(fill, "tpclip%d" % _tp_id[0])
     aria = ("%s rating on Trustpilot from %s reviews — read reviews on Trustpilot"
-            % (D.STATS["trustpilot"], D.STATS["reviews"]))
+            % (D.STATS["trustpilot"], D.STATS["trustpilot_reviews"]))
     logo = ('<span class="tp-brand"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
             '<path d="M12 2l2.6 6.8H22l-6 4.5 2.3 7L12 15.9 5.7 20.3 8 13.3 2 8.8h7.4z" '
             'fill="#00b67a"/></svg>Trustpilot</span>')
     inner = (f'{logo}{stars}'
              f'<span class="tp-meta"><span class="tp-word">{esc(label)}</span> '
-             f'<b>{esc(D.STATS["trustpilot"])}</b> · {esc(D.STATS["reviews"])} reviews</span>')
+             f'<b>{esc(D.STATS["trustpilot"])}</b> · {esc(D.STATS["trustpilot_reviews"])} reviews</span>')
     # Unlinked until D.TRUSTPILOT_URL names our own profile — a badge that sends
     # the buyer to another brand's page is worse than one that doesn't click.
     if not TRUSTPILOT_URL:
@@ -1080,6 +1100,11 @@ FOOT_SUPPORT = [
 if not getattr(D, "GUIDES", None):
     FOOT_SUPPORT = [row for row in FOOT_SUPPORT if row[0] != "/guides.html"]
 FOOT_EMAIL = "info@esportsboost.com"
+# The one mailbox on the site: the footer prints it, the support page's email
+# card and its copy chip carry it, and src/mailer.py sends from it and delivers
+# tickets to it (SUPPORT_EMAIL there, defaulting to MAIL_FROM). A second literal
+# is how a page comes to advertise an address nobody reads — so there is one.
+SUPPORT_EMAIL = FOOT_EMAIL
 # The handoff's one hard rule about the support card's status line: "Online now"
 # has to reflect real support availability, and if support is offline the dot
 # and the label change rather than lying. There is no availability feed to read,
@@ -1169,12 +1194,26 @@ def footer():
     )
     legal = "".join('<li><a href="%s"><span>%s</span></a></li>' % (h, esc(l))
                     for h, l in FOOT_LEGAL)
+    # Socials are hidden until the accounts behind them are real. The handoff's
+    # own note says to replace its six tiles with the channels that exist, for
+    # the reason a tile linking to a bare facebook.com/ is worse than one fewer
+    # tile: it reads as an account, and the click proves there isn't one. Every
+    # entry in _SOCIAL still points at a platform root rather than a page, so
+    # the whole block renders nothing. Fill in the real URLs and it comes back —
+    # `_SOCIAL` is the only thing to edit, and only entries with a real path are
+    # drawn. Discord is deliberately NOT here: it is a live server, and it is
+    # reached from the homepage card, the boosters strip and the support page.
+    live_social = {n: v for n, v in _SOCIAL.items()
+                   if v[0].startswith("http") and len(v[0].split("://", 1)[1].split("/", 1)) > 1
+                   and v[0].split("://", 1)[1].split("/", 1)[1].strip("/")}
     social = "".join(
         '<a class="ft-social" href="%s" aria-label="%s" title="%s"%s>%s</a>'
         % (href, esc(name), esc(name), ' target="_blank" rel="noopener noreferrer"'
            if href.startswith("http") else "", svg)
-        for name, (href, svg) in _SOCIAL.items()
+        for name, (href, svg) in live_social.items()
     )
+    social_block = ('<div class="ft-soc"><span class="ft-lab">Follow along</span>'
+                    '<div class="ft-soc-row">%s</div></div>' % social) if social else ""
     return f"""<footer class="ft">
   <div class="wrap ft-in">
     <div class="ft-grid">
@@ -1184,10 +1223,7 @@ def footer():
           <span class="ft-lab">Questions? Email us at</span>
           <a class="ft-mail-a" href="mailto:{FOOT_EMAIL}">{_ico("envelope", 15, "ico ft-mail-ico", stroke=True)}{FOOT_EMAIL}</a>
         </div>
-        <div class="ft-soc">
-          <span class="ft-lab">Follow along</span>
-          <div class="ft-soc-row">{social}</div>
-        </div>
+        {social_block}
         <p class="ft-disclaimer">{esc(FOOT_DISCLAIMER)}</p>
       </div>
 
@@ -1229,7 +1265,13 @@ def footer():
 
     <hr class="ft-rule">
     <div class="ft-bottom">
-      <span class="ft-copy">© {D.YEAR} {esc(D.BRAND)}. All Rights Reserved.</span>
+      <span class="ft-copy">© {D.YEAR} {esc(D.BRAND)}. All Rights Reserved.<!--
+        The registered address rides in the copyright cell rather than as a
+        fourth footer column: it is the one piece of chrome that has to be on
+        every page for the e-commerce regs, and it belongs beside the entity
+        it identifies. It is data, so it is one node and stays as written —
+        the legal pages print the same D.company_lines(). -->
+        <span class="ft-addr">{esc(D.company_address())}</span></span>
       <div class="ft-bottom-r">
         {foot_pay()}
         <span class="ft-bottom-div" aria-hidden="true"></span>
@@ -1327,11 +1369,11 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#06060a">
 <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="/assets/css/ashfall.css">
-<link rel="stylesheet" href="/assets/css/site.css">
-<link rel="stylesheet" href="/assets/css/type-b-sans.css">
+<link rel="preload" href="/assets/fonts/inter-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-600-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{av('/assets/css/ashfall.css')}">
+<link rel="stylesheet" href="{av('/assets/css/site.css')}">
+<link rel="stylesheet" href="{av('/assets/css/type-b-sans.css')}">
 {ld}</head>
 <body{body_cls}>
 <a class="btn btn-secondary btn-sm" href="#main" style="position:absolute;left:-9999px" onfocus="this.style.left='12px';this.style.top='12px';this.style.zIndex='99'" onblur="this.style.left='-9999px'">Skip to content</a>
@@ -1341,10 +1383,10 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
 </main>
 {foot}
 {bar}
-<script src="/assets/js/data.js"></script>
-<script src="/assets/js/i18n.js"></script>
-<script src="/assets/js/app.js"></script>
-<script src="/assets/js/analytics.js" defer></script>
+<script src="{av('/assets/js/data.js')}"></script>
+<script src="{av('/assets/js/i18n.js')}"></script>
+<script src="{av('/assets/js/app.js')}"></script>
+<script src="{av('/assets/js/analytics.js')}" defer></script>
 {extra_js}</body>
 </html>
 """
@@ -1426,6 +1468,12 @@ _ICONS = {
                     " 3.6 3.6 0 0 0 0-7.2M19.1 17.3l2.6 2.6"),
     "pause-circle": ("M12 2.8a9.2 9.2 0 1 0 0 18.4 9.2 9.2 0 0 0 0-18.4"
                      "M10.2 8.8v6.4M13.8 8.8v6.4"),
+    # The same badge drawn to be FILLED: the bars are real rects, so fill-rule
+    # evenodd knocks them out of the disc. `pause-circle` above is stroke-only —
+    # its bars are zero-width lines, which have no area to subtract, so filling
+    # it paints a solid dot and the glyph stops reading as pause at all.
+    "pause-badge": ("M12 2.8a9.2 9.2 0 1 0 0 18.4 9.2 9.2 0 0 0 0-18.4"
+                    "M9.9 8.5h1.7v7H9.9zM12.4 8.5h1.7v7h-1.7z"),
     "pause": "M9.4 5.4v13.2M14.6 5.4v13.2",
     "receipt": ("M5.6 3.4h12.8v17.2l-2.6-1.7-2.6 1.7-2.6-1.7-2.4 1.7z"
                 "M9 8.4h6M9 12.4h6"),
@@ -1640,19 +1688,32 @@ def _discord_mark(size=19, cls="ico dcd-mark"):
             f'aria-hidden="true" focusable="false"><path d="{_DISCORD_PATH}" fill="#5865F2"/></svg>')
 
 
-# Money-back / no account / VPN region. These are the three objections a
-# grey-market buyer has, so they are answered where the decision is made — in
-# both heroes, beside the CTA, not in the footer's fine print.
+# The three objections a grey-market buyer actually has — money, control, and
+# the account itself — answered where the decision is made: beside the CTA, not
+# in the footer's fine print. Three, not four: they sit on one flex row that
+# wraps at the hero's own measure (see .hero-h .gtee-row in site.css, which is
+# why that rule is NOT a 2-column grid — a fourth item made the second row a
+# lone cell beside a gap).
+#
+# Each line restates a claim the site already makes somewhere else, and none of
+# them is an outcome promise: the VPN is a mechanism, not a guarantee that no
+# account is ever actioned — the game pages' honesty plate is the one place that
+# subject gets argued, and it must not be contradicted here.
+# Icons in this row are filled, not stroked. Any whose inner shape is a hole
+# has to say so — see _ico()'s `evenodd`.
+_GTEE_EVENODD = {"pause-badge"}
+
 GUARANTEES_INLINE = (
     ("shield", "Money-back until a booster is assigned"),
-    ("ghost", "No account needed"),
+    ("pause-badge", "Pause it anytime"),
     ("globe", "VPN matched to your region"),
 )
 
 
 def guarantee_row():
     return '<div class="gtee-row">%s</div>' % "".join(
-        f'<span class="gtee">{_ico(ico, 16, "gtee-ico")}{esc(txt)}</span>'
+        f'<span class="gtee">{_ico(ico, 16, "gtee-ico", evenodd=(ico in _GTEE_EVENODD))}'
+        f'{esc(txt)}</span>'
         for ico, txt in GUARANTEES_INLINE)
 
 
@@ -2006,7 +2067,7 @@ def games_grid():
         tiles.append(f"""<a class="gg-tile gg-more" href="/games/">
       <span class="gg-more-top">
         <span class="gg-more-n">+{len(rest)}</span>
-        <span class="gg-more-t"><b>{esc(joined)}</b> <span>ladders are live too.</span></span>
+        <span class="gg-more-t"><b>{esc(joined)}</b> <span>are live too.</span></span>
       </span>
       <span class="gg-more-btn"><span>All games</span>{_ico("arrow", 14, "ico", stroke=True)}</span>
     </a>""")
@@ -2193,7 +2254,7 @@ def discord_card():
         </span>
       </div>
       <p class="dcd-body">{esc(d['body'])}</p>
-      <a class="dcd-cta" href="{esc(d['href'])}">{esc(d['cta'])}{_ico("arrow", 14, "ico", stroke=True)}</a>
+      <a class="dcd-cta" href="{esc(d['href'])}" target="_blank" rel="noopener noreferrer">{esc(d['cta'])}{_ico("arrow", 14, "ico", stroke=True)}</a>
     </div>"""
 
 
@@ -2323,8 +2384,9 @@ def _resolve_demo(src, g):
     # Priced WITH the fixture's add-ons, because the demo page's details rail
     # names them: a row reading "Add-ons: Champions, agents & roles" over a
     # "Paid" figure quoted without them is a hand-typed price by another route.
-    addons = [a for a in list(O.get("addons") or []) if any(x["id"] == a for x in D.ADDONS)]
-    O["addon_labels"] = [x["label"] for x in D.ADDONS if x["id"] in addons]
+    addons = [a for a in list(O.get("addons") or [])
+              if any(x["id"] == a and D.addon_applies(x, O["mode"]) for x in D.ADDONS)]
+    O["addon_labels"] = [D.addon_label(x, O["game"]) for x in D.ADDONS if x["id"] in addons]
     q = pricing.quote({"game": O["game"], "service": "division", "from": O["start_rank"],
                        "to": O["target_rank"], "mode": O["mode"], "addons": addons})
     O["pct"] = round(pct * 100)
@@ -2419,6 +2481,7 @@ def dash_mock(example=False, live=False, gp=False, order=None, game=None):
         tier, div = pair
         base = "dm-mark dm-mark-sm" if small else "dm-mark"
         return tier_mark(g, tier, div or tier[:2].upper(), strong=strong, base=base)
+
 
     # LP across the order: 13 authored points across the 588-unit box, joined
     # into the line and closed to the baseline for the area fill.
@@ -2528,7 +2591,7 @@ def dash_mock(example=False, live=False, gp=False, order=None, game=None):
         {climb}
 
         <div class="dm-prog">
-          <span class="dm-prog-l">{mark(O['at'], small=True)}{esc(O['at_rank'])} · <b>{O['lp']} {O['unit']}</b></span>
+          <span class="dm-prog-l"><span class="dm-prog-rank">{esc(O['at'][0])}{mark(O['at'], small=True)}</span> · <b>{O['lp']} {O['unit']}</b></span>
           <span class="dm-prog-r"><b>{O['pct']}%</b> complete<i aria-hidden="true"> · </i><b>{O['days_left']}</b> days left</span>
         </div>
         <div class="dm-track"><span class="dm-fill" style="width:{O['pct']}%"></span></div>
@@ -2556,19 +2619,25 @@ def dash_mock(example=False, live=False, gp=False, order=None, game=None):
     </div>"""
 
 
-# The four things the dashboard lets you do that a DM cannot. Neutral chips, not
-# accent outlines: they are facts about the order, not four more buttons. Icons
+# The things the dashboard lets you do that a DM cannot. Neutral chips, not
+# accent outlines: they are facts about the order, not more buttons. Icons
 # follow the site's existing mapping — globe is Regional VPN and eye-off is
-# Offline appearance everywhere else on the site, ghost is "no account".
+# Offline appearance everywhere else on the site.
+#
+# "No account sharing on duo" was a fifth chip here and was removed on request.
+# The claim itself is not gone and must not be re-added here casually: it is
+# SAFETY["body"]'s own line, rendered by safety_block() on the homepage and as
+# a named measure on /guarantee.html. This row is the dashboard's feature list,
+# and that is the one entry on it that was a safety promise rather than
+# something the panel does.
 DASHBOARD_CHIPS = (
     ("globe", False, "Regional VPN"),
     ("eye-off", True, "Offline appearance"),
     ("receipt", True, "Pro-rated refunds"),
-    ("ghost", False, "No account sharing on duo"),
 )
 
 
-def dashboard_section(num=None, on_demo=False, note=None):
+def dashboard_section(num=None, on_demo=False, note=None, cta_href="/games/"):
     """The whole section: the mock, the three claims, the chips and the CTAs.
 
     `num` numbers the eyebrow on the homepage, where the section is 04 in a run
@@ -2579,6 +2648,14 @@ def dashboard_section(num=None, on_demo=False, note=None):
     ("same dashboard on all nine titles"). Only that page passes one: on the
     homepage the three benefit rows below already carry the argument, and a
     fourth block of prose there pushes the CTA out of the viewport.
+
+    `cta_href` is where "Configure your boost" goes. It defaults to the
+    catalogue because three of the four pages that render this band have no
+    configurator on them, so picking a title is genuinely the next step there.
+    The homepage does have one — bs_band()'s Best Sellers dock, `#calc` — and
+    it passes that instead: a button labelled "Configure your boost" should
+    land on a configurator, not on a page asking which game first. Any caller
+    passing a fragment must own that id, or the CTA is a no-op.
 
     `on_demo` is the demo page's copy of the band — the handoff carries this
     section over verbatim and asks for exactly two changes there: the Example
@@ -2618,7 +2695,7 @@ def dashboard_section(num=None, on_demo=False, note=None):
       <div class="dsh-bens">{bens}</div>
       <div class="dsh-chips">{chips}</div>
       <div class="dsh-cta">
-        <a class="btn btn-primary" href="/games/">Configure your boost{_ico("arrow", 15, "ico", stroke=True)}</a>
+        <a class="btn btn-primary" href="{cta_href}">Configure your boost{_ico("arrow", 15, "ico", stroke=True)}</a>
         {open_demo}
       </div>
     </div>
@@ -2708,16 +2785,18 @@ def hero_rating():
     until D.TRUSTPILOT_URL names our own profile, same rule as the badge.
     """
     bits = []
-    if D.STATS.get("trustpilot") and D.STATS.get("reviews"):
+    if D.STATS.get("trustpilot"):
+        # Score only — the review count is deliberately not repeated here. It is
+        # stated on /reviews.html, where the distribution backing it is drawn and
+        # a sceptic can actually check it; in the hero it was a second number
+        # competing with the client count beside it for the same glance.
         bits.append(
             f'{_ico("star", 15, "hero-h-star")}'
-            f'<span><b>{esc(D.STATS["trustpilot"])}</b> <span>on Trustpilot</span>'
-            f'<i aria-hidden="true"> · </i><span>{esc(D.STATS["reviews"])}</span> '
-            f'<span>reviews</span></span>')
-    if D.STATS.get("boosts"):
+            f'<span><b>{esc(D.STATS["trustpilot"])}</b> <span>on Trustpilot</span></span>')
+    if D.STATS.get("clients"):
         if bits:
             bits.append('<span class="hero-h-div" aria-hidden="true"></span>')
-        bits.append('<span><b>%s</b> boosts delivered</span>' % esc(D.STATS["boosts"]))
+        bits.append('<span><b>%s</b> clients</span>' % esc(D.STATS["clients"]))
     return ('<div class="hero-h-rating">%s</div>' % "".join(bits)) if bits else ""
 
 
@@ -2917,7 +2996,7 @@ def discord_strip():
     return f"""<div class="ds">
       {_ico("chat", 19, "ds-ico", stroke=True)}
       <span class="ds-txt">{esc(pre)} <b>{esc(word)}</b> {esc(mid)}<i aria-hidden="true"> — </i><b>{esc(n)}</b> <span>{esc(tail)}</span></span>
-      <a class="ds-cta" href="{esc(d['href'])}">{esc(V.get('strip_cta', 'Join'))}{_ico("arrow", 12, "ico", stroke=True)}</a>
+      <a class="ds-cta" href="{esc(d['href'])}" target="_blank" rel="noopener noreferrer">{esc(V.get('strip_cta', 'Join'))}{_ico("arrow", 12, "ico", stroke=True)}</a>
     </div>"""
 
 
@@ -3590,25 +3669,60 @@ def mode_seg(name, pct=False, icons=False):
 
 def _addons_sorted():
     """Free inclusions first. Leading with what costs nothing establishes the
-    block as generous before it asks for money — and the free one (offline
-    appearance) is a trust proof that was previously buried."""
+    block as generous before it asks for money — the picks add-on and the
+    offline appearance are trust proofs that were previously buried."""
     return sorted(D.ADDONS, key=lambda a: (a["pct"] != 0, D.ADDONS.index(a)))
 
 
-def addons_block(money=False, paid_only=False):
+def addon_name(a, game=None):
+    """An add-on's name as markup, with the phone's shorter wording beside it
+    where data.py carries one.
+
+    Only `champ` is per game (see `D.picks_label()`), and only the pages pinned
+    to one game know which. Checkout does not — it is one static page for all
+    nine — so with no `game` it ships **every** wording, one `data-when-game`
+    node each, and app.js shows the order's. Same reason the two auth tabs and
+    the two rank-plate labels both ride in the DOM: i18n.js matches whole text
+    nodes, so a name written in by JS would arrive untranslated.
+    """
+    def one(txt, attrs=""):
+        if a.get("label_sm"):
+            return (f'<span class="opt-t-full"{attrs}>{esc(txt)}</span>'
+                    f'<span class="opt-t-sm"{attrs}>{esc(a["label_sm"])}</span>')
+        return f'<span{attrs}>{esc(txt)}</span>' if attrs else esc(txt)
+
+    if a["id"] != "champ":
+        return one(a["label"])
+    if game:
+        return one(D.picks_label(game))
+    return "".join(one(D.picks_label(g["name"]),
+                       ' data-when-game="%s"%s' % (esc(g["name"]), "" if i == 0 else " hidden"))
+                   for i, g in enumerate(D.GAMES))
+
+
+def addons_block(money=False, paid_only=False, game=None):
     """Add-on picker. `money` renders each price as the dollars it actually adds
     to this order rather than a percentage — used at checkout, where buyers
     price in currency, not maths.
 
-    `paid_only` drops the always-on inclusion, so the order card shows the three
-    add-ons the handoff draws and nothing else. It is a fact about every order
-    rather than a choice, and a fourth checkbox row costs the card vertical
-    budget its CTA needs to clear the fold. Checkout still lists all four.
+    `paid_only` drops the free inclusions, for checkout's "Last chance to add"
+    upsell: a row that is already ticked and cannot be unticked is not an
+    upsell. An add-on flagged `incl` in data.py never renders here at all —
+    checkout states that one in its own green strip, and a fourth checkbox row
+    costs the order card the vertical budget its CTA needs to clear the fold.
+
+    Two of the add-ons are mode-conditional: solo orders are offered "Solo only
+    queue", duo orders "Play on your schedule". Both ship in the DOM carrying
+    `data-when-mode`, the one for the other queue `hidden`, and app.js swaps
+    them on the mode radio — the whole-text-node rule again, and it also keeps
+    the row count (and so the card's height) the same in both queues.
+
+    `game` pins the per-game add-on name; see addon_name().
     """
     rows = []
     for a in _addons_sorted():
         free = a["pct"] == 0
-        if free and paid_only:
+        if a.get("incl") or (free and paid_only):
             continue
         if free:
             price = '<span class="price price-free">Included</span>'
@@ -3619,15 +3733,18 @@ def addons_block(money=False, paid_only=False):
         checked = " checked disabled" if free else ""
         # Phone wording where the handoff shortens it; both variants ride in the
         # DOM so each stays a whole translatable node (see ADDONS in data.py).
-        name = esc(a["label"])
-        if a.get("label_sm"):
-            name = (f'<span class="opt-t-full">{esc(a["label"])}</span>'
-                    f'<span class="opt-t-sm">{esc(a["label_sm"])}</span>')
+        name = addon_name(a, game)
         note = esc(a["note"])
         if a.get("note_sm"):
             note = (f'<span class="opt-n-full">{esc(a["note"])}</span>'
                     f'<span class="opt-n-sm">{esc(a["note_sm"])}</span>')
-        rows.append(f"""<label class="opt{' opt-free' if free else ''}">
+        # The queue this row belongs to, and whether it starts hidden. The
+        # server renders the default queue (Solo); app.js owns it from there.
+        when = ""
+        if a.get("mode"):
+            when = ' data-when-mode="%s"%s' % (
+                esc(a["mode"]), "" if D.addon_applies(a, "Solo") else " hidden")
+        rows.append(f"""<label class="opt{' opt-free' if free else ''}"{when}>
         <input type="checkbox" data-addon="{esc(a['id'])}"{checked} autocomplete="off">
         <span><span style="display:block">{name}</span>
         <span class="note">{note}</span></span>
@@ -3859,14 +3976,15 @@ def pay_glyphs():
 
 def ob_trust():
     """Compact rating line for the foot of the card. Renders nothing without a
-    real rating — same rule as trustpilot_badge()."""
-    if not D.STATS.get("trustpilot") or not D.STATS.get("reviews"):
+    real rating — same rule as trustpilot_badge(), and it counts the same thing
+    that badge counts: the reviews that are on Trustpilot, not the corpus."""
+    if not D.STATS.get("trustpilot") or not D.STATS.get("trustpilot_reviews"):
         return ""
     star = ('<svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
             '<path d="M12 2l2.6 6.8H22l-6 4.5 2.3 7L12 15.9 5.7 20.3 8 13.3 2 8.8h7.4z" '
             'fill="#00b67a"/></svg>')
     return (f'<span class="ob-tp">{star}<b>{esc(D.STATS["trustpilot"])}</b> on Trustpilot · '
-            f'{esc(D.STATS["reviews"])} reviews</span>')
+            f'{esc(D.STATS["trustpilot_reviews"])} reviews</span>')
 
 
 def offers_coaching(g):
@@ -3976,28 +4094,40 @@ def bundle_strip(g):
     if not climbs:
         return ""
     dm = g.get("divmap") or {}
-    max_off = max(int(round(b["disc"] * 100)) for b in climbs)
+    # Every figure on a card is derived from the hand-set price against the full
+    # climb, so the pill can only ever state the reduction the checkout charges.
+    offs = [int(round(pricing.bundle_pct(g, b) * 100)) for b in climbs]
+    max_off = max(offs)
     flat = not any(len(dm.get(b["ft"], ())) > 1 for b in climbs)
-    note = ("Two rating bands up in one order" if flat
-            else "Two tiers up in one order, from wherever you are")
+    tiers = g["tiers"]
+    spans = [tiers.index(b["tt"]) - tiers.index(b["ft"]) for b in climbs]
+    # The note is a claim about the set, so each is guarded by what the set
+    # actually does. "The bigger the climb, the deeper the discount" only holds
+    # while the percentages really do rise with the span — prices are set by
+    # hand now, so a re-price can break the correlation, and the strip must not
+    # keep advertising a ramp that is no longer there.
+    ramped = sorted(zip(spans, offs)) == sorted(zip(spans, sorted(offs)))
+    if flat:
+        note = "Two rating bands up in one order"
+    elif max(spans) - min(spans) >= 2:
+        note = ("The bigger the climb, the deeper the discount" if ramped
+                else "Whole-ladder climbs at one flat price")
+    else:
+        note = "Two tiers up in one order, from wherever you are"
     cards = ""
     for i, b in enumerate(climbs):
         # Price the FULL two-tier climb (from-tier's bottom division → target),
         # not the cheapest sub-climb: the bundle is a flat price every division
-        # in the tier pays, so the advertised figure has to be the real "two
-        # tiers up" work, discounted — see pricing.py / app.js.
-        q = pricing.quote({"game": g["name"], "service": "division",
-                           "from": b["defFrom"], "to": b["target"],
-                           "mode": "Solo", "addons": []})
-        full = q["subtotal"]
-        price = pricing._jsround(full * (1 - b["disc"]))
-        off = int(round(b["disc"] * 100))
+        # in the tier pays, so the struck figure has to be the real "two tiers
+        # up" work — see pricing.py / app.js.
+        full = pricing.full_bundle_price(g, b)
+        price, off = b["price"], offs[i]
         sub = ("From any %s division" % b["ft"] if len(dm.get(b["ft"], ())) > 1
                else "Starts at %s" % b["floorFrom"])
         cards += f"""<button type="button" class="ob-bundle" data-bundle="{i}"
           data-bundle-to="{esc(b['target'])}" data-bundle-tier="{esc(b['ft'])}"
           data-bundle-floor="{esc(b['floorFrom'])}" data-bundle-def="{esc(b['defFrom'])}"
-          data-bundle-disc="{b['disc']}" aria-pressed="false">
+          data-bundle-amt="{price}" aria-pressed="false">
           <span class="ob-bundle-top">
             <span class="ob-bundle-name"><span>{esc(b['ft'])}</span><i aria-hidden="true">→</i><wbr><span>{esc(b['target'])}</span></span>
             <span class="ob-bundle-off">−{off}%</span>
@@ -4161,7 +4291,7 @@ def wizard(game=None):
 
       <div class="ob-cell">
         <span class="ob-lab">Add-ons</span>
-        {addons_block(money=True, paid_only=True)}
+        {addons_block(money=True, game=g["name"])}
       </div>
       </div>
 
@@ -4454,6 +4584,16 @@ def page_home():
     # The left column runs headline → paragraph → CTAs → proof, so the three
     # objections and the rating are answered where the decision is made rather
     # than only up in the promo bar.
+    #
+    # The primary CTA goes to the catalogue, not to `#calc` (the Best Sellers
+    # dock further down this page). It is the first action on the site and the
+    # visitor has not named a title yet: the dock opens on whichever game leads
+    # the catalogue, so an Apex player scrolling into a League configurator has
+    # to notice the game select and change it. `/games/` asks the question the
+    # dock answers by assumption, and every card there lands on a real
+    # configurator. Band 04's identically-labelled button still points at
+    # `#calc` — by then the page has made its argument and the dock is the
+    # nearer configurator.
     body = f"""<section class="hero-a hero-a-lit hero-h" id="top">
   <div class="fx hero-h-glow" aria-hidden="true"></div>
   <div class="fx hero-a-hatch" aria-hidden="true"></div>
@@ -4468,9 +4608,11 @@ def page_home():
         <a class="btn btn-primary" href="/games/">Configure your boost{_ico("arrow", 15, "ico", stroke=True)}</a>
         <a class="btn btn-secondary" href="#live">{_ico("play", 18, "hero-h-play", evenodd=True)}Watch a live boost</a>
       </div>
-      {guarantee_row()}
-      <hr class="hero-a-rule">
-      {hero_rating()}
+      <div class="hero-h-proof">
+        {guarantee_row()}
+        <hr class="hero-a-rule">
+        {hero_rating()}
+      </div>
     </div>
     {spotlight_card()}
   </div>
@@ -4481,23 +4623,31 @@ def page_home():
 <section class="section gg" id="games">
   <div class="gg-hatch" aria-hidden="true"></div>
   <div class="wrap gg-wrap">
-    {sec_head("01", "Games",
-              "%s ladders.<br>%s services." % (spell(len(D.GAMES)).capitalize(),
-                                               spell(sum(len(services_of(g)) for g in D.GAMES)).capitalize()))}
+    {sec_head("01", "Services", "Pick your game.<br>We handle the rest.")}
     {games_grid()}
   </div>
 </section>
 
 {live_section}
 
-{dashboard_section("04")}
+{dashboard_section("04", cta_href="#calc")}
 
 {reviews_section}
 
 {cta_band(live=True, cta=("Continue your order", "/checkout.html"))}"""
 
     org = {"@context": "https://schema.org", "@type": "Organization",
-           "name": D.BRAND, "url": D.SITE, "logo": D.SITE + "/assets/img/favicon.svg"}
+           "name": D.BRAND, "url": D.SITE, "logo": D.SITE + "/assets/img/favicon.svg",
+           # The postal address and mailbox the legal pages and the footer
+           # print, asserted once to a crawler. Unlike aggregateRating below,
+           # these are checkable facts about us rather than a claim about what
+           # other people said, so they are not gated on anything.
+           "email": FOOT_EMAIL,
+           "address": {"@type": "PostalAddress",
+                       "streetAddress": D.COMPANY["street"],
+                       "addressLocality": D.COMPANY["city"],
+                       "postalCode": D.COMPANY["postcode"],
+                       "addressCountry": D.COMPANY["country_code"]}}
     # An aggregateRating in JSON-LD is a machine-readable claim that search
     # engines surface as review stars. Only ever emit it from a real rating.
     org.update(rating_ld())
@@ -4706,8 +4856,8 @@ def gc_catalog():
   <div class="wrap gc-inner">
     <div class="gc-head">
       <div class="gc-head-l">
-        <span class="gc-kicker">{esc(spell(len(D.GAMES)).capitalize())} titles</span>
-        <h1 class="gc-h1">Pick your battlefield.</h1>
+        <span class="gc-kicker">{esc(spell(len(D.GAMES)).capitalize())} games</span>
+        <h1 class="gc-h1">Pick your game.</h1>
       </div>
       <p class="gc-head-p"><span>Prices are per division and shown before you sign in.
       Placements, net wins and duo on every title, coaching on</span>
@@ -4837,7 +4987,14 @@ def gc_faq_items():
     """
     facts = gc_facts()
     code, promo = D.auto_promo()
-    discs = [d for lst in D.BUNDLES.values() for _ft, _tt, d in lst]
+    # The third element of a BUNDLES tuple is the hand-set FLAT PRICE in whole
+    # USD, not a discount fraction — reading it as one published "bundle climbs
+    # at 1500% to 30500% off" here and, worse, asserted it verbatim in the
+    # FAQPage JSON-LD. The reduction is derived from that price against the full
+    # climb by pricing.bundle_pct(), which is what the strip's own −N% pill
+    # reads, so the answer and the nine game pages now state one number.
+    discs = [pricing.bundle_pct(g, b) for g in D.GAMES for b in D.bundle_climbs(g)]
+    discs = [d for d in discs if d > 0]
     lo, hi = (min(discs), max(discs)) if discs else (0, 0)
     # Only assert "the larger of the two" while it is arithmetically true. If a
     # sitewide code is ever raised past the cheapest bundle, the sentence stops
@@ -5009,9 +5166,6 @@ def gp_how(g):
             {gp_eyebrow("01", "How it runs")}
             <h2 class="gp-h2">Four steps, and you can see all of them.</h2>
           </div>
-          <p class="gp-head-p">Nothing about this happens out of sight. The price is fixed at
-          checkout, the claim is timed, and every game lands on a dashboard you can open without an
-          account.</p>
         </div>
         <div class="gp-steps">{cards}</div>
       </div>
@@ -5160,9 +5314,10 @@ def gp_safety(g):
     # D.SAFETY["disclaimer"] (which the guarantee page still carries verbatim);
     # the order count is read off STATS rather than typed.
     disclaimer = (
-        "Boosting is against %s's terms of service. We have never had an account actioned in "
-        "%s orders and we recover any that are, but nobody honest will tell you the risk is "
-        "zero — and anyone who does is selling you something." % (pub, D.STATS["boosts"]))
+        "Boosting is against %s's terms of service. We have never had an account actioned for "
+        "any of our %s clients and we recover any that are, but nobody honest will tell you "
+        "the risk is zero — and anyone who does is selling you something."
+        % (pub, D.STATS["clients"]))
     return f"""<section class="gp-sec">
       <div class="wrap gp-inner gp-safety">
         <div class="gp-safety-copy">
@@ -5220,7 +5375,9 @@ def gp_reviews(g, revs):
           <div class="gp-rv-score">
             <div class="gp-rv-rating"><span class="gp-rv-big">{esc(rating)}</span>
               <span class="gp-rv-outof">/ 5</span></div>
-            <span class="gp-rv-tpline">{tp_star}<span>{esc(D.STATS["reviews"])} reviews on Trustpilot</span></span>
+            <!-- The Trustpilot count, not the whole corpus: the line names them.
+                 The score above it is still the corpus average — see STATS. -->
+            <span class="gp-rv-tpline">{tp_star}<span>{esc(D.STATS["trustpilot_reviews"])} reviews on Trustpilot</span></span>
           </div>
           <a class="gp-rv-all" href="/reviews.html">Read them all{_ico("arrow-up-right", 13, "ico", stroke=True)}</a>
         </div>"""
@@ -5245,19 +5402,29 @@ def gp_faq_items(g):
     champions add-on from a real quote difference, the claim time from STATS."""
     duo = round((pricing.DUO_MULT - 1) * 100)
     champ = next((a for a in D.ADDONS if a["id"] == "champ"), None)
-    # What ticking "champions" actually costs on this page's default order.
-    base = {"game": g["name"], "service": "division", "from": g["ladder"][0],
-            "to": g["ladder"][min(12, len(g["ladder"]) - 1)], "mode": "Solo"}
-    off = pricing.quote(dict(base, addons=[]))["total"]
-    on = pricing.quote(dict(base, addons=["champ"]))["total"]
+    # What the picks add-on costs on this page's default order — read off the
+    # engine, never typed. It is free today, so the answer says so; give it a
+    # percentage again in data.py and the same line quotes the real difference.
+    #
     # usd(), not money(): the answer is escaped as one text node in gp_faq() AND
     # asserted verbatim in the FAQPage JSON-LD, so a money() `.money` span would
     # print as literal markup on the page (and in the structured data). Same
     # trade-off the /games/ catalogue FAQ makes — this figure stays in USD when
     # the currency switches.
-    champ_line = ("It is the second add-on, %s on this order. Your booster plays a pool you pick, "
-                  "which also keeps the match history plausible. You can change the pool mid-order "
-                  "in the thread." % usd(on - off)) if champ else ""
+    champ_line = ""
+    if champ and champ["pct"]:
+        base = {"game": g["name"], "service": "division", "from": g["ladder"][0],
+                "to": g["ladder"][min(12, len(g["ladder"]) - 1)], "mode": "Solo"}
+        off = pricing.quote(dict(base, addons=[]))["total"]
+        on = pricing.quote(dict(base, addons=["champ"]))["total"]
+        champ_line = ("It is an add-on, %s on this order. Your booster plays a pool you pick, "
+                      "which also keeps the match history plausible. You can change the pool "
+                      "mid-order in the thread." % usd(on - off))
+    elif champ:
+        champ_line = ("It is free on every order, not an upsell — \"%s\" is ticked before you "
+                      "configure anything. Your booster plays a pool you pick, which also keeps "
+                      "the match history plausible, and you can change it mid-order in the "
+                      "thread." % D.picks_label(g["name"]))
     return [
         ("Do you need my account login?",
          "For solo, yes — your booster signs in and plays, through a VPN in your region and inside "
@@ -5271,7 +5438,7 @@ def gp_faq_items(g):
          "A 15% credit applies automatically once the order runs past its window, and it shows on "
          "the order page without anyone asking. If it is badly over, we move it to a booster who "
          "is free."),
-        ("Can I choose the champions they play?", "Yes — " + champ_line),
+        ("Can I choose the %s they play?" % D.picks_noun(g["name"]), "Yes — " + champ_line),
         ("Why is duo more expensive?",
          "It takes longer. Your booster carries a live player rather than playing every role "
          "freely, so the same climb costs %d%% more and takes longer. It is the safer option and "
@@ -5345,7 +5512,13 @@ def gp_close():
 
 
 def page_game(g):
-    fp = usd(from_price(g))
+    # money(), not usd(): this is the largest price on the page and the first
+    # one a visitor reads, so it has to follow the currency switcher like every
+    # other figure. A bare "$5" over a card quoting "€72" is the exact CRO
+    # finding this build exists to answer. The .money span nests inside
+    # .grad-text safely — the gradient is clipped to ALL descendant text and the
+    # child inherits `color: transparent`, so the fill still shows through.
+    fp = money(from_price(g))
     # This game's own boosters, capped: the board is 50 and League alone has 22,
     # which is a page of table inside a section that only has to establish that
     # real people cover this ladder. The full list is /boosters/.
@@ -5393,18 +5566,18 @@ def page_game(g):
     cells = [c for c in (
         (f'<div class="stat"><span class="stat-v"><b>{esc(D.STATS["trustpilot"].split("/")[0].strip())}</b>'
          f'<i>/ {esc(D.STATS["trustpilot"].split("/")[-1].strip())}</i></span>'
-         f'<span class="stat-k"><span class="stat-k-full">Trustpilot · {esc(D.STATS["reviews"])} reviews</span>'
+         f'<span class="stat-k"><span class="stat-k-full">Trustpilot</span>'
          f'<span class="stat-k-sm">Trustpilot</span></span></div>')
-        if D.STATS["trustpilot"] and D.STATS["reviews"] else "",
+        if D.STATS["trustpilot"] else "",
         (f'<div class="stat"><span class="stat-v"><b>{esc(D.STATS["median_claim"].split(" ")[0])}</b>'
          f'<i>{esc(" ".join(D.STATS["median_claim"].split(" ")[1:]))}</i></span>'
-         f'<span class="stat-k"><span class="stat-k-full">Median time to claim</span>'
+         f'<span class="stat-k"><span class="stat-k-full">Booster time to claim</span>'
          f'<span class="stat-k-sm">To claim</span></span></div>') if D.STATS["median_claim"] else "",
         (f'<div class="stat"><span class="stat-v">'
-         f'<b class="stat-n-full">{esc(D.STATS["boosts"])}</b>'
-         f'<b class="stat-n-sm">{esc(_short_count(D.STATS["boosts"]))}</b></span>'
-         f'<span class="stat-k"><span class="stat-k-full">Boosts delivered</span>'
-         f'<span class="stat-k-sm">Delivered</span></span></div>') if D.STATS.get("boosts") else "",
+         f'<b class="stat-n-full">{esc(D.STATS["clients"])}</b>'
+         f'<b class="stat-n-sm">{esc(_short_count(D.STATS["clients"]))}</b></span>'
+         f'<span class="stat-k"><span class="stat-k-full">Clients served</span>'
+         f'<span class="stat-k-sm">Clients</span></span></div>') if D.STATS.get("clients") else "",
     ) if c]
     stat_row = ('<div class="stat-row">%s</div>' % "".join(cells)) if cells else ""
 
@@ -5452,8 +5625,18 @@ def page_game(g):
 </div>
 {cta_band(live=True, cta=("Continue your order", "/checkout.html"))}"""
 
+    # Titles are budgeted to ~60 chars — past that Google truncates and the
+    # brand (the part that survives) is the least useful half. "League of
+    # Legends boosting — live price, no account needed | eSports Boost" ran to
+    # 74 and lost its own differentiator mid-word. The long ladder names are
+    # what blow the budget, so the suffix shortens for them rather than every
+    # title being cut to the worst case.
+    _t_long = "%s boosting — live price, no account needed | %s" % (g["name"], D.BRAND)
+    _t_mid = "%s boosting — live price, no account | %s" % (g["name"], D.BRAND)
+    _t_short = "%s boosting — live price | %s" % (g["name"], D.BRAND)
+    title = next((t for t in (_t_long, _t_mid, _t_short) if len(t) <= 60), _t_short)
     return layout("/games/%s.html" % g["slug"],
-                  "%s boosting — live price, no account needed | %s" % (g["name"], D.BRAND),
+                  title,
                   g["meta"], body, current="/games/", jsonld=ld,
                   og_image=img("/assets/img/keyart-%s.svg" % g["slug"]), mobile_bar=True,
                   nav_outline=True)
@@ -5831,9 +6014,13 @@ def page_guarantee():
 #
 # Two honesty edits vs the handoff, both documented on D.SUPPORT: the hero runs
 # TWO stats not three (the invented "91%" is dropped), and the status pill reads
-# the real FOOT_SUPPORT_ONLINE seam instead of a hard-coded "6 on shift". The
-# facade form's confirmation says plainly that nothing was emailed — the same
-# call the demo page's "link sent" notice makes, because none is.
+# the real FOOT_SUPPORT_ONLINE seam instead of a hard-coded "6 on shift".
+#
+# The form is no longer a facade: it POSTs to /api/support, which mails the
+# ticket to SUPPORT_EMAIL with the visitor in Reply-To (src/support.py →
+# src/mailer.py). It keeps the facade's honesty for the case where no mailbox is
+# configured — a build without SMTP_* says plainly that nothing was emailed and
+# names the address, the same call the demo page's "link sent" notice makes.
 def sp_status():
     """The hero status pill — a status, not a statistic. Wired to the same
     FOOT_SUPPORT_ONLINE seam the footer's support card reads, so the two can
@@ -5891,7 +6078,7 @@ def sp_channels():
           {reply_meta}
           <span class="sp-meta-i">{_ico("clock-countdown", 16, "sp-meta-ico", stroke=True)}Open 24/7</span>
         </div>
-        <a class="sp-invite" href="#discord">Open the Discord invite{_ico("arrow-up-right", 15, "ico")}</a>
+        <a class="sp-invite" href="{esc(DISCORD_URL)}" target="_blank" rel="noopener noreferrer">Open the Discord invite{_ico("arrow-up-right", 15, "ico")}</a>
       </div>
 
       <div class="sp-card">
@@ -5899,14 +6086,14 @@ def sp_channels():
           <span class="sp-tile sp-tile-mail">{_ico("envelope", 20, "sp-tile-ico", stroke=True)}</span>
           <span class="sp-card-heads">
             <span class="sp-card-k">On the record</span>
-            <span class="sp-card-t">Email — support@esportsboost.com</span>
+            <span class="sp-card-t">Email — {SUPPORT_EMAIL}</span>
           </span>
         </div>
         <p class="sp-card-b">Better for anything involving a payment dispute or a document. Answered
         in under two hours during EU and NA daytime, under six overnight.</p>
         <div class="sp-meta sp-meta-split">
           <span class="sp-meta-i">{_ico("paperclip", 16, "sp-meta-ico", stroke=True)}Attachments and receipts welcome</span>
-          <button type="button" class="sp-cc" data-sp-copy="support@esportsboost.com">
+          <button type="button" class="sp-cc" data-sp-copy="{SUPPORT_EMAIL}">
             <span class="sp-cc-t sp-cc-t-idle">Copy address</span>
             <span class="sp-cc-t sp-cc-t-done">Copied</span>
             {_ico("copy", 12, "sp-cc-ico sp-cc-ico-c", stroke=True)}{_ico("check", 12, "sp-cc-ico sp-cc-ico-k", stroke=True)}
@@ -5934,7 +6121,21 @@ def sp_form():
     sets the message placeholder to the thing support needs for that topic and
     shows or hides the order-number field. That is triage the buyer does for
     free, in one tap. Both the note line and the copy chip ship their two states
-    as sibling nodes toggled by CSS, so i18n keeps matching whole text nodes."""
+    as sibling nodes toggled by CSS, so i18n keeps matching whole text nodes.
+
+    **It POSTs to `/api/support` and the mail is real** (src/support.py →
+    src/mailer.py): the ticket lands in SUPPORT_EMAIL with the visitor in
+    Reply-To. Three outcomes ship as three sibling nodes, all `hidden` until one
+    is chosen, for the whole-text-node reason above — sent, "the mailbox isn't
+    configured on this deploy" (the 503, which is what the static preview and
+    any key-less deploy get), and "it didn't send, here is the address". The
+    fallback keeps the old facade's honesty: it says plainly that nothing was
+    emailed rather than confirming something that did not happen.
+
+    The honeypot is a real defence, not decoration: `/api/support` is public and
+    points at our own inbox. It is labelled, `tabindex="-1"` and
+    `aria-hidden` — hidden from people and from assistive tech, present in the
+    DOM for the bots that fill every field they find."""
     chips = ""
     for i, (label, needs, ph) in enumerate(D.SUPPORT["topics"]):
         sel = " is-sel" if i == 0 else ""
@@ -5965,19 +6166,40 @@ def sp_form():
       <span class="sp-flabel sp-flabel-mt">Message</span>
       <textarea class="sp-input sp-textarea" data-sp-msg placeholder="{first_ph}"></textarea>
 
+      <div class="sp-hp" aria-hidden="true">
+        <label for="sp-company">Company</label>
+        <input id="sp-company" type="text" name="company" tabindex="-1" autocomplete="off" data-sp-hp>
+      </div>
+
       <p class="sp-note" data-sp-note>
         <span class="sp-note-idle">One thread per message. Discord and email land in the same
         place, so pick either — not both.</span>
         <span class="sp-note-err">Add an email we can reply to, and a line or two about what happened.</span>
       </p>
 
-      <button class="sp-send" type="submit">Send message{_ico("arrow", 15, "ico")}</button>
+      <button class="sp-send" type="submit" data-sp-send>
+        <span class="sp-send-t sp-send-t-idle">Send message</span>
+        <span class="sp-send-t sp-send-t-busy">Sending…</span>{_ico("arrow", 15, "ico")}</button>
 
       <div class="sp-sent" data-sp-sent hidden>
         {_ico("send", 16, "sp-sent-ico", stroke=True)}
-        <span class="sp-sent-t"><b>Noted — this is a preview.</b> Nothing was emailed yet; in
-        production a copy goes to <span data-sp-sent-email>you</span> and replies land there,
-        no account needed.</span>
+        <span class="sp-sent-t"><b>Sent — it's in the inbox.</b>
+        <span>The reply lands at</span> <b data-sp-sent-email>your address</b><i aria-hidden="true">.</i>
+        <span>Discord is quicker if you'd rather not wait.</span></span>
+      </div>
+
+      <div class="sp-sent sp-sent-note" data-sp-preview hidden>
+        {_ico("send", 16, "sp-sent-ico", stroke=True)}
+        <span class="sp-sent-t"><b>Noted — this is a preview.</b>
+        <span>Nothing was emailed: this build has no mailbox configured. Write to</span>
+        <b>{SUPPORT_EMAIL}</b> <span>and it reaches the same people.</span></span>
+      </div>
+
+      <div class="sp-sent sp-sent-warn" data-sp-failed hidden>
+        {_ico("warn", 16, "sp-sent-ico", stroke=True)}
+        <span class="sp-sent-t"><b>That didn't send.</b>
+        <span>Rather than lose it, write to</span> <b>{SUPPORT_EMAIL}</b>
+        <span>or open a ticket in Discord — both land in the same place.</span></span>
       </div>
 
       <div class="sp-foot">
@@ -6044,12 +6266,25 @@ def page_support():
   var msg = form.querySelector('[data-sp-msg]');
   var note = form.querySelector('[data-sp-note]');
   var sent = form.querySelector('[data-sp-sent]');
+  var preview = form.querySelector('[data-sp-preview]');
+  var failed = form.querySelector('[data-sp-failed]');
   var sentEmail = form.querySelector('[data-sp-sent-email]');
+  var orderInput = form.querySelector('[data-sp-order-input]');
+  var hp = form.querySelector('[data-sp-hp]');
+  var send = form.querySelector('[data-sp-send]');
+  var busy = false;
+
+  // One slot, three outcomes. All three ship in the DOM and are toggled here,
+  // never written — i18n matches whole text nodes, so a sentence assembled in
+  // JS would arrive untranslated.
+  function results(which) {
+    [sent, preview, failed].forEach(function (n) { if (n) n.hidden = n !== which; });
+  }
 
   function clearErr() {
     note.classList.remove('is-err');
     email.classList.remove('is-err');
-    if (sent) sent.hidden = true;
+    results(null);
   }
 
   // The topic is the cheapest triage on the page: it sets the message
@@ -6070,25 +6305,74 @@ def page_support():
   email.addEventListener('input', clearErr);
   msg.addEventListener('input', clearErr);
 
-  // Facade: a valid-looking email and a few characters of message flip the
-  // preview confirmation. There is no POST — the confirmation says so rather
-  // than claiming an email went out, the same honesty the demo page keeps.
+  function setBusy(on) {
+    busy = on;
+    if (send) { send.classList.toggle('is-busy', on); send.disabled = on; }
+  }
+
+  function showError() {
+    note.classList.add('is-err');
+    email.classList.add('is-err');
+    results(null);
+    email.focus();
+  }
+
+  // The real thing: POST /api/support, which composes the ticket server-side
+  // and mails it to the support inbox with this address in Reply-To. The
+  // client validates first so an obvious typo never costs a round trip, and
+  // the server validates again because a browser check is not a check.
+  //
+  // Three server outcomes, three confirmations: sent (200), "no mailbox on
+  // this deploy" (503 — the static preview and any deploy without SMTP), and
+  // "it didn't go" (429/502/anything else), which names the address instead of
+  // swallowing the message. The topic rides as its INDEX, never its label:
+  // the server resolves it against data.py's own list, so the subject line can
+  // only ever be one of the five topics this page offers.
   form.addEventListener('submit', function (e) {
     e.preventDefault();
-    var ok = /^[^\\s@]+@[^\\s@]+\\.[a-z]{2,}$/i.test((email.value || '').trim())
-             && (msg.value || '').trim().length > 3;
-    if (!ok) {
-      note.classList.add('is-err');
-      email.classList.add('is-err');
-      if (sent) sent.hidden = true;
-      email.focus();
-      return;
-    }
+    if (busy) return;
+    var addr = (email.value || '').trim();
+    var text = (msg.value || '').trim();
+    if (!/^[^\\s@]+@[^\\s@]+\\.[a-z]{2,}$/i.test(addr) || text.length < 4) { showError(); return; }
     note.classList.remove('is-err');
     email.classList.remove('is-err');
-    if (sentEmail) sentEmail.textContent = email.value.trim();
-    if (sent) sent.hidden = false;
-    if (window.esbTrack) window.esbTrack('generate_lead', { method: 'contact_form' });
+    results(null);
+    setBusy(true);
+
+    var picked = 0;
+    chips.forEach(function (c, i) { if (c.classList.contains('is-sel')) picked = i; });
+    var body = {
+      email: addr, message: text, topic: picked,
+      order: (orderField && !orderField.hidden && orderInput ? orderInput.value : '').trim(),
+      hp: hp ? hp.value : '',
+      tz: (function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; }
+                         catch (err) { return ''; } })(),
+      lang: (window.ESB_LOCALE && window.ESB_LOCALE.lang) || 'en'
+    };
+
+    fetch('/api/support', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; })
+              .then(function (j) { return { status: r.status, data: j }; });
+    }).then(function (res) {
+      setBusy(false);
+      if (res.status === 200 && res.data.sent) {
+        if (sentEmail) sentEmail.textContent = addr;
+        results(sent);
+        msg.value = '';
+        if (window.esbTrack) window.esbTrack('generate_lead', { method: 'contact_form' });
+        return;
+      }
+      if (res.status === 503) {                       // no mailbox configured
+        results(preview);
+        if (window.esbTrack) window.esbTrack('generate_lead', { method: 'contact_form_preview' });
+        return;
+      }
+      if (res.status === 400) { showError(); return; }
+      results(failed);
+    }).catch(function () { setBusy(false); results(failed); });
   });
 
   // The copy chip copies the address and confirms for ~1.5s, then reverts.
@@ -6238,6 +6522,38 @@ def page_reviews():
     _tp_id[0] += 1
     tiles = _tp_stars_svg(fill, "rvptp%d" % _tp_id[0])
 
+    # The H1 sizes the audience, not the corpus: "4.7 / 5 across 13K customers".
+    # Read off STATS["clients"] and never typed, so this and the game-page stat
+    # row cannot quote two different sizes of the same client base.
+    #
+    # ⚠ Note what that makes the headline claim, because the page is built to be
+    # checked: the score is the average of REVIEW_DIST's 3,140 reviews, and the
+    # distribution card one column to the right prints those same counts. The
+    # headline now names the wider population those reviews came from. If the
+    # two are ever read as one claim, the fix is the H1 — the card is the page's
+    # evidence and REVIEW_DIST is the one place the rating is written.
+    #
+    # Rounded with its own helper rather than page_game()'s _short_count(),
+    # which keeps a decimal ("13.3k") because there the phone abbreviates a
+    # figure the desktop prints in full beside it. Here the rounded figure is
+    # the only one on the line, and a decimal would read as a precision an
+    # invented placeholder has not got.
+    def _round_k(s):
+        """"13,280" → "13K". Left alone if it isn't a plain number."""
+        try:
+            n = int(str(s).replace(",", ""))
+        except ValueError:
+            return str(s)
+        return "%dK" % int(n / 1000.0 + 0.5) if n >= 1000 else str(s)
+
+    # Falls back to the review corpus if the client count is ever emptied — the
+    # same guard every other reader of STATS["clients"] carries. A headline
+    # reading "4.7 / 5 across  customers" is worse than the line it replaced.
+    if D.STATS.get("clients"):
+        h1_fig, h1_word = _round_k(D.STATS["clients"]), "customers"
+    else:
+        h1_fig, h1_word = D.STATS["reviews"], "reviews"
+
     # Every review is rendered; everything past the first page ships `hidden`,
     # so the first page reads correctly with no JS and "Load 30 more" reveals
     # cards that are already in the document rather than fetching. Same
@@ -6278,7 +6594,7 @@ def page_reviews():
       <div class="rvp-copy">
         <span class="rvp-kicker">Reviews</span>
         <h1 class="rvp-h1"><b>{esc(D.STATS['trustpilot'])}</b> <span>across</span>
-          <b>{esc(D.STATS['reviews'])}</b> <span>reviews</span></h1>
+          <b>{esc(h1_fig)}</b> <span>{esc(h1_word)}</span></h1>
         <p class="rvp-lede">Every review below is attached to a paid, completed order — pulled from
         Trustpilot and the order-page rating, then deduplicated. We don't filter by score, so
         one-star reviews sit in the same feed.</p>
@@ -6446,7 +6762,7 @@ def _gd_form(second=False):
       </div>
 
       <div class="gd-tp">{_ico("star", 15, "ico gd-tp-star")}<span>From the team behind
-        <b>{esc(D.STATS.get("boosts", ""))} delivered boosts</b> and {esc(score)} / 5 on Trustpilot.</span></div>"""
+        <b>{esc(D.STATS.get("clients", ""))} clients</b> and {esc(score)} / 5 on Trustpilot.</span></div>"""
 
 
 def page_guides():
@@ -7254,17 +7570,16 @@ def page_checkout():
     chips, stripe_badge = pay_marks()
     tp = trustpilot_badge()
 
-    # The inclusion, stated. The bold name comes from data.py so the strip and
-    # the add-on list can never disagree about what it is called; the sentence
-    # is page copy, because data.py's note leads with "Always on." for the
-    # add-on row — where nothing else says so — and here the strip already does.
-    # No zero-cost add-on in data.py, no strip.
-    free = next((a for a in D.ADDONS if a["pct"] == 0), None)
-    incl = ""
-    if free:
-        incl = (f'<div class="co-incl">{_ico("seal", 15, "ico", evenodd=True)}'
-                f'<span><b>{esc(free["label"])}</b> <span>included — friends see you offline '
-                f'for the whole order.</span></span></div>')
+    # The inclusions, stated. One strip per zero-cost add-on, name and sentence
+    # both out of data.py, so the strip and the picker above can never disagree
+    # about what is free or what it is called — the picks add-on became a free
+    # inclusion and this is the only place checkout says so. No zero-cost add-on
+    # in data.py, no strip. The name is addon_name() with no game, so the strip
+    # carries all nine wordings and shows the order's; see that function.
+    incl = "".join(
+        f'<div class="co-incl">{_ico("seal", 15, "ico", evenodd=True)}'
+        f'<span><b>{addon_name(a)}</b> <span>{esc(a["note"])}</span></span></div>'
+        for a in D.ADDONS if a["pct"] == 0)
 
     body = f"""<section class="co">
   <div class="co-fx co-glow" aria-hidden="true"></div>
@@ -7558,6 +7873,18 @@ def page_checkout():
     var payload = {
       game: s.game, service: s.service, from: s.from, to: s.to, mode: s.mode,
       wins: s.wins, placements: s.placements, region: s.region, addons: s.addons,
+      // Price-affecting state the server re-quote reads. Without these the server
+      // recomputes a DIFFERENT price than the one shown: a dropped `bundle` falls
+      // back to the sitewide sale (overcharging every bundle), `unranked` reverts
+      // placements off the ladder floor, and coaching ignores the chosen pack.
+      bundle: (s.bundle === null || s.bundle === undefined) ? null : s.bundle,
+      unranked: !!s.unranked,
+      coach: s.coach, pack: s.pack,
+      // The exact total shown on this page (whole USD, before currency display).
+      // The server recomputes the price and refuses the charge if it disagrees,
+      // so Stripe always shows what the customer saw here. Not trusted as the
+      // price — only compared — so a tampered value cannot lower the charge.
+      client_total: (window.esbQuote ? (window.esbQuote(s) || {}).total : null),
       promo: s.promo || '',
       booster: s.booster || '',
       // Charge in the currency the customer is viewing prices in. The amount is
@@ -7747,10 +8074,27 @@ document.querySelector('[data-apply]').addEventListener('submit', function (e) {
                   "onboarding.", body, extra_js=js)
 
 
+# One description per legal page. Kept beside LEGAL rather than derived from the
+# title, because the useful sentence is the commitment the page makes, not its
+# name — and these are the pages a buyer reads before deciding to trust us.
+LEGAL_META = {
+    "terms": "What you're buying, what we do with your account, and the quote "
+             "we're held to. The price fixed at checkout never moves.",
+    "privacy": "What we collect, what we don't, and how to have it deleted. No "
+               "name, address or phone number — and credentials go when the order does.",
+    "refunds": "Money-back until a booster is assigned, an automatic refund if "
+               "nobody claims your order in 24 hours, and pro-rata after that.",
+}
+
 LEGAL = {
     "terms": ("Terms of service", [
-        ("Who we are", "eSports Boost sells rank-boosting and coaching services for the games listed "
-         "on this site. Placing an order means you accept these terms."),
+        # The trading entity and where to serve it, named in the clause a reader
+        # looks in for exactly that. Both come from D.COMPANY, so this sentence
+        # and the identity block at the foot of the page cannot give two
+        # addresses; the company number joins it on its own once it is set.
+        ("Who we are", "%s sells rank-boosting and coaching services for the games listed "
+         "on this site, from %s. Placing an order means you accept these terms."
+         % (D.COMPANY["name"], D.company_address())),
         ("What you're buying", "A named target — a rank, a number of wins, or a set of placement "
          "games — delivered by a booster we assign. The quote shown at checkout is fixed; we will "
          "never ask for more money to finish an order you have already paid for."),
@@ -7778,6 +8122,14 @@ LEGAL = {
          "Coaching sessions already attended."),
     ]),
     "privacy": ("Privacy", [
+        # UK GDPR art.13 wants the controller identified by name, postal address
+        # and a contact route before anything else on the page — so this is the
+        # first section, not a footnote. Same two sources as the terms clause
+        # above and the identity block at the foot: D.COMPANY and FOOT_EMAIL.
+        ("Who's responsible for your data", "%s, of %s, is the data controller for everything "
+         "described below. Write to %s about any of it — access, correction or deletion — and "
+         "the reply comes from a person, not a form."
+         % (D.COMPANY["name"], D.company_address(), FOOT_EMAIL)),
         ("What we collect", "An email address, the order details, and payment metadata from our "
          "processor. For solo orders, the game credentials you supply, encrypted at rest."),
         ("What we don't collect", "We do not require a name, an address or a phone number, and we do "
@@ -7791,6 +8143,37 @@ LEGAL = {
          "is removed within 30 days, except records we are legally required to keep for accounting."),
     ]),
 }
+
+
+# The entity block that closes every legal page. It is one function and three
+# callers for the same reason FOOT_EMAIL is one literal: terms, privacy and
+# refunds all have to name the same company at the same address, and three
+# hand-written copies is how one of them comes to be a year out of date.
+#
+# The registration line renders only once D.company_registration() has something
+# to say — see the ⚠ on D.COMPANY. An address is a fact about where we are; a
+# company number is a claim about a register somebody can check, so the second
+# one is gated and the first is not.
+#
+# i18n: the address lines are data and stay as written (same rule as game names
+# and handles), so each label around them is its own whole text node — a street
+# interpolated into a sentence would un-translate the sentence.
+def legal_contact():
+    reg = D.company_registration()
+    lines = "".join('<span style="display:block">%s</span>' % esc(l)
+                    for l in D.company_lines())
+    reg_html = ('<p class="t-13" style="margin:0;color:var(--text-5)">%s</p>' % esc(reg)) if reg else ""
+    return f"""<div class="stack" style="gap:10px;padding-top:4px;border-top:1px solid var(--hairline)">
+      <h2 style="font-size:20px">Who to write to</h2>
+      <p class="t-14" style="margin:0;color:var(--text-3);max-width:74ch;line-height:1.75">
+        <b style="color:var(--text-2);font-weight:600">{esc(D.COMPANY["name"])}</b>
+        {lines}
+      </p>
+      {reg_html}
+      <p class="t-13" style="margin:0;color:var(--text-5)"><span>Email</span>
+      <a href="mailto:{FOOT_EMAIL}">{FOOT_EMAIL}</a><i aria-hidden="true"> · </i><a
+      href="/support.html">Open a support ticket</a></p>
+    </div>"""
 
 
 def page_legal(slug):
@@ -7807,14 +8190,20 @@ def page_legal(slug):
       <span class="kicker kicker-dim">Last updated {esc(D.LEGAL_UPDATED)}</span>
     </div>
     {blocks}
+    {legal_contact()}
     <p class="t-13" style="margin:0;color:var(--text-5)">Questions about any of this go to
     <a href="/support.html">support</a>. Plain answers, same day.</p>
   </div>
 </section>
 
 {cta_band()}"""
-    return layout("/legal/%s.html" % slug, "%s — %s" % (title, D.BRAND),
-                  "%s for %s." % (title, D.BRAND), body)
+    # "Privacy for eSports Boost." is 26 characters and tells a searcher
+    # nothing, so Google writes its own snippet from the page anyway. These say
+    # what the policy actually commits to — the refund window and the account
+    # rules are what people search these pages for.
+    desc = LEGAL_META.get(slug) or ("%s for %s. Read the full policy, last "
+                                    "updated %s." % (title, D.BRAND, D.LEGAL_UPDATED))
+    return layout("/legal/%s.html" % slug, "%s — %s" % (title, D.BRAND), desc, body)
 
 
 def page_404():
@@ -7830,7 +8219,10 @@ def page_404():
     </div>
   </div>
 </section>"""
-    return layout("/404.html", "Page not found — %s" % D.BRAND, "That page doesn't exist.", body)
+    return layout("/404.html", "Page not found — %s" % D.BRAND,
+                  "That page doesn't exist. Pick a game to start an order, check "
+                  "an existing one, or ask support — every route from here is live.",
+                  body)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -7956,6 +8348,104 @@ def img(rel):
 
 
 IMG_MAP = {}
+_ASSET_V = {}
+
+
+def av(rel):
+    """A CSS/JS URL with a content hash on it — `/assets/js/app.js?v=8f2c1a`.
+
+    Vercel serves `/assets/*` with `max-age=31536000, immutable` (vercel.json),
+    which is the right header for a file whose URL changes when its bytes do and
+    a trap for one that doesn't: without this a returning visitor keeps last
+    deploy's app.js against this deploy's HTML for a year. The hash is of the
+    built file, so `data.js` — generated per build from data.py — busts whenever
+    the catalogue, the ladders or the prices move.
+
+    Called from `layout()` after main() has populated dist/, so the file is
+    always there; an unreadable one degrades to the bare path rather than
+    breaking the build."""
+    if rel not in _ASSET_V:
+        try:
+            with open(os.path.join(DIST, rel.lstrip("/")), "rb") as fh:
+                _ASSET_V[rel] = hashlib.md5(fh.read()).hexdigest()[:8]
+        except OSError:
+            _ASSET_V[rel] = ""
+    v = _ASSET_V[rel]
+    return "%s?v=%s" % (rel, v) if v else rel
+
+
+def minify_css(src):
+    """Strip comments and collapse whitespace in a stylesheet.
+
+    Deliberately conservative: it removes `/* … */` and squeezes runs of
+    whitespace, and does nothing else — no selector merging, no colour or
+    shorthand rewriting, no reordering. String literals and `url(…)` are copied
+    through untouched, so a `content: "/*"` or a data URI cannot be mangled.
+
+    Worth doing because this codebase documents itself in the stylesheet: the
+    MOBILE PASS block alone explains four load-bearing decisions in prose, and
+    `site.css` is ~40% comment by weight. That belongs in the source, not on the
+    critical path of every first paint — it is render-blocking CSS. The source
+    file keeps every word; only `dist/` is stripped."""
+    out, i, n = [], 0, len(src)
+    while i < n:
+        c = src[i]
+        # Comments are tested BEFORE strings, and the order is load-bearing: a
+        # `'` inside a comment ("don't", "the page's") is not a string opener,
+        # but checking quotes first made it one — the fake string then ran to
+        # the next apostrophe hundreds of lines away and copied everything
+        # between it verbatim, comments included. Scanning left to right,
+        # whichever token STARTS first wins, and the string branch below always
+        # consumes a whole literal, so reaching `/*` here means we are not
+        # inside one.
+        if src.startswith("/*", i):           # comment — drop
+            end = src.find("*/", i + 2)
+            i = n if end < 0 else end + 2
+        elif c in "\"'":                      # string literal — copy verbatim
+            q = c
+            j = i + 1
+            while j < n:
+                if src[j] == "\\":
+                    j += 2
+                    continue
+                if src[j] == q:
+                    j += 1
+                    break
+                j += 1
+            out.append(src[i:j])
+            i = j
+        elif src.startswith("url(", i):
+            # Only the UNQUOTED form needs verbatim handling. A quoted url() is
+            # a string, and letting the string branch take it is what stops an
+            # inline SVG data URI — which contains its own `url(%23n)` and a
+            # dozen `'` — from ending this copy at the wrong `)` and leaving the
+            # rest of the file mis-tokenised behind it.
+            j = i + 4
+            while j < n and src[j] in " \t\r\n":
+                j += 1
+            if j < n and src[j] in "\"'":
+                out.append("url(")
+                i = j
+            else:
+                end = src.find(")", i)
+                end = n if end < 0 else end + 1
+                out.append(src[i:end])
+                i = end
+        elif c in " \t\r\n":                  # whitespace run → one space
+            while i < n and src[i] in " \t\r\n":
+                i += 1
+            out.append(" ")
+        else:
+            out.append(c)
+            i += 1
+    css = "".join(out)
+    # Tighten around punctuation. The space BEFORE a colon is deliberately left
+    # alone: `.a :first-child` (a descendant) and `.a:first-child` (the element
+    # itself) are different selectors, and this file uses both forms.
+    for ch in "{};,>":
+        css = css.replace(" " + ch, ch).replace(ch + " ", ch)
+    css = css.replace(": ", ":")
+    return css.replace(";}", "}").strip()
 
 
 def write(rel, content):
@@ -7979,6 +8469,10 @@ def client_data():
         "winPrices": {g["name"]: g["win_prices"] for g in D.GAMES if g.get("win_prices")},
         "placePrices": {g["name"]: g["placement_prices"] for g in D.GAMES if g.get("placement_prices")},
         "services": {g["name"]: g["services"] for g in D.GAMES},
+        # What the picks add-on is called on each game (champions / agents /
+        # heroes / a playlist). Picker rows ship every wording in the DOM behind
+        # [data-when-game]; this is for the receipt strings app.js rebuilds.
+        "picks": {g["name"]: D.picks_label(g["name"]) for g in D.GAMES},
         "slugs": {g["name"]: g["slug"] for g in D.GAMES},
         "regions": {g["name"]: g["regions"] for g in D.GAMES},
         "regionShort": D.REGION_SHORT,
@@ -7994,7 +8488,13 @@ def client_data():
         # Per-game bundle climbs (resolved tier-pairs). The client re-quotes each
         # through the shared engine, so a card can't show a price the order
         # wouldn't get. Only games with an entry get a strip.
-        "bundles": {g["name"]: D.bundle_climbs(g)
+        #
+        # `disc` is DERIVED here from the bundle's hand-set `price` against the
+        # full climb (pricing.bundle_pct) and shipped alongside it, so app.js
+        # does no arithmetic of its own and the two engines apply the identical
+        # double — the mirror can't drift from a rounding difference.
+        "bundles": {g["name"]: [dict(b, disc=pricing.bundle_pct(g, b))
+                                for b in D.bundle_climbs(g)]
                     for g in D.GAMES if D.bundle_climbs(g)},
         "boostersFree": D.STATS["free_now"],
         # handle → the one game that booster covers. The client validates
@@ -8113,6 +8613,33 @@ def main():
     if os.path.isdir(DIST):
         shutil.rmtree(DIST)
     shutil.copytree(PUBLIC, DIST)
+
+    # Ship the stylesheets stripped. Source keeps its documentation; dist does
+    # not carry it down the wire on every first paint. JS is deliberately NOT
+    # minified here — doing it safely needs a parser (ASI and regex literals
+    # make regex-based JS minification a correctness risk), and gzip already
+    # takes app.js from 146K to 42K. Set ESB_NO_MINIFY=1 to debug against the
+    # unstripped CSS.
+    # Every font is self-hosted (see type-b-sans.css). ashfall.css is the
+    # vendored design system and is not edited, so its remote @import is
+    # stripped here instead: it pulls Chakra Petch + IBM Plex Sans + IBM Plex
+    # Mono from Google, of which the first two are overridden by Inter and never
+    # painted, and the third is now served from /assets/fonts. Leaving it in
+    # would hand a third party the IP of every visitor before first paint for
+    # two typefaces the site does not use — and would make the CSP's
+    # `font-src 'self'` block the one it does.
+    remote_import = re.compile(r"@import\s+url\(\s*['\"]?https?://[^)]*\)\s*;", re.I)
+    for name in ("ashfall.css", "site.css", "type-b-sans.css", "ops.css"):
+        p = os.path.join(DIST, "assets", "css", name)
+        if not os.path.isfile(p):
+            continue
+        with open(p, encoding="utf-8") as fh:
+            css = fh.read()
+        css = remote_import.sub("", css)
+        if os.environ.get("ESB_NO_MINIFY", "").strip() != "1":
+            css = minify_css(css)
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(css)
 
     write("/assets/js/data.js", client_data())
     images = emit_art()

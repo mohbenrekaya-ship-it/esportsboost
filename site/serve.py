@@ -67,9 +67,11 @@ import accounts   # noqa: E402  — header sign-up list (also used by /api)
 import analytics  # noqa: E402  — first-party event ingest (also used by /api)
 import boosters   # noqa: E402  — roster store behind /api/boosters (also used by /api)
 import guides     # noqa: E402  — free-guides mailing list behind /api/guides (also used by /api)
+import mailer     # noqa: E402  — outbound SMTP seam (support tickets, order mail)
 import oauth      # noqa: E402  — social sign-in (Google/Discord), also used by /api
 import ops        # noqa: E402  — gated dashboard API (also used by /api)
 import payments   # noqa: E402  — shared Stripe/pricing logic (also used by /api)
+import support    # noqa: E402  — /api/support, the contact form (also used by /api)
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -137,6 +139,19 @@ class Handler(SimpleHTTPRequestHandler):
             # an email + which guides were picked, no credential. Returns a small
             # JSON status; a bad body answers an empty 204.
             status, payload = guides.process_lead(self._read_body(), self.headers.get)
+            if payload is None:
+                self.send_response(status)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            return self._json(status, payload)
+        if route == "/api/support":
+            # Public, like /api/collect: the contact form is on a public page.
+            # Stores nothing — the ticket is composed and mailed to the support
+            # mailbox with the visitor in Reply-To (see support.py). A bad body
+            # answers an empty 204; an unconfigured mailbox answers 503 and the
+            # page falls back to its preview confirmation.
+            status, payload = support.process_ticket(self._read_body(), self.headers.get)
             if payload is None:
                 self.send_response(status)
                 self.send_header("Content-Length", "0")
@@ -233,4 +248,8 @@ if __name__ == "__main__":
     print("  social sign-in → %s"
           % (", ".join(on) + " enabled" if on
              else "OFF (set GOOGLE_/DISCORD_CLIENT_ID + _SECRET to enable)"))
+    print("  outbound mail → %s%s"
+          % (mailer.status(),
+             "" if not mailer.configured()
+             else " · tickets and order copies → %s" % mailer.support_addr()))
     srv.serve_forever()

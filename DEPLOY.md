@@ -22,11 +22,42 @@ All three are thin shells over `site/src/payments.py`, the same module the local
 | --- | --- |
 | `vercel.json` | Build command, output dir (`site/dist`), clean URLs, bundles `site/src/**` into the functions |
 | `.vercelignore` | Keeps the reference `redesign_zip*/` dirs and local logs out of the upload |
-| `api/*.py` | The five serverless functions (three payment, two analytics) |
+| `api/*.py` | The serverless functions (payment, analytics, accounts, guides, boosters, support, auth) |
 | `site/src/payments.py` | Shared Stripe + pricing logic |
 | `site/src/analytics.py`, `insights.py`, `ops.py` | Shared analytics logic behind `/ops` |
+| `site/src/mailer.py`, `support.py` | Outbound SMTP, and the `/api/support` contact form behind it |
 
 You do **not** need to run the build yourself — Vercel runs it on every deploy.
+
+---
+
+## ⚠ Set `SITE_URL` before the first real deploy
+
+This is the one variable that breaks silently. Every absolute URL in the build —
+the `<link rel="canonical">` on all 114 pages, `og:url`, the JSON-LD `url`/`@id`
+fields, all 110 entries in `sitemap.xml`, and the `Sitemap:` line in
+`robots.txt` — is written against `data.py`'s `SITE`, at build time.
+
+| Name | Value |
+| --- | --- |
+| `SITE_URL` | `https://esportsboost.com` |
+
+Without it the build falls back to Vercel's own
+`VERCEL_PROJECT_PRODUCTION_URL`, and if that is missing too, to
+`http://localhost:4321`. A deploy carrying localhost canonicals tells every
+crawler that all 114 pages are duplicates of a host it cannot reach, and the
+sitemap you submit to Search Console is 110 dead URLs. Nothing looks wrong in a
+browser — the pages render perfectly — so this is only ever caught by viewing
+source or by the traffic never arriving.
+
+Check it after deploying:
+
+```bash
+curl -s https://esportsboost.com/ | grep -o '<link rel="canonical"[^>]*>'
+```
+
+It must print your real domain. Re-deploy after changing it: `SITE` is read at
+**build** time, so an env change needs a new build, not just a restart.
 
 ---
 
@@ -82,8 +113,8 @@ vercel --prod # production deploy
    | Name | Value | Notes |
    | --- | --- | --- |
    | `STRIPE_SECRET_KEY` | `sk_test_…` (or `sk_live_…`) | Required to charge. Start with a **test** key. |
-   | `STRIPE_WEBHOOK_SECRET` | `whsec_…` | From step 3 below. Enables webhook signature checks. |
-   | `PUBLIC_BASE_URL` | `https://esportsboost.com` | Optional. If unset, the origin is inferred from the request — fine for `*.vercel.app`. Set it once you have the custom domain so Stripe redirects land on it. |
+   | `STRIPE_WEBHOOK_SECRET` | `whsec_…` | **Required.** From step 3 below. Without it `/api/webhook` refuses every event (400 `webhook_not_configured`) — see the warning under step 3. |
+   | `PUBLIC_BASE_URL` | `https://esportsboost.com` | **Set this.** If unset, the origin comes from the request's `Host` header, which the caller controls — a forged header then lands in Stripe's success/cancel URLs. Fine only for local work. |
 
    Add them for **Production** (and Preview if you want test payments on preview
    deploys). **Redeploy** after adding — env vars only apply to new deployments.
@@ -98,10 +129,82 @@ vercel --prod # production deploy
    - Copy the **Signing secret** (`whsec_…`) into `STRIPE_WEBHOOK_SECRET`, then
      redeploy.
 
+   > ⚠ **`/api/webhook` fails closed.** With no `STRIPE_WEBHOOK_SECRET` set it
+   > rejects everything rather than trusting the request body. That is
+   > deliberate: the route is public, and an unverified
+   > `checkout.session.completed` is a free order — anyone who can reach the URL
+   > could post one for the most expensive climb on the board, with an address
+   > they control, and it would land in the fulfilment store marked `paid`. If
+   > orders stop appearing after a deploy, this variable is the first thing to
+   > check; the function log prints `[webhook] refused: STRIPE_WEBHOOK_SECRET is
+   > not set`. To replay unsigned events locally, set
+   > `ESB_ALLOW_UNSIGNED_WEBHOOK=1` — never in production.
+
 4. **Test the full flow** with Stripe's test card `4242 4242 4242 4242`, any
    future expiry, any CVC. You should land on `/checkout/success` with a receipt,
    and see a `paid order → ESB-…` line in the function logs (Vercel → Project →
    Logs).
+
+---
+
+## Turn on email (Hostinger SMTP)
+
+Two things send mail, and both go through `site/src/mailer.py`, so this one
+mailbox switches on both:
+
+- **the support form** on `/support.html` → a ticket lands in the inbox, with
+  the visitor's address as `Reply-To`, so hitting reply answers them;
+- **a paid order** → the buyer gets a confirmation, and the inbox gets a copy so
+  you see the order land without watching `/ops`.
+
+1. In **Vercel → Project → Settings → Environment Variables**, add:
+
+   | Name | Value | Notes |
+   | --- | --- | --- |
+   | `SMTP_USER` | `info@esportsboost.com` | The **full address**, not `info`. This is the #1 cause of a `535` auth failure. |
+   | `SMTP_PASSWORD` | the mailbox password | From hPanel → Emails → your mailbox. Not your Hostinger account password. |
+   | `SMTP_HOST` | `smtp.hostinger.com` | Optional — that is already the default. |
+   | `SMTP_PORT` | `465` | Optional. 465 is implicit TLS (the default); `587` switches to STARTTLS. |
+   | `MAIL_FROM` | `info@esportsboost.com` | Optional, defaults to `SMTP_USER`. **Must be a mailbox on your own domain** — see the SPF note below. |
+   | `SUPPORT_EMAIL` | `info@esportsboost.com` | Optional, defaults to `MAIL_FROM`. Where tickets and order copies land, if you ever split sending from receiving. |
+
+   Redeploy afterwards — env vars only apply to new deployments.
+
+2. **Test it before trusting it.** Locally, put the same values in `.env` and run:
+
+   ```bash
+   python3 site/tools/send_test_mail.py
+   ```
+
+   It sends one message through the exact code path the site uses and prints the
+   SMTP error verbatim if it fails, with the three usual causes. `--order`
+   renders the real order-confirmation template instead, so you can look at what
+   a buyer receives without paying for a boost.
+
+3. **Set SPF and DKIM on the domain, or the mail goes to spam.** Hostinger
+   publishes both for you when the domain's DNS is with them (hPanel → Emails →
+   DNS records); if DNS is elsewhere, copy the SPF `TXT` record and the DKIM key
+   across. This matters because the site sends *as* `info@esportsboost.com` from
+   Hostinger's servers — mail claiming your domain from an unlisted sender is
+   what a spam filter is for.
+
+   > The site never sends **as** a visitor. A stranger's address goes in
+   > `Reply-To`, never `From` — a message From: someone else's domain fails
+   > their SPF and burns yours. Don't "fix" a ticket's From line to make replies
+   > easier; reply already works.
+
+4. **Nothing is configured → nothing pretends.** Without `SMTP_USER` /
+   `SMTP_PASSWORD` the support form answers `503` and shows a confirmation that
+   says plainly that nothing was emailed and names the address to write to, and
+   the order webhook skips the mail and still fulfils. The same contract the
+   Stripe seam has: a preview deploy stays honest.
+
+   > If `/api/support` returns `502` in production, the mailbox is configured
+   > but the send failed — the function log carries the SMTP error. Should
+   > Vercel's runtime ever block outbound SMTP (ports 465/587 work today), the
+   > swap is `mailer.send()` to a provider's HTTP API; nothing else changes,
+   > because that function is the only thing on the site that opens a socket to
+   > a mail server.
 
 ---
 
@@ -245,9 +348,9 @@ write is best-effort. The durable signal on Vercel is the **stderr log line**
 
 For real fulfilment you'll want to replace that seam in
 `site/src/payments.py → process_webhook` with a database or a queue (e.g. Vercel
-Postgres/KV, Supabase, or an email to the ops inbox). That's the natural next
-step after this first deploy — the code is already isolated to one function so
-it's a contained change.
+Postgres/KV, Supabase). The **email half of that is now built** — a paid order
+mails the buyer and copies the support inbox (see "Turn on email" above) — so
+even before a queue exists, no order can clear without someone being told.
 
 ---
 

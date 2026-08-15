@@ -19,16 +19,37 @@
 
   var LKEY = "esb.locale.v1";
 
+  /* ── a language implies a currency ────────────────────────────────────────
+     The two controls stay independent — a French reader can still be quoted in
+     dollars — but they are not independent DEFAULTS: FR and DE are euro markets,
+     and a page reading "à partir de $5" over a euro price card is the same
+     one-set-of-numbers failure a bare `$5` in the chrome is. The map holds until
+     the visitor picks a currency themselves; `curPinned` records that pick and
+     outranks the map from then on, so an explicit USD in French survives a
+     reload and a language switch. */
+  var LANG_CUR = { en: "USD", fr: "EUR", de: "EUR" };
+
   /* ── persisted locale, read synchronously so app.js sees it ───────────── */
-  var locale = { lang: "en", currency: "USD" };
+  var locale = { lang: "en", currency: "USD", curPinned: false };
   try {
     var raw = localStorage.getItem(LKEY);
     if (raw) {
       var s = JSON.parse(raw);
       if (s && (s.lang === "en" || s.lang === "fr" || s.lang === "de")) locale.lang = s.lang;
       if (s && (s.currency === "USD" || s.currency === "EUR")) locale.currency = s.currency;
+      // Records written before this default existed carry no flag, and the test
+      // is NOT "does it disagree with the language" — under the old code USD was
+      // the default in every language, so a stored USD tells us nothing and a
+      // returning French visitor (the whole case this fixes) would be read as
+      // having chosen dollars and left on them. Only a stored EUR can have been
+      // picked deliberately, so only that migrates in as pinned.
+      locale.curPinned = (s && typeof s.curPinned === "boolean") ? s.curPinned
+        : !!(s && s.currency === "EUR");
     }
   } catch (e) {}
+  // Resolved here, not in init(), because app.js reads ESB_LOCALE.currency on
+  // its first quote — deriving it later would paint the page in $ and swap it.
+  if (!locale.curPinned) locale.currency = LANG_CUR[locale.lang] || "USD";
   window.ESB_LOCALE = locale;
 
   /* ── currency ─────────────────────────────────────────────────────────── */
@@ -63,7 +84,11 @@
   window.esbT = function (str) {
     if (locale.lang === "en") return str;
     var d = ESB_I18N[locale.lang];
-    return (d && d[str] !== undefined) ? d[str] : str;
+    if (d && d[str] !== undefined) return d[str];
+    // Same {} patterns the DOM walk uses, so a runtime string app.js builds
+    // around a game name resolves the same way its server-rendered twin does.
+    var pat = patTranslate(str, locale.lang);
+    return pat !== null ? pat : str;
   };
 
   /* ── dictionary (English source → fr / de) ────────────────────────────── */
@@ -104,7 +129,7 @@
       "Menu": "Menu",
       "Skip to content": "Aller au contenu",
       /* mega menus */
-      "Pick a ladder": "Choisissez un classement",
+      "Pick your game": "Choisissez votre jeu",
       "Who plays your order": "Qui joue votre commande",
       "Before you buy": "Avant d'acheter",
       "Right now": "En ce moment",
@@ -114,7 +139,7 @@
       "boosters on shift": "boosters en service",
       "Median claim": "Prise en charge médiane",
       "Watch orders land live": "Voir les commandes arriver en direct",
-      "All nine ladders": "Les neuf classements",
+      "All nine games": "Les neuf jeux",
       "Browse the roster": "Parcourir l'équipe",
       "verified boosters, one game each": "boosters vérifiés, un jeu chacun",
       "Hire a specific booster": "Choisir un booster précis",
@@ -255,6 +280,14 @@
       "Save": "Économie",
       "with": "avec",
       "Money-back until a booster is assigned": "Remboursé tant qu'aucun booster n'est assigné",
+      "Money back until a booster claims it": "Remboursé tant qu'aucun booster n'a pris la commande",
+      "Your hours, offline the whole time": "À vos horaires, hors ligne du début à la fin",
+      "Pause any time — it's your account": "Mettez en pause quand vous voulez — c'est votre compte",
+      "Pause it anytime": "Mettez en pause quand vous voulez",
+      "Booster time to claim": "Prise en charge par un booster",
+      "Time to claim": "Prise en charge",
+      "We handle the rest.": "On s'occupe du reste.",
+      "Discreet on your bank statement": "Discret sur votre relevé bancaire",
       "No account needed": "Aucun compte requis",
       "VPN matched to your region": "VPN adapté à votre région",
       "on Trustpilot": "sur Trustpilot",
@@ -301,28 +334,53 @@
       "Verified": "Vérifié",
       "orders delivered": "commandes livrées",
       "boosts delivered": "boosts livrés",
+      "clients": "clients",
+      "Clients served": "Clients servis",
+      "Clients": "Clients",
       "Included": "Inclus",
 
-      /* add-ons */
-      "Priority queue": "File prioritaire",
-      "Pushed to the top of the board. Median claim drops to about 6 minutes.":
-        "Placé en tête de liste. La prise médiane passe à environ 6 minutes.",
-      "Specific champions, agents or heroes": "Champions, agents ou héros précis",
-      "Your booster plays a pool you choose, so the match history stays plausible.":
-        "Votre booster joue un pool que vous choisissez, pour un historique crédible.",
-      "Streamed to you": "Diffusé pour vous",
-      "A private stream link for every game, replayable for 14 days.":
-        "Un lien de stream privé pour chaque partie, rejouable pendant 14 jours.",
+      /* add-ons — the labels and notes in data.py's ADDONS, plus the per-game
+         name of the picks add-on (`picks` on each game: League picks champions,
+         Valorant agents, Rocket League a playlist). Every wording ships in the
+         DOM and one is shown, so all of them have to be here. Each note has a
+         phone variant beside it for the same reason. */
+      "Priority order": "Commande prioritaire",
+      "First in the claim queue, claimed in about 6 minutes.":
+        "Première de la file de prise en charge, prise en 6 minutes environ.",
+      "First in the claim queue, about 6 minutes.":
+        "Première de la file, 6 minutes environ.",
+      "Solo only queue": "File solo uniquement",
+      "Your booster plays alone, in ranked only — no parties.":
+        "Votre booster joue seul, en classé uniquement — jamais en groupe.",
+      "Plays alone, ranked only — no parties.":
+        "Joue seul, en classé — jamais en groupe.",
+      "Play on your schedule": "Jouez à vos horaires",
+      "Fixed session times, held for the whole order.":
+        "Horaires de session fixes, réservés pour toute la commande.",
+      "Fixed times, held for the whole order.":
+        "Horaires fixes, réservés pour toute la commande.",
+      "Champions & roles": "Champions et rôles",
+      "Agents & roles": "Agents et rôles",
+      "Heroes & roles": "Héros et rôles",
+      "Legends & playstyle": "Légendes et style de jeu",
+      "Comps & augments": "Compositions et augments",
+      "Roles & maps": "Rôles et cartes",
+      "Playlist & playstyle": "Playlist et style de jeu",
+      "Champions, agents & roles": "Champions, agents et rôles",
+      "Always free. Your booster plays the picks you choose.":
+        "Toujours gratuit. Votre booster joue les choix que vous faites.",
+      "You choose the picks they play.":
+        "Vous choisissez les picks joués.",
       "Offline appearance": "Apparaître hors ligne",
-      "Always on. Friends see you offline for the whole order — never an extra.":
-        "Toujours actif. Vos amis vous voient hors ligne durant toute la commande — jamais en option payante.",
+      "Always on. Friends see you offline for the whole order.":
+        "Toujours actif. Vos amis vous voient hors ligne durant toute la commande.",
 
       /* hero (home) */
       "Verified boosters — since 2019": "Boosters vérifiés — depuis 2019",
       "The rank is yours.": "Le rang est à vous.",
       "The grind isn't.": "Le grind, non.",
-      "Set two ranks. See the final price before you make an account. Then watch every match land from the dashboard — no bots, no shared logins, no invoice that moves after checkout.":
-        "Fixez deux rangs. Voyez le prix final avant de créer un compte. Puis suivez chaque partie depuis le tableau de bord — sans bots, sans identifiants partagés, sans facture qui bouge après le paiement.",
+      "Your price in 10 seconds. Claimed in about 18 minutes. Refunded in full until it is.":
+        "Votre prix en 10 secondes. Prise en charge en 18 minutes environ. Remboursé intégralement jusque-là.",
       "This month's #1 — vantaa": "N°1 du mois — vantaa",
       "Challenger 1042 LP · 78% WR · EUW · 214 orders": "Challenger 1042 LP · 78 % WR · EUW · 214 commandes",
       "Top booster of the month, vantaa": "Meilleur booster du mois, vantaa",
@@ -335,12 +393,15 @@
       "100% recovery rate on account reviews": "100 % de récupération sur les examens de compte",
 
       /* section heads / home */
-      "Nine ladders.": "Neuf ladders.",
-      "Thirty-seven services.": "Trente-sept services.",
+      "Pick your game.": "Choisissez votre jeu.",
+      "The price is already on it.": "Le prix est déjà dessus.",
+      "Nine games, thirty-seven services, priced per division.":
+        "Neuf jeux, trente-sept services, au prix par division.",
+      "Services": "Services",
       "Most ordered": "Le plus commandé",
       "Configure": "Configurer",
       "All games": "Tous les jeux",
-      "ladders are live too.": "sont aussi en ligne.",
+      "are live too.": "sont aussi en ligne.",
       "Elo boost": "Boost d'elo",
       "Rank boost": "Boost de rang",
       "MMR boost": "Boost de MMR",
@@ -366,7 +427,6 @@
       "You watch the whole thing": "Vous suivez tout du début à la fin",
       "Regional VPN": "VPN régional",
       "Pro-rated refunds": "Remboursements au prorata",
-      "No account sharing on duo": "Aucun partage de compte en duo",
       "Open the demo dashboard": "Voir le tableau de bord de démo",
       "Preview of the order dashboard": "Aperçu du tableau de bord de commande",
       "complete": "terminé",
@@ -803,7 +863,7 @@
         "Serveur public, canaux de tickets privés. Questions de commande, remboursements, changements de booster et avant-vente, 24/7. Vous pouvez aussi lire ce que disent les autres acheteurs avant de commander, ce qui est tout l'intérêt d'un serveur public.",
       "Open the Discord invite": "Ouvrir l'invitation Discord",
       "On the record": "Par écrit",
-      "Email — support@esportsboost.com": "E-mail — support@esportsboost.com",
+      "Email — info@esportsboost.com": "E-mail — info@esportsboost.com",
       "Better for anything involving a payment dispute or a document. Answered in under two hours during EU and NA daytime, under six overnight.":
         "Préférable pour tout litige de paiement ou document. Réponse en moins de deux heures en journée UE et NA, moins de six la nuit.",
       "Or write": "Ou écrivez",
@@ -815,14 +875,32 @@
       "Message": "Message",
       "What's going on?": "Que se passe-t-il ?",
       "Send message": "Envoyer le message",
-      "Local preview — this form doesn't send anything.": "Aperçu local — ce formulaire n'envoie rien.",
+      "Sending…": "Envoi…",
+      /* The form's three outcomes. Each sentence is its own node — the address
+         and the visitor's own email ride in <b>s of their own, so nothing here
+         has a figure or a mailbox interpolated into a translatable string. */
+      "Sent — it's in the inbox.": "Envoyé — c'est dans la boîte de réception.",
+      "The reply lands at": "La réponse arrivera à",
+      "your address": "votre adresse",
+      "Discord is quicker if you'd rather not wait.": "Discord est plus rapide si vous préférez ne pas attendre.",
+      "Noted — this is a preview.": "Noté — ceci est un aperçu.",
+      "Nothing was emailed: this build has no mailbox configured. Write to":
+        "Aucun e-mail n'a été envoyé : cette version n'a pas de boîte configurée. Écrivez à",
+      "and it reaches the same people.": "et cela arrive aux mêmes personnes.",
+      "That didn't send.": "L'envoi a échoué.",
+      "Rather than lose it, write to": "Plutôt que de le perdre, écrivez à",
+      "or open a ticket in Discord — both land in the same place.":
+        "ou ouvrez un ticket sur Discord — les deux arrivent au même endroit.",
       "Before you write in": "Avant de nous écrire",
 
-      /* reviews page. The figures ride in their own nodes, so "4.8 / 5 across
-         3,140 reviews" is three translatable words around two numbers. The
-         rating segment says "Any" rather than the handoff's "All" because
-         "All" is already taken by the roster rail's "All 187 reviews". */
+      /* reviews page. The figures ride in their own nodes, so "4.7 / 5 across
+         13K customers" is two translatable words around two numbers. "reviews"
+         is still needed — it is the count line under the filters ("Showing 12
+         of 58 reviews"). The rating segment says "Any" rather than the
+         handoff's "All" because "All" is already taken by the roster rail's
+         "All 187 reviews". */
       "reviews": "avis",
+      "customers": "clients",
       "Every review below is attached to a paid, completed order — pulled from Trustpilot and the order-page rating, then deduplicated. We don't filter by score, so one-star reviews sit in the same feed.":
         "Chaque avis ci-dessous est rattaché à une commande payée et terminée — extrait de Trustpilot et de la note en page de commande, puis dédupliqué. Nous ne filtrons pas par note, les avis une étoile figurent dans le même flux.",
       "across": "sur",
@@ -927,8 +1005,6 @@
       "Contacting payment…": "Connexion au paiement…",
       "Refunded in full until a booster claims it":
         "Remboursé intégralement jusqu'à la prise en charge par un booster",
-      "included — friends see you offline for the whole order.":
-        "inclus — vos amis vous voient hors ligne pendant toute la commande.",
       "Last chance to add": "Dernière chance d'ajouter",
       "Discount code": "Code de réduction",
       "applied": "appliqué",
@@ -1008,6 +1084,12 @@
       "Plain answers, same day.": "Des réponses claires, le jour même.",
       "Terms of service": "Conditions d'utilisation",
       "Refund policy": "Politique de remboursement",
+      /* The entity block that closes all three legal pages. The company name
+         and the address lines are data and stay as written, like game names
+         and handles — only the labels around them are translated. */
+      "Who to write to": "À qui écrire",
+      "Open a support ticket": "Ouvrir un ticket au support",
+      "Who's responsible for your data": "Qui est responsable de vos données",
 
       /* 404 */
       "Error 404": "Erreur 404",
@@ -1078,7 +1160,347 @@
       "Two guides. One email address.": "Deux guides. Une adresse e-mail.",
       "Never sold, never rented": "Jamais vendue, jamais louée",
       "One click unsubscribes": "Un clic pour se désabonner",
-      "Send them": "Envoyez-les"
+      "Send them": "Envoyez-les",
+
+      /* ── game pages: the six proof bands (design_handoff_lol_game_page) ──
+         Ported after the dictionary was last swept, so the whole run below the
+         configurator shipped in English on all nine ladders. The `{}` entries
+         are the sentences that name the game, its publisher or its rank floor:
+         one entry each instead of nine, and the placeholder sits where French
+         word order wants it, not where English left it. */
+      "Our {} boosters.": "Nos boosters {}.",
+      "From {} orders this month.": "Sur les commandes {} ce mois-ci.",
+      "Asked before every {} order": "Demandé avant chaque commande {}",
+      "It goes on the board and a verified {} booster takes it. If nothing claims it within 24 hours, the order refunds itself.":
+        "Elle passe sur le tableau et un booster {} vérifié la prend. Si personne ne la prend sous 24 heures, la commande se rembourse d'elle-même.",
+      "{} of them, {} only — {} or above, with a clean account history and a name you can look up. Order without naming anyone and it goes to whoever is free; name one and it waits for them.":
+        "{} au total, sur {} uniquement — {} ou au-dessus, avec un historique de compte propre et un nom que vous pouvez vérifier. Commandez sans désigner personne et elle part au premier libre ; désignez-en un et elle l'attend.",
+      "{} flags accounts on patterns, not accusations: a login from the other side of the world, a sudden change in hours, a win rate that doesn't look human. So we don't produce any of those patterns. Your booster connects through an enterprise VPN in your region, plays inside the hours you set, and keeps your settings.":
+        "{} signale les comptes sur des schémas, pas sur des accusations : une connexion à l'autre bout du monde, un changement soudain d'horaires, un taux de victoire qui n'a rien d'humain. Nous ne produisons donc aucun de ces schémas. Votre booster se connecte via un VPN professionnel dans votre région, joue dans les horaires que vous fixez et conserve vos réglages.",
+      "Boosting is against {}'s terms of service. We have never had an account actioned for any of our {} clients and we recover any that are, but nobody honest will tell you the risk is zero — and anyone who does is selling you something.":
+        "Le boosting est contraire aux conditions d'utilisation de {}. Aucun compte n'a jamais été sanctionné parmi nos {} clients, et nous récupérons ceux qui le seraient ; mais personne d'honnête ne vous dira que le risque est nul — et quiconque l'affirme a quelque chose à vous vendre.",
+      /* The roster sentence spells its own count, so the capture is a WORD and
+         gets the exact lookup patTranslate() runs on the way out. A roster size
+         that lands on a spelling not listed here passes through in English —
+         add it rather than leaving it. */
+      "Four": "Quatre",
+      "Twenty-nine": "Vingt-neuf",
+      "Thirty-one": "Trente et un",
+
+      /* 01 How it runs */
+      "Four steps, and you can see all of them.": "Quatre étapes, et vous les voyez toutes.",
+      "The number you see is the number you pay. Nothing is added later, and no account is needed to buy.":
+        "Le montant affiché est celui que vous payez. Rien n'est ajouté ensuite, et aucun compte n'est nécessaire pour acheter.",
+      "Price fixed at checkout": "Prix figé au paiement",
+      "A booster claims it": "Un booster la prend",
+      "Median 18 minutes": "18 minutes en médiane",
+      "Watch it climb": "Suivez la montée",
+      "Every game appears on your order page with the result, the KDA and the LP swing. Pause it any time you want to play.":
+        "Chaque partie apparaît sur votre page de commande avec le résultat, le KDA et l'écart de LP. Mettez en pause dès que vous voulez jouer.",
+      "Updated as games finish": "Mis à jour à la fin de chaque partie",
+      "Finished, or refunded": "Livrée, ou remboursée",
+      "Delivered to the rank you set. Anything not delivered is refunded pro-rata, any time the order is open.":
+        "Livrée au rang que vous avez fixé. Tout ce qui ne l'est pas est remboursé au prorata, à tout moment tant que la commande est ouverte.",
+      "Back within 5 business days": "Remboursé sous 5 jours ouvrés",
+
+      /* 02 While it runs */
+      "While it runs": "Pendant la commande",
+      "Watch every game land.": "Voyez chaque partie tomber.",
+      "The order page opens from the link we email you — no password, no app. It updates as games finish, so you never have to ask where things are.":
+        "La page de commande s'ouvre depuis le lien que nous vous envoyons par e-mail — sans mot de passe, sans application. Elle se met à jour à la fin de chaque partie : vous n'avez jamais à demander où en sont les choses.",
+      "The LP graph, not a percentage": "La courbe de LP, pas un pourcentage",
+      "The RR graph, not a percentage": "La courbe de RR, pas un pourcentage",
+      "Every game plotted from the rank you started at, so a bad night is visible instead of averaged away.":
+        "Chaque partie tracée depuis votre rang de départ : une mauvaise soirée se voit au lieu d'être noyée dans une moyenne.",
+      "Match history with replays": "Historique des parties avec replays",
+      "Result, KDA and LP for every game, each with a replay link that stays live for 14 days.":
+        "Résultat, KDA et LP pour chaque partie, avec un lien de replay actif pendant 14 jours.",
+      "Result, KDA and RR for every game, each with a replay link that stays live for 14 days.":
+        "Résultat, KDA et RR pour chaque partie, avec un lien de replay actif pendant 14 jours.",
+      "One thread with your booster": "Un seul fil avec votre booster",
+      "Ask for a champion, a pause or a swap. Support reads the same thread, so nothing gets repeated.":
+        "Demandez un champion, une pause ou un changement. Le support lit le même fil : rien n'est à répéter.",
+      "games this order": "parties sur cette commande",
+
+      /* 03 Who plays it */
+      "Who plays it": "Qui y joue",
+      "Rank verified every month": "Rang vérifié chaque mois",
+      "One free swap, no reason needed": "Un changement gratuit, sans justification",
+
+      /* 04 Safety */
+      "Why this doesn't get you banned.": "Pourquoi cela ne vous fait pas bannir.",
+      "Enterprise VPN matched to your region": "VPN professionnel dans votre région",
+      "Not a consumer VPN, and never a datacentre IP.":
+        "Pas un VPN grand public, et jamais une IP de centre de données.",
+      "Your sensitivity, your crosshair, your runes": "Votre sensibilité, votre viseur, vos runes",
+      "Settings are mirrored at the start and restored at the end.":
+        "Vos réglages sont reproduits au début et rétablis à la fin.",
+      "You set the window at checkout. Nothing runs at 04:00 unless you do.":
+        "Vous fixez la plage horaire au paiement. Rien ne tourne à 4 h du matin sauf si c'est votre choix.",
+      "Offline appearance for the whole order": "Statut hors ligne pendant toute la commande",
+      "Friends see you offline until it finishes.": "Vos amis vous voient hors ligne jusqu'à la fin.",
+      "In duo your booster queues beside you from their own account.":
+        "En duo, votre booster fait la file à côté de vous depuis son propre compte.",
+
+      /* 05 Reviews */
+      "Read them all": "Lire tous les avis",
+
+      /* 06 FAQ */
+      "If yours isn't here, Discord answers in about four minutes and you don't need an order to ask.":
+        "Si la vôtre n'y est pas, Discord répond en quatre minutes environ et vous n'avez pas besoin d'une commande pour poser la question.",
+      "Do you need my account login?": "Avez-vous besoin de mes identifiants ?",
+      "For solo, yes — your booster signs in and plays, through a VPN in your region and inside the hours you set. For duo, no: they queue beside you from their own account and never see your login at all. Either way we never ask for your email password or your 2FA codes.":
+        "En solo, oui — votre booster se connecte et joue, via un VPN dans votre région et dans les horaires que vous fixez. En duo, non : il fait la file à côté de vous depuis son propre compte et ne voit jamais vos identifiants. Dans les deux cas, nous ne demandons jamais le mot de passe de votre e-mail ni vos codes 2FA.",
+      "Can I play while the order is running?": "Puis-je jouer pendant la commande ?",
+      "What happens if it goes past the estimate?": "Que se passe-t-il en cas de dépassement du délai ?",
+      "A 15% credit applies automatically once the order runs past its window, and it shows on the order page without anyone asking. If it is badly over, we move it to a booster who is free.":
+        "Un avoir de 15 % s'applique automatiquement dès qu'une commande dépasse sa fenêtre, et il apparaît sur la page de commande sans rien demander. En cas de retard important, nous la confions à un booster disponible.",
+      "Why is duo more expensive?": "Pourquoi le duo coûte-t-il plus cher ?",
+      "It takes longer. Your booster carries a live player rather than playing every role freely, so the same climb costs 55% more and takes longer. It is the safer option and we would rather price it honestly than hide the difference.":
+        "Parce que c'est plus long. Votre booster porte un joueur en direct au lieu de jouer chaque rôle librement : la même montée coûte 55 % de plus et prend plus de temps. C'est l'option la plus sûre, et nous préférons l'afficher honnêtement plutôt que masquer l'écart.",
+      "How do I follow the order without an account?": "Comment suivre la commande sans compte ?",
+      "The confirmation email carries a link that is the login. It never expires, works on any device, and opens the same dashboard shown above. Lost it? The demo page resends it to the address you paid with.":
+        "L'e-mail de confirmation contient un lien qui tient lieu de connexion. Il n'expire jamais, fonctionne sur tous les appareils et ouvre le tableau de bord montré ci-dessus. Perdu ? La page de démo le renvoie à l'adresse utilisée pour le paiement.",
+      "Can I choose the champions they play?": "Puis-je choisir les champions qu'il joue ?",
+      "Can I choose the agents they play?": "Puis-je choisir les agents qu'il joue ?",
+      "Can I choose the roles they play?": "Puis-je choisir les rôles qu'il joue ?",
+      "Can I choose the playlist they play?": "Puis-je choisir la playlist qu'il joue ?",
+
+      /* the hero lede, one per ladder */
+      "Solo/duo and flex, across NA and EU. Your booster plays your account inside your normal hours with a regional VPN, or queues beside you in duo and never touches the login at all.":
+        "Solo/duo et flex, sur NA et EU. Votre booster joue votre compte dans vos horaires habituels avec un VPN régional, ou fait la file à côté de vous en duo sans jamais toucher à vos identifiants.",
+      "Competitive and unrated, across NA and EU. Your booster plays your account inside your normal hours with a regional VPN, or queues beside you in duo and never touches the login at all.":
+        "Compétitif et non classé, sur NA et EU. Votre booster joue votre compte dans vos horaires habituels avec un VPN régional, ou fait la file à côté de vous en duo sans jamais toucher à vos identifiants.",
+      "Premier CS Rating and Faceit levels, run by FPL-adjacent players. Anti-cheat safe patterns, no smurf stacking, no rating farm scripts.":
+        "CS Rating Premier et niveaux Faceit, assurés par des joueurs proches du FPL. Des schémas sans risque pour l'anti-triche, pas d'empilement de smurfs, pas de scripts de farm de rating.",
+      "1v1, 2v2 and 3v3 playlists, tournament wins, and duo sessions where the booster calls rotations live on voice.":
+        "Playlists 1c1, 2c2 et 3c3, victoires en tournoi, et sessions duo où le booster annonce les rotations en direct sur vocal.",
+
+      /* the bundle strip */
+      "Save big on bundles": "Économisez gros sur les packs",
+      "Whole-ladder climbs at one flat price": "Des montées d'échelle entière à prix fixe",
+      "Two tiers up in one order, from wherever you are":
+        "Deux paliers de plus en une commande, d'où que vous partiez",
+      "Two rating bands up in one order": "Deux tranches de rating de plus en une commande",
+      "Up to {}% off": "Jusqu'à −{} %",
+      /* "Depuis n'importe quelle division {}" is the natural phrasing and it
+         wrapped to a second line on a 216px bundle card where the English fits
+         on one, leaving one card in the row of three taller than its
+         neighbours. Shortened to fit the card it actually ships in. */
+      "From any {} division": "Depuis toute division {}",
+      "Starts at {}": "À partir de {}",
+      "Apply bundle": "Appliquer le pack",
+      "Applied": "Appliqué",
+      "Played in your preferred hours": "Joué à vos heures préférées",
+
+      /* net wins / placements */
+      "per game": "par partie",
+      "A net win means one win above your losses — five is the cap per order.":
+        "Une victoire nette, c'est une victoire de plus que vos défaites — cinq au maximum par commande.",
+      "A placement game sets or resets your rank — five is the cap per order.":
+        "Une partie de placement fixe ou réinitialise votre rang — cinq au maximum par commande.",
+      "I have a rank": "J'ai un rang",
+      "Unranked": "Non classé",
+      "Fresh account or a new season — no MMR to read yet. Your booster plays all five and the rank you land is the rank you keep.":
+        "Compte neuf ou nouvelle saison — aucun MMR à lire pour l'instant. Votre booster joue les cinq parties et le rang obtenu est celui que vous gardez.",
+
+      /* coaching */
+      "Pick your coach": "Choisissez votre coach",
+      "How many hours": "Combien d'heures",
+      "What to work on": "Sur quoi travailler",
+      "First session": "Première session",
+      "per hour": "de l'heure",
+      "Single session": "Session unique",
+      "Save {}%": "−{} %",
+      "Laning": "Phase de lane",
+      "Macro & rotations": "Macro et rotations",
+      "Champion pool": "Pool de champions",
+      "VOD review": "Analyse de VOD",
+      "coaches taking bookings": "coachs prennent des réservations",
+      "taking bookings": "prend des réservations",
+      "Live on Discord, screen shared, recorded for you to keep.":
+        "En direct sur Discord, écran partagé, enregistré et gardé pour vous.",
+
+      /* ── the support page ─────────────────────────────────────────────── */
+      "Two ways in. Both are read by people.": "Deux entrées. Les deux sont lues par des humains.",
+      "Staffed right now": "Équipe présente en ce moment",
+      "— someone is in #support": "— quelqu'un est dans #support",
+      "Median first reply": "Premier retour médian",
+      "Open 24/7": "Ouvert 24/7",
+      "Attachments and receipts welcome": "Pièces jointes et reçus bienvenus",
+      "Copy address": "Copier l'adresse",
+      "Write in": "Écrivez-nous",
+      "Or write it here": "Ou écrivez-le ici",
+      "What to put in it": "Ce qu'il faut y mettre",
+      "The order number": "Le numéro de commande",
+      "Anything starting ESB-. It skips triage and lands with the person on that order.":
+        "Tout ce qui commence par ESB-. Cela évite le tri et arrive directement chez la personne en charge de la commande.",
+      "What you expected": "Ce que vous attendiez",
+      "The rank, the date, the thing the checkout said you were buying.":
+        "Le rang, la date, ce que le paiement disait que vous achetiez.",
+      "What actually happened": "Ce qui s'est réellement passé",
+      "Screenshots beat descriptions. Paste them straight into the thread.":
+        "Une capture vaut mieux qu'une description. Collez-la directement dans le fil.",
+      "Nothing else": "Rien d'autre",
+      "No passwords, no 2FA codes. Support will never ask for one, and won't act on a message that contains one.":
+        "Pas de mots de passe, pas de codes 2FA. Le support n'en demandera jamais et ne traitera pas un message qui en contient un.",
+      "What's it about": "De quoi s'agit-il",
+      "Order issue": "Problème de commande",
+      "Refund": "Remboursement",
+      "Booster swap": "Changement de booster",
+      "Before I buy": "Avant d'acheter",
+      "Something else": "Autre chose",
+      "Company": "Société",
+      "One thread per message. Discord and email land in the same place, so pick either — not both.":
+        "Un fil par message. Discord et l'e-mail arrivent au même endroit : choisissez l'un ou l'autre, pas les deux.",
+      "Add an email we can reply to, and a line or two about what happened.":
+        "Ajoutez un e-mail auquel répondre, et une ligne ou deux sur ce qui s'est passé.",
+      "We never ask for your game password here, or anywhere else.":
+        "Nous ne demandons jamais le mot de passe de votre jeu, ni ici ni ailleurs.",
+      "Six answers that between them close most of the tickets we get. If yours isn't here, Discord is two clicks away.":
+        "Six réponses qui règlent à elles seules la plupart de nos tickets. Si la vôtre n'y est pas, Discord est à deux clics.",
+      "Where is my order? I never made an account.":
+        "Où est ma commande ? Je n'ai jamais créé de compte.",
+      "You do not need one. Guest orders are tracked by the link we emailed when you paid — it never expires and works on any device. Lost it? Open the order lookup, enter the address you paid with, and we send it again.":
+        "Vous n'en avez pas besoin. Les commandes invité se suivent avec le lien envoyé par e-mail au moment du paiement — il n'expire jamais et fonctionne sur tous les appareils. Perdu ? Ouvrez la recherche de commande, saisissez l'adresse utilisée pour le paiement et nous le renvoyons.",
+      "Nobody has claimed my order yet.": "Personne n'a encore pris ma commande.",
+      "Median claim time is 18 min, and most of the rest go within the hour. If nothing has claimed it 24 hours after payment, the order refunds itself automatically — no ticket, no asking. Writing in before that does not move it up the board.":
+        "Le délai médian de prise en charge est de 18 min, et la plupart des autres partent dans l'heure. Si rien ne l'a prise 24 heures après le paiement, la commande se rembourse automatiquement — sans ticket, sans démarche. Nous écrire avant cela ne la fait pas remonter sur le tableau.",
+      "Can I get a refund?": "Puis-je être remboursé ?",
+      "In full, any time before a booster claims it. After that it is pro-rated on what has not been delivered — you keep the divisions already climbed and get the rest back. Money lands on the original payment method within 5 business days.":
+        "Intégralement, à tout moment avant qu'un booster ne la prenne. Ensuite, c'est au prorata de ce qui n'a pas été livré — vous gardez les divisions déjà gravies et le reste vous est rendu. L'argent revient sur le moyen de paiement d'origine sous 5 jours ouvrés.",
+      "Can I swap to a different booster?": "Puis-je changer de booster ?",
+      "Yes, once per order, at no charge. Ask in the order thread. The order goes back on the board and is usually re-claimed the same day; if you would rather not say why, do not — we do not ask.":
+        "Oui, une fois par commande et sans frais. Demandez-le dans le fil de la commande. Elle retourne sur le tableau et est généralement reprise le jour même ; si vous préférez ne pas dire pourquoi, ne le dites pas — nous ne le demandons pas.",
+      "Can I play on my account while an order is running?":
+        "Puis-je jouer sur mon compte pendant une commande ?",
+      "My order is past the delivery estimate.": "Ma commande a dépassé le délai annoncé.",
+      "A 15% credit applies automatically once an order runs past its window, and it shows on the order page without anyone having to ask. If it is badly over, write in and we will move it to a booster who is free.":
+        "Un avoir de 15 % s'applique automatiquement dès qu'une commande dépasse sa fenêtre, et il apparaît sur la page de commande sans rien avoir à demander. En cas de retard important, écrivez-nous et nous la confierons à un booster disponible.",
+      "Still stuck? Ask us.": "Toujours bloqué ? Écrivez-nous.",
+      "Discord is the fast one — our staff sit in it all day. Or write in above and it lands in the same inbox.":
+        "Discord est le plus rapide — notre équipe y est toute la journée. Ou écrivez-nous ci-dessus : cela arrive dans la même boîte.",
+      "Ask us": "Écrivez-nous",
+
+      /* ── the free-guides landing ──────────────────────────────────────── */
+      "One for League, one for Valorant. Six chapters and six drills each, on the things that decide games between Silver and Ascendant. Written by the people on our roster who play those ranks every day.":
+        "Un pour League, un pour Valorant. Six chapitres et six exercices chacun, sur ce qui décide les parties entre Silver et Ascendant. Écrits par les membres de notre effectif qui jouent ces rangs tous les jours.",
+      "Win the lane you already won.": "Gagnez la lane que vous aviez déjà gagnée.",
+      "Stop losing rounds you already won.": "Arrêtez de perdre les rounds que vous aviez gagnés.",
+      "6 chapters · 6 drills": "6 chapitres · 6 exercices",
+      "The League field guide": "Le guide de terrain League",
+      "The Valorant field guide": "Le guide de terrain Valorant",
+      "Iron to Diamond · wave control, roams, objectives":
+        "D'Iron à Diamond · gestion des vagues, roams, objectifs",
+      "Iron to Ascendant · crosshair, economy, retakes":
+        "D'Iron à Ascendant · viseur, économie, retakes",
+      ". If nothing lands in two minutes, look in promotions — it sometimes goes there first.":
+        ". Si rien n'arrive en deux minutes, regardez dans les promotions — il y atterrit parfois d'abord.",
+      "From the team behind": "De l'équipe derrière",
+      "and 4.7 / 5 on Trustpilot.": "et 4,7 / 5 sur Trustpilot.",
+      "Every chapter ends with a drill you can run in a custom game in under ten minutes. That is the whole format: read it, then do it.":
+        "Chaque chapitre se termine par un exercice à faire en partie personnalisée en moins de dix minutes. C'est tout le format : on lit, puis on fait.",
+      "Drill": "Exercice",
+      "Wave control": "Gestion des vagues",
+      "Freeze, slow-push, crash — and which one the minute demands.":
+        "Freeze, slow-push, crash — et lequel la minute réclame.",
+      "Trading, not fighting": "Échanger, pas combattre",
+      "Why the lane is won by who spends time better, not who hits harder.":
+        "Pourquoi la lane se gagne par celui qui emploie mieux son temps, pas par celui qui frappe le plus fort.",
+      "Roams that pay": "Des roams rentables",
+      "The three windows where leaving lane gains more than it costs.":
+        "Les trois fenêtres où quitter la lane rapporte plus que cela ne coûte.",
+      "Objectives as maths": "Les objectifs comme un calcul",
+      "Dragon, herald and the setup that starts 40 seconds early.":
+        "Dragon, héraut et la mise en place qui commence 40 secondes plus tôt.",
+      "Six habits that cap your rank": "Six habitudes qui plafonnent votre rang",
+      "Each with the tell you can spot in your own replays.":
+        "Chacune avec l'indice repérable dans vos propres replays.",
+      "Each with the tell you can spot in your own VODs.":
+        "Chacune avec l'indice repérable dans vos propres VOD.",
+      "The climb plan": "Le plan de montée",
+      "Twelve ranked games a week, structured.": "Douze parties classées par semaine, structurées.",
+      "Crosshair placement": "Placement du viseur",
+      "Where the dot sits before you peek, not after.":
+        "Où se trouve le point avant de peek, pas après.",
+      "Economy you can trust": "Une économie fiable",
+      "When to force, when to save, and why the half-buy loses.":
+        "Quand forcer, quand économiser, et pourquoi le demi-achat perd.",
+      "Retakes and the four-second rule": "Les retakes et la règle des quatre secondes",
+      "Most retakes are lost before anyone shoots.":
+        "La plupart des retakes sont perdus avant le premier tir.",
+      "Utility that buys space": "Les utilitaires qui achètent de l'espace",
+      "Smokes and flashes as currency.": "Smokes et flashs comme monnaie d'échange.",
+      "Not a content team reading patch notes. Boosters from our own roster wrote a chapter each, and every claim is something they do in ranked that week — not theory borrowed from a pro scene you will never play in.":
+        "Pas une équipe de contenu qui lit les notes de patch. Des boosters de notre propre effectif ont écrit un chapitre chacun, et chaque affirmation est quelque chose qu'ils font en classé cette semaine-là — pas de la théorie empruntée à une scène pro où vous ne jouerez jamais.",
+      "From 1,100 readers": "Sur 1 100 lecteurs",
+      "Is it actually free, or free-ish?": "Est-ce vraiment gratuit, ou presque gratuit ?",
+      "Free. There is no card, no trial, and no upsell inside either PDF. We publish them because a player who improves is a player who stays in the game, and some of them buy a boost or a coaching hour later. That is the whole business case.":
+        "Gratuit. Pas de carte, pas d'essai, aucune vente additionnelle dans les PDF. Nous les publions parce qu'un joueur qui progresse est un joueur qui reste, et que certains achètent un boost ou une heure de coaching plus tard. Voilà tout le modèle.",
+      "Can I take both?": "Puis-je prendre les deux ?",
+      "Yes, and most people do — both are ticked by default. They arrive as two attachments in one email, so taking the second one costs you nothing extra, not even another form.":
+        "Oui, et la plupart le font — les deux sont cochés par défaut. Ils arrivent en deux pièces jointes dans un seul e-mail : prendre le second ne coûte rien de plus, pas même un autre formulaire.",
+      "What do you do with my email?": "Que faites-vous de mon e-mail ?",
+      "Send you the guides. If you tick the box, one email a month with new guides and patch notes. We never sell or rent the list, and one click unsubscribes — the link is in every email, not buried in a preference centre.":
+        "Vous envoyer les guides. Si vous cochez la case, un e-mail par mois avec les nouveaux guides et les notes de patch. Nous ne vendons ni ne louons jamais la liste, et un clic suffit pour se désabonner — le lien est dans chaque e-mail, pas enfoui dans un centre de préférences.",
+      "What rank are these written for?": "Pour quel rang sont-ils écrits ?",
+      "Iron through Diamond for League, Iron through Ascendant for Valorant. The early chapters do most of the work at lower ranks; the habit and objective chapters matter more once you are past Platinum.":
+        "D'Iron à Diamond pour League, d'Iron à Ascendant pour Valorant. Les premiers chapitres font l'essentiel du travail aux rangs bas ; les chapitres sur les habitudes et les objectifs comptent davantage une fois Platinum passé.",
+      "Do I need to buy boosting to use them?": "Dois-je acheter un boost pour les utiliser ?",
+      "No, and neither guide mentions our services beyond one line on the last page. If you would rather someone else did the climbing, that is a different page on this site — this one is for doing it yourself.":
+        "Non, et aucun des deux guides ne mentionne nos services au-delà d'une ligne en dernière page. Si vous préférez que quelqu'un d'autre fasse la montée, c'est une autre page de ce site — celle-ci est pour la faire vous-même.",
+
+      /* ── homepage, checkout and the odds and ends ─────────────────────── */
+      "Know your exact price in seconds. A verified booster claims your order in about 18 minutes — and until one does, every cent is refundable.":
+        "Votre prix exact en quelques secondes. Un booster vérifié prend votre commande en 18 minutes environ — et tant que personne ne l'a prise, chaque centime est remboursable.",
+      "Best Sellers": "Meilleures ventes",
+      "Fast checkout": "Paiement rapide",
+      "You are here": "Vous êtes ici",
+      "You are here tier": "Palier où vous êtes",
+      "You want to be": "Vous visez",
+      "You want to be tier": "Palier visé",
+      "Your region": "Votre région",
+      "Nine games": "Neuf jeux",
+      "Start an order": "Lancer une commande",
+      "Ask in Discord": "Demander sur Discord",
+      "Median first reply on Discord last month: 3m 40s.":
+        "Premier retour médian sur Discord le mois dernier : 3 min 40 s.",
+      "with vantaa": "avec vantaa",
+      "Duo queue · +55%": "File duo · +55 %",
+      "SPLIT15 takes 15% off the whole catalogue with nothing to type. Each game page also carries bundle climbs at 19% to 37% off, and a bundle replaces the code rather than adding to it — there is only ever one discount on an order, and it is the larger of the two.":
+        "SPLIT15 retire 15 % sur tout le catalogue sans rien à saisir. Chaque page de jeu propose aussi des packs de montée à −19 % à −37 %, et un pack remplace le code au lieu de s'y ajouter — il n'y a jamais qu'une seule remise par commande, et c'est la plus avantageuse des deux.",
+
+      /* The roster line is split around its <b>count</b>, so it is two nodes and
+         each needs its own entry — the figure never enters the dictionary. */
+      "more {} boosters": "boosters {} de plus",
+      "more {} booster": "booster {} de plus",
+      "on the roster, all {} or above.": "sur le tableau, tous {} ou au-dessus.",
+      "on Trustpilot · {} reviews": "sur Trustpilot · {} avis",
+      "{} reviews on Trustpilot": "{} avis sur Trustpilot",
+      "· {} reviews": "· {} avis",
+      /* The capture is the game's own picks add-on, which is already a key
+         above ("Champions & roles"), so patTranslate()'s lookup renders the
+         French name inside the French sentence. ⚠ the English source reads
+         "Yes — It is free", a stray capital from the way build.py joins the
+         clause; the French is written correctly rather than reproducing it. */
+      "Yes — It is free on every order, not an upsell — \"{}\" is ticked before you configure anything. Your booster plays a pool you pick, which also keeps the match history plausible, and you can change it mid-order in the thread.":
+        "Oui — c'est gratuit sur chaque commande, pas une option payante : « {} » est coché avant même que vous ne configuriez quoi que ce soit. Votre booster joue un pool que vous choisissez, ce qui rend aussi l'historique de parties plausible, et vous pouvez le modifier en cours de commande dans le fil.",
+      "Pause it first, from the order page. Pausing is free and resumes the same night if a slot is open. What you should not do is queue ranked alongside an unpaused solo order — two people on one account in the same queue is the fastest way to get flagged.":
+        "Mettez-la d'abord en pause, depuis la page de commande. La pause est gratuite et la reprise se fait le soir même si un créneau est libre. Ce qu'il ne faut pas faire, c'est lancer une partie classée en parallèle d'une commande solo non mise en pause — deux personnes sur un compte dans la même file, c'est le moyen le plus rapide de se faire repérer.",
+
+      /* mobile stat row, coaching slots and the roles under a booster's name */
+      "To claim": "Prise en charge",
+      "Tonight, 20:00": "Ce soir, 20:00",
+      "Tomorrow, 18:00": "Demain, 18:00",
+      "Saturday, 15:00": "Samedi, 15:00",
+      "Sunday, 12:00": "Dimanche, 12:00",
+      "Mid lane": "Mid lane",
+      "Duelist": "Duelliste",
+      "Initiator": "Initiateur",
+      "Sentinel": "Sentinelle",
+      "Rocket League, Apex Legends and Counter-Strike 2":
+        "Rocket League, Apex Legends et Counter-Strike 2",
+      "3m 40s": "3 min 40 s"
     },
 
     de: {
@@ -1115,7 +1537,7 @@
       "Menu": "Menü",
       "Skip to content": "Zum Inhalt springen",
       /* mega menus */
-      "Pick a ladder": "Wähle eine Rangliste",
+      "Pick your game": "Wähle dein Spiel",
       "Who plays your order": "Wer deine Bestellung spielt",
       "Before you buy": "Bevor du kaufst",
       "Right now": "Gerade jetzt",
@@ -1125,7 +1547,7 @@
       "boosters on shift": "Booster im Dienst",
       "Median claim": "Übernahme im Median",
       "Watch orders land live": "Bestellungen live eintreffen sehen",
-      "All nine ladders": "Alle neun Ranglisten",
+      "All nine games": "Alle neun Spiele",
       "Browse the roster": "Das Team ansehen",
       "verified boosters, one game each": "verifizierte Booster, je ein Spiel",
       "Hire a specific booster": "Einen bestimmten Booster buchen",
@@ -1266,6 +1688,14 @@
       "Save": "Gespart",
       "with": "mit",
       "Money-back until a booster is assigned": "Geld zurück, bis ein Booster zugewiesen ist",
+      "Money back until a booster claims it": "Geld zurück, bis ein Booster die Bestellung annimmt",
+      "Your hours, offline the whole time": "Zu deinen Zeiten, durchgehend offline",
+      "Pause any time — it's your account": "Jederzeit pausieren — es ist dein Konto",
+      "Pause it anytime": "Jederzeit pausieren",
+      "Booster time to claim": "Zeit bis zur Übernahme",
+      "Time to claim": "Bis zur Übernahme",
+      "We handle the rest.": "Wir kümmern uns um den Rest.",
+      "Discreet on your bank statement": "Diskret auf deinem Kontoauszug",
       "No account needed": "Kein Konto nötig",
       "VPN matched to your region": "VPN passend zu deiner Region",
       "on Trustpilot": "auf Trustpilot",
@@ -1307,28 +1737,49 @@
       "Verified": "Verifiziert",
       "orders delivered": "Bestellungen geliefert",
       "boosts delivered": "Boosts geliefert",
+      "clients": "Kunden",
+      "Clients served": "Betreute Kunden",
+      "Clients": "Kunden",
       "Included": "Inklusive",
 
-      /* add-ons */
-      "Priority queue": "Prioritäts-Queue",
-      "Pushed to the top of the board. Median claim drops to about 6 minutes.":
-        "Ganz nach oben auf dem Board. Die mediane Annahme sinkt auf etwa 6 Minuten.",
-      "Specific champions, agents or heroes": "Bestimmte Champions, Agenten oder Helden",
-      "Your booster plays a pool you choose, so the match history stays plausible.":
-        "Dein Booster spielt einen von dir gewählten Pool, damit der Spielverlauf plausibel bleibt.",
-      "Streamed to you": "Für dich gestreamt",
-      "A private stream link for every game, replayable for 14 days.":
-        "Ein privater Stream-Link für jedes Spiel, 14 Tage lang abspielbar.",
+      /* add-ons — see the note on the French block above. */
+      "Priority order": "Prioritäre Bestellung",
+      "First in the claim queue, claimed in about 6 minutes.":
+        "Ganz vorn in der Annahme-Warteschlange, angenommen in etwa 6 Minuten.",
+      "First in the claim queue, about 6 minutes.":
+        "Ganz vorn in der Warteschlange, etwa 6 Minuten.",
+      "Solo only queue": "Nur Solo-Queue",
+      "Your booster plays alone, in ranked only — no parties.":
+        "Dein Booster spielt allein, nur Ranked — niemals in einer Gruppe.",
+      "Plays alone, ranked only — no parties.":
+        "Spielt allein, nur Ranked — keine Gruppen.",
+      "Play on your schedule": "Spiel zu deinen Zeiten",
+      "Fixed session times, held for the whole order.":
+        "Feste Sitzungszeiten, für die ganze Bestellung reserviert.",
+      "Fixed times, held for the whole order.":
+        "Feste Zeiten, für die ganze Bestellung reserviert.",
+      "Champions & roles": "Champions & Rollen",
+      "Agents & roles": "Agenten & Rollen",
+      "Heroes & roles": "Helden & Rollen",
+      "Legends & playstyle": "Legenden & Spielstil",
+      "Comps & augments": "Comps & Augments",
+      "Roles & maps": "Rollen & Maps",
+      "Playlist & playstyle": "Playlist & Spielstil",
+      "Champions, agents & roles": "Champions, Agenten & Rollen",
+      "Always free. Your booster plays the picks you choose.":
+        "Immer kostenlos. Dein Booster spielt die von dir gewählten Picks.",
+      "You choose the picks they play.":
+        "Du wählst die gespielten Picks.",
       "Offline appearance": "Offline erscheinen",
-      "Always on. Friends see you offline for the whole order — never an extra.":
-        "Immer aktiv. Freunde sehen dich während der gesamten Bestellung offline — nie ein Aufpreis.",
+      "Always on. Friends see you offline for the whole order.":
+        "Immer aktiv. Freunde sehen dich während der gesamten Bestellung offline.",
 
       /* hero (home) */
       "Verified boosters — since 2019": "Verifizierte Booster — seit 2019",
       "The rank is yours.": "Der Rang gehört dir.",
       "The grind isn't.": "Der Grind nicht.",
-      "Set two ranks. See the final price before you make an account. Then watch every match land from the dashboard — no bots, no shared logins, no invoice that moves after checkout.":
-        "Lege zwei Ränge fest. Sieh den Endpreis, bevor du ein Konto erstellst. Verfolge dann jedes Match im Dashboard — keine Bots, keine geteilten Logins, keine Rechnung, die sich nach der Kasse ändert.",
+      "Your price in 10 seconds. Claimed in about 18 minutes. Refunded in full until it is.":
+        "Dein Preis in 10 Sekunden. Angenommen in etwa 18 Minuten. Bis dahin voll erstattbar.",
       "This month's #1 — vantaa": "Nr. 1 des Monats — vantaa",
       "Challenger 1042 LP · 78% WR · EUW · 214 orders": "Challenger 1042 LP · 78 % WR · EUW · 214 Bestellungen",
       "Top booster of the month, vantaa": "Top-Booster des Monats, vantaa",
@@ -1341,12 +1792,15 @@
       "100% recovery rate on account reviews": "100 % Erfolgsquote bei Konto-Prüfungen",
 
       /* section heads / home */
-      "Nine ladders.": "Neun Ladders.",
-      "Thirty-seven services.": "Siebenunddreißig Services.",
+      "Pick your game.": "Wähle dein Spiel.",
+      "The price is already on it.": "Der Preis steht schon drauf.",
+      "Nine games, thirty-seven services, priced per division.":
+        "Neun Spiele, siebenunddreißig Services, Preis pro Division.",
+      "Services": "Services",
       "Most ordered": "Am häufigsten bestellt",
       "Configure": "Konfigurieren",
       "All games": "Alle Spiele",
-      "ladders are live too.": "sind ebenfalls live.",
+      "are live too.": "sind ebenfalls live.",
       "Elo boost": "Elo-Boost",
       "Rank boost": "Rang-Boost",
       "MMR boost": "MMR-Boost",
@@ -1372,7 +1826,6 @@
       "You watch the whole thing": "Du siehst alles mit",
       "Regional VPN": "Regionales VPN",
       "Pro-rated refunds": "Anteilige Rückerstattungen",
-      "No account sharing on duo": "Kein Kontoteilen im Duo",
       "Open the demo dashboard": "Demo-Dashboard öffnen",
       "Preview of the order dashboard": "Vorschau des Bestell-Dashboards",
       "complete": "abgeschlossen",
@@ -1797,7 +2250,7 @@
         "Öffentlicher Server, private Ticket-Kanäle. Bestellfragen, Rückerstattungen, Booster-Wechsel und Vorverkauf, 24/7. Du kannst auch einfach lesen, was andere Käufer sagen, bevor du bestellst — genau dafür ist er öffentlich.",
       "Open the Discord invite": "Discord-Einladung öffnen",
       "On the record": "Schriftlich",
-      "Email — support@esportsboost.com": "E-Mail — support@esportsboost.com",
+      "Email — info@esportsboost.com": "E-Mail — info@esportsboost.com",
       "Better for anything involving a payment dispute or a document. Answered in under two hours during EU and NA daytime, under six overnight.":
         "Besser für alles rund um Zahlungsstreit oder Dokumente. Antwort in unter zwei Stunden tagsüber in EU und NA, unter sechs über Nacht.",
       "Or write": "Oder schreib",
@@ -1809,11 +2262,25 @@
       "Message": "Nachricht",
       "What's going on?": "Worum geht es?",
       "Send message": "Nachricht senden",
-      "Local preview — this form doesn't send anything.": "Lokale Vorschau — dieses Formular sendet nichts.",
+      "Sending…": "Wird gesendet…",
+      /* Die drei Ausgänge des Formulars — siehe den Kommentar im französischen Block. */
+      "Sent — it's in the inbox.": "Gesendet — es liegt im Postfach.",
+      "The reply lands at": "Die Antwort kommt an",
+      "your address": "deine Adresse",
+      "Discord is quicker if you'd rather not wait.": "Discord ist schneller, wenn du nicht warten möchtest.",
+      "Noted — this is a preview.": "Notiert — das ist eine Vorschau.",
+      "Nothing was emailed: this build has no mailbox configured. Write to":
+        "Es wurde keine E-Mail gesendet: diese Version hat kein Postfach konfiguriert. Schreib an",
+      "and it reaches the same people.": "und es erreicht dieselben Leute.",
+      "That didn't send.": "Das wurde nicht gesendet.",
+      "Rather than lose it, write to": "Damit nichts verloren geht, schreib an",
+      "or open a ticket in Discord — both land in the same place.":
+        "oder öffne ein Ticket auf Discord — beides landet am selben Ort.",
       "Before you write in": "Bevor du uns schreibst",
 
       /* reviews page — siehe den Kommentar im französischen Block. */
       "reviews": "Bewertungen",
+      "customers": "Kunden",
       "Every review below is attached to a paid, completed order — pulled from Trustpilot and the order-page rating, then deduplicated. We don't filter by score, so one-star reviews sit in the same feed.":
         "Jede Bewertung unten gehört zu einer bezahlten, abgeschlossenen Bestellung — aus Trustpilot und der Bewertung auf der Bestellseite gezogen und dedupliziert. Wir filtern nicht nach Sternen, Ein-Stern-Bewertungen stehen im selben Feed.",
       "across": "bei",
@@ -1918,8 +2385,6 @@
       "Contacting payment…": "Zahlung wird kontaktiert…",
       "Refunded in full until a booster claims it":
         "Volle Rückerstattung, bis ein Booster die Bestellung annimmt",
-      "included — friends see you offline for the whole order.":
-        "inklusive — Freunde sehen dich während der ganzen Bestellung offline.",
       "Last chance to add": "Letzte Gelegenheit zum Hinzufügen",
       "Discount code": "Rabattcode",
       "applied": "angewendet",
@@ -1999,6 +2464,11 @@
       "Plain answers, same day.": "Klare Antworten, am selben Tag.",
       "Terms of service": "Nutzungsbedingungen",
       "Refund policy": "Rückerstattungsrichtlinie",
+      /* Siehe den fr-Block: Firmenname und Anschrift sind Daten und bleiben
+         unübersetzt — übersetzt werden nur die Beschriftungen drumherum. */
+      "Who to write to": "An wen Sie schreiben",
+      "Open a support ticket": "Support-Ticket eröffnen",
+      "Who's responsible for your data": "Wer für Ihre Daten verantwortlich ist",
 
       /* 404 */
       "Error 404": "Fehler 404",
@@ -2074,6 +2544,69 @@
   var ANYDICT = {};
   ["fr", "de"].forEach(function (l) { for (var k in ESB_I18N[l]) ANYDICT[k] = 1; });
 
+  /* ── {} patterns ──────────────────────────────────────────────────────────
+     A key may carry `{}` placeholders. "It goes on the board and a verified {}
+     booster takes it." is ONE entry covering all nine ladders, where the
+     whole-text-node rule otherwise needs nine near-identical ones — and the
+     count grows with the catalogue, which is how a tenth game ships half
+     translated. It is not the interpolation the rest of this file warns about:
+     the placeholder MOVES with the target's word order ("Demandé avant chaque
+     commande {}"), which is exactly what splitting a sentence into fragments
+     around a `<b>` cannot do.
+
+     Three properties keep it safe. Only keys written with `{}` take part; they
+     are tried only after an exact lookup misses, so no existing entry changes
+     behaviour; and what a `{}` captures is copied through verbatim, because it
+     is always data — a game name, a tier, a publisher, a figure. Keep the
+     literal part of a pattern long enough to be unambiguous: `{}` is
+     non-greedy but it will still match anything. */
+  var _pats = {};
+  function patterns(lang) {
+    if (_pats[lang]) return _pats[lang];
+    var out = [], d = ESB_I18N[lang] || {};
+    for (var k in d) {
+      if (k.indexOf("{}") === -1) continue;
+      var rx = k.split("{}").map(function (part) {
+        return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }).join("([^]+?)");
+      out.push({ re: new RegExp("^" + rx + "$"), to: d[k] });
+    }
+    return (_pats[lang] = out);
+  }
+
+  function patTranslate(core, lang) {
+    var ps = patterns(lang), d = ESB_I18N[lang] || {};
+    for (var i = 0; i < ps.length; i++) {
+      var m = core.match(ps[i].re);
+      if (!m) continue;
+      var j = 1;
+      return ps[i].to.replace(/\{\}/g, function () {
+        var cap = m[j++] || "";
+        // A capture is normally data and passes through untouched — no game
+        // name, tier or publisher is a dictionary key. The exception is the
+        // roster sentence, which spells its own count ("Thirty-one of them"):
+        // that IS a word, so a capture gets one exact lookup on the way out.
+        return d[cap] !== undefined ? d[cap] : cap;
+      });
+    }
+    return null;
+  }
+
+  // The pattern half of ANYDICT: is this node translatable in ANY language?
+  // Asked once per node before the original is stashed, so a node that only
+  // matches a pattern is still restored to English on the way back.
+  var ANYPATS = null;
+  function anyPatMatch(core) {
+    if (!ANYPATS) {
+      ANYPATS = [];
+      ["fr", "de"].forEach(function (l) {
+        patterns(l).forEach(function (p) { ANYPATS.push(p.re); });
+      });
+    }
+    for (var i = 0; i < ANYPATS.length; i++) if (ANYPATS[i].test(core)) return true;
+    return false;
+  }
+
   /* ── DOM translation ──────────────────────────────────────────────────── */
   var ORIG = new WeakMap();      // text node → original English nodeValue
   var ATTR_ORIG = new WeakMap(); // element → { attr: original English value }
@@ -2100,13 +2633,14 @@
     var lead = m[1], coreRaw = m[2], trail = m[3];
     if (!coreRaw) return;
     var core = norm(coreRaw);
-    var known = orig !== undefined || ANYDICT[core] === 1;
+    var known = orig !== undefined || ANYDICT[core] === 1 || anyPatMatch(core);
     if (!known) return;
     if (orig === undefined) ORIG.set(node, full);
     var out = coreRaw;
     if (lang !== "en") {
-      var d = ESB_I18N[lang];
+      var d = ESB_I18N[lang], pat;
       if (d && d[core] !== undefined) out = d[core];
+      else if ((pat = patTranslate(core, lang)) !== null) out = pat;
     }
     node.nodeValue = lead + out + trail;
   }
@@ -2133,6 +2667,12 @@
   function applyLang(lang) {
     locale.lang = lang;
     document.documentElement.setAttribute("lang", lang);
+    // The language carries its currency with it until the visitor pins one, so
+    // switching to French re-quotes the whole page in euros. Set before the walk
+    // so the single reformatStaticMoney() / esbRender() pass at the foot of this
+    // function does both jobs at once, and syncAll() re-marks the currency
+    // control that just moved underneath the reader.
+    if (!locale.curPinned) locale.currency = LANG_CUR[lang] || "USD";
     var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
       acceptNode: function (n) {
         if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
@@ -2151,6 +2691,7 @@
     reformatStaticMoney();
     // let the runtime re-render its dynamic strings in the new language
     if (window.esbRender) window.esbRender();
+    syncAll();
   }
 
   var ATTRS_SEL = [];
@@ -2170,8 +2711,11 @@
     });
   }
 
-  function applyCurrency(cur) {
+  function applyCurrency(cur, pinned) {
     locale.currency = cur;
+    // Only a click pins. Restoring a stored preference at boot must not, or the
+    // language default could never move a currency it set itself.
+    if (pinned) locale.curPinned = true;
     reformatStaticMoney();
     if (window.esbRender) window.esbRender();
   }
@@ -2211,6 +2755,16 @@
     });
   }
 
+  // Every .loc on the page. Three switchers mount per document — the promo bar,
+  // the nav sheet and the footer — and a language pick now moves the currency
+  // too, so re-marking only the control that was clicked leaves the other five
+  // contradicting the prices beside them.
+  function syncAll() {
+    document.querySelectorAll(".loc").forEach(function (loc) {
+      syncDropdown(loc, loc.getAttribute("data-loc"));
+    });
+  }
+
   function wireDropdown(loc) {
     var kind = loc.getAttribute("data-loc");
     var btn = loc.querySelector(".loc-btn");
@@ -2226,9 +2780,9 @@
       var pick = function () {
         var val = opt.getAttribute("data-value");
         if (kind === "language") applyLang(val.toLowerCase());
-        else applyCurrency(val);
+        else applyCurrency(val, true);
         persist();
-        syncDropdown(loc, kind);
+        syncAll();
         closeMenus();
         btn.focus();
       };
@@ -2258,7 +2812,9 @@
     document.querySelectorAll(".loc").forEach(wireDropdown);
     document.addEventListener("click", closeMenus);
 
-    // apply stored preferences (currency first so esbRender picks up both)
+    // apply stored preferences (currency first so esbRender picks up both).
+    // locale.currency was already resolved against the language at parse time,
+    // so a French visitor with no pick of their own arrives on EUR here.
     if (locale.currency !== "USD") applyCurrency(locale.currency);
     if (locale.lang !== "en") applyLang(locale.lang);
   }

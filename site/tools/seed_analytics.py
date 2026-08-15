@@ -97,9 +97,14 @@ def make_config(quality):
         "game": g["name"], "service": service,
         "mode": "Duo queue" if random.random() < 0.18 else "Solo",
         "region": random.choice(g["regions"]),
-        "addons": [a["id"] for a in D.ADDONS
-                   if random.random() < (0.30 if a["id"] == "priority" else 0.16)],
+        "addons": [],
     }
+    # Only the add-ons this queue actually offers — a synthetic solo order
+    # carrying the duo-only option would show up in the console as a choice the
+    # picker never presented (and the engine never charged for).
+    cfg["addons"] = [a["id"] for a in D.ADDONS
+                     if D.addon_applies(a, cfg["mode"])
+                     and random.random() < (0.30 if a["id"] == "priority" else 0.16)]
     if service == "division":
         # Most people start mid-ladder and aim a few rungs up; a minority buy a
         # long climb. That skew is what makes the rank matrix worth looking at.

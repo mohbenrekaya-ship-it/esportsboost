@@ -15,9 +15,10 @@ Design notes worth keeping:
     API on a public domain is exactly where a weak password gets found.
   * Login returns a short-lived HMAC token; the browser holds that, not the
     password, and it expires on its own.
-  * Failed attempts are counted and throttled when Upstash is configured (the
-    production path). Locally there is no shared state to count in, so the
-    throttle degrades to the constant-time compare alone.
+  * Failed attempts are counted and throttled: Upstash when it is configured
+    (the production path, shared across serverless invocations), otherwise an
+    in-process counter — `serve.py` is one long-running process, so that is a
+    real lockout rather than a no-op.
   * Comparisons use `hmac.compare_digest` — never `==`.
 """
 import base64
@@ -84,14 +85,27 @@ def check_token(token, now=None):
         return False
 
 
-# ── brute-force throttle (shared state only exists on the Upstash path) ───
+# ── brute-force throttle ──────────────────────────────────────────────────
+# `/ops` is a public URL on the shop's own domain, so the login is reachable by
+# anyone who guesses the path. Upstash carries the counter in production; the
+# local path used to degrade to "no throttle at all", which is only defensible
+# while `serve.py` is a private preview. It is one long-running process, so an
+# in-memory counter is real protection there — the same fallback accounts.py
+# uses, and the same reason.
+_MEM_FAILS = [0, 0]        # [count, window_start]
+
+
 def _attempt_key():
     return "esb:ops:fails"
 
 
-def _too_many_attempts():
+def _too_many_attempts(now=None):
+    now = int(now or time.time())
     if not analytics.upstash_config()[0]:
-        return False
+        count, start = _MEM_FAILS
+        if now - start > ATTEMPT_WINDOW:
+            return False
+        return count >= MAX_ATTEMPTS
     try:
         res = analytics._upstash([["GET", _attempt_key()]])
     except analytics.StoreError:
@@ -102,8 +116,12 @@ def _too_many_attempts():
         return False
 
 
-def _note_failure():
+def _note_failure(now=None):
+    now = int(now or time.time())
     if not analytics.upstash_config()[0]:
+        if now - _MEM_FAILS[1] > ATTEMPT_WINDOW:
+            _MEM_FAILS[0], _MEM_FAILS[1] = 0, now
+        _MEM_FAILS[0] += 1
         return
     try:
         analytics._upstash([["INCR", _attempt_key()],
@@ -114,6 +132,7 @@ def _note_failure():
 
 def _clear_failures():
     if not analytics.upstash_config()[0]:
+        _MEM_FAILS[0], _MEM_FAILS[1] = 0, 0
         return
     try:
         analytics._upstash([["DEL", _attempt_key()]])

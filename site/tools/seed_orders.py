@@ -88,7 +88,10 @@ def _make_order(rng, now):
     region = rng.choice(g.get("regions") or ["Global"])
     country = rng.choice(_REGION_COUNTRIES.get(region, ["US", "GB", "DE"]))
     currency = "eur" if rng.random() < 0.4 else "usd"
-    addons = [a["id"] for a in D.ADDONS if a["id"] != "offline" and rng.random() < 0.32]
+    # Only what this queue offers — see D.addon_applies(). A row naming the duo
+    # option on a solo order is one the engine would refuse to charge for.
+    addons = [a["id"] for a in D.ADDONS
+              if a["id"] != "offline" and D.addon_applies(a, mode) and rng.random() < 0.32]
     if rng.random() < 0.35:
         addons.append("offline")
     promo = "SPLIT15" if rng.random() < 0.45 else ""

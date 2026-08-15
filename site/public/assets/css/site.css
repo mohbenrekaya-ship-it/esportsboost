@@ -1448,6 +1448,11 @@ body.hd-locked {
   flex-wrap: wrap; gap: 16px 24px; padding: 20px 0 26px;
 }
 .ft-copy { font-size: 13px; color: var(--h-muted); }
+/* The registered address, under the copyright it belongs to. It is a block so
+   it takes its own line at every width rather than lengthening the copyright
+   into the payment marks opposite, and a step quieter than the copyright
+   because it is required chrome, not a claim anyone is meant to read. */
+.ft-addr { display: block; margin-top: 5px; font-size: 12px; color: var(--h-muted); opacity: .8; }
 .ft-bottom-r { display: flex; align-items: center; gap: 20px; }
 .ft-pay { display: flex; align-items: center; gap: 13px; color: var(--h-text-2); }
 .ft-pay-lock { color: var(--h-muted); }
@@ -1594,6 +1599,10 @@ body.hd-locked {
 .opt input { accent-color: var(--ember); margin-top: 2px; }
 .opt .price { margin-left: auto; font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--ember-warm); white-space: nowrap; }
 .opt .note { display: block; color: var(--text-6); font-size: 11px; line-height: 1.5; }
+/* The mode-conditional pair (Solo only queue / Play on your schedule) is hidden
+   with the attribute, and `.opt` carries a `display` that beats the UA's
+   [hidden] — the same bug .co, .fc and the ops console's .banner each hit. */
+.opt[hidden] { display: none; }
 
 /* Collapsed add-on drawer on the game-page wizard. The card is ~440px wide, so
    the rows stay single-column in here — two columns only fit by wrapping every
@@ -1983,11 +1992,56 @@ body.hd-locked {
 .hero-h-cta .btn-secondary:hover .hero-h-play { color: inherit; }
 
 /* ── proof ─────────────────────────────────────────────────────────────── */
-.hero-h .gtee-row { margin-top: 34px; }
-.hero-h .hero-a-rule { max-width: 560px; margin-top: 24px; }
+/* Three chips, on ONE line wherever the column can hold it. They are three
+   halves of a single sentence — money, control, account — and reading as one
+   row is the point; wrapped 2 + 1 the third looks like an afterthought hanging
+   under the other two.
+   The one-line rule is bounded by `min-width: 1201px` and that bound is
+   load-bearing, not caution. The row measures ~651px whatever the viewport
+   does, because `nowrap` means it cannot give any of it back; at 1200 the copy
+   column is already down to ~534px, so an unbounded rule does not wrap — it
+   overhangs the column by ~157px and runs the guarantees under the spotlight
+   card. The page does not scroll sideways when that happens (the hero grid
+   absorbs it), which is exactly why it would have shipped unnoticed.
+   Below 1201 it wraps 2 + 1; below 1000 it stacks (see the phone rule further
+   down), because three claims do not fit on a 375px line at any readable size.
+   If a fourth is ever added, this has to become a 2x2 grid — at four, one line
+   overflows even the widest column and a wrapping line breaks 3 + 1. */
+.hero-h .gtee-row { gap: 12px 22px; margin-top: 34px; max-width: none; }
+
+@media (min-width: 1201px) {
+  .hero-h .gtee-row { flex-wrap: nowrap; }
+  /* Without this the chips shrink and break their own text instead of the row
+     staying whole — nowrap on the container alone does not stop the items. */
+  .hero-h .gtee { white-space: nowrap; }
+}
+/* The three guarantees, the rule and the proof pill are ONE block, and
+   `width: fit-content` is what makes that true: the wrapper shrinks to its
+   widest child — the guarantee row — so the rule spans exactly that width and
+   the pill's `margin-inline: auto` centres on exactly that span.
+   Centring the pill on the copy column instead put it 91px right of the
+   guarantees at 1440, because the column is ~834px and the guarantees are
+   ~651px. Measuring the row and hard-coding its width would break the moment
+   the text is translated (the French line is longer); letting the box size
+   itself to the content survives that. */
+.hero-h-proof { display: flex; flex-direction: column; width: fit-content; max-width: 100%; }
+.hero-h .hero-a-rule { max-width: none; width: 100%; margin-top: 24px; }
+/* The proof line, centred under the copy column and drawn as one object rather
+   than a sentence trailing off the left margin.
+   It is centred on the RULE above it (both are capped at the same 560px), not
+   on the column — the column is 700px+ at desktop and centring on that would
+   float the line away from the text it belongs to. Capping the two together is
+   what makes it read as the footer of the copy block.
+   The pill is deliberately quiet: a hairline and a barely-there ground. This is
+   the last thing above the fold and the only element between the guarantees and
+   the card; anything with real contrast here competes with the CTA. */
 .hero-h-rating {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 11px;
-  margin-top: 18px; font-size: 13px; color: var(--h-text-2);
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+  gap: 12px; margin: 16px auto 0; max-width: 560px;
+  padding: 10px 18px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  background: rgba(255, 255, 255, .022);
+  font-size: 13px; color: var(--h-text-2); width: fit-content;
 }
 .hero-h-rating b { font-weight: 600; color: var(--h-text); }
 /* Trustpilot's own green, and their own name — this is a stand-in for the
@@ -2132,7 +2186,25 @@ body.hd-locked {
      the trust signal on its own. The spotlight is a ~380px interruption
      between the CTA and everything else — the booster story lives on the
      profile page, which the nav still reaches. */
-  .hero-h .gtee-row, .hero-h .spot { display: none; }
+  .hero-h .spot { display: none; }
+  /* The row used to go too. It is the only trust content above the fold on a
+     phone, which is where most of this traffic is, so it stays — tighter, and
+     inside the centred column. Three items stack one per line at this width
+     (each is a whole claim and none of them fits beside another at 375px), so
+     the row is a column here rather than a wrapping line. */
+  /* The wrapper is `width: fit-content` at desktop so the rule and the pill can
+     centre on the guarantee row's own span. On a phone that shrink-to-fit works
+     against us: the block collapsed to the widest wrapped line (~255px of a
+     375px screen) and sat hard against the left margin with 100px of dead space
+     beside it. Here it takes the full column and the pill centres on that. */
+  .hero-h-proof { width: 100%; }
+  .hero-h .gtee-row {
+    flex-direction: column; flex-wrap: nowrap;
+    gap: 9px; margin-top: 24px; max-width: none;
+    align-self: stretch; font-size: 12.5px;
+  }
+  .hero-h .gtee { align-items: flex-start; gap: 7px; line-height: 1.35; }
+  .hero-h .gtee-ico { margin-top: 1px; }
   .hero-h .hero-a-rule {
     margin-top: 28px; max-width: none;
     background: linear-gradient(to right, transparent, rgba(255, 255, 255, .14) 30%, rgba(255, 255, 255, .14) 70%, transparent);
@@ -3691,7 +3763,10 @@ body.hd-locked {
   /* Both stat cells share row 1; bottom-align them so the delivery ETA and the
      availability count sit on one baseline even when "Boosters free now" wraps
      to two lines on a ~320px phone (its label is the widest here). */
-  .bs-figs { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 0; align-items: end; }
+  /* Row-gap 0 keeps the two stat cells sharing row 1; the 18px column-gap sits
+     on both sides of the 1px separator so neither the ETA nor the "• 59" count
+     crowds the divider. */
+  .bs-figs { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 0 18px; align-items: end; }
   .bs-figs > * + *::before { display: none; }
   .bs-fig { gap: 6px; }
   /* Tighten the availability dot so the number reads as one tight unit under
@@ -4878,6 +4953,9 @@ body.hd-locked {
 
 .dm-prog { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; margin-top: 20px; }
 .dm-prog-l { display: flex; align-items: center; gap: 9px; font-size: 14px; color: var(--d-text-3); }
+/* Current rank on the progress line: plain tier name + tinted division box,
+   the same "Gold IV" / "Diamond IV" pairing the climb row above draws. */
+.dm-prog-rank { display: inline-flex; align-items: center; gap: 7px; }
 .dm-prog-r { font-size: 13px; color: var(--d-muted); }
 .dm-prog b { font-weight: 600; color: var(--d-text); }
 .dm-track {
@@ -6250,6 +6328,12 @@ body.hd-locked {
 .sp-note.is-err { color: var(--g-tint); }
 .sp-note.is-err .sp-note-idle { display: none; }
 .sp-note.is-err .sp-note-err { display: inline; }
+/* The honeypot. /api/support is a public endpoint pointing at our own inbox, so
+   the form carries one field no human ever sees: off-screen rather than
+   display:none, because a bot that reads computed styles skips the latter and
+   fills the former. aria-hidden + tabindex="-1" keep it away from everyone
+   else. Never give it a placeholder — some password managers fill those. */
+.sp-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 .sp-send {
   display: flex; align-items: center; justify-content: center; gap: 11px; width: 100%;
   height: 54px; margin-top: 16px; border: 0; border-radius: 10px; background: var(--ember-grad);
@@ -6259,6 +6343,14 @@ body.hd-locked {
 .sp-send:hover { filter: brightness(1.07); }
 .sp-send:active { filter: brightness(.94); }
 .sp-send .ico { flex: none; }
+/* Idle / sending, the same two-siblings-toggled-by-CSS pattern as .sp-note and
+   the copy chip — the label is never rewritten in JS, so i18n keeps matching
+   whole text nodes. The busy button stays put: no spinner, no width change. */
+.sp-send-t-busy { display: none; }
+.sp-send.is-busy { cursor: progress; filter: saturate(.55) brightness(.92); }
+.sp-send.is-busy .sp-send-t-idle { display: none; }
+.sp-send.is-busy .sp-send-t-busy { display: inline; }
+.sp-send.is-busy .ico { opacity: .5; }
 .sp-sent {
   display: flex; align-items: flex-start; gap: 11px; margin-top: 14px; padding: 13px 14px;
   border-radius: 10px; background: rgba(70, 190, 110, .07); border: 1px solid rgba(70, 190, 110, .20);
@@ -6266,6 +6358,14 @@ body.hd-locked {
 .sp-sent-ico { flex: none; margin-top: 1px; color: var(--g-good); }
 .sp-sent-t { flex: 1; font-size: 13px; line-height: 1.55; color: var(--g-body-2); }
 .sp-sent-t b { font-weight: 600; color: var(--g-text); }
+/* Two more outcomes in the same slot. Green is reserved for the mail that
+   actually went: the preview notice is neutral, and a failure is amber — the
+   caution colour the guarantee page's disclaimer uses, deliberately not the
+   accent, which on this site means "buy". */
+.sp-sent-note { background: var(--g-field); border-color: var(--g-line-5); }
+.sp-sent-note .sp-sent-ico { color: var(--g-muted); }
+.sp-sent-warn { background: rgba(201, 149, 95, .08); border-color: rgba(201, 149, 95, .28); }
+.sp-sent-warn .sp-sent-ico { color: #c9955f; }
 .sp-foot {
   display: flex; align-items: center; gap: 9px; margin-top: 16px; padding-top: 14px;
   border-top: 1px solid var(--g-line-2); font-size: 12.5px; color: var(--g-muted);
@@ -7866,11 +7966,35 @@ body.gc-page { background: #0b0a09; }
    the mark and the caret stay centred, so nothing moves visually. */
 @media (max-width: 1000px) {
   .ob-field { min-height: 44px; padding-block: 0; }
+  /* `.ob-two .ob-field` (0,2,0) sets `padding: 11px 9px` and was beating the
+     bare `.ob-field` reset above (0,1,0) — so the region and rank fields kept
+     11px of vertical padding, the content box collapsed to 22px, and the
+     stretched select rendered 20px inside a 44px control. Measured at 375px:
+     taps at 10%, 25%, 75% and 90% of the field's height all landed on the div,
+     leaving only the middle ~45% live on the one control the order depends on.
+     Restating the specificity is the whole technique this block is built on —
+     the reset has to beat the component rule, not merely follow it. */
+  .ob-two .ob-field { padding-block: 0; }
   .ob-field > .ob-select { align-self: stretch; }
   .co-field > .co-select, .bs-tiersel > .bs-select { align-self: stretch; }
   /* Only the select stretches — these keep their own box. */
   .ob-field > .ob-mark, .ob-field > .ob-caret, .ob-field > .ico,
   .co-field > .ico, .co-field > .ob-caret, .bs-tiersel > .ob-caret { align-self: center; }
+}
+
+/* ── 2b. two controls added after the mobile pass, never given its treatment ─
+   `.ob-named-x` ("Change", which clears the named booster from the order) and
+   `.gp-brow-all` ("See all N") measured 13px and 16px of real hit height — the
+   invisible `::after` expansion below is the same technique `.rv-dot`,
+   `.fc-change` and `.gp-rv-all` already use, and the same reason: padding on
+   the element itself is painted by its background or moves the row. Vertical
+   only, so neither can reach a control beside it. */
+@media (max-width: 1000px) {
+  .ob-named-x, .gp-brow-all { position: relative; }
+  .ob-named-x::after, .gp-brow-all::after {
+    content: ""; position: absolute; left: 0; right: 0;
+    top: 50%; height: 44px; transform: translateY(-50%);
+  }
 }
 
 /* ── 3. the pay-flow header stopped fitting at 320px ────────────────────────
@@ -7911,7 +8035,7 @@ body.gc-page { background: #0b0a09; }
 }
 
 /* ── 5. the support address could not be read ───────────────────────────────
-   "Email — support@esportsboost.com" is one unbreakable 252px string in a
+   "Email — info@esportsboost.com" is one unbreakable string wider than its
    186px column, so at 320px the domain was cut off by `.sp`'s clip — the
    support page failing to show the support address. Long tokens wrap. */
 .sp-card-t, .sp-card-heads, .sp-card-sub { overflow-wrap: anywhere; }

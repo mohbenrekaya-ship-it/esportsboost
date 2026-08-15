@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A static-site generator for the `esportsboost.com` redesign, written in **plain Python 3 with no
 dependencies** (no Node on this machine, no package manager, no lockfile). `python3 site/build.py`
 generates every page of `site/dist/` from `site/src/data.py` — 24 pages of shop plus one profile per
-booster (50 today, so 74 in total).
+booster (88 today, so 114 in total).
 
 Not a git repository. The README is in French; the site copy and the design handoffs are in English.
 
@@ -33,9 +33,25 @@ and rebuild after every source edit; there is no watcher and no HMR.
 like production. It also hosts the **Stripe payment API** the checkout page calls — see
 [Payments](#payments-stripe) below. With no `STRIPE_SECRET_KEY` set it stays a plain static preview.
 
-There is **no test suite, linter, or formatter** in this project. Verification is: build succeeds
-(prints `built 74 pages + 131 images … (+ /ops console)`), then load the affected pages and check the
-browser console.
+Verification is: the two test files pass — `python3 site/tests/test_pricing.py` (the pricing engine,
+the bundle rules, the JS/Python mirror, the currency charge and the checkout payload) and `python3
+site/tests/test_mail.py` (header injection, the honeypot, the rate cap and the two order mails) —
+the build succeeds (prints `built 114 pages + 207 images … (+ /ops console)`), then load the affected
+pages and check the browser console. There is no linter or formatter.
+
+**The build has three environment switches**, all optional locally:
+
+| Var | Effect |
+| --- | --- |
+| `SITE_URL` | The origin every canonical/og:url/sitemap URL is written against. **Required in production** — see DEPLOY.md; the fallback is `localhost:4321`. |
+| `ESB_NO_MINIFY=1` | Ships the stylesheets uncompressed, so you can read them in devtools. |
+| `ESB_ALLOW_UNSIGNED_WEBHOOK=1` | Lets `/api/webhook` accept unsigned events for local replay. Never set in production. |
+
+CSS is minified into `dist/` by `minify_css()` (comments stripped, whitespace collapsed, nothing
+else — `site.css` goes 445K → 266K raw, 97K → 44K gzipped). **The source keeps every comment**; only
+the build output is stripped, so the documentation in the stylesheet costs nothing at runtime. JS is
+deliberately *not* minified: doing it safely needs a real parser, and gzip already takes `app.js`
+from 146K to 42K.
 
 ## Architecture
 
@@ -81,11 +97,26 @@ steps = ladder.indexOf(to) - ladder.indexOf(from)      # <= 0 → invalid, rende
 climb = max(1, i - 1)                                   # higher starting ranks cost more
 base  = steps * PER_STEP * FACTOR[game] * (1 + climb * 0.045) * (Duo ? 1.55 : 1)
 total = jsRound(base * (1 + Σ addon.pct))               # wins ×0.55 · placements ×0.7 of PER_DIVISION
-days  = max(1, round(steps * 0.35 + climb * 0.08))
+days  = max(1, round(0.5 + steps * 0.18 + climb * 0.045))   # DAYS_* in pricing.py; climb term only
+                                                             # where the game has no `prices` table
 ```
 
 Both sides cover all three services (division / wins / placements) and the add-on percentages;
 `pricing.py` uses a half-up `_jsround()` so the Python total matches JS `Math.round` to the cent.
+Add-ons are also filtered by queue before they are summed — `D.addon_applies()` server-side,
+`addonApplies()` in app.js — so the mode-conditional pair (see the order-card section) can never be
+charged in the queue it is not offered in, and the two sides must agree or checkout's `client_total`
+guard rejects a valid order.
+
+**The ETA is a band once a single figure would be false precision.** `eta_text()` in `pricing.py` and
+`etaText()` in app.js (another mirror — `test_pricing.py` locks both the `DAYS_*` rates and the band)
+render 1 day as "about 1 day", 2–3 as a figure, and anything past `ETA_EXACT` as a band opening **on**
+the computed value: 7 days is "7–9 days". The band is proportional (`ETA_SPAN_PCT`, never under
+`ETA_SPAN_MIN`), so a ladder longer than any shipped today widens it rather than quoting a fortnight to
+the day. `days` itself stays an int — the demo order's "N days left", the booster profiles' completed
+orders and `/orders.html` all read it as a number. The schedule was cut from 0.35/rung + 0.08/climb,
+which quoted a full ladder at 12 days; the slowest climb on the site is now 7. The guarantee page
+promises a 15% credit past the ETA, so a re-tune downward is a real commitment, not a copy change.
 
 `PER_DIVISION`, the per-game `factor`s and the add-on percentages are still shipped in
 `assets/js/data.js` for the live client quote; the **charge** amount is now computed server-side in
@@ -120,6 +151,8 @@ reuse these rather than inventing new hooks:
 | `data-when-service="division\|wins\|placements\|units"` | Element shown only on that service. `units` is wins + placements together — anything drawn as a rank pair needs one node for the pair and one for everything else, not one per service |
 | `data-addon-lines` | Container JS fills with one receipt row per selected add-on. Each row is a **subtotal** delta taken in order, so the column telescopes and `boost + rows − discount = total` exactly. Deliberately *not* the same figure as `data-addon-price` below |
 | `data-addon-price="<id>"` | Dollar cost of one add-on **on this order** — quoted as the difference with and without it, so it already includes the discount |
+| `data-when-mode="Solo\|Duo queue"` | Element shown only in that queue — the mode-conditional add-on pair. Both ride in the DOM (i18n matches whole text nodes); the server renders the default queue and `paint()` swaps them. Needs the `.opt[hidden]` guard: `.opt` carries a `display` that beats the UA's `[hidden]` |
+| `data-when-game="<name>"` | Element shown only for that game — the picks add-on's per-game name on the pages that are not pinned to one game (checkout ships all nine). Same reason both ride in the DOM |
 | `data-promo`, `data-promo-apply`, `data-promo-msg` | Discount-code input, its button, and its status line |
 | `data-promo-toggle` / `data-promo-box` | The "Have a code?" button and the input it reveals. The button only flips `aria-expanded`; CSS picks the label |
 | `data-continue` | Checkout links: disabled on an invalid pair, fires `begin_checkout` before navigating |
@@ -177,6 +210,56 @@ they only agree by accident otherwise, and `data-addon-price` depends on quoting
   plain `max-width` rules at equal specificity, so a new `@media (max-width: 1200px)` block at the
   end of the file beats the `max-width: 1000px` block above it on a phone. Bound new blocks with
   `min-width` (`@media (min-width: 1001px) and (max-width: 1200px)`) or re-state what they override.
+
+## Language and currency — `i18n.js`
+
+Two controls, persisted together in `esb.locale.v1`. They stay independent — a French reader can
+still ask for dollars — but they are **not independent defaults**.
+
+- **A language implies a currency.** `LANG_CUR` maps `fr`/`de` → EUR, `en` → USD, and it is resolved
+  where the store is read, *before* `window.ESB_LOCALE` is published, because app.js takes its first
+  quote off that object — deriving it in `init()` would paint the page in dollars and swap it. The
+  French page used to headline "à partir de **$5**" over a card quoting euros, which is the same
+  one-set-of-numbers failure a bare `$5` in the chrome is.
+- **`curPinned` is the visitor's own pick and outranks the map.** Only a click on the currency
+  dropdown sets it (`applyCurrency(cur, true)`); restoring a stored preference at boot must not, or a
+  language-set currency could never be moved by a later language change. Records written before the
+  default existed carry no flag, and the migration test is **not** "does it disagree with the
+  language" — under the old code USD was the default in every language, so a stored USD means
+  nothing and a returning French visitor would be read as having chosen dollars and left on them.
+  Only a stored **EUR** migrates in as pinned.
+- **A language switch re-marks every switcher**, not just the one clicked: `syncAll()` walks all
+  `.loc` on the page, and three mount per document (promo bar, nav sheet, footer). Miss it and five
+  controls contradict the prices beside them.
+- **The currency is also the Stripe charge** (`pricing.CHARGE_RATES` mirrors `ESB_RATES`), so this
+  makes EUR the default *charge* currency for French and German traffic, not just the display.
+
+### `{}` patterns in the dictionary
+
+A key may carry `{}` placeholders — `"Our {} boosters."`, `"on the roster, all {} or above."` — and
+the translation puts the placeholder where its own word order wants it. This is what makes
+interpolated copy translatable at all: splitting a sentence into fragments around a `<b>` cannot move
+the fragment, which is why the whole-text-node rule elsewhere says never to interpolate. Three
+properties keep it safe, and all three are load-bearing:
+
+- **Only keys written with `{}` take part**, and they are tried **only after an exact lookup misses**,
+  so no existing entry changes behaviour.
+- **A capture is copied through verbatim** — it is normally data (a game name, a tier, a publisher).
+  The one exception is handled: a capture gets a single exact dictionary lookup on the way out, which
+  is how the roster sentence's spelled count ("Thirty-one of them") lands as "Trente et un" and how
+  the picks FAQ renders "Agents et rôles" inside the French sentence. A roster size that spells to a
+  word with no entry passes through in English — add it rather than leaving it.
+- **Keep the literal part long enough to be unambiguous.** `{}` is non-greedy but still matches
+  anything; `"Starts at {}"` is about as short as one should get.
+
+`esbT()` uses the same patterns, so a runtime string app.js builds around a game name resolves the
+way its server-rendered twin does. `ANYPATS` is the pattern half of `ANYDICT`: asked once per node
+before the original is stashed, so a node that only matches a pattern still restores to English.
+
+**What is deliberately left in English**: rank and tier names, booster handles, game and publisher
+names, reviewer names, payment-network brands, and the invented review/testimonial bodies — all data,
+and all flagged for replacement before launch anyway. Plus the two documented figure-in-the-middle
+sentences ("Last 5 of 38 games").
 
 ## Mobile rules — the `MOBILE PASS` block at the foot of site.css
 
@@ -399,9 +482,25 @@ Things that are load-bearing here:
 - **Availability lives in the card, not the hero stat row.** "N of M boosters free now" sits beside
   the delivery estimate, where it argues for ordering now; the hero's third stat is boosts delivered.
   Putting a roster count in both places is how the two conflicting numbers got shipped last time.
-- **The card shows three add-on rows** — `addons_block(paid_only=True)` drops the always-on
-  inclusion, which is a fact about every order rather than a choice. Checkout does the same and
-  states the inclusion in its green strip instead, so it is still said out loud in the flow.
+- **The card shows three add-on rows, and it is three in both queues.** Four ship in the DOM: the
+  free picks inclusion, Priority order, and a **mode-conditional pair** — Solo is offered "Solo only
+  queue", Duo "Play on your schedule" — of which one is always `hidden`. Emitting both is the
+  whole-text-node rule (a label written in by JS arrives untranslated), and hiding one is what keeps
+  the row count, and so the card's height, the same whichever queue is picked. The `offline`
+  inclusion is flagged `incl` in data.py and renders in **no** picker: checkout states it in its
+  green strip, and a fourth visible row costs the fold budget. `addons_block(paid_only=True)` is
+  checkout's upsell only — a ticked, disabled row is not a "last chance to add".
+- **The queue owns its add-ons on both sides.** `D.addon_applies()` (mirrored by `addonApplies()` in
+  app.js) is the filter, and `pricing.quote()` re-applies it, so the other queue's option is never
+  charged whatever the payload says. app.js drops it from `state.addons` on the mode change and once
+  at load, or the receipt would list a row the server does not bill. Since `payments.build_session()`
+  refuses to charge a total the page did not show, the two filters agreeing is not cosmetic — a
+  drift here is a failed checkout on a valid order. `test_addon_modes()` covers it.
+- **Only one add-on's name is per game** — the picks one. `picks` on each game in data.py names it
+  ("Champions & roles", "Agents & roles", "Playlist & playstyle"), read through `D.picks_label()`;
+  `D.picks_noun()` derives the bare noun the game-page FAQ builds a sentence around, so the two
+  cannot drift. A game page renders its own wording; **checkout ships all nine** behind
+  `data-when-game` and shows the order's, because it is one static page for all nine.
 - **Add-on notes must stay one line.** They are `data.py` copy; a second line costs ~14px of the
   fold budget per row.
 - **Two things in the card size themselves to the game's longest tier name, and both measure the
@@ -512,19 +611,37 @@ authoritative for the whole site, not adopt the handoff's separate PER_TIER mode
   measurement to sit beside its mark. The unit plate labels itself "Current rank" at every width —
   it has no second plate beside it for "You are" to be read against.
 - **The bundle strip** (`bundle_strip(g)` in the hero, `D.BUNDLES` / `bundle_climbs()`) is the
-  handoff's "Save big on bundles": each card is a two-tier climb at a **real** discount (`(ft, tt,
-  disc)` in `D.BUNDLES`, 22–35%) that **replaces the sitewide sale** on a matching climb — the `−N%`
-  pill and the struck→discounted price are a reduction the checkout actually charges, because
-  `pricing.quote()` reads `state.bundle` and `data.bundle_discount()` re-verifies the match server-side
-  (⚠ confirm the percentages are the real bundle offer before launch). Opt-in, never auto-set:
-  `data-bundle` click sets `state.bundle` + configures the climb (keeps the current division in the
-  lower tier). It **survives a division change, drops on a tier or target change** (`bundleAfter()` in
-  `setNode`, `bundleDiscount()` in `quote`). `aria-pressed` = Applied. On mobile it is a horizontal
-  swipe rail after the configurator (`.hero-copy` order 3). The ladder foot reads "Played in your
-  preferred hours" and the queue control "Duo +55%".
+  handoff's "Save big on bundles": each card is a multi-tier climb at a **flat hand-set price**
+  (`(ft, tt, price)` in `D.BUNDLES`, whole USD) that **replaces the sitewide sale** on a matching
+  climb. **The price is the stored figure; the `−N%` pill and the struck price are derived from it**
+  against the full climb (`pricing.bundle_pct()` / `full_bundle_price()`), so the badge can never
+  claim a cut the checkout doesn't charge and re-pricing a bundle is one number in one place.
+  `pricing.quote()` reads `state.bundle` and `data.active_bundle()` re-verifies the match
+  server-side. Opt-in, never auto-set: `data-bundle` click sets `state.bundle` + configures the climb
+  (keeps the current division in the lower tier). It **survives a division change, drops on a tier or
+  target change** (`bundleAfter()` in `setNode`, `bundleDiscount()` in `quote`). `aria-pressed` =
+  Applied. On mobile it is a horizontal swipe rail after the configurator (`.hero-copy` order 3).
+  The ladder foot reads "Played in your preferred hours" and the queue control "Duo +55%".
+  - **Applying a bundle must never cost more than not applying it.** This is the rule the price model
+    exists to serve, and it is not automatic: a bundle is a *flat* price across its whole from-tier
+    (priced as that tier's bottom division → target), so the buyer at the tier's **top** division is
+    ordering the shortest climb and is the one a too-high flat price penalises. The price therefore
+    has to sit under the cheapest normal order in the tier — that top division's climb, at the
+    sitewide sale. Under the old percentage ramp, four of League's six bundles and five of Valorant's
+    six charged a penalty for opting in (up to +$24), while the card advertised a saving. Two things
+    keep it fixed: the League prices are set $1–4 under that line, and **add-ons on a bundle are a
+    percentage of the bundle's price, not of the inflated list climb** (`pricing.quote()`, mirrored in
+    app.js) — without that, ticking Priority cost $3 more on the bundle than on the plain order and
+    re-created the trap on its own. `test_bundle_never_costs_more()` walks every bundle × division ×
+    queue × add-on set. It **hard-fails only for the games in the test's `PRICED_GAMES`** (League
+    today) and prints a `PENDING` line for the rest, which still carry the handoff's converted ramp
+    and still have the penalty — add a game there the moment its prices are set by hand.
+  - **A bigger climb must never cost less than a smaller one it contains.** The old ramp priced
+    Iron → Diamond ($234) *under* Bronze → Diamond ($239). `test_bundle_rules()` asserts it now.
   - **All nine games carry a set**, so the strip renders on every game page (it still renders nothing
-    for a game with no `BUNDLES` entry). They share one shape and one 22 → 35% ramp until the real
-    per-game economics replace them. One rule should survive that re-tuning: **the top rank of a
+    for a game with no `BUNDLES` entry). ⚠ Only **League** is priced; the other eight are the
+    handoff's invented ramp converted to the same money it was already charging, and are a business
+    call before launch. One rule should survive that re-pricing: **the top rank of a
     ladder is never a bundle target** — Predator, Challenger, Immortal, One Above All, Supersonic,
     Champion, LoL's Master and CS2's 30k are cutoff- or leaderboard-gated, and each game's own `note`
     says those orders are quoted per order, which a fixed advertised price cannot be.
@@ -624,6 +741,12 @@ trust · 04 FAQ · close.
 - **The sale answer only claims "the larger of the two" while it is true.** `gc_faq_items()` compares
   the cheapest bundle against the auto promo and drops the clause otherwise, rather than letting a
   re-tuned code quietly falsify it.
+- **The bundle range in that answer is derived, never read off `BUNDLES` directly.** The third
+  element of a `BUNDLES` tuple is the hand-set **flat price in whole USD**, not a discount fraction —
+  it used to be a fraction, and `gc_faq_items()` was left reading it as one, so the page published
+  "bundle climbs at **1500% to 30500%** off" as copy *and* asserted it verbatim in the FAQPage
+  JSON-LD. The reduction comes from `pricing.bundle_pct()`, the same call the strip's own `−N%` pill
+  makes, so the answer and the nine game pages state one number (19–37% today).
 - **Breakpoints follow the site's 1200/1000/760**, not the handoff's 1280/1024/768: 1200 takes the
   services to two columns and narrows the rail; 1000 is two card columns, the head stacked and the
   FAQ column unsticky; 760 is the whole phone pattern (one card per row, chip rail, native sort,
@@ -851,6 +974,12 @@ leaking past. It replaced a `.split-9-11` figure holding `art.dashboard()`'s gen
 - **The mock is the argument.** It is the evidence for the three claims beside it, so it is built as
   a working screen at real fidelity — live rank, progress, an LP chart, a real match table — not as
   a decorative panel. Anything that makes it look generated undoes the section.
+- **"Configure your boost" goes to a configurator, not the catalogue** (`cta_href=`). It defaults to
+  `/games/`, which is right on the three pages that have no configurator on them (`/games/`,
+  `/how-it-works.html`, `/demo.html`) — picking a title genuinely is the next step there. The
+  homepage passes `cta_href="#calc"`, the Best Sellers dock, because it *has* one: the band used to
+  send its own visitors off the page to choose a game they could have configured 4,000px above.
+  A caller passing a fragment owns that id, or the CTA is a no-op.
 - **`dash_mock()` is inert by construction, and that is a decision.** `role="img"` puts one labelled
   illustration in the accessibility tree instead of a fake table of somebody else's order, and the
   footer's Pause / Message controls are **spans**, so nothing in the panel is focusable or clickable
@@ -1159,9 +1288,19 @@ was unverifiable, because every visible card was a five. Scoped on `.rvp`, token
   negative rating shown plainly rather than dressed in brand colour.
 - **`D.REVIEW_DIST` is the one place the rating is written.** `STATS["trustpilot"]` (the average) and
   `STATS["reviews"]` (the total) are computed from it in `data.py`, and `rating_dist()` computes the
-  percentages. The H1, the summary card, the five rows, the Trustpilot badge and the checkout all
-  read one source, so the numbers on this page cannot contradict each other or the rest of the site.
-  The badge and the checkout summary read the same two STATS keys they always did.
+  percentages. The H1's score, the summary card, the five rows, the Trustpilot badge and the checkout
+  all read one source, so the numbers on this page cannot contradict each other or the rest of the
+  site. The badge and the checkout summary read the same two STATS keys they always did.
+- **The H1 sizes the audience, not the corpus** — "4.7 / 5 across 13K customers", where the figure is
+  `STATS["clients"]` rounded by `page_reviews()`'s own `_round_k()` (deliberately not `_short_count()`,
+  whose decimal would claim a precision a placeholder has not got). It reads off the same key the
+  game-page stat row and the safety plate do, so the site still cannot quote two client counts — but
+  note the split it introduces and keep it in view: **the score is the average of the 3,140 reviews in
+  `REVIEW_DIST`, which the distribution card prints in full one column to the right.** The headline
+  names the wider population those reviews came from, not what the average is over. This was an
+  explicit call; the four other readers of that key still say "clients", and only this one says
+  "customers". If the two are ever read as one claim, the H1 is what changes — the card is the page's
+  evidence, and `REVIEW_DIST` is where the rating lives.
 - **`D.REVIEWS` must keep its sub-five-star entries.** The page offers a `3★ or less` filter and a
   `Lowest rated` sort *because* the paragraph above them says nothing is hidden; an empty result
   behind either reads as suppression. One 3★ sits inside the first twelve so the default feed is not
@@ -1205,8 +1344,9 @@ was unverifiable, because every visible card was a five. Scoped on `.rvp`, token
 - **Breakpoints follow the site's 1200/1000/760**, not the handoff's 1280/1024/768. 1000 stacks the
   hero and goes to two columns; 760 is one column with 44px chips and taller distribution rows,
   which are the primary rating filter at that width. The handoff draws 1440 only.
-- **i18n**: the H1's figures ride in their own nodes, so "across" and "reviews" stay whole
-  translatable words. The rating segment says **"Any"**, not the handoff's "All" — `"All"` is already
+- **i18n**: the H1's figures ride in their own nodes, so "across" and "customers" stay whole
+  translatable words (`"reviews"` is still a key — it is the count line under the filters). The
+  rating segment says **"Any"**, not the handoff's "All" — `"All"` is already
   the roster rail's "All 187 reviews", where French needs "Tous les". "Load 30 more" and "Show the
   rest" are two whole labels rather than one with a number interpolated into it.
 
@@ -1329,7 +1469,7 @@ email/password session is a `localStorage` record, not the signed server cookie 
 public `/api/account`. Checkout stays guest-only, orders are tracked by an emailed link, and the
 panel still says twice that an account is optional and is never their game login.
 
-`REVIEW_DIST` is one of these and the most quotable: 2,612 / 372 / 94 / 34 / 28 invented
+`REVIEW_DIST` is one of these and the most quotable: 2,444 / 540 / 94 / 34 / 28 invented
 reviews per star, drawn on `/reviews.html` as a distribution a visitor is invited to check the rating
 against, and the source `STATS["trustpilot"]` and `STATS["reviews"]` are computed from. It has to be
 counted from the real corpus before launch — and so do the four sub-five-star reviews written to keep
@@ -1337,6 +1477,34 @@ the `3★ or less` filter from returning nothing, which are complaints attribute
 orders that never happened. Keep the warning comment at the top of
 `data.py` intact, and don't let placeholder statistics leak into new copy — the site deliberately uses
 one single set of numbers everywhere.
+
+**Two review counts, and they are not interchangeable.** `STATS["reviews"]` (3,140) is the whole
+corpus — Trustpilot plus the order-page rating, deduplicated, which is what `/reviews.html` says in
+its own standfirst — and `STATS["trustpilot_reviews"]` (229) is the part of it that is *on
+Trustpilot*. Only the second may stand next to Trustpilot's name or logo, so `trustpilot_badge()`,
+`ob_trust()`, the game page's review aside and the marquee all read it; the reviews page's own
+"4.7 across 3,140 reviews", its meta description and `rating_ld()`'s `reviewCount` keep the corpus
+figure, because that is what the average is computed over. ⚠ The **score** beside the Trustpilot
+count is still the corpus average, not Trustpilot's own — when `TRUSTPILOT_URL` names our profile,
+the score on a Trustpilot-branded badge has to come from that profile too, or the badge attributes
+our average to them. Both counts are placeholders until then.
+
+Two mechanisms enforce that now, and both should survive:
+
+- **`rating_ld()` is gated on `D.TRUSTPILOT_URL`, not on "is STATS populated?"** The nine game pages
+  and `/reviews.html` were emitting `aggregateRating` (4.8 / 3,140) as JSON-LD — the machine-readable
+  claim search engines render as review stars — computed from this invented distribution. That is the
+  same thing the booster profiles deliberately refuse to do, for the same reason, and fabricated
+  review markup is a manual-action risk. While `TRUSTPILOT_URL` is empty the figures still render as
+  page copy but nothing is asserted to a crawler; wiring a real profile turns the structured data back
+  on with no code change.
+- **No figure on the site invents its own movement.** `[data-live]` numbers used to *wander* on a
+  timer (`wanderStat()`): the header's roster count drifted ±1–2 every few seconds with nothing behind
+  it, floored at 36 against a real 88, so the page showed **87 in the header, 84 in the "On shift now"
+  rail and 88 in the server-rendered HTML at the same moment**. They are now written only by
+  `setLiveStat()`, which `initBoosters()` calls with the counts from the same `/api/boosters` payload
+  the rail and the board are drawn from. If you want a figure to look live, make it *be* live — one
+  source, or it is three numbers.
 
 `GUARANTEE` and `SAFETY` are a different kind of unverified: not invented statistics but **written
 commitments**. The refund page states 5 business days to a refund, 24 hours to an automatic refund on
@@ -1385,6 +1553,17 @@ checkout.html  ──POST /api/checkout──►  serve.py  ──►  Stripe Ch
 - **The amount is never trusted from the client.** The browser POSTs only the *config* (game, ranks,
   mode, addons, region); the server recomputes the price. A tampered `wins`/`placements` is clamped
   (`pricing.UNIT_MIN..UNIT_MAX`); an invalid rank pair is refused before any Stripe call.
+- **`/api/webhook` fails CLOSED.** With no `STRIPE_WEBHOOK_SECRET` it refuses every event rather than
+  trusting the body. It used to skip verification entirely when the secret was absent, which made a
+  misconfigured deploy a free-order endpoint: an unsigned POST wrote a `status: "paid"` row for any
+  climb, with an attacker-supplied email, straight into the fulfilment store. An unconfigured secret
+  is a deployment mistake and now reads as one. `ESB_ALLOW_UNSIGNED_WEBHOOK=1` reopens it for local
+  replay only.
+- **Fulfilment is idempotent.** Stripe retries until it gets a 200, so the same event arrives several
+  times as a matter of course: `_seen_event()` drops the repeat before it reaches the log or the
+  store (the store also dedupes on `order_id`, which is what survives a restart). Session creation
+  sends an `Idempotency-Key` of the minted order id, so a double-clicked Pay button resolves to one
+  Session instead of two.
 - **Config is env-only, never committed:** `STRIPE_SECRET_KEY` (required to charge — use a
   `sk_test_…` key in dev), `STRIPE_WEBHOOK_SECRET` (enables signature checks on `/api/webhook`),
   `PUBLIC_BASE_URL` (success/cancel origin; inferred from the `Host` header if unset). Run it as
@@ -1395,6 +1574,62 @@ checkout.html  ──POST /api/checkout──►  serve.py  ──►  Stripe Ch
   **Crypto** is present but disabled with a "coming soon" label. PayPal was removed.
 - Regenerate after editing `build.py`/`data.py`; the payment routes live in `serve.py` and take
   effect only when the server process is **restarted** (no watcher).
+
+## Outbound mail — the support form and the order confirmation
+
+`src/mailer.py` is the **one SMTP seam** on the site: stdlib `smtplib` against the Hostinger
+mailbox, no packages, and it composes nothing. Two flows send through it, and they compose their own
+messages the way `accounts.py` and `guides.py` share analytics' Upstash *transport* but never its
+data:
+
+```
+/support.html ──POST /api/support──► src/support.py ──► mailer ──► info@  (Reply-To: the visitor)
+/api/webhook (paid) ──► payments._send_order_mail ──► mailer ──┬─► the buyer's confirmation
+                                                               └─► a copy to info@
+```
+
+Config is env-only (`SMTP_USER`, `SMTP_PASSWORD`, host/port/`MAIL_FROM`/`SUPPORT_EMAIL` optional —
+see DEPLOY.md's "Turn on email"). `python3 site/tools/send_test_mail.py` sends one message through
+the same path and prints the SMTP error verbatim; `--order` renders the buyer's template.
+
+- **Nothing is ever sent `From:` the visitor.** A message claiming a stranger's address fails our own
+  SPF and burns the domain. The visitor rides in **`Reply-To`**, so replying in the inbox answers
+  them — the support ticket and the operator's order copy both do this.
+- **Every header is sanitised** (`mailer._header` / `_addr`). Subjects and Reply-To carry text a
+  stranger typed into a public form, and a bare CR/LF in either is a free Bcc. `test_mail.py` locks
+  it; don't route a new header around those two functions.
+- **`send()` never raises** — it returns `(ok, error)`. The webhook's call is *additionally* wrapped
+  and swallowed, because Stripe answers a non-200 by redelivering the event: a mail server having a
+  bad minute would otherwise fulfil the order twice. `_seen_event()` already stops the retry burst,
+  so a customer is never mailed twice for one payment.
+- **`/api/support` stores nothing.** A ticket is a message to a human, not a list to aggregate —
+  there is no store, no `/ops` tab, no row. It is defended three ways instead: everything validated
+  and capped in `clean_ticket()`, a honeypot field (answered as a *success*, so a bot never learns
+  which field gave it away), and a rate cap of `MAX_TICKETS` per client per 15 minutes, mirroring
+  accounts.py's counter.
+- **The topic is resolved server-side by index** against `D.SUPPORT["topics"]`, so the subject line
+  can only ever be one of the five the page offers. The order number reaches the subject only when it
+  matches the real `ESB-…` shape; a mistyped one still shows in the body, flagged, because a buyer
+  fumbling their own order number is exactly the ticket a human should see.
+- **A ticket is plain text, deliberately** — it carries a stranger's words, and HTML would mean
+  escaping them correctly forever. The buyer's confirmation *is* HTML (with `esc()` on every
+  interpolated value) because it is ours.
+- **No tracking link in the order mail.** The site's FAQ promises orders are tracked by an emailed
+  link and that page does not exist — `/demo.html` renders one invented fixture. A link would open
+  somebody else's demo order. When a real per-order page ships it goes in `_order_text`/`_order_html`
+  and that FAQ answer becomes true. ⚠ The one commitment the mail does make — "we email you when a
+  booster claims it" — is **not built**; ops has to hold it or the line comes out.
+- **`site_origin()` skips a localhost origin** whichever variable holds it. `PUBLIC_BASE_URL` is
+  routinely a dev origin, and a `127.0.0.1` link in a customer's inbox is wrong in every environment.
+- **Unconfigured degrades, never pretends.** No mailbox → `/api/support` answers 503 and the page
+  shows a confirmation that says plainly nothing was emailed and names the address; the webhook skips
+  the mail and still fulfils. Same contract as the Stripe seam. The form's three outcomes (sent /
+  preview / failed) all ship in the DOM and are toggled, per the whole-text-node i18n rule.
+- **`SUPPORT_EMAIL` in build.py is the one address in the copy** (`= FOOT_EMAIL`, `info@`), read by
+  the footer, the support page's email card and its copy chip. A second literal is how a page comes
+  to advertise a mailbox nobody reads.
+- **Restart the server after touching these files** — `/api/support` lives in `serve.py`, no watcher.
+  `api/support.py` is the Vercel shell mirroring it.
 
 ## Analytics & the /ops console
 
@@ -1413,6 +1648,7 @@ public/assets/js/analytics.js  ──►  POST /api/collect  ──►  src/anal
 | `site/public/assets/js/analytics.js` | The beacon. Anonymous id + session, first-touch UTM, `page_view`, `configure`, scroll, errors, and a bridge that mirrors every existing `dataLayer` push. |
 | `site/src/analytics.py` | Event validation (strict allowlist) and the store. |
 | `site/src/geo.py` | Country resolution with no IP lookup: Vercel's edge header, else the browser's IANA timezone, else the locale's region subtag. |
+| `site/src/mailer.py`, `support.py` | The SMTP seam and the contact form behind `/api/support` — see [Outbound mail](#outbound-mail--the-support-form-and-the-order-confirmation). Sends only; stores nothing. |
 | `site/src/insights.py` | All aggregation. **Every number on the dashboard is defined exactly once, here.** |
 | `site/src/ops.py` | Password auth + two routes: the dashboard payload, and one session's full timeline on demand. |
 | `site/public/assets/js/ops.js`, `ops.css` | The console. Self-contained; shares nothing with the shop's stylesheets. |
@@ -1420,7 +1656,7 @@ public/assets/js/analytics.js  ──►  POST /api/collect  ──►  src/anal
 | `site/src/accounts.py` | The header sign-up list — a **separate** store, `POST /api/account` to write, `ops.py`'s `accounts` action to read. Holds name + email, never a password. |
 | `site/src/boosters.py` | The roster store — another **separate** store (operator-write / public-read), `GET /api/boosters` to read, `ops.py`'s `boosters` action for the console. See [The roster store](#the-roster-store--boosters-in-the-backend). |
 | `site/tools/seed_boosters.py` | Fills the roster store from `data.py`'s `BOOSTERS` (tags rows `syn`). |
-| `api/collect.py`, `api/account.py`, `api/boosters.py`, `api/ops.py` | Vercel shells, mirroring the `serve.py` routes. |
+| `api/collect.py`, `api/account.py`, `api/boosters.py`, `api/support.py`, `api/ops.py` | Vercel shells, mirroring the `serve.py` routes. |
 
 **Two stores, chosen by environment.** With `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`
 set, events go to Upstash Redis over its REST API (stdlib `urllib`) — required in production,
@@ -1491,8 +1727,15 @@ sworn never to.
 - **`/api/account` is public and unauthenticated**, exactly like `/api/collect`: the form is on every
   page. Everything is length-capped and validated (`clean_signup()` for the row, the password capped
   before hashing), and the list is read only through the password-gated `ops.py` `accounts` action,
-  fetched on demand (it is PII, kept off every dashboard refresh the way session timelines are). A real
-  login endpoint is a credential-stuffing target, so production **needs rate limiting** on this route.
+  fetched on demand (it is PII, kept off every dashboard refresh the way session timelines are).
+- **The login is rate limited and timing-flat, and both halves are load-bearing.** Failures are
+  counted per (identity, client) — Upstash in production, an in-process counter under `serve.py`,
+  which is one long-running process — and lock that pair out for `ATTEMPT_WINDOW` after
+  `MAX_ATTEMPTS`. Matching 401 bodies were *not* enough on their own: `_login()` returned early when
+  no credential existed, so an unregistered address answered in ~0ms against ~75ms for a registered
+  one, and that 2000× gap enumerates the whole customer list whatever the body says. An unknown email
+  now pays the same PBKDF2 against `decoy_hash()`. Sign-up is throttled per client too — its 409 is
+  the same existence oracle from the other side.
 - **One address, one row.** `append()` dedupes on email (lower-cased in `clean_signup()`): a repeat
   submission is dropped, first-signup wins, and duplicates inside one batch collapse. On Upstash the
   check is O(1) against the `esb:accounts:emails` SET, written in the same pipeline as the row and

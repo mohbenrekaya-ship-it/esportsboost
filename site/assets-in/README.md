@@ -61,3 +61,48 @@ mine to fetch, and a boosting service will not get them licensed. What goes
 here has to be art you own, art you commissioned, or stock you hold a licence
 for. The generated fallbacks exist so the site never looks broken while you
 sort that out.
+
+---
+
+## Fonts — vendored, not hot-linked
+
+`site/public/assets/fonts/` holds the site's two typefaces as woff2, served
+first-party. They are **not** an `assets-in/` drop-in slot: they are committed
+build inputs, copied to `dist/` like any other asset.
+
+| Family | Weights | Ranges | Used for |
+| --- | --- | --- | --- |
+| Inter | 400, 500, 600, 700 | latin, latin-ext | `--display` and `--body` — nearly all text |
+| IBM Plex Mono | 400, 500 | latin, latin-ext | `--mono` — kickers and spec labels |
+
+Both are **SIL Open Font License 1.1**, which permits redistribution — that is
+what makes vendoring them legitimate rather than a copy of someone's CDN.
+
+They used to load from Google Fonts via `@import`. That was replaced because it
+sent every visitor's IP to a third party before first paint (the analytics
+pipeline is deliberately anonymous so the site stays out of consent-banner
+territory — a font request gave that away for nothing), and because `@import`
+inside a stylesheet is the slowest possible way to load a face: fetch the CSS,
+parse it, discover Google's CSS, fetch that, parse it, *then* start the woff2.
+
+`ashfall.css` still `@import`s Chakra Petch + IBM Plex Sans + IBM Plex Mono. It
+is the vendored design system and is not edited (CLAUDE.md), so **`build.py`
+strips any remote `@import` from `dist/` at build time**. The first two were
+already dead weight — `type-b-sans.css` overrides `--display`/`--body` with
+Inter, so they were downloaded and never painted.
+
+To refresh or add a weight (needs network; `latin` covers French and German —
+`latin-ext` is only for Central/Eastern European and is fetched lazily via
+`unicode-range`, so adding it costs nothing until a page needs it):
+
+```bash
+curl -s -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0" \
+  "https://fonts.googleapis.com/css?family=Inter:400,500,600,700&subset=latin,latin-ext"
+```
+
+Then download each `fonts.gstatic.com` URL in the response to
+`inter-<weight>-<range>.woff2` and copy the matching `unicode-range` into the
+`@font-face` blocks in `type-b-sans.css`. Use the **v1** API as above: the
+`css2?family=…` endpoint hands back URLs that 404 outside a browser session.
+After adding a weight, check the two `<link rel="preload">` tags in `build.py`'s
+`layout()` still name the faces used above the fold (400 and 600 today).

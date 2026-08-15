@@ -18,9 +18,86 @@ the booster's own ladder. All of it is invented. A profile reads like a
 personnel record, which is exactly why none of it can go live unverified.
 """
 
-SITE = "http://localhost:4321"
+import os as _os
+
+# The public origin every absolute URL in the build is written against:
+# canonical tags, og:url, the JSON-LD @id/url fields, the sitemap and the
+# `Sitemap:` line in robots.txt. It MUST be the real origin in any build that
+# gets deployed — a production deploy carrying `http://localhost:4321` tells
+# every crawler that all 100+ pages are duplicates of an unreachable host, and
+# the sitemap submitted to Search Console is 110 dead URLs.
+#
+# Set SITE_URL in the build environment (Vercel → Project → Environment
+# Variables). Vercel also exports VERCEL_PROJECT_PRODUCTION_URL, so a deploy
+# that forgets SITE_URL still builds against the right host rather than
+# silently shipping localhost. The literal is only the local-preview default.
+def _site_url():
+    for key in ("SITE_URL", "PUBLIC_BASE_URL"):
+        val = (_os.environ.get(key) or "").strip().rstrip("/")
+        if val:
+            return val if "://" in val else "https://" + val
+    host = (_os.environ.get("VERCEL_PROJECT_PRODUCTION_URL") or "").strip().rstrip("/")
+    if host:
+        return host if "://" in host else "https://" + host
+    return "http://localhost:4321"
+
+
+SITE = _site_url()
 BRAND = "eSports Boost"
 YEAR = 2026
+
+# ── The legal entity behind the brand ─────────────────────────────────────
+# One postal address, in one place: the terms name it, the privacy policy names
+# it as the data controller, the three legal pages print it, the footer carries
+# it and the homepage's Organization JSON-LD asserts it. Same rule build.py's
+# SUPPORT_EMAIL follows for the mailbox — a second literal is how a site comes
+# to give two addresses, and on a legal page that is the one that gets noticed.
+# The mailbox itself is NOT repeated here; it stays build.py's FOOT_EMAIL.
+#
+# ⚠ `number` and `registry` are EMPTY, and every line that would quote them is
+# omitted while they are — the same gate rating_ld() puts on TRUSTPILOT_URL. If
+# eSports Boost is a registered limited company, UK law (Companies Act 2006 s.82
+# and the E-Commerce Regulations 2002 reg.6) requires the registered name, the
+# company number and the place of registration to appear on the site: fill both
+# in and the lines appear with no other change. Do not type a plausible number.
+# A fabricated registration on a terms page is worse than a missing one.
+COMPANY = {
+    "name": BRAND,          # trading name until a registered name is confirmed
+    "number": "",           # e.g. "12345678"
+    "registry": "",         # e.g. "England and Wales"
+    "street": "71-75 Shelton Street",
+    "locality": "Covent Garden",
+    "city": "London",
+    "postcode": "WC2H 9JL",
+    "country": "United Kingdom",
+    "country_code": "GB",
+}
+
+
+def company_lines():
+    """The postal address as its display lines — one per line of an envelope."""
+    c = COMPANY
+    return [c["street"],
+            "%s, %s %s" % (c["locality"], c["city"], c["postcode"]),
+            c["country"]]
+
+
+def company_address(sep=", "):
+    """The same address on one line, for prose and for structured data."""
+    return sep.join(company_lines())
+
+
+def company_registration():
+    """"Registered in X, company number N" — or "" while either is unset.
+
+    Callers render nothing at all when this is empty, rather than a half
+    sentence: see the ⚠ on COMPANY.
+    """
+    c = COMPANY
+    if not (c["number"] and c["registry"]):
+        return ""
+    return "Registered in %s, company number %s" % (c["registry"], c["number"])
+
 
 PER_DIVISION = 26  # per-win / per-placement base; belongs in server-side pricing config
 PER_STEP = 7       # per single division rung on the ladder (see subdivide() below)
@@ -86,6 +163,7 @@ def _attach_structure(g):
 GAMES = [
     dict(
         name="League of Legends", slug="league-of-legends", short="LoL", tab="League", factor=1.0, hue=262,
+        picks="Champions & roles",
         ladder=subdivide(["Iron", "Bronze", "Silver", "Gold", "Platinum", "Emerald",
                           "Diamond", "Master"],
                          ["IV", "III", "II", "I"],
@@ -114,6 +192,7 @@ GAMES = [
     ),
     dict(
         name="Valorant", slug="valorant", short="VAL", factor=1.15, hue=352,
+        picks="Agents & roles",
         # Valorant ranks up on RR (Rank Rating), not LP, and its ladder queue is
         # "Competitive". The dashboard mock and the game page read these so the
         # Valorant order never says "LP" or "Ranked solo". LoL and the rest
@@ -132,9 +211,14 @@ GAMES = [
                           "Diamond": 10, "Ascendant": 15, "Immortal": 22},
         services="Rank boost · placements · unrated wins · duo · coaching",
         regions=["North America", "Europe", "Asia", "Latin America"],
-        blurb="Radiant-level boosters with your own crosshair and sensitivity loaded in. "
-              "Agent pool on request, and duo runs with voice if you want the coaching "
-              "on the way up.",
+        # Same shape as League's: what is covered, then what actually happens to
+        # the account — piloted play bounded by your hours and a regional VPN,
+        # or duo, where the login is never handed over. The queue names and the
+        # four regions are this game's own (`services` and `regions` above), not
+        # League's copied across.
+        blurb="Competitive and unrated, across NA and EU. Your booster plays "
+              "your account inside your normal hours with a regional VPN, or queues beside "
+              "you in duo and never touches the login at all.",
         meta="Valorant rank boost, Iron to Immortal. Transparent live pricing, duo or "
              "solo, agent pool on request.",
         note="Act rank and episode resets shift the price; the quote is locked at "
@@ -142,6 +226,7 @@ GAMES = [
     ),
     dict(
         name="Counter-Strike 2", slug="counter-strike-2", short="CS2", tab="CS2", factor=1.45, hue=32,
+        picks="Roles & maps",
         ladder=["5k", "10k", "13k", "15k", "17k", "19k", "21k", "25k", "30k"],
         services="Premier rating · Faceit levels · Wingman · wins",
         regions=["North America", "Europe", "South America", "Asia", "Oceania"],
@@ -153,6 +238,7 @@ GAMES = [
     ),
     dict(
         name="Teamfight Tactics", slug="teamfight-tactics", short="TFT", tab="TFT", factor=0.8, hue=198,
+        picks="Comps & augments",
         ladder=subdivide(["Iron", "Bronze", "Silver", "Gold", "Platinum", "Emerald",
                           "Diamond", "Master", "Challenger"],
                          ["IV", "III", "II", "I"], apex=("Master", "Challenger")),
@@ -165,6 +251,7 @@ GAMES = [
     ),
     dict(
         name="Marvel Rivals", slug="marvel-rivals", short="RIV", tab="Rivals", factor=0.95, hue=8,
+        picks="Heroes & roles",
         ladder=subdivide(["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Grandmaster",
                           "Celestial", "Eternity", "One Above All"],
                          ["III", "II", "I"], apex=("Eternity", "One Above All")),
@@ -178,6 +265,7 @@ GAMES = [
     ),
     dict(
         name="Dota 2", slug="dota-2", short="DOTA", factor=1.25, hue=18,
+        picks="Heroes & roles",
         ladder=subdivide(["Herald", "Guardian", "Crusader", "Archon", "Legend", "Ancient",
                           "Divine", "Immortal"],
                          ["1", "2", "3", "4", "5"], apex=("Immortal",)),
@@ -191,6 +279,7 @@ GAMES = [
     ),
     dict(
         name="Apex Legends", slug="apex-legends", short="APEX", factor=1.1, hue=6,
+        picks="Legends & playstyle",
         ladder=subdivide(["Rookie", "Bronze", "Silver", "Gold", "Platinum", "Diamond",
                           "Master", "Predator"],
                          ["IV", "III", "II", "I"], apex=("Master", "Predator")),
@@ -204,6 +293,7 @@ GAMES = [
     ),
     dict(
         name="Overwatch 2", slug="overwatch-2", short="OW2", factor=0.9, hue=212,
+        picks="Heroes & roles",
         ladder=subdivide(["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master",
                           "Grandmaster", "Champion"],
                          ["5", "4", "3", "2", "1"], apex=("Champion",)),
@@ -217,6 +307,7 @@ GAMES = [
     ),
     dict(
         name="Rocket League", slug="rocket-league", short="RL", factor=0.7, hue=222,
+        picks="Playlist & playstyle",
         ladder=subdivide(["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Champion",
                           "Grand Champ", "Supersonic"],
                          ["I", "II", "III", "IV"], apex=("Supersonic",)),
@@ -318,14 +409,14 @@ def bundle_climbs(g):
     out = []
     dm = g.get("divmap") or {}
     ld = g["ladder"]
-    for ft, tt, disc in BUNDLES.get(g["name"], []):
+    for ft, tt, price in BUNDLES.get(g["name"], []):
         if ft not in dm or tt not in dm:
             continue
         floor_from, target, def_from = dm[ft][-1], dm[tt][0], dm[ft][0]
         if ld.index(target) <= ld.index(floor_from):
             continue
         out.append(dict(ft=ft, tt=tt, floorFrom=floor_from, target=target,
-                        defFrom=def_from, disc=disc))
+                        defFrom=def_from, price=price))
     return out
 
 
@@ -347,10 +438,16 @@ def active_bundle(g, from_rank, to_rank, idx):
     return b if (from_tier == b["ft"] and to_rank == b["target"]) else None
 
 
-def bundle_discount(g, from_rank, to_rank, idx):
-    """The discount for a matching opt-in bundle, else 0. See active_bundle()."""
+def bundle_price(g, from_rank, to_rank, idx):
+    """The flat Solo price of a matching opt-in bundle, else None.
+
+    Whole USD, set by hand in BUNDLES. The discount fraction the engine actually
+    applies is derived from it against the full climb — `pricing.bundle_pct()`,
+    which is where it lives because pricing this climb is pricing's job and
+    data.py must not import it. See active_bundle().
+    """
     b = active_bundle(g, from_rank, to_rank, idx)
-    return b["disc"] if b else 0.0
+    return b["price"] if b else None
 
 
 # Notes are deliberately one line each: the order card draws them under the
@@ -360,18 +457,92 @@ def bundle_discount(g, from_rank, to_rank, idx):
 # wide and the long forms wrap to a second line — the handoff's mobile screen
 # shortens exactly these two. Both variants ship in the DOM and CSS picks one,
 # because i18n.js matches whole text nodes.
+#
+# Two of these are MODE-CONDITIONAL: `mode` names the queue an add-on belongs
+# to, and exactly one of the pair is ever on offer — a solo order can buy
+# "Solo only queue", a duo order "Play on your schedule". Neither is a thing the
+# other queue can sell (a duo order is two players by definition; a solo order
+# has nobody to hold a session slot for). Both ship in the DOM and one is
+# hidden; the filter is addon_applies() below, mirrored in app.js, and the
+# server re-applies it inside pricing.quote() so a payload naming the other
+# queue's option is simply not charged for it. `champ` is free on every order,
+# so it renders ticked and disabled — see addons_block() in build.py.
+#
+# ⚠ The two 12% rates are the retired "Live game stream" slot's percentage,
+# carried over rather than measured. Confirm the real uplift for a restricted
+# queue and for held session slots before launch, the same standing as BUNDLES.
 ADDONS = [
     dict(id="priority", label="Priority order", pct=0.15,
          note="First in the claim queue, claimed in about 6 minutes.",
          note_sm="First in the claim queue, about 6 minutes."),
-    dict(id="champ", label="Champions, agents & roles", pct=0.10,
-         label_sm="Champions & roles",
-         note="Your booster plays the picks you choose."),
-    dict(id="stream", label="Live game stream", pct=0.12,
-         note="Watch every game from your dashboard."),
-    dict(id="offline", label="Offline appearance", pct=0.0,
+    dict(id="soloq", label="Solo only queue", pct=0.12, mode="Solo",
+         note="Your booster plays alone, in ranked only — no parties.",
+         note_sm="Plays alone, ranked only — no parties."),
+    dict(id="schedule", label="Play on your schedule", pct=0.12, mode="Duo queue",
+         note="Fixed session times, held for the whole order.",
+         note_sm="Fixed times, held for the whole order."),
+    # The one add-on whose NAME is per game — a Valorant order does not pick
+    # champions. Each game carries its own wording in `picks`; this label is the
+    # fallback for the surfaces that have no game in hand (analytics labels, a
+    # stored order for a game that has since left the catalogue).
+    dict(id="champ", label="Champions, agents & roles", pct=0.0,
+         note="Always free. Your booster plays the picks you choose.",
+         # The phone drops the "always free" half — the price column beside it
+         # already reads "Included" — and shortens the rest, because this row's
+         # note column is ~30px narrower than the others (the "Included" chip is
+         # wider than a "+$13") and the full sentence wraps there at 375px.
+         note_sm="You choose the picks they play."),
+    # `incl` keeps a row out of every picker: checkout states this one in its
+    # own green strip, and a fourth row costs the order card the vertical budget
+    # its CTA needs to clear the fold at 1440×900.
+    dict(id="offline", label="Offline appearance", pct=0.0, incl=True,
          note="Always on. Friends see you offline for the whole order."),
 ]
+
+
+def addon_applies(addon, mode):
+    """Whether a mode-conditional add-on belongs on an order played in `mode`.
+
+    An add-on with no `mode` key is on offer in both queues. The test is
+    duo-or-not — the same one pricing.py makes for DUO_MULT — so any non-duo
+    mode string (`"Solo"`, the legacy `"Piloted"`) reads as solo rather than
+    silently dropping every solo add-on. Mirrored by `addonApplies()` in
+    app.js: the server refuses to charge a total the page did not show, so the
+    two filters agreeing is what keeps checkout from erroring on a valid order.
+    """
+    want = addon.get("mode")
+    if not want:
+        return True
+    return (str(mode) == "Duo queue") == (want == "Duo queue")
+
+
+def picks_label(game=None):
+    """What the `champ` add-on is called on this game.
+
+    League picks champions, Valorant agents, Dota and Overwatch heroes, Apex
+    legends; CS2 and Rocket League have no character to pick at all and choose
+    roles/maps and a playlist instead. One generic label naming three of the
+    nine ("Champions, agents & roles") was the compromise, and it read as
+    filler on eight pages. Each game carries its own in `picks`; a game without
+    one falls back to the add-on's own label.
+    """
+    g = next((x for x in GAMES if x["name"] == game), None) if game else None
+    return (g or {}).get("picks") or _ADDON_BY_ID["champ"]["label"]
+
+
+def picks_noun(game=None):
+    """The bare noun in `picks_label()` — "champions", "agents", "playlist" —
+    for the sentences that name it mid-copy (the game page's FAQ). Derived from
+    the label rather than stored beside it, so the two cannot drift."""
+    return picks_label(game).split(" & ")[0].lower()
+
+
+def addon_label(addon, game=None):
+    """An add-on's name on this game. Only `champ` varies — see picks_label()."""
+    return picks_label(game) if addon.get("id") == "champ" else addon["label"]
+
+
+_ADDON_BY_ID = {a["id"]: a for a in ADDONS}
 
 # ── Coaching — the fourth configurator product ─────────────────────────────
 # ⚠ PLACEHOLDER, same standing as BOOSTERS/DEMO_ORDER: the four coaches, their
@@ -422,16 +593,27 @@ COACH_SLOTS = ["Tonight, 20:00", "Tomorrow, 18:00", "Saturday, 15:00", "Sunday, 
 # gets. Introduce a real bundle-only discount by adding a promo code and reading
 # it here first. Games without an entry show no strip.
 #
-# Each entry is (from-tier, to-tier, discount). The discount is a REAL bundle-only
-# cut that the server charges — it replaces the sitewide sale on a matching climb
-# (never stacks), so the "−N%" pill and the struck price are a reduction the order
-# actually gets, not a fabricated one. ⚠ These percentages are a business call:
-# confirm they are the real bundle offer before launch.
+# Each entry is (from-tier, to-tier, PRICE IN WHOLE USD). The price is the flat
+# figure a Solo order pays for that bundle, set by hand — not a percentage of
+# anything. The "−N%" pill and the struck price are DERIVED from it against the
+# full climb (pricing.bundle_pct), so the badge can never claim a cut the order
+# doesn't get, and re-pricing a bundle is one number in one place.
 #
-# All nine games carry a set, so no game page is missing the strip. They share one
-# shape — three two-tier jumps through the low ladder, then single-tier jumps where
-# a tier is already a long climb — and one 22 → 35% ramp, so the offer reads the
-# same everywhere until the real per-game economics replace it.
+# It used to be a discount fraction, and the percentages were the invented 22–35%
+# ramp the handoff shipped. Storing the price instead is what let the League set
+# be priced against the thing that actually matters: **applying a bundle must
+# never cost more than not applying it.** A bundle is a flat price across its
+# whole from-tier (see bundle_climbs), so it has to sit under the CHEAPEST normal
+# order in that tier — the climb from the tier's top division, at the sitewide
+# sale. Price a bundle above that line and the card offers a saving that charges
+# a penalty, which is what four of League's six and five of Valorant's six did.
+# test_pricing.py asserts the line for every bundle on every game.
+#
+# ⚠ These figures are a business call: the League set is priced, the other games
+# still carry the handoff's ramp converted to the same money it was already
+# charging. Confirm each is the real bundle offer before launch.
+#
+# All nine games carry a set, so no game page is missing the strip.
 #
 # One rule holds across all nine and should survive re-tuning: **the top rank of a
 # ladder is never a bundle target.** Predator, Challenger, Immortal, One Above All,
@@ -440,47 +622,66 @@ COACH_SLOTS = ["Tonight, 20:00", "Tomorrow, 18:00", "Saturday, 15:00", "Sunday, 
 # what a fixed advertised bundle price cannot be. Lower apex ranks with a fixed
 # threshold (Apex's Master) are fine.
 BUNDLES = {
+    # League is the reworked set: bundles are BIG orders only, and the discount
+    # scales with the size of the climb, so a bigger order earns a bigger cut. From
+    # any division of the starting tier up to division IV of the target tier. The
+    # floor is THREE tiers in one climb through the low/mid ranks — but at the high
+    # ranks a two-tier climb (Platinum → Diamond) is already an expensive order and
+    # a three-tier one would land on Master, so two tiers is enough there. None
+    # targets Master (LP/leaderboard-gated — the top-rank rule above).
+    # PRICED BY HAND. Bundles are BIG orders only, and each price sits $1–4 under
+    # the cheapest normal order in its from-tier (that tier's top division, at the
+    # sitewide sale), so opting in is a saving from every division and never a
+    # penalty. From any division of the starting tier up to division IV of the
+    # target. The floor is THREE tiers in one climb through the low/mid ranks —
+    # at the high ranks a two-tier climb (Platinum → Diamond) is already an
+    # expensive order and a three-tier one would land on Master. None targets
+    # Master (LP/leaderboard-gated — the top-rank rule above).
     "League of Legends": [
-        ("Iron", "Silver", 0.22), ("Bronze", "Gold", 0.25), ("Silver", "Platinum", 0.28),
-        ("Gold", "Platinum", 0.30), ("Platinum", "Emerald", 0.32), ("Emerald", "Diamond", 0.35),
+        ("Iron", "Gold", 67),         # 3 tiers · full $98  · cheapest normal $68
+        ("Bronze", "Platinum", 87),   # 3 tiers · full $127 · cheapest normal $88
+        ("Silver", "Emerald", 130),   # 3 tiers · full $181 · cheapest normal $131
+        ("Platinum", "Diamond", 142),  # 2 tiers · full $225 · cheapest normal $143
+        ("Bronze", "Diamond", 275),   # 5 tiers · full $352 · cheapest normal $279
+        ("Iron", "Diamond", 305),     # 6 tiers · full $378 · cheapest normal $306
     ],
     "Valorant": [
-        ("Iron", "Silver", 0.22), ("Bronze", "Gold", 0.25), ("Silver", "Platinum", 0.28),
-        ("Gold", "Platinum", 0.30), ("Platinum", "Diamond", 0.32), ("Diamond", "Ascendant", 0.35),
+        ("Iron", "Silver", 20), ("Bronze", "Gold", 23), ("Silver", "Platinum", 29),
+        ("Gold", "Platinum", 16), ("Platinum", "Diamond", 24), ("Diamond", "Ascendant", 46),
     ],
     "Teamfight Tactics": [
-        ("Iron", "Silver", 0.22), ("Bronze", "Gold", 0.25), ("Silver", "Platinum", 0.28),
-        ("Gold", "Platinum", 0.30), ("Platinum", "Emerald", 0.32), ("Emerald", "Diamond", 0.35),
+        ("Iron", "Silver", 37), ("Bronze", "Gold", 38), ("Silver", "Platinum", 42),
+        ("Gold", "Platinum", 23), ("Platinum", "Emerald", 26), ("Emerald", "Diamond", 27),
     ],
     "Marvel Rivals": [
-        ("Bronze", "Gold", 0.22), ("Silver", "Platinum", 0.25), ("Gold", "Diamond", 0.28),
-        ("Platinum", "Diamond", 0.30), ("Diamond", "Grandmaster", 0.32),
-        ("Grandmaster", "Celestial", 0.35),
+        ("Bronze", "Gold", 33), ("Silver", "Platinum", 32), ("Gold", "Diamond", 35),
+        ("Platinum", "Diamond", 19), ("Diamond", "Grandmaster", 20),
+        ("Grandmaster", "Celestial", 21),
     ],
     "Overwatch 2": [
-        ("Bronze", "Gold", 0.22), ("Silver", "Platinum", 0.25), ("Gold", "Diamond", 0.28),
-        ("Platinum", "Diamond", 0.30), ("Diamond", "Master", 0.32),
-        ("Master", "Grandmaster", 0.35),
+        ("Bronze", "Gold", 51), ("Silver", "Platinum", 56), ("Gold", "Diamond", 64),
+        ("Platinum", "Diamond", 36), ("Diamond", "Master", 39),
+        ("Master", "Grandmaster", 43),
     ],
     "Rocket League": [
-        ("Bronze", "Gold", 0.22), ("Silver", "Platinum", 0.25), ("Gold", "Diamond", 0.28),
-        ("Platinum", "Diamond", 0.30), ("Diamond", "Champion", 0.32),
-        ("Champion", "Grand Champ", 0.35),
+        ("Bronze", "Gold", 32), ("Silver", "Platinum", 33), ("Gold", "Diamond", 37),
+        ("Platinum", "Diamond", 20), ("Diamond", "Champion", 22),
+        ("Champion", "Grand Champ", 23),
     ],
     "Dota 2": [
-        ("Herald", "Crusader", 0.22), ("Guardian", "Archon", 0.25), ("Crusader", "Legend", 0.28),
-        ("Archon", "Legend", 0.30), ("Legend", "Ancient", 0.32), ("Ancient", "Divine", 0.35),
+        ("Herald", "Crusader", 71), ("Guardian", "Archon", 77), ("Crusader", "Legend", 89),
+        ("Archon", "Legend", 50), ("Legend", "Ancient", 55), ("Ancient", "Divine", 59),
     ],
     "Apex Legends": [
-        ("Rookie", "Silver", 0.22), ("Bronze", "Gold", 0.25), ("Silver", "Platinum", 0.28),
-        ("Gold", "Platinum", 0.30), ("Platinum", "Diamond", 0.32), ("Diamond", "Master", 0.35),
+        ("Rookie", "Silver", 50), ("Bronze", "Gold", 53), ("Silver", "Platinum", 58),
+        ("Gold", "Platinum", 32), ("Platinum", "Diamond", 35), ("Diamond", "Master", 37),
     ],
     # Flat rating ladder — every rung is its own tier, so a bundle names two exact
     # CS Rating checkpoints rather than "any division of". bundle_strip() reads the
     # divmap and drops the "from any division" line for exactly this case.
     "Counter-Strike 2": [
-        ("5k", "13k", 0.22), ("10k", "15k", 0.25), ("13k", "17k", 0.28),
-        ("15k", "19k", 0.30), ("17k", "21k", 0.32), ("19k", "25k", 0.35),
+        ("5k", "13k", 16), ("10k", "15k", 16), ("13k", "17k", 15),
+        ("15k", "19k", 15), ("17k", "21k", 16), ("19k", "25k", 16),
     ],
 }
 
@@ -488,7 +689,19 @@ BUNDLES = {
 # `trustpilot` and `reviews` are not written here — they are computed from
 # REVIEW_DIST just below, which is the one place the rating lives.
 STATS = dict(
-    boosts="92,400",
+    # People, not orders. "92,400 boosts delivered" was the kind of figure a
+    # visitor discounts on sight; a client count is smaller, checkable against
+    # the roster and the review total, and is what the hero now leads with.
+    # Every label that reads it takes the number from here, so the site cannot
+    # quote two different sizes of itself — guarantee_row()'s rating line, the
+    # game-page stat row, the safety plate and the reviews H1.
+    #
+    # Four of those say "clients"; the reviews H1 alone says "customers" and
+    # rounds to "13K" (page_reviews()'s _round_k). That was an explicit call —
+    # the figure is the same one and moves with this key, only the word and the
+    # precision differ. If the wording is ever unified, that H1 is the only
+    # thing to change, and "customers" comes out of i18n.js's two dictionaries.
+    clients="13,280",
     discord="3,000", median_claim="18 min",
     online=34, free_now=25, reply="3m 40s",
     # Footer line under the delivery feed. Counts the whole 24h window, not the
@@ -510,12 +723,34 @@ STATS = dict(
 # Note what is NOT here: the reviews the page actually prints. REVIEWS below is
 # a 58-entry sample of these 3,140 — the distribution describes the corpus, the
 # feed shows a slice of it, and the count line on the page says which.
-REVIEW_DIST = {5: 2612, 4: 372, 3: 94, 2: 34, 1: 28}
+# Averages to exactly 4.7 across 3,140 reviews. The rating is NOT written
+# anywhere else — it is computed from this table below, because /reviews.html
+# draws the distribution as something a sceptic is invited to check the average
+# against. Typing "4.7" into STATS while this still averaged 4.8 would make that
+# page contradict itself on its own subject; to move the rating, move these.
+REVIEW_DIST = {5: 2444, 4: 540, 3: 94, 2: 34, 1: 28}
 
 _RATED = sum(REVIEW_DIST.values())
 STATS["reviews"] = "{:,}".format(_RATED) if _RATED else ""
 STATS["trustpilot"] = ("%.1f / 5" % (sum(s * n for s, n in REVIEW_DIST.items()) / _RATED)
                        if _RATED else "")
+
+# How many of those reviews are ON TRUSTPILOT. The corpus above is Trustpilot
+# *plus* the order-page rating, deduplicated — the reviews page says so in its
+# standfirst — so the two counts are not interchangeable, and only this one may
+# stand next to Trustpilot's name and logo. Every line that reads "N reviews on
+# Trustpilot" takes it from here. The reviews page's own count line ("Showing
+# N of M reviews") is a third figure again — it counts the feed, not the corpus
+# and not this. Three sizes, three sources, none of them typed. The page's H1
+# quotes none of them: it names the client base (STATS["clients"]).
+#
+# ⚠ The SCORE beside it is still computed from the whole corpus, not from these
+# 229 — the two will not be the same number once the real profile is wired.
+# When TRUSTPILOT_URL names our profile, the score shown on a Trustpilot-branded
+# badge has to come from that profile too, or the badge attributes our own
+# average to them. Placeholder until then, same standing as REVIEW_DIST.
+_TP_RATED = 229
+STATS["trustpilot_reviews"] = "{:,}".format(_TP_RATED) if _TP_RATED else ""
 
 # ── the roster ────────────────────────────────────────────────────────────
 # `slug` names the game in GAMES: the roster chip renders that game's `short`,
@@ -1044,8 +1279,14 @@ HERO = dict(
     kicker="",   # empty hides the slot entirely — build.py drops the element
     line1="The rank is yours.",
     line2="The grind isn't.",
-    lede="Set two ranks. See the final price before you make an account. Then watch every match "
-         "land from the dashboard — no bots, no shared logins, no invoice that moves after checkout.",
+    # Three facts in the order a buyer meets them: what it costs, how fast
+    # someone real picks it up, and what happens if nobody does. The claim time
+    # is read from STATS rather than typed — it is the same figure the order
+    # card, the stat row and the support page quote, and a hand-typed copy of it
+    # here is how the site ends up advertising two different speeds.
+    lede="Know your exact price in seconds. A verified booster claims your order in "
+         "about %s — and until one does, every cent is refundable."
+         % STATS["median_claim"].replace(" min", " minutes"),
 )
 
 # ── home-hero booster spotlight ───────────────────────────────────────────
@@ -1149,11 +1390,16 @@ PROMO = dict(
 # every badge on the site becomes a link again, in one place.
 TRUSTPILOT_URL = ""
 
+# Read off STATS, never typed. These four lines used to carry their own copies
+# of the figures — so moving the rating in REVIEW_DIST left the marquee still
+# scrolling the old one past the reader, which is the "one set of numbers"
+# rule broken in the most visible way available.
 MARQUEE = [
-    "92,400 boosts delivered",
-    "4.8 / 5 on Trustpilot — 3,140 reviews",
-    "Most orders claimed within 18 min",
-    "3,000 players in the Discord",
+    "%s clients" % STATS["clients"],
+    # The Trustpilot count, not the corpus count — this line names them.
+    "%s on Trustpilot — %s reviews" % (STATS["trustpilot"], STATS["trustpilot_reviews"]),
+    "Most orders claimed within %s" % STATS["median_claim"],
+    "%s players in the Discord" % STATS["discord"],
 ]
 
 # ── delivered-today feed ──────────────────────────────────────────────────
@@ -1252,11 +1498,18 @@ SAFETY = dict(
 # The headline counts the same STATS["discord"] the stat band does. The mark is
 # deliberately a generic chat glyph, not Discord's logo — same trademark rule
 # as the payment marks and the Trustpilot star.
+# The real invite. Every "join the Discord" control on the site resolves to this
+# one constant — the homepage card, the boosters-page application strip and the
+# support page's invite button — so the server can be moved in one edit rather
+# than by hunting three hardcoded links. It is the one external destination the
+# site owns, so unlike the socials it is a real URL and not a placeholder.
+DISCORD_URL = "https://discord.gg/zxHxzz46ST"
+
 DISCORD = dict(
     label="Free to join",
     body="Free VOD reviews on Sundays, scrim pickups, and the booster application queue.",
     cta="Join the server",
-    href="/support.html#discord",
+    href=DISCORD_URL,
 )
 
 # Mosaic: the six titles that get a tile, plus their span. Order mirrors the
