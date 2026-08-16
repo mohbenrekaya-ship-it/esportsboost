@@ -1302,6 +1302,24 @@ def _canon(path):
     return path
 
 
+def _indexable(path):
+    """Which built pages Google should index. Deliberately narrow — only the
+    homepage, the games catalogue and the nine game pages. Everything else is
+    served and crawlable but carries `noindex` and stays out of the sitemap:
+    the 88 booster profiles and the roster are invented people, /demo is a
+    fabricated order, and the trust/legal pages are not worth ranking while the
+    site's data is placeholder. This is the "accueil + jeux" launch footprint;
+    widen it the day the data is real (see the placeholder-data note in
+    data.py)."""
+    p = _canon(path)
+    if p in ("/", "/games/"):
+        return True
+    if p.startswith("/games/"):
+        rest = p[len("/games/"):]
+        return rest != "" and "/" not in rest        # /games/<slug>, one level deep
+    return False
+
+
 def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
            mobile_bar=False, extra_js="", nav_outline=False, bare=False,
            head=None, foot=None, body_class=None):
@@ -1365,6 +1383,11 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
     body_cls = ' class="%s"' % body_class if body_class else (' class="co-page"' if bare else "")
     og_image = og_image or img("/assets/img/og-default.svg")
     canonical = D.SITE + _canon(path)
+    # Launch footprint: only the homepage, the catalogue and the game pages are
+    # indexed. Everything else stays crawlable (follow) but out of the index —
+    # `follow` so link equity still reaches the pages that do rank.
+    robots_meta = ("" if _indexable(path)
+                   else '<meta name="robots" content="noindex, follow">\n')
     # `no-js` is stripped by the first line of the document. It is the only hook
     # site.css has for the header's scripting-off fallback: with it, the mega
     # menus open on :hover / :focus-within, so the nav still reaches nine games
@@ -1379,7 +1402,7 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title>
 <meta name="description" content="{esc(desc)}">
-<link rel="canonical" href="{canonical}">
+{robots_meta}<link rel="canonical" href="{canonical}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="{esc(D.BRAND)}">
 <meta property="og:title" content="{esc(title)}">
@@ -8816,12 +8839,13 @@ def main():
     # /orders is account-scoped placeholder history reached only from the
     # account menu — kept out of search alongside the pay flow, not a page to
     # rank. It stays crawlable (no robots block) but unadvertised.
-    urls = ["/"] + [r for r, _ in pages if r not in
-                    ("/index.html", "/404.html", "/checkout.html", "/checkout/success.html",
-                     ORDERS_HREF)]
-    # Clean-URL form, matching the canonical each page advertises — the sitemap
-    # must list the URL Google will index, not the .html that redirects to it.
-    urls = [_canon(u) for u in urls]
+    # Only the pages that carry no `noindex` belong here — a sitemap listing a
+    # noindex page sends Google two contradictory signals. `_indexable()` is the
+    # single source of truth for both, so the sitemap and the meta tags can never
+    # disagree: today that is the homepage, the catalogue and the nine game
+    # pages. Clean-URL form, matching the canonical each page advertises.
+    raw = ["/index.html"] + [r for r, _ in pages]
+    urls = sorted(set(_canon(u) for u in raw if _indexable(u)))
     sm = "".join("  <url><loc>%s%s</loc></url>\n" % (D.SITE, u) for u in sorted(set(urls)))
     write("/sitemap.xml",
           '<?xml version="1.0" encoding="UTF-8"?>\n'
