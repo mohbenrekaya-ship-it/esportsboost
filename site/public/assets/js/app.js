@@ -66,7 +66,12 @@
     // `unranked` is placements-only: no MMR to read, so the rank picker is hidden
     // and the price falls back to the ladder floor.
     wins: 3, placements: 3, unranked: false,
-    region: "EUW", addons: [], promo: "",
+    // Full region name (not a short code): it must match an entry in
+    // D.regions[game] or a fresh visitor — who gets DEFAULT verbatim, before
+    // load()'s normalization runs — is left on an invalid region. "North
+    // America" is the first region for LoL and Valorant (and a valid NA variant
+    // for every other game), so it is the default server everywhere.
+    region: "North America", addons: [], promo: "",
     // Opt-in bundle (index into D.bundles[game]) — a real discount that replaces
     // the sitewide sale on a matching climb. Never auto-set; dropped when the
     // climb stops matching (tier or target change). See bundleDiscount().
