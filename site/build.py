@@ -32,18 +32,20 @@ BY_NAME = {g["name"]: g for g in D.GAMES}
 BOOSTER = {b["handle"]: b for b in D.BOOSTERS}
 
 # ── Google Ads (gtag.js) ──────────────────────────────────────────────────
-# Env-gated, the same "degrade gracefully, never commit keys" contract as the
-# Stripe and analytics seams: with GOOGLE_ADS_ID unset the tag emits nothing,
-# so the static preview and every local build stay clean. Set both in the
-# build environment (Vercel → Environment) to turn it on:
-#   GOOGLE_ADS_ID             the account tag, e.g. AW-18171663463
+# The account tag and its Purchase conversion label. These are NOT secrets —
+# the tag ships in every page's HTML to every visitor, so committing them is
+# safe and, unlike an env var, can't silently go missing on a build (which is
+# exactly what happened once). The env vars still override, so a staging
+# project can point at a different account, or set GOOGLE_ADS_ID="" to disable:
+#   GOOGLE_ADS_ID             the account tag (default AW-18171663463)
 #   GOOGLE_ADS_PURCHASE_LABEL the Purchase conversion action's label
 # The base tag needs only the id; the purchase conversion needs both. The
 # conversion fires on the confirmed-paid success page against the REAL charged
 # amount/currency/order id (see page_checkout_success), not the snippet's
 # placeholder 1.0 EUR — that is what feeds Smart Bidding a true ROAS.
-GOOGLE_ADS_ID = (os.environ.get("GOOGLE_ADS_ID") or "").strip()
-GOOGLE_ADS_PURCHASE_LABEL = (os.environ.get("GOOGLE_ADS_PURCHASE_LABEL") or "").strip()
+GOOGLE_ADS_ID = os.environ.get("GOOGLE_ADS_ID", "AW-18171663463").strip()
+GOOGLE_ADS_PURCHASE_LABEL = os.environ.get(
+    "GOOGLE_ADS_PURCHASE_LABEL", "CraYCOGOibAcEOeo9thD").strip()
 
 
 def _gads_head():
