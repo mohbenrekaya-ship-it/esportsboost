@@ -4406,7 +4406,7 @@ def wizard(game=None):
       </div>
 
       <a class="btn btn-primary btn-block ob-cta" href="/checkout.html" data-continue>
-        <span data-hide-service="coaching">Continue to checkout</span><span data-when-service="coaching" data-out="bookLabel" hidden>Book</span><span class="ob-cta-sep" aria-hidden="true">·</span><span data-out="price">—</span>
+        <span data-hide-service="coaching">Continue to checkout</span><span data-when-service="coaching" data-out="bookLabel" hidden>Book</span>
         {_ico("arrow", 15, "ico", stroke=True)}
       </a>
 
@@ -4743,7 +4743,7 @@ def page_home():
     # nav_outline for the same reason the game pages set it: the hero's own
     # gradient CTA is the filled button in this viewport, so the nav's "Start
     # an order" drops to an outline rather than splitting the click.
-    return layout("/", "Game boosting platform - %s" % D.BRAND,
+    return layout("/", "Game Boosting Platform - %s" % D.BRAND,
                   "The game boosting platform for competitive games. Climb the ranks in League of "
                   "Legends, Valorant, CS2 and 6 more titles with verified, vetted boosters.",
                   body, current=None, jsonld=ld, mobile_bar=True, nav_outline=True)
@@ -5167,7 +5167,7 @@ def page_games_index():
                "/games/%s.html" % lead["slug"]))}
 
 {gc_bar(lead)}"""
-    return layout("/games/", "All games boosting - %s" % D.BRAND,
+    return layout("/games/", "All Games Boosting - %s" % D.BRAND,
                   "Rank boosting for League of Legends, Valorant, CS2, TFT, Marvel Rivals, Dota 2, "
                   "Apex, Overwatch 2 and Rocket League. Live prices, no account needed.",
                   body, current="/games/",
@@ -5715,7 +5715,7 @@ def page_game(g):
     # "<Game> boosting - eSports Boost" — a clean, consistent SERP title. The
     # longest game name ("Counter-Strike 2") lands at ~40 chars, well under
     # Google's ~60-char truncation point, so no length-fitting is needed.
-    title = "%s boosting - %s" % (g["name"], D.BRAND)
+    title = "%s Boosting - %s" % (g["name"], D.BRAND)
     return layout("/games/%s.html" % g["slug"],
                   title,
                   g["meta"], body, current="/games/", jsonld=ld,
@@ -7747,7 +7747,6 @@ def page_checkout():
 
           <button class="co-cta" type="submit">
             {_ico("lock", 16, "ico", stroke=True)}<span data-btn-label>Place the order</span>
-            <span class="co-cta-sep" aria-hidden="true">·</span><span data-sum="total">—</span>
             {_ico("arrow", 16, "ico", stroke=True)}
           </button>
 
