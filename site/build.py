@@ -6657,16 +6657,17 @@ def page_reviews():
     # offering the trip. Until then the second action is the one the page can
     # honour on its own — the same climb down to the bad reviews the paragraph
     # above it promises, sorted worst first.
-    if D.TRUSTPILOT_URL:
-        second = (f'<a class="btn btn-secondary" href="{esc(D.TRUSTPILOT_URL)}" '
-                  f'target="_blank" rel="noopener nofollow">'
-                  f'<span class="rvp-tp-star" aria-hidden="true">&#9733;</span>'
-                  f'<span>Read on Trustpilot</span>'
-                  f'{_ico("arrow-up-right", 13, "ico", stroke=True)}</a>')
-    else:
-        second = ('<a class="btn btn-secondary" href="#reviews-feed" data-rvp-worst>'
-                  + _ico("arrow-down", 15, "ico", stroke=True)
-                  + '<span>Read the worst first</span></a>')
+    # Direct link out to our Trustpilot profile. Deliberately NOT wired through
+    # D.TRUSTPILOT_URL: that constant also gates rating_ld()'s aggregateRating
+    # JSON-LD, and turning it on would publish the still-placeholder review
+    # distribution to search engines (a manual-action risk — see data.py). The
+    # link lives here only until that data is real.
+    _tp_url = "https://www.trustpilot.com/review/lolepicshop.com"
+    second = (f'<a class="btn btn-secondary" href="{esc(_tp_url)}" '
+              f'target="_blank" rel="noopener nofollow">'
+              f'<span class="rvp-tp-star" aria-hidden="true">&#9733;</span>'
+              f'<span>See our reviews on Trustpilot</span>'
+              f'{_ico("arrow-up-right", 13, "ico", stroke=True)}</a>')
 
     dist = dist_rows()
     hint = (f'<p class="rvp-hint">{_ico("info", 14, "rvp-hint-ico")}'
