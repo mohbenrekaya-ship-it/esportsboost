@@ -2044,19 +2044,91 @@
      name and drop the "you're viewing a sample, log in" guest prompt. Same
      localStorage key the header writes; there is no server round-trip because
      there is no account backend yet. */
+  // The signed-in customer's OWN orders, read live from GET /api/orders (the
+  // store is email-scoped to the signed session cookie — see src/orders.py).
+  // No fabricated data: three states in the DOM are toggled here — signed out,
+  // signed in with no orders (empty), and real orders (stats + table). Called on
+  // load and again on every session change through paint(), so signing in/out
+  // re-renders without a reload.
   function initOrders() {
-    var guest = document.querySelector("[data-ord-guest]");
-    var hello = document.querySelector("[data-ord-hello]");
-    if (!guest && !hello) return;                 // not the orders page
-    var s = null;
-    try { s = JSON.parse(localStorage.getItem("esb.session.v1") || "null"); } catch (e) {}
-    var on = !!(s && s.name);
-    if (guest) guest.hidden = on;
-    if (hello) {
-      hello.hidden = !on;
-      var n = hello.querySelector("[data-ord-name]");
-      if (n && on) n.textContent = s.name;        // in its own <b>, i18n-safe
+    var root = document.querySelector("[data-orders]");
+    if (!root) return;                            // not the orders page
+    var guest = root.querySelector("[data-ord-guest]");
+    var hello = root.querySelector("[data-ord-hello]");
+    var helloName = root.querySelector("[data-ord-name]");
+    var stats = root.querySelector("[data-ord-stats]");
+    var empty = root.querySelector("[data-ord-empty]");
+    var tableSec = root.querySelector("[data-ord-table-sec]");
+    var tbody = root.querySelector("[data-ord-tbody]");
+
+    // The localStorage session: email/password logins have no server cookie yet,
+    // so /api/orders can't identify them — but the header still shows them signed
+    // in, and they have no real orders to miss, so they get the empty state.
+    var ls = null;
+    try { ls = JSON.parse(localStorage.getItem("esb.session.v1") || "null"); } catch (e) {}
+
+    function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+    function money(cur, n) {
+      try {
+        return new Intl.NumberFormat(undefined, { style: "currency", currency: (cur || "usd").toUpperCase(), maximumFractionDigits: 0 }).format(n || 0);
+      } catch (e) { return "$" + (n || 0); }
     }
+    function when(ts) {
+      if (!ts) return "—";
+      try { return new Date(ts * 1000).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }); }
+      catch (e) { return "—"; }
+    }
+    function pill(st) {
+      if (st === "delivered") return '<span class="ord-status is-done">Delivered</span>';
+      if (st === "refunded") return '<span class="ord-status is-refunded">Refunded</span>';
+      return '<span class="ord-status is-live">In progress</span>';
+    }
+    function row(o) {
+      return '<div class="ord-row">'
+        + '<span class="ord-cell ord-c-id"><span class="ord-oid">' + esc(o.order_id) + '</span></span>'
+        + '<span class="ord-cell ord-c-game">' + esc(o.gameShort) + '</span>'
+        + '<span class="ord-cell ord-c-climb">' + esc(o.summary) + '</span>'
+        + '<span class="ord-cell ord-c-mode">' + esc(o.mode || "—") + '</span>'
+        + '<span class="ord-cell ord-c-date">' + when(o.at) + '</span>'
+        + '<span class="ord-cell ord-c-price">' + money(o.currency, o.total) + '</span>'
+        + '<span class="ord-cell ord-c-status">' + pill(o.status) + '</span>'
+        + '</div>';
+    }
+    function show(el, on) { if (el) el.hidden = !on; }
+    function setStat(k, v) {
+      var el = root.querySelector('[data-ord-stat="' + k + '"]');
+      if (el) el.textContent = v;
+    }
+
+    function render(data) {
+      var authed = !!(data && data.authenticated);
+      var name = (data && data.name) || (ls && ls.name) || "";
+      var signedIn = authed || !!(ls && ls.name);
+
+      show(hello, signedIn);
+      if (helloName && name) helloName.textContent = name;   // own <b>, i18n-safe
+      show(guest, !signedIn);
+
+      if (!signedIn) { show(stats, false); show(empty, false); show(tableSec, false); return; }
+
+      var all = ((data && data.active) || []).concat((data && data.delivered) || []);
+      if (!authed || !all.length) {               // no verifiable session, or none yet
+        show(stats, false); show(tableSec, false); show(empty, true); return;
+      }
+
+      all.sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
+      setStat("orders", data.orders);
+      setStat("inprogress", data.in_progress);
+      setStat("delivered", data.delivered_count);
+      setStat("spent", money(data.currency, data.spent));
+      tbody.innerHTML = all.map(row).join("");
+      show(empty, false); show(stats, true); show(tableSec, true);
+    }
+
+    fetch("/api/orders", { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(render)
+      .catch(function () { render({ authenticated: false }); });
   }
 
   /* ── the boosters roster: game / availability / sort, all live ────────────

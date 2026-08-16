@@ -7131,6 +7131,15 @@ body.hd-locked {
 .ord-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
 .ord-status.is-live { color: var(--ember-lit); background: rgba(255, 90, 31, .10); border: 1px solid rgba(255, 90, 31, .26); }
 .ord-status.is-done { color: #8fd6a4; background: rgba(70, 190, 110, .12); border: 1px solid rgba(70, 190, 110, .28); }
+.ord-status.is-refunded { color: var(--text-5); background: var(--glass); border: 1px solid var(--hairline); }
+
+/* Signed in with no orders yet — the honest empty state that replaced the
+   fabricated preview history. */
+.ord-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 48px 22px; border: 1px solid var(--hairline); border-radius: 12px; background: var(--panel); }
+.ord-empty-i { display: inline-flex; color: var(--ember-lit); margin-bottom: 4px; }
+.ord-empty-h { font: 600 19px/1.2 var(--display); color: var(--text); }
+.ord-empty-p { font-size: 13.5px; line-height: 1.5; color: var(--text-4); max-width: 48ch; }
+.ord-empty-a { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; justify-content: center; }
 .ord-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ember); animation: live-pulse 2.2s ease-out infinite; }
 .ord-oid { font-family: var(--mono); font-size: 12.5px; letter-spacing: .02em; color: var(--text-4); }
 

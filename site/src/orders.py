@@ -270,6 +270,69 @@ def has_data():
 
 
 # ══════════════════════════════════════════════════════════════════════════
+#  customer-facing read — the signed-in account's OWN orders (/orders.html)
+# ══════════════════════════════════════════════════════════════════════════
+def by_email(email, limit=MAX_ORDERS):
+    """Every stored order for one email, newest first. Email-scoped and
+    **read-only**: the caller must have authenticated the session and pass its
+    OWN verified email — never a client-supplied one — or one customer could
+    read another's orders. There is no public endpoint that reaches this."""
+    e = _s(email, 160).lower()
+    if not e:
+        return []
+    return [r for r in read(limit) if (r.get("email") or "").lower() == e]
+
+
+def customer_view(email):
+    """The payload `/orders.html` renders for the signed-in customer: their own
+    orders split into active vs delivered, plus the four header stats. A refunded
+    order counts as delivered (a closed order) but never toward lifetime spend.
+
+    Only ever called with the authenticated session's verified email — see
+    `by_email`. Returns real rows; an empty list is an honest empty state, not a
+    placeholder to fill."""
+    rows = by_email(email)
+
+    def _card(r):
+        return {
+            "order_id": r.get("order_id", ""),
+            "at": _int(r.get("at")),
+            "status": r.get("status", "paid"),
+            "game": r.get("game", ""),
+            "gameShort": _short(r),
+            "slug": r.get("slug", ""),
+            "service": r.get("service", "division"),
+            "summary": _climb_summary(r),
+            "from_rank": r.get("from_rank", ""),
+            "to_rank": r.get("to_rank", ""),
+            "mode": r.get("mode", ""),
+            "region": r.get("region", ""),
+            "booster": r.get("booster", ""),
+            "currency": r.get("currency", "usd"),
+            "total": _int(r.get("total")),
+        }
+
+    active, delivered, spent = [], [], 0
+    for r in rows:
+        card = _card(r)
+        if r.get("status") in ("delivered", "refunded"):
+            delivered.append(card)
+        else:
+            active.append(card)
+        if r.get("status") != "refunded":
+            spent += card["total"]
+    return {
+        "orders": len(rows),
+        "in_progress": len(active),
+        "delivered_count": len(delivered),
+        "spent": spent,
+        "currency": (rows[0].get("currency") if rows else "usd") or "usd",
+        "active": active,
+        "delivered": delivered,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════
 #  presentation helpers
 # ══════════════════════════════════════════════════════════════════════════
 def _climb_summary(row):

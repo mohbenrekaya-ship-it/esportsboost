@@ -7539,17 +7539,17 @@ def _ord_row(o):
 
 
 def page_orders():
-    """`/orders.html` — the signed-in account's order history."""
-    active = demo_order()
-    hist = order_history()
-    total = len(hist) + 1
-    spent = active["price"] + sum(o["price"] for o in hist)
+    """`/orders.html` — the signed-in account's OWN orders, read live from the
+    orders store via `GET /api/orders` (email-scoped to the signed session).
 
+    No fabricated data: the page ships as an empty shell and `initOrders()` in
+    app.js fills it from the API. Three states, all in the DOM and toggled: signed
+    out (a log-in prompt), signed in with no orders (an empty state), and real
+    orders (the stats + table). The store is only written by the Stripe webhook,
+    so a customer sees exactly what they paid for and nothing else."""
     head = "".join('<span>%s</span>' % esc(t) for t in
-                   ("Order", "Game", "Climb", "Queue", "Delivered", "Paid", "Status"))
-    rows = "".join(_ord_row(o) for o in hist)
-
-    body = f"""<section class="section ord">
+                   ("Order", "Game", "Climb", "Queue", "Date", "Paid", "Status"))
+    body = f"""<section class="section ord" data-orders>
   <div class="wrap ord-wrap">
     <header class="ord-head">
       <span class="ord-eyebrow">Account</span>
@@ -7558,10 +7558,12 @@ def page_orders():
       <p class="ord-hello" data-ord-hello hidden>{_ico("user", 14, "ico", stroke=True)}<span>Signed in as</span> <b data-ord-name></b></p>
     </header>
 
-    <div class="ord-guest" data-ord-guest>
+    <!-- Signed out: without an identity there are no orders to show. -->
+    <div class="ord-guest" data-ord-guest hidden>
       <div class="ord-guest-c">
         <span class="ord-guest-i" aria-hidden="true">{_ico("user", 18, "ico", stroke=True)}</span>
-        <span>You're viewing a sample history. <b>Log in</b> to keep your orders in one place — or track a single order by the link we emailed you. Checkout never needs an account.</span>
+        <span><b>Log in</b> to see your orders here — or track a single order by the link we emailed
+        you. Checkout never needs an account.</span>
       </div>
       <div class="ord-guest-a">
         <button type="button" class="btn btn-primary btn-sm" data-hd-auth="signin">Log in</button>
@@ -7569,34 +7571,36 @@ def page_orders():
       </div>
     </div>
 
-    <div class="ord-stats">
-      <div class="ord-stat"><span class="ord-stat-v">{total}</span><span class="ord-stat-l">Orders</span></div>
-      <div class="ord-stat"><span class="ord-stat-v">1</span><span class="ord-stat-l">In progress</span></div>
-      <div class="ord-stat"><span class="ord-stat-v">{len(hist)}</span><span class="ord-stat-l">Delivered</span></div>
-      <div class="ord-stat"><span class="ord-stat-v">{money(spent)}</span><span class="ord-stat-l">Lifetime spent</span></div>
+    <div class="ord-stats" data-ord-stats hidden>
+      <div class="ord-stat"><span class="ord-stat-v" data-ord-stat="orders">0</span><span class="ord-stat-l">Orders</span></div>
+      <div class="ord-stat"><span class="ord-stat-v" data-ord-stat="inprogress">0</span><span class="ord-stat-l">In progress</span></div>
+      <div class="ord-stat"><span class="ord-stat-v" data-ord-stat="delivered">0</span><span class="ord-stat-l">Delivered</span></div>
+      <div class="ord-stat"><span class="ord-stat-v" data-ord-stat="spent">—</span><span class="ord-stat-l">Lifetime spent</span></div>
     </div>
 
-    <div class="ord-section">
-      <h2 class="ord-h2">In progress</h2>
-      {_ord_active_card(active)}
-    </div>
-
-    <div class="ord-section">
-      <h2 class="ord-h2">Delivered</h2>
-      <div class="ord-table">
-        <div class="ord-thead" aria-hidden="true">{head}</div>
-        <div class="ord-tbody">{rows}</div>
+    <!-- Signed in, but no orders yet. -->
+    <div class="ord-empty" data-ord-empty hidden>
+      <span class="ord-empty-i" aria-hidden="true">{_ico("package", 22, "ico", stroke=True)}</span>
+      <h2 class="ord-empty-h">No orders yet</h2>
+      <p class="ord-empty-p">When you place an order it shows up here — the climb, the price and its
+      status, updated as your booster works. Ready to start?</p>
+      <div class="ord-empty-a">
+        <a class="btn btn-primary btn-sm" href="/games/">Browse games</a>
+        <a class="btn btn-outline btn-sm" href="{DEMO_HREF}">Track by link</a>
       </div>
     </div>
 
-    <p class="ord-note">{_ico("info", 15, "ico", stroke=True)}
-      <span>This order history is a preview. Until an account backend is live, the orders shown are
-      example data, priced with the real quote — the same standing as the demo dashboard.</span></p>
+    <div class="ord-section" data-ord-table-sec hidden>
+      <h2 class="ord-h2">All orders</h2>
+      <div class="ord-table">
+        <div class="ord-thead" aria-hidden="true">{head}</div>
+        <div class="ord-tbody" data-ord-tbody></div>
+      </div>
+    </div>
   </div>
 </section>"""
     return layout(ORDERS_HREF, "Your orders — %s" % D.BRAND,
-                  "Your order history: the boost in progress and every one already delivered, "
-                  "each with its climb, price and dashboard.",
+                  "Your order history: the boost in progress and every one already delivered.",
                   body, current=ORDERS_HREF)
 
 

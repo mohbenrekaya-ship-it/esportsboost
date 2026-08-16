@@ -199,6 +199,21 @@ class Handler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 return
             return self._json(status, payload)
+        if route == "/api/orders":
+            # The signed-in customer's OWN orders, for /orders.html. Authenticated
+            # by the signed session cookie alone (oauth.read_session) — the email
+            # is taken from the verified session, never from the request, so no one
+            # can read another customer's orders. Not signed in → {authenticated:
+            # false}, and the page shows its sign-in / empty state.
+            import orders as _orders  # noqa: E402 — lazy: only this route needs it
+            cookies = oauth.parse_cookies(self.headers.get("Cookie"))
+            session = oauth.read_session(cookies.get(oauth.SESSION_COOKIE))
+            if not session or not session.get("email"):
+                return self._json(200, {"authenticated": False})
+            view = _orders.customer_view(session["email"])
+            view.update({"authenticated": True, "name": session.get("name", ""),
+                         "email": session.get("email", "")})
+            return self._json(200, view)
         if route.startswith("/api/auth/"):
             return self._auth(route)
         if route.startswith("/api/"):
