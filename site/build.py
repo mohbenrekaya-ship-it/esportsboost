@@ -31,6 +31,47 @@ BY_SLUG = {g["slug"]: g for g in D.GAMES}
 BY_NAME = {g["name"]: g for g in D.GAMES}
 BOOSTER = {b["handle"]: b for b in D.BOOSTERS}
 
+# ── Google Ads (gtag.js) ──────────────────────────────────────────────────
+# Env-gated, the same "degrade gracefully, never commit keys" contract as the
+# Stripe and analytics seams: with GOOGLE_ADS_ID unset the tag emits nothing,
+# so the static preview and every local build stay clean. Set both in the
+# build environment (Vercel → Environment) to turn it on:
+#   GOOGLE_ADS_ID             the account tag, e.g. AW-18171663463
+#   GOOGLE_ADS_PURCHASE_LABEL the Purchase conversion action's label
+# The base tag needs only the id; the purchase conversion needs both. The
+# conversion fires on the confirmed-paid success page against the REAL charged
+# amount/currency/order id (see page_checkout_success), not the snippet's
+# placeholder 1.0 EUR — that is what feeds Smart Bidding a true ROAS.
+GOOGLE_ADS_ID = (os.environ.get("GOOGLE_ADS_ID") or "").strip()
+GOOGLE_ADS_PURCHASE_LABEL = (os.environ.get("GOOGLE_ADS_PURCHASE_LABEL") or "").strip()
+
+
+def _gads_head():
+    """The Google tag (gtag.js) for the <head> — one per page, as high as
+    possible. Empty string when unconfigured. It defines the global `gtag()`
+    and shares `window.dataLayer` with the site's own funnel beacon."""
+    if not GOOGLE_ADS_ID:
+        return ""
+    gid = esc(GOOGLE_ADS_ID)
+    return (
+        "<!-- Google tag (gtag.js) -->\n"
+        '<script async src="https://www.googletagmanager.com/gtag/js?id=%s"></script>\n'
+        "<script>\n"
+        "window.dataLayer = window.dataLayer || [];\n"
+        "function gtag(){dataLayer.push(arguments);}\n"
+        "gtag('js', new Date());\n"
+        "gtag('config', '%s');\n"
+        "</script>\n" % (gid, gid)
+    )
+
+
+def gads_purchase_send_to():
+    """`AW-…/label` for the Purchase conversion, or "" when either half is
+    unset. The success-page script guards on this before calling gtag."""
+    if GOOGLE_ADS_ID and GOOGLE_ADS_PURCHASE_LABEL:
+        return "%s/%s" % (GOOGLE_ADS_ID, GOOGLE_ADS_PURCHASE_LABEL)
+    return ""
+
 
 # ══════════════════════════════════════════════════════════════════════════
 #  pricing — mirrors assets/js/app.js exactly
@@ -1399,6 +1440,7 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
 <head>
 <script>document.documentElement.classList.remove('no-js')</script>
 <meta charset="utf-8">
+{_gads_head()}
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title>
 <meta name="description" content="{esc(desc)}">
@@ -7990,6 +8032,7 @@ def page_checkout_success():
 """.replace("{demo}", DEMO_HREF + "?order=" + demo_order()["id"])
     js = """<script>
 (function () {
+  var GADS_PURCHASE = '__GADS_PURCHASE_SEND_TO__';
   var q = new URLSearchParams(location.search);
   var sid = q.get('session_id');
   var kicker = document.querySelector('[data-state-kicker]');
@@ -8032,6 +8075,16 @@ def page_checkout_success():
         if (typeof d.amount_total === 'number') p.value = d.amount_total / 100;
         if (d.currency) p.currency = String(d.currency).toUpperCase();
         window.esbTrack('purchase', p);
+        // Google Ads Purchase conversion — real charged amount, not the
+        // snippet's placeholder 1.0 EUR. No-op unless the tag is configured.
+        if (GADS_PURCHASE && window.gtag) {
+          window.gtag('event', 'conversion', {
+            send_to: GADS_PURCHASE,
+            value: (typeof d.amount_total === 'number') ? d.amount_total / 100 : undefined,
+            currency: d.currency ? String(d.currency).toUpperCase() : undefined,
+            transaction_id: d.order_id || ''
+          });
+        }
       } catch (e) {}
       try { localStorage.removeItem('esb.order.v1'); } catch (e) {}
     } else if (res.status === 200) {
@@ -8044,7 +8097,7 @@ def page_checkout_success():
   });
 })();
 </script>
-"""
+""".replace("__GADS_PURCHASE_SEND_TO__", gads_purchase_send_to())
     return layout("/checkout/success.html", "Order confirmed — %s" % D.BRAND,
                   "Your payment is confirmed and your order is on the booster board.",
                   body, extra_js=js)
