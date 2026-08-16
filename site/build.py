@@ -4699,9 +4699,9 @@ def page_home():
     # nav_outline for the same reason the game pages set it: the hero's own
     # gradient CTA is the filled button in this viewport, so the nav's "Start
     # an order" drops to an outline rather than splitting the click.
-    return layout("/", "Rank boosting with the price up front — %s" % D.BRAND,
-                  "Set two ranks and see the exact price and delivery window before you make an "
-                  "account. Verified boosters, guest checkout, pro-rated refunds. 9 games, every region.",
+    return layout("/", "Game boosting platform - %s" % D.BRAND,
+                  "The game boosting platform for competitive games. Climb the ranks in League of "
+                  "Legends, Valorant, CS2 and 6 more titles with verified, vetted boosters.",
                   body, current=None, jsonld=ld, mobile_bar=True, nav_outline=True)
 
 
@@ -5123,7 +5123,7 @@ def page_games_index():
                "/games/%s.html" % lead["slug"]))}
 
 {gc_bar(lead)}"""
-    return layout("/games/", "All games — %s" % D.BRAND,
+    return layout("/games/", "All games boosting - %s" % D.BRAND,
                   "Rank boosting for League of Legends, Valorant, CS2, TFT, Marvel Rivals, Dota 2, "
                   "Apex, Overwatch 2 and Rocket League. Live prices, no account needed.",
                   body, current="/games/",
@@ -5668,16 +5668,10 @@ def page_game(g):
 </div>
 {cta_band(live=True, cta=("Continue your order", "/checkout.html"))}"""
 
-    # Titles are budgeted to ~60 chars — past that Google truncates and the
-    # brand (the part that survives) is the least useful half. "League of
-    # Legends boosting — live price, no account needed | eSports Boost" ran to
-    # 74 and lost its own differentiator mid-word. The long ladder names are
-    # what blow the budget, so the suffix shortens for them rather than every
-    # title being cut to the worst case.
-    _t_long = "%s boosting — live price, no account needed | %s" % (g["name"], D.BRAND)
-    _t_mid = "%s boosting — live price, no account | %s" % (g["name"], D.BRAND)
-    _t_short = "%s boosting — live price | %s" % (g["name"], D.BRAND)
-    title = next((t for t in (_t_long, _t_mid, _t_short) if len(t) <= 60), _t_short)
+    # "<Game> boosting - eSports Boost" — a clean, consistent SERP title. The
+    # longest game name ("Counter-Strike 2") lands at ~40 chars, well under
+    # Google's ~60-char truncation point, so no length-fitting is needed.
+    title = "%s boosting - %s" % (g["name"], D.BRAND)
     return layout("/games/%s.html" % g["slug"],
                   title,
                   g["meta"], body, current="/games/", jsonld=ld,
