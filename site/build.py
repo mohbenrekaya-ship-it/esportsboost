@@ -6186,22 +6186,28 @@ def sp_form():
       <div class="sp-chips">{chips}</div>
 
       <div class="sp-frow sp-frow-mt">
-        <span class="sp-flabel">Email</span>
+        <label class="sp-flabel" for="sp-email">Email</label>
         <span class="sp-tag sp-tag-req">Required</span>
       </div>
-      <input class="sp-input" type="email" data-sp-email placeholder="you@example.com" autocomplete="email">
+      <!-- id + name are load-bearing: without a name the browser cannot tell
+           this apart from the order-number box below and autofills the email
+           into that field instead. `autocomplete="off"` on the order box is the
+           other half — it stops autofill targeting a free-text field at all. -->
+      <input class="sp-input" id="sp-email" name="email" type="email" data-sp-email
+             placeholder="you@example.com" autocomplete="email" inputmode="email">
 
       <div class="sp-order" data-sp-order-field{order_hidden}>
         <div class="sp-frow">
-          <span class="sp-flabel">Order number</span>
+          <label class="sp-flabel" for="sp-order">Order number</label>
           <span class="sp-tag sp-tag-opt">Optional</span>
         </div>
-        <input class="sp-input sp-input-code" type="text" data-sp-order-input placeholder="ESB-3F92K1">
+        <input class="sp-input sp-input-code" id="sp-order" name="order" type="text"
+               data-sp-order-input placeholder="ESB-3F92K1" autocomplete="off">
         <span class="sp-help">{_ico("envelope-open", 15, "sp-help-ico", stroke=True)}On your confirmation email, under the total.</span>
       </div>
 
-      <span class="sp-flabel sp-flabel-mt">Message</span>
-      <textarea class="sp-input sp-textarea" data-sp-msg placeholder="{first_ph}"></textarea>
+      <label class="sp-flabel sp-flabel-mt" for="sp-message">Message</label>
+      <textarea class="sp-input sp-textarea" id="sp-message" name="message" data-sp-msg placeholder="{first_ph}"></textarea>
 
       <div class="sp-hp" aria-hidden="true">
         <label for="sp-company">Company</label>
