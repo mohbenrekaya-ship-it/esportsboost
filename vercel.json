@@ -4,6 +4,15 @@
   "outputDirectory": "site/dist",
   "cleanUrls": true,
   "trailingSlash": false,
+  "redirects": [
+    { "source": "/games/team-fight-tactics", "destination": "/games/teamfight-tactics", "permanent": true },
+    { "source": "/policies/privacy-policy", "destination": "/legal/privacy", "permanent": true },
+    { "source": "/policies/terms-of-service", "destination": "/legal/terms", "permanent": true },
+    { "source": "/policies/cookie-policy", "destination": "/legal/privacy", "permanent": true },
+    { "source": "/contact-us", "destination": "/support", "permanent": true },
+    { "source": "/blogs", "destination": "/guides", "permanent": true },
+    { "source": "/blogs/:slug*", "destination": "/guides", "permanent": true }
+  ],
   "functions": {
     "api/**/*.py": {
       "includeFiles": "site/src/**"
