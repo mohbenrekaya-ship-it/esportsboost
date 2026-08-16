@@ -7875,8 +7875,6 @@ def page_checkout():
             <span class="co-tchip">{_ico("globe", 12, "ico")}<span>Regional VPN</span></span>
             <span class="co-tchip">{_ico("eye-off", 12, "ico", stroke=True)}<span>Offline appearance</span></span>
           </div>
-
-          <a class="co-back" href="/games/" data-game-link>{_ico("undo", 14, "ico", stroke=True)}<span>Change the order</span></a>
         </div>
       </aside>
     </div>
