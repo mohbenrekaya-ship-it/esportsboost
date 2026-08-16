@@ -1282,6 +1282,26 @@ def footer():
 </footer>"""
 
 
+def _canon(path):
+    """The public (clean) URL for a built file path.
+
+    Files are written at `.html` paths (that is where they live), but Vercel's
+    `cleanUrls` serves `/foo.html` at `/foo` and `/dir/index.html` at `/dir/`,
+    and the `.html` forms 308-redirect to those. So every URL a crawler reads as
+    authoritative — canonical, og:url, sitemap, JSON-LD `url`/`item`/`@id` — must
+    be the clean form, or it points Google at a redirect and the canonical the
+    served page advertises no longer matches its own address. Internal `href`s
+    may stay `.html` (they redirect once and land on the same clean page); the
+    indexing signals may not."""
+    if path.endswith("/index.html"):
+        return path[:-len("index.html")] or "/"     # /boosters/index.html -> /boosters/
+    if path == "/index.html":
+        return "/"
+    if path.endswith(".html"):
+        return path[:-len(".html")]                  # /foo.html -> /foo
+    return path
+
+
 def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
            mobile_bar=False, extra_js="", nav_outline=False, bare=False,
            head=None, foot=None, body_class=None):
@@ -1344,7 +1364,7 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
     foot = foot if foot is not None else (foot_min() if bare else footer())
     body_cls = ' class="%s"' % body_class if body_class else (' class="co-page"' if bare else "")
     og_image = og_image or img("/assets/img/og-default.svg")
-    canonical = D.SITE + path
+    canonical = D.SITE + _canon(path)
     # `no-js` is stripped by the first line of the document. It is the only hook
     # site.css has for the header's scripting-off fallback: with it, the mega
     # menus open on :hover / :focus-within, so the nav still reaches nine games
@@ -3376,7 +3396,7 @@ def page_booster(b):
             "jobTitle": "%s booster" % (g["name"] if g else "Rank"),
             "knowsAbout": g["name"] if g else "",
             "image": D.SITE + img(booster_portrait(b)),
-            "url": D.SITE + booster_href(b),
+            "url": D.SITE + _canon(booster_href(b)),
         },
     }, {
         "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
@@ -3384,7 +3404,7 @@ def page_booster(b):
             {"@type": "ListItem", "position": 2, "name": "Boosters",
              "item": D.SITE + "/boosters/"},
             {"@type": "ListItem", "position": 3, "name": b["handle"],
-             "item": D.SITE + booster_href(b)},
+             "item": D.SITE + _canon(booster_href(b))},
         ],
     }]
 
@@ -5588,7 +5608,7 @@ def page_game(g):
             {"@type": "ListItem", "position": 1, "name": "Home", "item": D.SITE + "/"},
             {"@type": "ListItem", "position": 2, "name": "Games", "item": D.SITE + "/games/"},
             {"@type": "ListItem", "position": 3, "name": g["name"],
-             "item": "%s/games/%s.html" % (D.SITE, g["slug"])},
+             "item": "%s/games/%s" % (D.SITE, g["slug"])},
         ]},
     ]
 
@@ -8799,7 +8819,9 @@ def main():
     urls = ["/"] + [r for r, _ in pages if r not in
                     ("/index.html", "/404.html", "/checkout.html", "/checkout/success.html",
                      ORDERS_HREF)]
-    urls = [u.replace("/index.html", "/") for u in urls]
+    # Clean-URL form, matching the canonical each page advertises — the sitemap
+    # must list the URL Google will index, not the .html that redirects to it.
+    urls = [_canon(u) for u in urls]
     sm = "".join("  <url><loc>%s%s</loc></url>\n" % (D.SITE, u) for u in sorted(set(urls)))
     write("/sitemap.xml",
           '<?xml version="1.0" encoding="UTF-8"?>\n'
