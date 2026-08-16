@@ -72,6 +72,7 @@ import oauth      # noqa: E402  — social sign-in (Google/Discord), also used b
 import ops        # noqa: E402  — gated dashboard API (also used by /api)
 import payments   # noqa: E402  — shared Stripe/pricing logic (also used by /api)
 import support    # noqa: E402  — /api/support, the contact form (also used by /api)
+import apply      # noqa: E402  — /api/apply, the become-a-booster form (also used by /api)
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -152,6 +153,19 @@ class Handler(SimpleHTTPRequestHandler):
             # answers an empty 204; an unconfigured mailbox answers 503 and the
             # page falls back to its preview confirmation.
             status, payload = support.process_ticket(self._read_body(), self.headers.get)
+            if payload is None:
+                self.send_response(status)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            return self._json(status, payload)
+        if route == "/api/apply":
+            # Public, like /api/support: the become-a-booster form is on a public
+            # page. Stores nothing — the application is composed and mailed to the
+            # support mailbox (see apply.py). A bad body answers an empty 204; an
+            # unconfigured mailbox answers 503 and the page falls back to its
+            # preview confirmation.
+            status, payload = apply.process_application(self._read_body(), self.headers.get)
             if payload is None:
                 self.send_response(status)
                 self.send_header("Content-Length", "0")

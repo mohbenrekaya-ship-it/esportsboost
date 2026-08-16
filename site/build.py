@@ -8023,31 +8023,48 @@ def page_become_booster():
         <div class="stat"><b>5 games</b><span>Live trial before onboarding</span></div>
       </div>
     </div>
-    <form class="card" data-apply>
+    <form class="card" data-apply novalidate>
       <div class="field">
         <label for="b-handle">In-game name</label>
-        <input class="input" id="b-handle" required placeholder="Name #TAG">
+        <input class="input" id="b-handle" required placeholder="Name #TAG" data-ap-handle
+          autocomplete="off">
       </div>
       <div class="two-up">
         <div class="field">
           <label for="b-game">Game</label>
-          <select class="input" id="b-game">{opts}</select>
+          <select class="input" id="b-game" data-ap-game>{opts}</select>
         </div>
         <div class="field">
           <label for="b-rank">Peak rank</label>
-          <input class="input" id="b-rank" required placeholder="Challenger 1042 LP">
+          <input class="input" id="b-rank" required placeholder="Challenger 1042 LP" data-ap-rank
+            autocomplete="off">
         </div>
       </div>
       <div class="field">
         <label for="b-contact">Discord</label>
-        <input class="input" id="b-contact" required placeholder="username">
+        <input class="input" id="b-contact" required placeholder="username" data-ap-contact
+          autocomplete="off">
       </div>
       <div class="field">
         <label for="b-op">Anything else</label>
-        <textarea class="input" id="b-op" placeholder="Hours you can play, roles, other accounts…"></textarea>
+        <textarea class="input" id="b-op" placeholder="Hours you can play, roles, other accounts…" data-ap-op></textarea>
       </div>
-      <button class="btn btn-primary btn-block" type="submit">Apply</button>
-      <p class="fine" data-apply-note>Local preview — this form doesn't send anything.</p>
+      <!-- Honeypot. /api/apply is a public endpoint pointing at our own inbox, so
+           a bot that fills every field is answered as a success and dropped. -->
+      <div class="sp-hp" aria-hidden="true">
+        <label for="b-company">Company</label>
+        <input id="b-company" type="text" name="company" tabindex="-1" autocomplete="off" data-ap-hp>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit" data-ap-send>
+        <span data-ap-send-idle>Apply</span><span data-ap-send-busy hidden>Sending…</span></button>
+      <p class="fine" data-apply-note>We reply on Discord. We never share your details or pass your account to anyone.</p>
+      <!-- Four outcomes, all shipped in the DOM and toggled (never written): a
+           client-side validation miss, and the server's three (sent / no mailbox
+           on this deploy / send failed). Mirrors the support form. -->
+      <p class="fine ap-result" data-ap-error hidden><b>Almost — one more thing.</b> Add your in-game name, peak rank, and a Discord we can reach you on.</p>
+      <p class="fine ap-result" data-ap-sent hidden><b>Application received.</b> We'll message you on Discord — keep an eye out.</p>
+      <p class="fine ap-result" data-ap-preview hidden><b>Noted — this is a preview.</b> Nothing was emailed: this build has no mailbox configured. Send your application to <b>{SUPPORT_EMAIL}</b> and it reaches the same people.</p>
+      <p class="fine ap-result" data-ap-failed hidden><b>That didn't send.</b> Rather than lose it, email <b>{SUPPORT_EMAIL}</b> with your rank and Discord.</p>
     </form>
   </div>
 </section>
@@ -8062,11 +8079,94 @@ def page_become_booster():
 </section>
 """
     js = """<script>
-document.querySelector('[data-apply]').addEventListener('submit', function (e) {
-  e.preventDefault();
-  document.querySelector('[data-apply-note]').textContent = 'Local preview — nothing was sent.';
-  window.esbTrack('generate_lead', { method: 'booster_application' });
-});
+// The become-a-booster application. POST /api/apply composes the application
+// server-side and mails it to the support inbox (see apply.py). The client
+// validates first so an obvious miss never costs a round trip; the server
+// validates again because a browser check is not a check. Three server
+// outcomes, three confirmations: sent (200), "no mailbox on this deploy"
+// (503 — the static preview and any deploy without SMTP), and "it didn't go"
+// (429/502/anything else), which names the address instead of swallowing it.
+(function () {
+  var form = document.querySelector('[data-apply]');
+  if (!form) return;
+  var handle = form.querySelector('[data-ap-handle]');
+  var game = form.querySelector('[data-ap-game]');
+  var rank = form.querySelector('[data-ap-rank]');
+  var contact = form.querySelector('[data-ap-contact]');
+  var op = form.querySelector('[data-ap-op]');
+  var hp = form.querySelector('[data-ap-hp]');
+  var send = form.querySelector('[data-ap-send]');
+  var idle = form.querySelector('[data-ap-send-idle]');
+  var busyT = form.querySelector('[data-ap-send-busy]');
+  var note = form.querySelector('[data-apply-note]');
+  var rErr = form.querySelector('[data-ap-error]');
+  var rSent = form.querySelector('[data-ap-sent]');
+  var rPrev = form.querySelector('[data-ap-preview]');
+  var rFail = form.querySelector('[data-ap-failed]');
+  var busy = false;
+
+  // One slot, five states. All ship in the DOM and are toggled here, never
+  // written — i18n matches whole text nodes, so a sentence assembled in JS
+  // would arrive untranslated. Showing any result hides the idle helper.
+  function results(which) {
+    [rErr, rSent, rPrev, rFail].forEach(function (n) { if (n) n.hidden = n !== which; });
+    if (note) note.hidden = !!which;
+  }
+  function setBusy(on) {
+    busy = on;
+    if (send) send.disabled = on;
+    if (idle) idle.hidden = on;
+    if (busyT) busyT.hidden = !on;
+  }
+  [handle, rank, contact].forEach(function (el) {
+    if (el) el.addEventListener('input', function () { if (rErr && !rErr.hidden) results(null); });
+  });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (busy) return;
+    var h = ((handle && handle.value) || '').trim();
+    var rk = ((rank && rank.value) || '').trim();
+    var c = ((contact && contact.value) || '').trim();
+    if (!h || !rk || c.length < 2) {
+      results(rErr);
+      (!h ? handle : !rk ? rank : contact).focus();
+      return;
+    }
+    results(null);
+    setBusy(true);
+    var payload = {
+      handle: h, rank: rk, contact: c,
+      game: game ? game.selectedIndex : 0,
+      op: ((op && op.value) || '').trim(),
+      hp: hp ? hp.value : '',
+      tz: (function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; }
+                         catch (err) { return ''; } })(),
+      lang: (window.ESB_LOCALE && window.ESB_LOCALE.lang) || 'en'
+    };
+    fetch('/api/apply', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; })
+              .then(function (j) { return { status: r.status, data: j }; });
+    }).then(function (res) {
+      setBusy(false);
+      if (res.status === 200 && res.data.sent) {
+        results(rSent);
+        form.reset();
+        if (window.esbTrack) window.esbTrack('generate_lead', { method: 'booster_application' });
+        return;
+      }
+      if (res.status === 503) {
+        results(rPrev);
+        if (window.esbTrack) window.esbTrack('generate_lead', { method: 'booster_application_preview' });
+        return;
+      }
+      results(rFail);
+    }).catch(function () { setBusy(false); results(rFail); });
+  });
+})();
 </script>
 """
     return layout("/become-a-booster.html", "Become a booster — %s" % D.BRAND,
