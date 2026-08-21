@@ -2693,7 +2693,7 @@
     var intro = document.createElement("div");
     intro.className = "banner";
     intro.innerHTML = '<span class="ico">✉</span><div><strong>Mystery discount — the configurator’s ' +
-      "email capture.</strong> Four seconds after a visitor settles their target rank, the game page offers a " +
+      "email capture.</strong> Eight seconds after a visitor settles their target rank, the game page offers a " +
       "sealed card; the address buys the right to open it. <b>Every card pays " + pct + "%</b> — the pick is " +
       "theatre and the copy never claims odds. One card per inbox ever, live for " + num(a.ttl_mins) +
       " minutes, single-use, and it replaces the sitewide sale rather than stacking with it. " +
@@ -2806,7 +2806,7 @@
     if (!recent.length) {
       el.insertAdjacentHTML("beforeend",
         '<p class="empty">No cards opened in this period. They appear once a visitor sets a target rank on a ' +
-        "game page, waits four seconds and gives the modal an address.</p>");
+        "game page, waits eight seconds and gives the modal an address.</p>");
       f.appendChild(el);
       return f;
     }

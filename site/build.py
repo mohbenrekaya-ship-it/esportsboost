@@ -5757,7 +5757,7 @@ def gp_close():
 # ══════════════════════════════════════════════════════════════════════════
 #  The mystery discount — design_handoff_mystery_discount
 # ══════════════════════════════════════════════════════════════════════════
-# A modal sequence that fires on a game page four seconds after the visitor's
+# A modal sequence that fires on a game page eight seconds after the visitor's
 # target-rank selection settles. It offers a sealed "mystery discount", takes an
 # email in exchange for opening it, reveals a 30% code and hands the buyer back
 # to their order with the discount already applied.

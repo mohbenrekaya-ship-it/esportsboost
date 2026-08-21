@@ -3816,7 +3816,7 @@
   }
 
   /* ── the mystery discount — design_handoff_mystery_discount ─────────────
-     Four seconds after the visitor settles their TARGET rank on a game page, a
+     Eight seconds after the visitor settles their TARGET rank on a game page, a
      sealed card is offered; an email buys the right to open it; the reveal
      shows a 30% code and applying it hands them back to their order with the
      total already discounted.
@@ -3852,7 +3852,12 @@
        the moment somebody increases their order is the worst possible time. */
   var MYD_KEY = "esb.bingo.v1";
   var MYD_SETTLE = 800;        // handoff: settled means settled, before any timer
-  var MYD_DELAY = 4000;        // the business's own figure — 4s after the settle
+  /* The business's own figure, measured from the visitor's LAST rank input —
+     "8 seconds after choosing the desired rank", literally. The settle window
+     sits INSIDE it rather than being added to it, so this constant is the
+     number that was asked for and not 800ms more than it; change it here and
+     nowhere else. */
+  var MYD_AFTER_PICK = 8000;
   var MYD_OPENING = 1400;      // the "drawing your code" beat
   var MYD_RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
   // Every control that moves a rank. `to`/`toTier` are the TARGET — "after
@@ -3952,7 +3957,7 @@
     }
 
     /* Whether this order already carries a discount of its own. Re-checked at
-       fire time, not just at boot: a bundle can be applied in the four seconds
+       fire time, not just at boot: a bundle can be applied in the eight seconds
        between the settle and the modal. */
     function hasOffer() {
       var s = window.esbState ? window.esbState() : {};
@@ -4103,7 +4108,7 @@
           // finished, and the next rank touch re-arms the whole sequence.
           if (!q || q.invalid || !q.total) return;
           open();
-        }, MYD_DELAY);
+        }, Math.max(0, MYD_AFTER_PICK - MYD_SETTLE));
       }, MYD_SETTLE);
     }
 

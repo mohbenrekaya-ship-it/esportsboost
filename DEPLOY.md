@@ -336,7 +336,7 @@ Notes worth keeping in mind:
 
 ## Turn on the mystery discount (the configurator's email capture)
 
-Four seconds after a visitor settles their **target rank** on a game page, a modal
+Eight seconds after a visitor settles their **target rank** on a game page, a modal
 offers a sealed "mystery discount". An email buys the right to open it; the reveal
 shows a 30% code, live for one hour and single-use, and applying it returns them to
 their order with the total already discounted. Every card opened, and how many were

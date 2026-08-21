@@ -9,7 +9,7 @@ analytics' Upstash *transport*.
 
 Why it exists (design_handoff_mystery_discount): the configurator proves intent —
 somebody who set two ranks and read a price is a buyer — but captures nothing if
-they leave. Four seconds after their rank selection settles, the page offers a
+they leave. Eight seconds after their rank selection settles, the page offers a
 sealed "mystery discount"; the address buys the right to open it.
 
 **Every card pays the same 30%.** The pick is theatre, and the copy is written so

@@ -2088,7 +2088,7 @@ checkout email typed ─┴─► POST /api/cart ─► carts store ─┤
 
 ## The mystery discount — `mystery.py` + the modal on every game page
 
-`design_handoff_mystery_discount`. Four seconds after a visitor settles their **target rank** on a
+`design_handoff_mystery_discount`. Eight seconds after a visitor settles their **target rank** on a
 game page, a modal offers a sealed "mystery discount"; an email buys the right to open it; the reveal
 shows a 30% code and applying it hands them back to their order with the total already discounted. It
 exists because the configurator proves intent — somebody who set two ranks and read a price is a
@@ -2159,8 +2159,12 @@ target rank settles ──800ms──► 4s ──► modal ──email──►
   `change`/`click` on the rank controls themselves, so a rehydrated localStorage state, a `?booster=`
   link, a bundle click or a game switch cannot fire it. A **target** control (`data-sel="to"`,
   `toTier`, `[data-subseg="to"]`) has to have been touched at least once — "after choosing his desired
-  rank" — and then ~800ms of no rank input settles it before the 4-second timer starts. `MYD_DELAY` in
-  app.js is that 4 seconds; the handoff drew 3.
+  rank" — and then ~800ms of no rank input has to settle before it can fire. `MYD_AFTER_PICK` in
+  app.js is the whole wait **measured from the last rank input** (8 seconds), with the settle window
+  INSIDE it rather than added to it — so the constant is the figure the business asked for and not
+  800ms more than it. The handoff drew 3s and this build shipped 4 before it was doubled; the number
+  is a business call about how long a visitor is left alone with the price, so change it there and
+  nowhere else.
 - **Once per visitor, and a decline is genuinely free.** The flag is written when the card is *shown*.
   No exit-intent second attempt, no re-fire on the next page; the `passed` card's own reversal link is
   the only way back in. It also never opens over an order that already carries a discount (a typed
@@ -2200,7 +2204,7 @@ target rank settles ──800ms──► 4s ──► modal ──email──►
   visitor's verified address is the obvious second source and goes through the same helper rather
   than growing a second mechanism.
 - **Applying returns to the configurator, not to checkout**, and there is no confirmation screen. The
-  trigger fires four seconds after the rank settles, so queue, server and add-ons may still be unset,
+  trigger fires eight seconds after the rank settles, so queue, server and add-ons may still be unset,
   and a percentage scales with the order — time spent configuring with −30% visible is worth more than
   one saved tap, and the sticky bar keeps checkout one tap away. **If the trigger ever moves to
   exit-intent or onto the checkout button, flip this**: there is nothing left to configure at that
