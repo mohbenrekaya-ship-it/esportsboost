@@ -47,6 +47,23 @@
     catch (e) { return ""; }
   }
 
+  /* The country Vercel's edge resolved from the request IP, handed down by
+     middleware.js as a plain cookie. This is geo.py's FIRST choice — the same
+     `x-vercel-ip-country` the analytics store records — and the only signal here
+     that follows the connection rather than the device, which is what makes it
+     the one a VPN, a roaming SIM or a traveller's laptop gets right.
+
+     Everything below is a fallback for when it is absent, which is every local
+     build, any non-Vercel host, and the fraction of requests the edge cannot
+     place. That is deliberate: this whole block is INERT without the cookie, so
+     the client can ship ahead of the middleware and behave exactly as it did. */
+  function cookieCountry() {
+    try {
+      var m = /(?:^|;\s*)esb_geo=([A-Za-z]{2})(?:\s*;|\s*$)/.exec(document.cookie || "");
+      return m ? m[1].toUpperCase() : "";
+    } catch (e) { return ""; }
+  }
+
   /* `fr-FR` → FR. Only an explicit region subtag counts; a bare `fr` says
      nothing about location. Same rule as geo.py's _from_locale(). */
   function uiRegion() {
@@ -66,6 +83,8 @@
      neither table carries (America/Regina) still lands on the right side of the
      Atlantic. See geo.server_area() for why the choice is binary. */
   function area() {
+    var cc = cookieCountry();
+    if (cc) return NA_COUNTRIES[cc] ? "NA" : "EU";
     var tz = zone();
     if (tz) {
       if (tz.indexOf("America/") === 0) return SA_ZONES[tz] ? "EU" : "NA";
@@ -75,7 +94,7 @@
     return NA_COUNTRIES[uiRegion()] ? "NA" : "EU";
   }
 
-  window.esbGeo = { zone: zone, region: uiRegion, area: area };
+  window.esbGeo = { zone: zone, region: uiRegion, area: area, country: cookieCountry };
 
   /* ── a location implies a currency; failing that, a language does ─────────
      The markets as the business set them (geo.currency_for()): the United
@@ -97,6 +116,13 @@
   function defaultCurrency(lang) {
     var tz = zone(), reg = uiRegion();
     // The order matters, and every step earns its place:
+    //  0. The edge's own answer, when there is one. This branch is the exact
+    //     JS twin of geo.currency_for() — keep the two in step.
+    var cc = cookieCountry();
+    if (cc) {
+      if (REGION_CUR[cc]) return REGION_CUR[cc];
+      return EU_COUNTRIES[cc] ? "EUR" : "USD";
+    }
     //  1. A zone we can place exactly. The only signal that separates Toronto
     //     from New York, or London from Dublin.
     if (tz && ZONE_CUR[tz]) return ZONE_CUR[tz];

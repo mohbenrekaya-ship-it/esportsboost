@@ -307,9 +307,22 @@ can take their order. It is now resolved from where the visitor is.
   costs a real ping — six of the nine ladders list a South America or Brazil server. Changing it is
   one entry in `REGION_CUR`-style resolution (`_region_for` gains an "SA" area); it is a business
   call, not a technical one.
-- **The signal is the browser's IANA timezone**, which is `geo.py`'s *second* choice after the edge
-  header — a static page cannot read the header — and its third, the locale's region subtag, is the
-  fallback when there is no timezone at all. It is a better signal than the locale here: a timezone
+- **The signal is the edge's country when there is one, and the browser's IANA timezone otherwise.**
+  `middleware.js` (Vercel Edge Middleware, the one JS file here that is not a browser asset) copies
+  `x-vercel-ip-country` — the same header `geo.py` and the /ops dashboard already use — into an
+  `esb_geo` cookie, which i18n.js reads synchronously at parse time. That is the only signal that
+  follows the **connection** rather than the device, so it is the one a VPN, a roaming SIM or a
+  traveller's laptop gets right: before it existed, /ops correctly reported a visitor as US while the
+  storefront quoted them euros off their Paris system clock. **The whole cookie path is inert when
+  the cookie is absent** — every local build, any non-Vercel host — and the timezone fallback below
+  takes over unchanged, which is what lets the client ship ahead of the middleware.
+  `serve.py` sets the same cookie locally from the header, or from a **`?geo=XX` dev override**, so
+  "does a US visitor see dollars" is answerable on localhost instead of behind a VPN.
+  ⚠ **`middleware.js` fronts every document request.** It must return `x-middleware-next: 1` or every
+  matched URL serves an empty 200, and it must never throw. Both are asserted by
+  `test_server_defaults()`; deploy it to a **preview** and click through before promoting.
+- **The timezone is the fallback**, `geo.py`'s *second* choice after the edge header, and its third,
+  the locale's region subtag, is the fallback when there is no timezone at all. It is a better signal than the locale here: a timezone
   says where the machine **is**, where `en-US` on a laptop in Berlin says only what language it is
   in. No request, no permission prompt, no PII. `navigator.geolocation` would need all three for a
   worse answer than a server list needs.
@@ -332,8 +345,15 @@ can take their order. It is now resolved from where the visitor is.
   `test_server_defaults()` asserts every ladder resolves **both** estates: a game added with no
   European server would fall through to `list[0]`, which is a North America variant on all nine, and
   every European visitor would silently land back on NA.
-- **It is a default, never an override.** A stored region the visitor picked is kept — the geo pick
-  only fills a state that has none. On a game change the **estate carries across** (`areaOf()`):
+- **It is a default, never an override — and `regionPicked` is what tells the two apart.** Only a
+  touch of the Server control sets it; the geo default fills a state that has none. The migration is
+  the same test `curPinned` makes and **not** the obvious one: every state written before the flag
+  existed carries `North America`, because that was the old hardcoded default for every visitor on
+  earth, so a stored North America is *not* evidence of a choice and is re-resolved. Any other region
+  could only have got there by someone picking it, so it is kept and marked. Without this the fix
+  reaches only browsers that have never seen the site. ⚠ Read the **raw parsed record** for that
+  test, never the merged one — `Object.assign({}, DEFAULT, stored)` supplies a value for every field,
+  so the merged object can never answer "did the stored state carry this key?". On a game change the **estate carries across** (`areaOf()`):
   someone on "Europe West" moving to a ladder that calls it "Europe" has not asked to be moved to
   America, and `list[0]` — the old fallback — would have done exactly that. A server that is neither
   estate (Oceania, Korea, Brazil) is kept when the new ladder has it and falls back to the visitor's

@@ -130,7 +130,13 @@
     // load()'s normalization runs. Filled in below rather than written here —
     // it is resolved from the visitor's own timezone, so there is no one name
     // that is right to store in the literal.
-    region: "", addons: [], promo: "",
+    region: "",
+    // Whether the region above is the VISITOR'S pick or just what we resolved
+    // for them. Only a touch of the Server control sets it, and once set the geo
+    // default never moves that endpoint again — the same contract `curPinned`
+    // has for the currency, and for the same reason.
+    regionPicked: false,
+    addons: [], promo: "",
     // Opt-in bundle (index into D.bundles[game]) — a real discount that replaces
     // the sitewide sale on a matching climb. Never auto-set; dropped when the
     // climb stops matching (tier or target change). See bundleDiscount().
@@ -167,7 +173,12 @@
     try {
       var raw = localStorage.getItem(KEY);
       if (!raw) return Object.assign({}, DEFAULT);
-      var s = Object.assign({}, DEFAULT, JSON.parse(raw));
+      // Keep the PARSED record as well as the merged one. Anything that has to
+      // ask "did the stored state actually carry this key?" must read `stored`:
+      // DEFAULT supplies a value for every field, so the merged object can never
+      // answer that question. The regionPicked migration below is exactly that.
+      var stored = JSON.parse(raw);
+      var s = Object.assign({}, DEFAULT, stored);
       if (!D.ladders[s.game]) return Object.assign({}, DEFAULT);
       if (!s.savedAt || (Date.now() - s.savedAt) > STATE_TTL) {
         s.booster = DEFAULT.booster;
@@ -187,6 +198,20 @@
       // fallback quietly sent every European back to America on a game change.
       if ((D.regions[s.game] || []).indexOf(s.region) < 0) {
         s.region = defaultRegion(s.game, s.region);
+      } else if (typeof stored.regionPicked !== "boolean") {
+        // Migration, and it is the same test `curPinned` makes rather than the
+        // obvious one. Every state written before this flag existed carries the
+        // region the OLD code defaulted to — "North America", hardcoded, for
+        // every visitor on earth — so a stored North America is not evidence of
+        // a choice and has to be re-resolved, or the geo default would reach
+        // only browsers that had never seen the site. Any OTHER region could
+        // only have got there by someone picking it, so it stays and is marked.
+        if (areaOf(s.region) === "NA") {
+          s.region = defaultRegion(s.game, "");
+          s.regionPicked = false;
+        } else {
+          s.regionPicked = true;
+        }
       }
       if (s.mode !== "Solo" && s.mode !== "Duo queue") s.mode = "Solo";  // migrate old "Piloted"
       // Drop anything the catalogue no longer sells (the retired stream option)
@@ -1344,7 +1369,7 @@
       var abbr = document.createElement("span");
       abbr.className = "bs-region-abbr"; abbr.textContent = shortMap[r] || r;
       b.appendChild(full); b.appendChild(abbr);
-      b.addEventListener("click", function () { set({ region: r }); });
+      b.addEventListener("click", function () { set({ region: r, regionPicked: true }); });
       root.appendChild(b);
     });
   }
@@ -1486,7 +1511,7 @@
         else if (k === "to") set({ to: el.value }, "add_to_cart");
         else if (k === "fromTier") setTier("from", el.value);
         else if (k === "toTier") setTier("to", el.value);
-        else if (k === "region") set({ region: el.value });
+        else if (k === "region") set({ region: el.value, regionPicked: true });
       });
     });
 

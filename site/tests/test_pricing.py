@@ -514,7 +514,46 @@ def test_server_defaults():
     check("GB" in geo.EU_COUNTRIES and geo.currency_for("GB") == "GBP",
           "GB is European but still quotes in GBP")
 
-    # 5. The client payload is DERIVED from geo.py, so it has to still match it.
+    # 5. The country cookie is named in THREE files and they must agree: the
+    #    edge middleware that sets it in production, serve.py's local stand-in,
+    #    and the i18n.js reader. A rename in one is silent — the client simply
+    #    falls back to the timezone and nobody sees an error, which is exactly
+    #    the VPN-shows-euros symptom this whole mechanism was added to fix.
+    COOKIE = "esb_geo"
+    root = os.path.dirname(ROOT)
+    sources = {
+        "middleware.js": os.path.join(root, "middleware.js"),
+        "serve.py": os.path.join(ROOT, "serve.py"),
+        "i18n.js": os.path.join(ROOT, "public", "assets", "js", "i18n.js"),
+    }
+    for name, path in sources.items():
+        if not os.path.exists(path):
+            check(False, "%s exists" % name)
+            continue
+        check(COOKIE in open(path, encoding="utf-8").read(),
+              "%s names the %s cookie" % (name, COOKIE))
+
+    mw = sources["middleware.js"]
+    if os.path.exists(mw):
+        txt = open(mw, encoding="utf-8").read()
+        # Continuing the request is the one thing that must never be dropped:
+        # without this header every matched URL returns an empty 200.
+        check("x-middleware-next" in txt,
+              "middleware.js continues the request (x-middleware-next)")
+        # The API reads the edge header directly and assets are CDN bytes.
+        check("api/" in txt and "assets/" in txt,
+              "middleware.js matcher excludes /api/ and /assets/")
+        # Scope this to the cookie STRING, not the file — the comment above it
+        # explains why HttpOnly is absent, and naming a thing is not doing it.
+        setc = re.search(r"esb_geo=\$\{[^`\n]*", txt)
+        check(bool(setc), "middleware.js builds an esb_geo Set-Cookie value")
+        if setc:
+            check("HttpOnly" not in setc.group(0),
+                  "the cookie is readable by i18n.js (not HttpOnly)")
+            check("SameSite=Lax" in setc.group(0),
+                  "the cookie is SameSite=Lax")
+
+    # 6. The client payload is DERIVED from geo.py, so it has to still match it.
     cd = _client_data()
     if cd is None:
         check(False, "data.js present (run build.py first)")

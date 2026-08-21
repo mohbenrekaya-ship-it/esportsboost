@@ -112,8 +112,34 @@ class Handler(SimpleHTTPRequestHandler):
             return
         super().send_error(code, message, explain)
 
+    def _geo_cookie(self):
+        """The local stand-in for middleware.js, which only exists on Vercel.
+
+        Same cookie, same name, same shape, so i18n.js's `cookieCountry()` is
+        exercised for real in dev rather than only in production. Two sources:
+        the edge header when something upstream sets it, and — because nothing
+        does locally — a `?geo=XX` override that pins a country for the rest of
+        the session. That override is what makes "does a US visitor see dollars"
+        a thing you can answer on localhost instead of behind a VPN.
+
+        Dev-only by construction: production serves static files and
+        `api/*.py` through Vercel, and never runs this file."""
+        try:
+            cc = (self.headers.get("x-vercel-ip-country") or "").strip().upper()
+            if not (len(cc) == 2 and cc.isalpha()):
+                q = urllib.parse.urlparse(self.path or "").query
+                cc = (urllib.parse.parse_qs(q).get("geo", [""])[0] or "").strip().upper()
+            if len(cc) == 2 and cc.isalpha():
+                return "esb_geo=%s; Path=/; Max-Age=86400; SameSite=Lax" % cc
+        except Exception:
+            pass
+        return ""
+
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
+        cookie = self._geo_cookie()
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
         super().end_headers()
 
     def log_message(self, fmt, *args):
