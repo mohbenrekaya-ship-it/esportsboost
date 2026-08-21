@@ -4,10 +4,12 @@
    from the same computation, so that page's calculator, sticky bar and CTA
    band can never disagree.
 
-   Each configurator context keeps its OWN order, so independent calculators
-   don't mirror each other: the homepage price calculator and a game page's
-   wizard are separate configurations. Whichever one you "Continue" from is
-   snapshotted into CHECKOUT_KEY, which the checkout page reads.
+   The order the visitor is building is kept ONE PER GAME and shared by every
+   surface that configures that game: the homepage band and that game's own
+   page read and write the same record, so a climb set in one is still there in
+   the other, and still there after a trip to /support.html, a sign-in, or a
+   visit tomorrow. Whichever configurator you "Continue" from is snapshotted
+   into CHECKOUT_KEY, which the checkout page reads.
    ───────────────────────────────────────────────────────────────────────── */
 (function () {
   "use strict";
@@ -18,18 +20,40 @@
   // when the customer clicks Continue (see the [data-continue] handler).
   var CHECKOUT_KEY = "esb.order.v1";
 
-  // Working key for THIS page's configurator. Distinct per context so the
-  // homepage calculator and each game-page wizard remember their own picks
-  // independently. Pages with no configurator (checkout, success) read the
-  // committed snapshot instead.
-  function orderKey() {
-    var cfg = document.querySelector("[data-configurator]");
-    if (!cfg) return CHECKOUT_KEY;
-    var g = cfg.getAttribute("data-game");
-    if (g) return "esb.order.g." + ((D.slugs && D.slugs[g]) || g);
-    return "esb.order.home.v1";
+  // The game the visitor last configured, on ANY surface. It is what lets a
+  // configurator with no game of its own — the homepage band — reopen on the
+  // ladder they were last looking at rather than on the catalogue's first
+  // title, and it is the only thing that has to be remembered site-wide.
+  var LAST_KEY = "esb.order.last.v1";
+
+  // This page's configurator and the game it is pinned to, read once: the
+  // scripts sit at the foot of the body, so the DOM is already parsed.
+  var CFG = document.querySelector("[data-configurator]");
+  var PINNED = (CFG && CFG.getAttribute("data-game")) || "";
+
+  // The closing band on a page that owns no configurator (reviews, guarantee,
+  // /games/, the roster, legal). It ships the catalogue-floor fallback visible
+  // and a read-back of the visitor's own order hidden, and this is the marker
+  // that says so — a page carrying one resolves the saved order like a
+  // configurator page rather than reading the checkout snapshot.
+  var FCB = document.querySelector("[data-fc-readback]");
+
+  /* ONE record per GAME, shared by every surface that configures that game.
+     The homepage band and that game's page write the same key, so a climb set
+     in the band is still set when the visitor follows it to the page it was
+     for — and the other way round. It used to be one order per *context*
+     ("esb.order.home.v1" beside "esb.order.g.<slug>"), which meant the two
+     calculators for the same ladder each remembered a different climb and
+     whichever one you landed on next contradicted the one you had just left.
+
+     Per GAME rather than one order for the whole site, because the ranks are
+     the one thing that cannot be shared: nine ladders name their rungs
+     differently and "Gold II" is not a rung of CS2's. Everything that is not
+     about a particular ladder follows the visitor across games instead — see
+     SHARED below. */
+  function keyFor(game) {
+    return "esb.order.g." + ((D.slugs && D.slugs[game]) || game);
   }
-  var KEY = orderKey();
 
   /* ── money ───────────────────────────────────────────────────────────── */
   var fmt0 = new Intl.NumberFormat("en-US", {
@@ -169,16 +193,88 @@
      the two attached commitments expire. */
   var STATE_TTL = 36 * 3600 * 1000;      // 36h — over a night, not over a month
 
-  function load() {
+  /* The fields that are NOT about a particular ladder. They follow the visitor
+     from game to game: somebody who has just said Duo queue, Europe West and
+     "watch me play" has not asked to be put back on Solo and North America by
+     tapping a different title. Everything else — from/to, the bundle, the
+     named booster — belongs to the game it was chosen on and stays there. */
+  var SHARED = ["service", "mode", "region", "regionPicked", "addons", "promo",
+                "wins", "placements", "unranked",
+                "coach", "pack", "focus", "slot"];
+
+  function readRecord(key) {
+    try { return JSON.parse(localStorage.getItem(key) || "null"); }
+    catch (e) { return null; }
+  }
+
+  // The last game configured anywhere, validated — a stored name the catalogue
+  // no longer sells must not decide what a page opens on.
+  function lastGame() {
     try {
-      var raw = localStorage.getItem(KEY);
-      if (!raw) return Object.assign({}, DEFAULT);
+      var g = localStorage.getItem(LAST_KEY) || "";
+      return D.ladders[g] ? g : "";
+    } catch (e) { return ""; }
+  }
+
+  /* What THIS page's configurator can actually represent, read off the DOM
+     rather than written down — the same contract every other control here is
+     wired through. The band draws four game tabs and no service tabs; a game
+     page draws one game and three or four services. A stored order naming
+     something the page cannot draw is CLAMPED, never dropped: losing the ranks
+     is the thing the shared record exists to stop. */
+  function pageGames() {
+    if (PINNED) return [PINNED];
+    var out = [];
+    each("[data-game-tag]", function (el) {
+      var g = el.getAttribute("data-game-tag");
+      if (g && out.indexOf(g) < 0) out.push(g);
+    });
+    each("[data-sel='game'] option", function (el) {
+      if (out.indexOf(el.value) < 0) out.push(el.value);
+    });
+    return out;
+  }
+  /* The most recently configured game this page can actually draw. The band
+     carries four of the nine titles, so a visitor whose last order was on Apex
+     cannot be shown it here — but the catalogue's first title over a climb they
+     never set reads as "it forgot my order", where the last climb they set on a
+     game the band DOES carry is still theirs. Their Apex record is untouched
+     and comes back on the Apex page. */
+  function recentOffered(list) {
+    var best = "", at = -1;
+    list.forEach(function (g) {
+      var r = readRecord(keyFor(g));
+      if (r && (r.savedAt || 0) > at) { at = r.savedAt || 0; best = g; }
+    });
+    return best;
+  }
+
+  function pageServices() {
+    var out = [];
+    each("[role=tab][data-service]", function (el) {
+      out.push(el.getAttribute("data-service"));
+    });
+    return out;
+  }
+
+  /* Bring a stored record up to what this page can quote. `game` is the game
+     the record is FILED under (the key is the authority, not the record's own
+     field, which can be a stale schema); "" means the checkout snapshot, which
+     names its own game. */
+  function normalize(stored, game) {
+    try {
       // Keep the PARSED record as well as the merged one. Anything that has to
       // ask "did the stored state actually carry this key?" must read `stored`:
       // DEFAULT supplies a value for every field, so the merged object can never
       // answer that question. The regionPicked migration below is exactly that.
-      var stored = JSON.parse(raw);
+      // Nothing stored at all: a first visit, which must NOT take the
+      // migration below. It marks a resolved region as the visitor's own pick,
+      // and a fresh visitor has not picked anything — doing it here would pin
+      // every new browser's server before it had touched the control.
+      var fresh = !stored;
+      stored = stored || {};
       var s = Object.assign({}, DEFAULT, stored);
+      if (game) s.game = game;
       if (!D.ladders[s.game]) return Object.assign({}, DEFAULT);
       if (!s.savedAt || (Date.now() - s.savedAt) > STATE_TTL) {
         s.booster = DEFAULT.booster;
@@ -198,7 +294,7 @@
       // fallback quietly sent every European back to America on a game change.
       if ((D.regions[s.game] || []).indexOf(s.region) < 0) {
         s.region = defaultRegion(s.game, s.region);
-      } else if (typeof stored.regionPicked !== "boolean") {
+      } else if (!fresh && typeof stored.regionPicked !== "boolean") {
         // Migration, and it is the same test `curPinned` makes rather than the
         // obvious one. Every state written before this flag existed carries the
         // region the OLD code defaulted to — "North America", hardcoded, for
@@ -222,16 +318,101 @@
       // Grid caps at five now; migrate a stored 6–20 from the old stepper.
       s.wins = Math.max(1, Math.min(5, s.wins | 0));
       s.placements = Math.max(1, Math.min(5, s.placements | 0));
+      /* A service this page cannot draw. The band is division-only and carries
+         no service tabs at all, so a "wins" order set on a game page would
+         quote net wins there under two rank panels; and a game with no coaches
+         has no Coaching tab for a booking carried in from one that has. Only
+         ever clamped where there IS a configurator — checkout draws no tabs
+         and must charge the service that was bought. */
+      if (CFG) {
+        var svc = pageServices();
+        if (svc.indexOf(s.service) < 0) s.service = "division";
+      }
       return s;
     } catch (e) { return Object.assign({}, DEFAULT); }
   }
 
+  /* Did `state` come from a stored record at all? A page with no configurator
+     and no committed snapshot is holding DEFAULT, and DEFAULT must never be
+     written over a game record the visitor actually built — which is reachable
+     from a stray ?booster= link on a page that has no order form on it. */
+  var HYDRATED = false;
+
+  function load() {
+    // The pay flow (checkout, success) reads the committed snapshot, exactly as
+    // before: that is the order the buyer pressed Continue on, not whatever was
+    // configured after it. It is the only page with neither a configurator nor
+    // a read-back band, which is what tells the two apart.
+    if (!CFG && !FCB) {
+      var snap = readRecord(CHECKOUT_KEY);
+      HYDRATED = !!snap;
+      return normalize(snap, "");
+    }
+
+    // The game this page opens on: its own if it is pinned to one, else the
+    // one last configured anywhere, else the catalogue's first — clamped to
+    // what the page draws, since the band has four tabs and cannot show a
+    // fifth ladder.
+    var offered = pageGames();
+    var game = PINNED || lastGame() || DEFAULT.game;
+    if (offered.length && offered.indexOf(game) < 0) {
+      game = recentOffered(offered) || offered[0];
+    }
+
+    var rec = readRecord(keyFor(game));
+    HYDRATED = !!rec;                  // a real order for this game, not DEFAULT
+    if (!rec) {
+      // Never configured THIS game. The ranks fall back to the ladder's own
+      // default (they cannot carry — different rungs), but everything that is
+      // not about a ladder does carry, so a queue and a server chosen one
+      // title ago are not silently undone by opening another game's page.
+      var last = lastGame();
+      var prev = last && last !== game ? readRecord(keyFor(last)) : null;
+      if (prev) {
+        rec = {};
+        SHARED.forEach(function (k) {
+          if (prev[k] !== undefined) rec[k] = prev[k];
+        });
+      }
+    }
+    return normalize(rec, game);
+  }
+
+  /* One-time migration off the old per-context key. The band used to keep its
+     own order at "esb.order.home.v1", so a returning visitor's last climb is
+     sitting in there — dropping it on deploy is exactly the loss this change
+     exists to stop. It is filed under the game it names, and only where that
+     game has no record of its own: a game page's order is the more considered
+     of the two, and it is the one whose page quoted a price. */
+  function migrateLegacy() {
+    try {
+      var rec = readRecord("esb.order.home.v1");
+      if (!rec) return;
+      var g = rec.game;
+      if (g && D.ladders[g] && !readRecord(keyFor(g))) {
+        localStorage.setItem(keyFor(g), JSON.stringify(rec));
+        if (!localStorage.getItem(LAST_KEY)) localStorage.setItem(LAST_KEY, g);
+      }
+      localStorage.removeItem("esb.order.home.v1");
+    } catch (e) {}
+  }
+
+  migrateLegacy();
   var state = load();
 
   function save() {
     try {
       state.savedAt = Date.now();          // stamps the TTL load() reads
-      localStorage.setItem(KEY, JSON.stringify(state));
+      // The game's own record — what every surface that configures this game
+      // reads — plus the pointer telling a game-less configurator which ladder
+      // to reopen on.
+      if (CFG || HYDRATED) {
+        localStorage.setItem(keyFor(state.game), JSON.stringify(state));
+        localStorage.setItem(LAST_KEY, state.game);
+      }
+      // On checkout there is no configurator and `state` IS the committed
+      // snapshot, so that is the record an edit there has to write back.
+      if (!CFG) localStorage.setItem(CHECKOUT_KEY, JSON.stringify(state));
     } catch (e) {}
     captureCart();
   }
@@ -389,10 +570,30 @@
     return total;
   }
 
+  /* Whether an add-on is free BUT still the buyer's choice. `was_pct` is the
+     only thing separating a row that renders as an empty checkbox from an
+     inclusion that renders ticked and disabled — both have pct === 0 and
+     neither is ever charged. Mirrors data.py `addon_is_free_opt()`. */
+  function isFreeOpt(a) {
+    return !!a && !a.pct && !!a.was_pct;
+  }
+
+  /* What a free-but-optional add-on WOULD cost if it were priced like the paid
+     ones — the struck figure beside its "Free", and nothing else. Deliberately
+     the SAME arithmetic addonTotal() charges with, was_pct in place of pct and
+     the same $1 floor, off the same addonBase (so a bundle order strikes 50% of
+     the bundle's flat price, not of the list climb it is discounted from).
+     Mirrors pricing.py `addon_list_price()` — change one, change the other. */
+  function addonListPrice(addonBase, id) {
+    var a = addonById(id), pct = a && a.was_pct;
+    if (!pct || !addonBase) return 0;
+    return Math.max(1, Math.round(addonBase * pct));
+  }
+
   /* Pick the one discount that applies. Mirrors resolve_promo() in
      ../../../src/pricing.py — the auto promo applies with nothing typed, a
      typed code replaces it only when worth more, and discounts never stack. */
-  function resolvePromo(code) {
+  function resolvePromo(code, s) {
     var promos = D.promos || {}, bestCode = null, best = null;
     for (var k in promos) { if (promos[k].auto) { bestCode = k; best = promos[k]; break; } }
     if (code) {
@@ -401,18 +602,29 @@
         bestCode = String(code).trim().toUpperCase(); best = typed;
       }
     }
-    /* The abandoned-cart recovery offer. Deliberately NOT in D.promos: that
-       table ships to every browser in data.js, so a static recovery code would
-       be public the day it shipped. window.ESB_RECOVERY is set only after the
-       server has validated a token the buyer arrived with (GET /api/cart), and
-       it exists here purely so this quote matches what the server will charge —
+    /* The two SERVER-RESOLVED offers: the abandoned-cart recovery code and the
+       mystery discount. Neither is in D.promos and neither ever can be — that
+       table ships to every browser in data.js, so a static code would be public
+       the day it shipped. Each store issues one unguessable single-use token
+       instead; the browser learns the percentage only after the SERVER has
+       validated that token (GET /api/cart, GET /api/bingo), and it exists here
+       purely so this quote matches what the server will charge —
        payments.build_session() refuses a total the page did not show. The
-       percentage is never sent back; only the token is. Same never-stack,
-       best-wins rule as pricing.resolvePromo(). */
-    var rec = window.ESB_RECOVERY;
-    if (rec && rec.pct > 0 && (!best || rec.pct > best.pct)) {
-      bestCode = rec.token || "BACK";
-      best = { pct: rec.pct, label: "Come back offer", ends: "" };
+       percentage is never sent back; only the token is.
+
+       Read off the STATE first, and the globals only as the fallback. That is
+       what lets a hypothetical quote be asked for — "what would this order cost
+       with 30% on it" is the whole of the mystery modal's before/after row —
+       and it is also the rule pricing.py already follows (`quote()` reads
+       `state["recovery_pct"]`, never a module global). Same never-stack,
+       best-wins as pricing.resolve_promo(). */
+    var st = s || {};
+    var offer = st.recoveryPct !== undefined && st.recoveryPct !== null
+      ? { pct: st.recoveryPct, token: st.promo, label: st.offerLabel }
+      : (window.ESB_BINGO || window.ESB_RECOVERY);
+    if (offer && offer.pct > 0 && (!best || offer.pct > best.pct)) {
+      bestCode = offer.token || "BACK";
+      best = { pct: offer.pct, label: offer.label || "Come back offer", ends: "" };
     }
     return { code: bestCode, promo: best };
   }
@@ -586,12 +798,16 @@
     // total (boost + add-ons − discount = total). Mirrors pricing.py. A live
     // bundle replaces the sitewide sale on a matching division climb.
     var r = bpct ? { code: "BUNDLE", promo: { pct: bpct, label: "Bundle", ends: "" } }
-                 : resolvePromo(s.promo);
+                 : resolvePromo(s.promo, s);
     var discount = r.promo ? Math.round(boost * r.promo.pct) : 0;
     var total = subtotal - discount;
 
     return {
       invalid: invalid, total: total, base: Math.round(base), addons: extra,
+      // The number add-ons are a percentage OF — the list boost normally, the
+      // bundle's flat price on a bundle order. Mirrors `addon_base` in
+      // pricing.py; the free-but-optional row strikes a figure off it.
+      addonBase: bpct ? base * (1 - bpct) : base,
       subtotal: subtotal, discount: discount,
       price: usd(total), wasPrice: discount ? usd(subtotal) : "",
       discountPrice: discount ? "−" + usd(discount) : "",
@@ -674,6 +890,14 @@
         saveWith: q.discount
           ? (q.promoCode === "BUNDLE"
               ? T("You save") + " " + usd(q.discount) + " · " + T("bundle price")
+              // A server-issued offer token names ITSELF rather than printing
+              // its own 16 characters into a sentence — same treatment BUNDLE
+              // gets, and for the same reason: the string is an internal
+              // identifier, not something a shopper reads. The real code still
+              // shows where it is useful (the modal's copy chip, the email, and
+              // checkout's own discount row, which is a receipt).
+              : /^(BINGO|BACK)-/.test(q.promoCode || "")
+                ? T("You save") + " " + usd(q.discount) + " · " + T(q.promoLabel)
               : T("You save") + " " + usd(q.discount)
                 + (q.promoCode ? " " + T("with") + " " + q.promoCode : ""))
           : "",
@@ -1054,8 +1278,13 @@
       var a = addonById(id);
       // A zero-cost add-on is always on, and is never carried in state.addons —
       // it has to render ticked or "Included" sits next to an empty box and
-      // reads as the opposite of what it says.
-      el.checked = (a && a.pct === 0) || (state.addons || []).indexOf(id) >= 0;
+      // reads as the opposite of what it says. The ONE exception is the
+      // free-but-optional row (`was_pct`, see data.py): it costs nothing but is
+      // still a choice, so it is driven by state like any paid option and opens
+      // UNTICKED. Forcing it on would both misreport what the buyer asked for
+      // and put a permanent tick beside a struck price.
+      el.checked = (a && a.pct === 0 && !isFreeOpt(a))
+                || (state.addons || []).indexOf(id) >= 0;
     });
 
     /* The mode-conditional pair, and the per-game name of the picks add-on.
@@ -1105,6 +1334,25 @@
     // below the current rank). Its text is the whole translatable node
     // "Target must sit above your current rank".
     each("[data-when-invalid]", function (el) { el.hidden = !q.invalid; });
+
+    /* The closing band on a page with no configurator of its own. Both states
+       ship in the DOM — the handoff's catalogue-floor fallback and a read-back
+       of the visitor's own order — and this picks one. It is not a fabricated
+       default: it swaps only when there is a REAL stored order behind it, which
+       is also why the server renders the fallback (a static page is cached for
+       everybody and cannot know which it is).
+
+       Coaching is deliberately not read back. It is a booking, not a climb:
+       "Your climb starts at €79" over a card with an empty Climb row describes
+       nothing the visitor bought, and re-quoting their ranks as a boost to fill
+       it would invent a price they were never shown. */
+    if (FCB) {
+      var back = HYDRATED && !q.invalid && state.service !== "coaching";
+      each("[data-fc-when]", function (el) {
+        el.hidden = (el.getAttribute("data-fc-when") === "order") !== back;
+      });
+      FCB.classList.toggle("fc-solo", !back);
+    }
 
     // Money rows that only exist when they carry a number.
     each("[data-when-addons]", function (el) { el.hidden = !q.addons; });
@@ -1169,6 +1417,18 @@
       var off = quote(Object.assign({}, state, { addons: without })).total;
       var on = quote(Object.assign({}, state, { addons: without.concat([id]) })).total;
       el.textContent = q.invalid ? "—" : "+" + usd(on - off);
+    });
+
+    /* The struck reference figure on a free-but-optional row. Quoted off this
+       order's own addonBase by the same formula a real charge would use, so it
+       tracks the climb the way every other number on the card does — a fixed
+       "$40" beside a $12 boost is the thing that makes a struck price read as
+       invented. It is DISPLAY ONLY: nothing here feeds a total, and the row's
+       [data-addon-price] beside it still quotes the real +$0. */
+    each("[data-addon-was]", function (el) {
+      var was = addonListPrice(q.addonBase, el.getAttribute("data-addon-was"));
+      el.textContent = q.invalid || !was ? "" : usd(was);
+      el.hidden = !!q.invalid || !was;
     });
 
     document.dispatchEvent(new CustomEvent("esb:render", { detail: { state: state, quote: q } }));
@@ -1377,15 +1637,21 @@
   /* ── wiring ──────────────────────────────────────────────────────────── */
   /* Switching game resets the climb to a sensible mid-ladder default rather
      than trying to carry ranks across two different ladders. */
+  /* Move the order onto another game. The ranks cannot travel — the ladders
+     name different rungs — so they come from THAT game's own record if the
+     visitor has configured it before, and from its ladder default if they
+     haven't. Everything that is not about a ladder travels with them, because
+     it is what they were just touching (see SHARED).
+
+     Switching used to reset the climb to the ladder default every time, so a
+     visitor comparing two titles in the band lost the first one's climb the
+     moment they looked at the second. */
   function ensureGame(game) {
     if (state.game === game) return;
-    var l = ladderOf(game);
-    state.game = game;
-    state.from = l[0];
-    state.to = l[Math.min(12, l.length - 1)];
-    if ((D.regions[game] || []).indexOf(state.region) < 0) {
-      state.region = defaultRegion(game, state.region);
-    }
+    save();                                   // park the game being left
+    var rec = readRecord(keyFor(game)) || {};
+    SHARED.forEach(function (k) { rec[k] = state[k]; });
+    Object.assign(state, normalize(rec, game));
     save();
   }
 
@@ -1429,9 +1695,39 @@
       msg.setAttribute("data-ok", ok ? "1" : "0");
     }
 
+    /* A server-issued offer token pasted into the box. `data.js` cannot hold
+       these — that is the whole reason they exist — so an unknown code that
+       LOOKS like one gets one server lookup before it is called invalid. The
+       modal already applies the discount for the buyer; this is for the person
+       who closed the tab, found the code in their inbox and typed it in, and
+       without it their own code would be refused by their own checkout. */
+    var TOKEN_RE = /^(BINGO|BACK)-[A-Z0-9]{6,20}$/;
+    function resolveToken(typed) {
+      var path = typed.indexOf("BINGO-") === 0 ? "/api/bingo" : "/api/cart";
+      return fetch(path + "?token=" + encodeURIComponent(typed))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          if (!j || !j.valid) return false;
+          var slot = typed.indexOf("BINGO-") === 0 ? "ESB_BINGO" : "ESB_RECOVERY";
+          window[slot] = { token: j.token, pct: j.pct, label: j.label || "" };
+          return true;
+        }).catch(function () { return false; });
+    }
+
     function submit() {
       var typed = input.value.trim().toUpperCase();
       if (!typed) { set({ promo: "" }); say("", true); return; }
+
+      if (TOKEN_RE.test(typed) && !D.promos[typed] && window.fetch
+          && !(window.ESB_BINGO && window.ESB_BINGO.token === typed)
+          && !(window.ESB_RECOVERY && window.ESB_RECOVERY.token === typed)) {
+        say(T("Checking that code…"), true);
+        resolveToken(typed).then(function (ok) {
+          if (!ok) { set({ promo: "" }); say(T("That code isn't valid. Your price is unchanged."), false); return; }
+          submit();                       // now it resolves like any other code
+        });
+        return;
+      }
 
       var before = quote(state).total;
       set({ promo: typed });
@@ -1702,6 +1998,11 @@
     initReviews();
     initCatalog();
     initGuides();
+    // The mystery discount. `mydBoot()` runs on EVERY page — a token applied on
+    // a game page has to be in the price at checkout too, and checkout has no
+    // modal — while `initMystery()` returns immediately without one.
+    mydBoot();
+    initMystery();
     initScrollHints();
     initStickyBar();
 
@@ -3510,6 +3811,483 @@
     // dynamic strings have to go with it or they stay in the previous language.
     var prev = window.esbRender;
     window.esbRender = function () { if (prev) prev.apply(this, arguments); paint(); };
+
+    paint();
+  }
+
+  /* ── the mystery discount — design_handoff_mystery_discount ─────────────
+     Four seconds after the visitor settles their TARGET rank on a game page, a
+     sealed card is offered; an email buys the right to open it; the reveal
+     shows a 30% code and applying it hands them back to their order with the
+     total already discounted.
+
+     What is load-bearing here, in the order it bites:
+
+     * **The trigger is a real interaction, never a restore.** It is armed only
+       from `change`/`click` events on the rank controls themselves, so a state
+       rehydrated out of localStorage, a `?booster=` deep link, a bundle click
+       or a game switch can never fire it. The handoff's rule is "settled means
+       settled": ~800ms of no rank input, THEN the delay. Anything else is a
+       modal over somebody mid-adjustment.
+     * **It fires once per visitor, not once per configuration.** A modal that
+       comes back when someone nudges a division is the difference between a
+       gift and an ambush. The flag is written the moment the card is shown,
+       before anything can go wrong, and a decline is free — there is no
+       exit-intent second attempt and no re-fire on the next page. The `passed`
+       card's own reversal link is the only way back in, and that is the
+       visitor's choice.
+     * **It never fires over an order that already has a discount** — a typed
+       code, an applied bundle, a recovery token, or a campaign link carrying
+       one. Two offers on one order is how a buyer learns the price is a
+       negotiation.
+     * **The client does not mint or know the discount.** `/api/bingo` issues an
+       opaque single-use token, mails it, and answers with the percentage; every
+       later page re-validates the token before pricing anything with it, which
+       is what makes the one-hour deadline real rather than a countdown in a tab
+       somebody can leave open.
+     * **Applying survives a reload and a re-configure.** The token is what is
+       stored; `window.ESB_BINGO` is re-derived from the server on every load,
+       and `quote()` re-prices against the new total rather than dropping the
+       discount when the buyer extends their climb. Taking a discount away at
+       the moment somebody increases their order is the worst possible time. */
+  var MYD_KEY = "esb.bingo.v1";
+  var MYD_SETTLE = 800;        // handoff: settled means settled, before any timer
+  var MYD_DELAY = 4000;        // the business's own figure — 4s after the settle
+  var MYD_OPENING = 1400;      // the "drawing your code" beat
+  var MYD_RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
+  // Every control that moves a rank. `to`/`toTier` are the TARGET — "after
+  // choosing his desired rank" is the trigger, so one of those has to have been
+  // touched at least once before the timer can start; the others only re-settle
+  // it, because someone still correcting their current rank has not finished.
+  var MYD_TARGET = '[data-sel="to"],[data-sel="toTier"]';
+  var MYD_ANY_RANK = '[data-sel="from"],[data-sel="to"],[data-sel="fromTier"],' +
+    '[data-sel="toTier"],[data-tiergrid] button,[data-subseg] button';
+
+  function mydRead() {
+    try { return JSON.parse(localStorage.getItem(MYD_KEY) || "{}") || {}; }
+    catch (e) { return {}; }
+  }
+  function mydWrite(patch) {
+    var rec = mydRead();
+    Object.assign(rec, patch);
+    try { localStorage.setItem(MYD_KEY, JSON.stringify(rec)); } catch (e) {}
+    return rec;
+  }
+
+  /* Fill an email field the site already knows the address for.
+
+     Marked with `data-prefill-email`, not an id — the wiring in this file is
+     attribute-based throughout, and checkout's `#k-email` would be the only id
+     hook in it. Only ever fills an EMPTY field: a value on screen is something
+     the buyer typed, and overwriting it is worse than asking twice. The `input`
+     event is dispatched deliberately, so checkout's own abandoned-cart capture
+     sees the address the same way it would if it had been typed — without it,
+     a buyer who prefilled and then left would be uncapturable.
+
+     Today there is one source (the mystery modal) and one target (checkout).
+     A signed-in visitor's verified address is the obvious second source; it
+     goes through here rather than growing a second mechanism. */
+  function prefillEmail(addr) {
+    if (!addr) return;
+    each("[data-prefill-email]", function (el) {
+      if (el.value) return;
+      el.value = addr;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  /* Publish a validated offer to the pricing engine. Runs on EVERY page, not
+     just the ones with the modal on them: the discount has to be in the price
+     on checkout too, and checkout has no modal. The token is re-checked against
+     the store each time rather than trusted from localStorage — an expired or
+     already-spent one simply re-prices at the normal sale, which is the correct
+     outcome and never an error the buyer has to read. */
+  function mydBoot() {
+    var rec = mydRead();
+    /* The address they gave the modal, carried to checkout so they are not
+       asked for it twice. Read from the local record rather than waiting on the
+       token resolve below, for two reasons: it is synchronous, so the field is
+       filled before the buyer can start typing over it; and it outlives the
+       code, so someone whose hour lapsed still doesn't re-type their email. */
+    if (rec.mail) prefillEmail(rec.mail);
+    if (!rec.token || !window.fetch) return;
+    fetch("/api/bingo?token=" + encodeURIComponent(rec.token))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || !j.valid) { mydWrite({ token: "", pct: 0, exp: 0 }); return; }
+        window.ESB_BINGO = { token: j.token, pct: j.pct, label: j.label || "Mystery discount" };
+        mydWrite({ pct: j.pct, exp: (j.expires || 0) * 1000 });
+        render();                       // repaint every price at the new total
+      }).catch(function () {});
+  }
+
+  function initMystery() {
+    var root = document.querySelector("[data-myd]");
+    if (!root) return;                  // only the game pages mount it
+
+    var rec = mydRead();
+    // Once per visitor. `seen` is written when the card is shown, `declined`
+    // when they say no; either one closes the door for good, and a live token
+    // means they already have the discount this modal exists to hand out.
+    if (rec.seen || rec.declined || rec.token) return;
+    // A campaign or recovery link carries its own discount — never stack an
+    // offer on top of an offer.
+    if (/[?&](cart|promo)=/.test(location.search)) return;
+
+    var cards = Array.prototype.slice.call(root.querySelectorAll("[data-myd-card]"));
+    var input = root.querySelector("[data-myd-email]");
+    var optin = root.querySelector("[data-myd-optin]");
+    var noteEl = root.querySelector("[data-myd-note]");
+    var openBtn = root.querySelector("[data-myd-open]");
+    var st = { pick: "C", email: "", err: false, sending: false, pct: 0,
+               token: "", secs: 0, mailed: true, opener: null };
+    var settleT = null, fireT = null, openT = null, tick = null;
+    var touchedTarget = false;
+
+    function T2(s) { return window.esbT ? window.esbT(s) : s; }
+    function view() { return root.getAttribute("data-myd-view"); }
+    function isOpen() { return !root.hidden; }
+    function fill(attr, text) {
+      root.querySelectorAll("[data-myd-" + attr + "]").forEach(function (n) { n.textContent = text; });
+    }
+
+    /* Whether this order already carries a discount of its own. Re-checked at
+       fire time, not just at boot: a bundle can be applied in the four seconds
+       between the settle and the modal. */
+    function hasOffer() {
+      var s = window.esbState ? window.esbState() : {};
+      return !!(s.promo || (s.bundle !== null && s.bundle !== undefined)
+                || window.ESB_RECOVERY || window.ESB_BINGO);
+    }
+    /* Never open over another surface. The header's menus, its auth panel and
+       the nav sheet all own the viewport when they are up, and a visitor in one
+       of them is mid-task on something they chose to do. */
+    function busyElsewhere() {
+      var auth = document.querySelector("[data-hd-auth-panel]");
+      var sheet = document.querySelector("[data-hd][data-sheet]");
+      return !!(sheet || (auth && !auth.hidden));
+    }
+
+    function paint() {
+      fill("pick", st.pick);
+      cards.forEach(function (c) {
+        c.setAttribute("aria-pressed", c.getAttribute("data-myd-card") === st.pick ? "true" : "false");
+      });
+      if (input) {
+        if (input.value !== st.email) input.value = st.email;
+        if (st.err) input.setAttribute("data-err", ""); else input.removeAttribute("data-err");
+        if (MYD_RE.test(st.email.trim()) && !st.err) input.setAttribute("data-valid", "");
+        else input.removeAttribute("data-valid");
+      }
+      if (noteEl) {
+        var msg = st.err === "server"
+          ? "That didn't go through. Try again in a moment."
+          : st.err ? "Enter an address we can send the code to."
+          : "The card is opened on the next screen either way.";
+        noteEl.textContent = T2(msg);
+        if (st.err) noteEl.setAttribute("data-err", ""); else noteEl.removeAttribute("data-err");
+      }
+      if (openBtn) openBtn.disabled = !!st.sending;
+    }
+
+    /* The reveal's own figures. Quoted twice off the SAME state — once as it
+       stands and once with the offer applied — rather than doing arithmetic on
+       a displayed string, so the "you save" here and the total the server
+       charges are one computation. */
+    function paintPrices() {
+      var s = window.esbState ? window.esbState() : null;
+      if (!s || !window.esbQuote) return;
+      var now = window.esbQuote(s);
+      var off = window.esbQuote(Object.assign({}, s, {
+        recoveryPct: st.pct, promo: st.token, offerLabel: "Mystery discount"
+      }));
+      if (!now || now.invalid || !off || off.invalid) return;
+      fill("was", now.price);
+      fill("full", now.price);
+      fill("now", off.price);
+      fill("save", usd(Math.max(0, now.total - off.total)));
+    }
+
+    function setView(v) {
+      root.setAttribute("data-myd-view", v);
+      // The attribute is what actually shows the step. `ashfall.css` declares
+      // `[hidden] { display: none !important }` globally, so a step rendered
+      // with `hidden` cannot be revealed by any CSS rule in site.css at any
+      // specificity — the view attribute above is the readable state, this is
+      // the switch.
+      root.querySelectorAll("[data-myd-step]").forEach(function (n) {
+        n.hidden = n.getAttribute("data-myd-step") !== v;
+      });
+      if (v === "reveal") startClock(); else stopClock();
+      /* Where focus lands on each step. The email step gets its field — the
+         whole card is one question. Every other step focuses the CARD, not its
+         first button: the × is the first button in source order, so "the first
+         focusable thing" would put a keyboard user on Dismiss with Enter armed.
+         From the card, Tab reaches the real controls in reading order. */
+      var card = root.querySelector('[data-myd-step="' + v + '"]');
+      if (!card) return;
+      var target = card.querySelector("[data-myd-email]") || card;
+      setTimeout(function () {
+        try { target.focus({ preventScroll: true }); } catch (e) { target.focus(); }
+      }, 0);
+    }
+
+    function open() {
+      if (isOpen()) return;
+      st.opener = document.activeElement;
+      root.hidden = false;
+      document.documentElement.classList.add("myd-open");
+      lockScroll(true);
+      mydWrite({ seen: 1, at: Date.now() });
+      setView("offer");
+      paint();
+      track("view_promotion", {});
+    }
+
+    function close() {
+      if (!isOpen()) return;
+      // Not while the card is being opened. The request in flight ISSUES a code
+      // and mails it; dismissing mid-call would leave the buyer holding a
+      // discount they were never shown, and the response would then start a
+      // countdown on a closed dialog. It is 1.4 seconds — the × is absent from
+      // that step for the same reason.
+      if (st.sending || view() === "opening") return;
+      stopClock();
+      clearTimeout(openT);
+      root.hidden = true;
+      document.documentElement.classList.remove("myd-open");
+      lockScroll(false);
+      // Back to the configurator's summary rather than a trigger button — there
+      // is no trigger here, so returning focus to "where it came from" is only
+      // meaningful when that element is still on the page.
+      var back = (st.opener && document.contains(st.opener)) ? st.opener
+        : document.querySelector("[data-configurator] [data-out='price']");
+      if (back && back.focus) { try { back.focus({ preventScroll: true }); } catch (e) { back.focus(); } }
+      st.opener = null;
+    }
+
+    /* ── the countdown ──────────────────────────────────────────────────
+       Guarded at 59 minutes on the display: initialising at exactly 3600 with
+       an mm:ss format renders "00:00" on the first frame, which reads as
+       already-expired at the emotional peak. That bug shipped once. */
+    function clockText() {
+      var m = Math.floor((st.secs % 3600) / 60), sec = st.secs % 60;
+      var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+      return pad(Math.min(59, m)) + ":" + pad(sec) + " " + T2("left");
+    }
+    function startClock() {
+      stopClock();
+      fill("timer", clockText());
+      tick = setInterval(function () {
+        st.secs = Math.max(0, st.secs - 1);
+        fill("timer", clockText());
+        // An hour that runs out means it: the offer is gone from the page the
+        // same second the server stops honouring it, rather than sitting there
+        // looking live. Anything else teaches buyers to ignore every countdown.
+        if (st.secs <= 0) { stopClock(); window.ESB_BINGO = null; render(); close(); }
+      }, 1000);
+    }
+    function stopClock() { clearInterval(tick); tick = null; }
+
+    /* ── the trigger ────────────────────────────────────────────────────── */
+    function disarm() { clearTimeout(settleT); clearTimeout(fireT); }
+    function arm() {
+      if (isOpen() || mydRead().seen) return;
+      disarm();
+      settleT = setTimeout(function () {
+        fireT = setTimeout(function () {
+          if (isOpen() || mydRead().seen || hasOffer() || busyElsewhere()) return;
+          var s = window.esbState ? window.esbState() : null;
+          var q = s && window.esbQuote ? window.esbQuote(s) : null;
+          // Nothing to discount yet. Not a miss — the visitor simply has not
+          // finished, and the next rank touch re-arms the whole sequence.
+          if (!q || q.invalid || !q.total) return;
+          open();
+        }, MYD_DELAY);
+      }, MYD_SETTLE);
+    }
+
+    function onRankInput(e) {
+      var el = e.target && e.target.closest ? e.target.closest(MYD_ANY_RANK) : null;
+      if (!el) return;
+      if (el.closest && el.closest("[data-myd]")) return;   // never the modal's own controls
+      if (el.matches && el.matches(MYD_TARGET)) touchedTarget = true;
+      if (el.closest && el.closest('[data-tiergrid="to"],[data-subseg="to"]')) touchedTarget = true;
+      if (!touchedTarget) return;
+      arm();
+    }
+    document.addEventListener("change", onRankInput, true);
+    document.addEventListener("click", onRankInput, true);
+
+    /* ── step 1 → 2 ─────────────────────────────────────────────────────── */
+    cards.forEach(function (c) {
+      c.addEventListener("click", function () { st.pick = c.getAttribute("data-myd-card"); paint(); });
+    });
+    root.querySelectorAll("[data-myd-take]").forEach(function (b) {
+      b.addEventListener("click", function () { st.err = false; setView("email"); paint(); });
+    });
+
+    /* ── step 2 → the server ────────────────────────────────────────────
+       Validated on SUBMIT, not on blur — an error on every keystroke is what
+       the handoff asks to avoid — and the button goes inert while it is in
+       flight, because a double tap must not issue two codes. */
+    function submit() {
+      if (st.sending) return;
+      st.email = input ? input.value : "";
+      if (!MYD_RE.test(st.email.trim())) { st.err = true; paint(); return; }
+      st.sending = true; st.err = false; paint();
+      setView("opening");
+
+      var s = window.esbState ? window.esbState() : {};
+      var shown = Date.now();
+      fetch("/api/bingo", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",   // a signed-in visitor's verified address wins
+        body: JSON.stringify({
+          email: st.email.trim(), pick: st.pick,
+          optin: optin && optin.getAttribute("aria-pressed") === "true" ? 1 : 0,
+          game: s.game, service: s.service, from: s.from, to: s.to, mode: s.mode,
+          region: s.region, addons: s.addons || [], wins: s.wins,
+          placements: s.placements, unranked: !!s.unranked,
+          booster: s.booster || "", bundle: s.bundle || "",
+          tz: (Intl.DateTimeFormat().resolvedOptions().timeZone || ""),
+          lang: (navigator.language || "")
+        })
+      }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, body: d }; }); })
+        .then(function (res) {
+          st.sending = false;
+          var j = res.body || {};
+          /* Remember the address for checkout. Stored on any answer the server
+             accepted — including "your card is already spent", where the email
+             is just as valid and the buyer is just as likely to go on and pay.
+             Only a 400 (`reason: "email"`) means it was not an address at all. */
+          if (res.ok && j.reason !== "email") mydWrite({ mail: st.email.trim() });
+          // Hold the opening beat for its full 1.4s even when the server is
+          // faster: the spinner is the anticipation the reveal pays off, and a
+          // reveal that lands in 200ms reads as a page glitch, not a card.
+          var wait = Math.max(0, MYD_OPENING - (Date.now() - shown));
+          clearTimeout(openT);
+          openT = setTimeout(function () {
+            if (!res.ok || !j.ok) {
+              // One card per inbox, ever. Said plainly on the declined card
+              // rather than by minting a second 30%.
+              if (j.reason === "spent") return showSpent();
+              st.err = "server"; setView("email"); paint(); return;
+            }
+            st.pct = j.pct; st.token = j.token;
+            st.secs = Math.max(0, (j.seconds || 0) - 1);
+            st.mailed = !!j.mailed;
+            fill("code", j.token);
+            fill("pct", String(Math.round(j.pct * 100)));
+            var inbox = root.querySelector("[data-myd-inbox]");
+            var nomail = root.querySelector("[data-myd-nomail]");
+            if (inbox) inbox.hidden = !st.mailed;
+            if (nomail) nomail.hidden = st.mailed;
+            paintPrices();
+            setView("reveal");
+            track("generate_lead", { promotion: "mystery_discount" });
+          }, wait);
+        }).catch(function () {
+          st.sending = false;
+          clearTimeout(openT);
+          openT = setTimeout(function () { st.err = "server"; setView("email"); paint(); }, 400);
+        });
+    }
+    if (openBtn) openBtn.addEventListener("click", submit);
+    if (input) {
+      input.addEventListener("input", function () { st.email = input.value; st.err = false; paint(); });
+      input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); submit(); }
+      });
+    }
+    if (optin) optin.addEventListener("click", function () {
+      optin.setAttribute("aria-pressed", optin.getAttribute("aria-pressed") === "true" ? "false" : "true");
+    });
+
+    /* ── step 3 — apply ─────────────────────────────────────────────────
+       Applying closes the modal and returns the buyer to their order with the
+       total already discounted. There is deliberately NO confirmation screen:
+       an extra card after the emotional peak asks them to dismiss the same news
+       twice, and the discounted total in the configurator's own summary is
+       better proof than a modal saying so. It goes back to the configurator
+       rather than to checkout because queue, server and add-ons may still be
+       unset, and a percentage scales with the order — time spent configuring
+       with −30% visible is worth more than one saved tap. */
+    root.querySelectorAll("[data-myd-apply]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        if (!st.token) return;
+        window.ESB_BINGO = { token: st.token, pct: st.pct, label: "Mystery discount" };
+        mydWrite({ token: st.token, pct: st.pct, exp: Date.now() + st.secs * 1000, applied: 1 });
+        render();
+        track("select_promotion", { promotion: "mystery_discount" });
+        try {
+          fetch("/api/bingo", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "apply", token: st.token }), keepalive: true
+          }).catch(function () {});
+        } catch (e) {}
+        close();
+      });
+    });
+
+    /* ── declining, and the one way back in ─────────────────────────────── */
+    function showPassed(reason) {
+      mydWrite({ declined: 1 });
+      root.querySelectorAll("[data-myd-passed-h],[data-myd-passed-p]").forEach(function (n) { n.hidden = reason === "spent"; });
+      root.querySelectorAll("[data-myd-spent-h],[data-myd-spent-p]").forEach(function (n) { n.hidden = reason !== "spent"; });
+      // The reversal is only offered where there is something to reverse. An
+      // inbox that has spent its card cannot pick another one, and a link that
+      // walks back to a dead end is worse than no link.
+      var undo = root.querySelector("[data-myd-undo]");
+      if (undo) undo.hidden = reason === "spent";
+      setView("passed");
+    }
+    function showSpent() { showPassed("spent"); }
+    root.querySelectorAll("[data-myd-pass],[data-myd-fullprice]").forEach(function (b) {
+      b.addEventListener("click", function () { showPassed(""); });
+    });
+    root.querySelectorAll("[data-myd-undo]").forEach(function (b) {
+      b.addEventListener("click", function () { mydWrite({ declined: 0 }); setView("offer"); paint(); });
+    });
+
+    /* ── the code chip is a copy button ─────────────────────────────────── */
+    root.querySelectorAll("[data-myd-copy]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var code = (root.querySelector("[data-myd-code]") || {}).textContent || "";
+        if (!code || !navigator.clipboard) return;
+        navigator.clipboard.writeText(code).then(function () {
+          b.setAttribute("data-copied", "");
+          setTimeout(function () { b.removeAttribute("data-copied"); }, 1500);
+        }).catch(function () {});
+      });
+    });
+
+    /* ── dismissal: ×, the backdrop, Escape — and a focus trap while open ── */
+    root.querySelectorAll("[data-myd-close],[data-myd-back]").forEach(function (b) {
+      b.addEventListener("click", close);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (!isOpen()) return;
+      if (e.key === "Escape") { e.preventDefault(); close(); return; }
+      if (e.key !== "Tab") return;
+      var card = root.querySelector('[data-myd-step="' + view() + '"]');
+      if (!card) return;
+      var f = Array.prototype.slice.call(card.querySelectorAll(
+        'a[href],button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])'))
+        .filter(function (n) { return n.offsetParent !== null; });
+      if (!f.length) return;
+      var first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+
+    // A language switch re-renders the site through esbRender; this card's own
+    // runtime strings have to go with it or they stay in the previous language.
+    var prevRender = window.esbRender;
+    window.esbRender = function () {
+      if (prevRender) prevRender.apply(this, arguments);
+      if (isOpen()) { paint(); if (view() === "reveal") { fill("timer", clockText()); paintPrices(); } }
+    };
 
     paint();
   }

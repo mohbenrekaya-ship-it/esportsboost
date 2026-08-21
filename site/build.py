@@ -23,6 +23,9 @@ sys.path.insert(0, os.path.join(HERE, "src"))
 import art  # noqa: E402
 import data as D  # noqa: E402
 import geo  # noqa: E402
+# OFFER_PCT / TOKEN_TTL, so the mystery modal's copy quotes the discount and
+# the deadline the server actually issues rather than a typed pair.
+import mystery  # noqa: E402
 import pricing  # noqa: E402
 
 DIST = os.path.join(HERE, "dist")
@@ -1755,6 +1758,10 @@ _ICONS = {
                      "M9.2 9.4a1.4 1.4 0 1 1-2.8 0 1.4 1.4 0 0 1 2.8 0"),
     "envelope-open": "M3.6 9.6 12 3.8l8.4 5.8v10.2H3.6zM3.6 9.6 12 15.2l8.4-5.6",
     "lock-simple": "M6 10.4h12v9.2H6zM8 10.4V7.6a4 4 0 0 1 8 0v2.8",
+    # The open shackle — the mystery modal's "Open card C". Deliberately the
+    # same body as lock-simple with the arm swung clear on the right, so the two
+    # read as one object in two states rather than two different padlocks.
+    "lock-open": "M6 10.4h12v9.2H6zM8 10.4V7.6a4 4 0 0 1 8 0",
 }
 
 
@@ -1917,7 +1924,7 @@ def catalogue_floor():
     return _FLOOR_CACHE[0]
 
 
-def fc_card():
+def fc_card(gate=False):
     """The closing band's configuration summary — design_handoff_footer, the
     right column of band 1.
 
@@ -1944,10 +1951,17 @@ def fc_card():
     print "Solo" twice in four rows. The unit services have no pair of marks, so
     there the row falls back to the summary sentence.
     """
-    return f"""<aside class="fc-card">
+    # `gate=True` is the copy that rides on a page with no configurator: it
+    # ships hidden and app.js unhides it only when there is a real stored order
+    # to read back, and "Change" cannot mean "#top" there — the configurator is
+    # on another page, so the link follows the order's own game instead.
+    gate_attr = ' data-fc-when="order" hidden' if gate else ''
+    change = ('<a class="fc-change" data-game-link href="/games">Change</a>' if gate
+              else '<a class="fc-change" href="#top">Change</a>')
+    return f"""<aside class="fc-card"{gate_attr}>
       <div class="fc-card-head">
         <span class="fc-card-t">Your boost</span>
-        <a class="fc-change" href="#top">Change</a>
+        {change}
       </div>
       <div class="fc-rows">
         <div class="fc-row">
@@ -1990,7 +2004,8 @@ def fc_card():
     </aside>"""
 
 
-def cta_band(live=False, title=None, sub=None, cta=("Configure your boost", "/games")):
+def cta_band(live=False, title=None, sub=None, cta=("Configure your boost", "/games"),
+             readback=True):
     """The last ask — design_handoff_footer, band 1.
 
     The premise of the handoff: by the time someone reaches the bottom of the
@@ -2001,10 +2016,23 @@ def cta_band(live=False, title=None, sub=None, cta=("Configure your boost", "/ga
     the summary card beside it.
 
     `live=False` is the handoff's documented fallback for a page with nothing to
-    read back. It is not an empty card and not a fabricated default: no card at
-    all, the headline quotes the catalogue minimum, and one CTA back to the
-    configurator. The handoff describes this state but does not draw it — it is
-    flagged for the designer.
+    read back: no card, the headline quotes the catalogue minimum, and one CTA
+    back to the configurator. The handoff describes this state but does not draw
+    it — it is flagged for the designer.
+
+    `readback=True` (the default) ships the live version alongside it, hidden,
+    for the visitor who HAS configured something. The order is kept per game and
+    shared site-wide (see app.js's keyFor), so a page with no configurator of its
+    own can still close on their climb rather than on the catalogue floor —
+    which is what the handoff's premise asks for, and what "not a fabricated
+    default" was protecting: this appears only when there is a real stored order
+    behind it. The server always renders the FALLBACK visible, because a static
+    page is cached for everybody and cannot know; app.js swaps them, so with no
+    JS the band is still correct. Both states are in the DOM for the
+    whole-text-node i18n rule.
+
+    Pass `readback=False` where the band is not an order close — the support
+    page's "Still stuck? Ask us." is asking a different question.
 
     Scoped on `.hero-a` rather than redeclaring the handoff palette: this band
     and the two heroes are the same design, so `.btn-primary`, `.grad-text` and
@@ -2012,14 +2040,16 @@ def cta_band(live=False, title=None, sub=None, cta=("Configure your boost", "/ga
     the warmest glow on the site (.26 against .13–.22 elsewhere), deliberately,
     because it is the final ask.
     """
-    if live:
-        # The price, the card total and the struck list price are three
-        # assertions of one number; all three come off the same render() pass.
-        head = ('Your climb starts at '
-                '<span class="grad-text" data-out="price">—</span>')
-        lede = sub or ("Final at checkout. Refunded in full until a booster claims it, "
-                       "pro-rated after that.")
-        config = f"""<div class="fc-config">
+    # The read-back half — the live price, the climb line, the card and the two
+    # order buttons. Shared verbatim by `live=True` and by the hidden copy a
+    # `readback` band carries, so the two can never drift into quoting the same
+    # order two ways.
+    gate = '' if live else ' data-fc-when="order" hidden'
+    live_head = ('Your climb starts at '
+                 '<span class="grad-text" data-out="price">—</span>')
+    live_lede = ("Final at checkout. Refunded in full until a booster claims it, "
+                 "pro-rated after that.")
+    live_config = f"""<div class="fc-config"{gate}>
         <span class="fc-pair" data-when-service="division" hidden>
           <span class="fc-rank" data-rankcolor="from" data-out="fromRank">—</span>
           {_ico("arrow", 13, "ico fc-arrow", stroke=True)}
@@ -2029,28 +2059,48 @@ def cta_band(live=False, title=None, sub=None, cta=("Configure your boost", "/ga
         </span>
         <span class="fc-unit" data-when-service="units" data-out="summary" hidden>—</span>
       </div>"""
-        buttons = (f'<a class="btn btn-primary" href="/checkout.html" data-continue>'
-                   f'<span>Continue your order</span>{_ico("arrow", 15, "ico", stroke=True)}</a>'
-                   f'<a class="btn btn-secondary" href="/support.html">'
-                   f'{_ico("chat", 17, "ico fc-b2-ico", stroke=True)}<span>Talk to support</span></a>')
+    live_buttons = (f'<a class="btn btn-primary" href="/checkout.html" data-continue{gate}>'
+                    f'<span>Continue your order</span>{_ico("arrow", 15, "ico", stroke=True)}</a>'
+                    f'<a class="btn btn-secondary" href="/support.html"{gate}>'
+                    f'{_ico("chat", 17, "ico fc-b2-ico", stroke=True)}<span>Talk to support</span></a>')
+
+    if live:
+        # The price, the card total and the struck list price are three
+        # assertions of one number; all three come off the same render() pass.
+        head, config, buttons = live_head, live_config, live_buttons
+        lede = esc(sub or live_lede)
         card = fc_card()
+        solo, mark = False, ""
     else:
-        head = ('Your climb starts at <span class="grad-text">%s</span>'
-                % money(catalogue_floor())) if not title else esc(title)
-        lede = sub or ("Set two ranks and the price is on screen before you sign up. "
-                       "No account, no quote request.")
-        config = ""
-        buttons = ('<a class="btn btn-primary" href="%s"><span>%s</span>%s</a>'
-                   % (cta[1], esc(cta[0]), _ico("arrow", 15, "ico", stroke=True)))
-        card = ""
-    return f"""<section class="hero-a hero-a-lit fc{'' if card else ' fc-solo'}">
+        floor_head = (esc(title) if title else
+                      'Your climb starts at <span class="grad-text">%s</span>'
+                      % money(catalogue_floor()))
+        floor_lede = esc(sub or ("Set two ranks and the price is on screen before you sign up. "
+                                 "No account, no quote request."))
+        floor_btn = ('<a class="btn btn-primary" href="%s"%s><span>%s</span>%s</a>'
+                     % (cta[1], ' data-fc-when="none"' if readback else '',
+                        esc(cta[0]), _ico("arrow", 15, "ico", stroke=True)))
+        # The card starts hidden either way, so the band opens in its one-column
+        # layout; app.js drops `fc-solo` when it unhides the card.
+        solo = True
+        if readback:
+            head = ('<span data-fc-when="none">%s</span>'
+                    '<span data-fc-when="order" hidden>%s</span>' % (floor_head, live_head))
+            lede = ('<span data-fc-when="none">%s</span>'
+                    '<span data-fc-when="order" hidden>%s</span>'
+                    % (floor_lede, esc(live_lede)))
+            config, buttons, card = live_config, floor_btn + live_buttons, fc_card(gate=True)
+            mark = " data-fc-readback"
+        else:
+            head, lede, config, buttons, card, mark = floor_head, floor_lede, "", floor_btn, "", ""
+    return f"""<section class="hero-a hero-a-lit fc{' fc-solo' if solo else ''}"{mark}>
   <div class="fx fc-glow" aria-hidden="true"></div>
   <div class="fx hero-a-hatch" aria-hidden="true"></div>
   <div class="wrap fc-inner">
     <div class="fc-copy">
       {config}
       <h2 class="fc-h">{head}</h2>
-      <p class="fc-lede">{esc(lede)}</p>
+      <p class="fc-lede">{lede}</p>
       <div class="fc-cta">{buttons}</div>
     </div>
     {card}
@@ -3788,9 +3838,11 @@ def mode_seg(name, pct=False, icons=False):
 
 
 def _addons_sorted():
-    """Free inclusions first. Leading with what costs nothing establishes the
-    block as generous before it asks for money — the picks add-on and the
-    offline appearance are trust proofs that were previously buried."""
+    """Free rows first, in ADDONS order. Leading with what costs nothing
+    establishes the block as generous before it asks for money — the picks
+    add-on and the offline appearance are trust proofs that were previously
+    buried, and the free-but-optional stream row is the one the visitor is
+    meant to see first of all, which is why it sits first in ADDONS."""
     return sorted(D.ADDONS, key=lambda a: (a["pct"] != 0, D.ADDONS.index(a)))
 
 
@@ -3825,11 +3877,17 @@ def addons_block(money=False, paid_only=False, game=None):
     to this order rather than a percentage — used at checkout, where buyers
     price in currency, not maths.
 
-    `paid_only` drops the free inclusions, for checkout's "Last chance to add"
+    `paid_only` drops the free INCLUSIONS, for checkout's "Last chance to add"
     upsell: a row that is already ticked and cannot be unticked is not an
-    upsell. An add-on flagged `incl` in data.py never renders here at all —
-    checkout states that one in its own green strip, and a fourth checkbox row
-    costs the order card the vertical budget its CTA needs to clear the fold.
+    upsell. It deliberately keeps the free-but-OPTIONAL row, which is untaken by
+    default and is therefore the strongest thing that block can offer. An add-on
+    flagged `incl` in data.py never renders here at all — checkout states that
+    one in its own green strip.
+
+    Three price shapes, matching the three states data.py's ADDONS block
+    documents: a percentage or a live "+$N" for a paid option, a static
+    "Included" chip for an inclusion, and — for a `was_pct` row — a struck
+    reference figure beside the live "+$0" the engine actually quotes.
 
     Two of the add-ons are mode-conditional: solo orders are offered "Solo only
     queue", duo orders "Play on your schedule". Both ship in the DOM carrying
@@ -3842,15 +3900,33 @@ def addons_block(money=False, paid_only=False, game=None):
     rows = []
     for a in _addons_sorted():
         free = a["pct"] == 0
-        if a.get("incl") or (free and paid_only):
+        # Free but still a CHOICE — see D.addon_is_free_opt(). It is the one
+        # zero-cost row that survives `paid_only`: checkout's "Last chance to
+        # add" drops the inclusions because a ticked, disabled row is not an
+        # upsell, but an untaken free option is the best upsell on the page.
+        free_opt = D.addon_is_free_opt(a)
+        if a.get("incl") or (free and paid_only and not free_opt):
             continue
-        if free:
+        if free_opt:
+            # Two live figures, never a typed one: the struck reference quoted
+            # by pricing.addon_list_price() off this order's own base, and
+            # beside it the same [data-addon-price] every paid row carries,
+            # which quotes what ticking the box ACTUALLY does to the total. That
+            # second figure is what keeps the row honest — it reads "+$0"
+            # because the engine charges $0, not because the markup says so, and
+            # it would start reading "+$21" the moment anybody set a `pct`.
+            price = (
+                '<span class="price price-freeopt">'
+                '<s class="opt-was" data-addon-was="%s" title="%s"></s>'
+                '<span class="opt-now" data-addon-price="%s">—</span>'
+                '</span>' % (esc(a["id"]), esc(D.STREAM_WAS_NOTE), esc(a["id"])))
+        elif free:
             price = '<span class="price price-free">Included</span>'
         elif money:
             price = '<span class="price" data-addon-price="%s">—</span>' % esc(a["id"])
         else:
             price = '<span class="price">+%d%%</span>' % round(a["pct"] * 100)
-        checked = " checked disabled" if free else ""
+        checked = " checked disabled" if free and not free_opt else ""
         # Phone wording where the handoff shortens it; both variants ride in the
         # DOM so each stays a whole translatable node (see ADDONS in data.py).
         name = addon_name(a, game)
@@ -3864,9 +3940,22 @@ def addons_block(money=False, paid_only=False, game=None):
         if a.get("mode"):
             when = ' data-when-mode="%s"%s' % (
                 esc(a["mode"]), "" if D.addon_applies(a, "Solo") else " hidden")
-        rows.append(f"""<label class="opt{' opt-free' if free else ''}"{when}>
+        cls = " opt-freeopt" if free_opt else (" opt-free" if free else "")
+        # The flag that makes the free row read as an offer rather than the
+        # third checkbox in a list. It is rendered on exactly the condition that
+        # makes the row free (`free_opt`, i.e. `pct == 0`), so it cannot come to
+        # sit beside a price: give this add-on a rate and the flag disappears
+        # with the strikethrough in the same edit.
+        #
+        # "FREE" is uppercase in the TEXT, not via text-transform, and that is
+        # load-bearing: i18n.js matches whole text nodes case-sensitively, and
+        # "Free" is already a key — the roster's, where it means *available* and
+        # translates to "Libre". A lower-case flag here would render a French
+        # visitor a green pill reading "Libre" beside a price.
+        flag = '<b class="opt-flag">FREE</b>' if free_opt else ""
+        rows.append(f"""<label class="opt{cls}"{when}>
         <input type="checkbox" data-addon="{esc(a['id'])}"{checked} autocomplete="off">
-        <span><span style="display:block">{name}</span>
+        <span><span style="display:block">{name}{flag}</span>
         <span class="note">{note}</span></span>
         {price}
       </label>""")
@@ -4443,11 +4532,45 @@ def wizard(game=None):
         {_ico("arrow", 15, "ico", stroke=True)}
       </a>
 
+      {ob_included(g)}
+
       <div class="ob-assure">
         {ob_trust()}
         {pay_glyphs()}
       </div>
     </div>"""
+
+
+def ob_included(g):
+    """The always-on inclusions, stated as one line instead of costing a row.
+
+    WHY IT SITS BELOW THE CTA. The order card's whole vertical budget is the
+    handoff's one hard measurement — the CTA has to clear the fold at 1440×900 —
+    and the add-on list is exactly three checkbox rows wide of it. A fourth row
+    costs ~51px and puts the button under the fold on six of the nine ladders.
+    Everything BELOW the button is free of that budget, which is the only reason
+    the picks inclusion could give up its row without the claim being lost: it
+    is a fact about every order, not a choice, so it reads as well in a strip as
+    it did in a permanently-ticked checkbox — the same trade `offline` made
+    first, and the same shape checkout's green strip already uses.
+
+    Reads `incl`/zero-cost straight off data.py, so a new inclusion appears here
+    with no edit and the line can never name something the picker also offers.
+    The free-but-OPTIONAL row is excluded for the reason it exists: it is the
+    buyer's to take.
+
+    i18n: each name is its own text node with the separators in `<i aria-hidden>`
+    carriers, so every name stays a whole translatable node — all of them are
+    already dictionary keys, because the picker rendered the same words.
+    """
+    names = [addon_name(a, g["name"]) for a in D.ADDONS
+             if a["pct"] == 0 and not D.addon_is_free_opt(a)]
+    if not names:
+        return ""
+    sep = '<i class="ob-incl-sep" aria-hidden="true">·</i>'
+    body = sep.join('<span>%s</span>' % n for n in names)
+    return (f'<div class="ob-incl">{_ico("seal", 13, "ico", evenodd=True)}'
+            f'<span class="ob-incl-k">Included free</span>{sep}{body}</div>')
 
 
 def bs_tabs(games):
@@ -5631,6 +5754,258 @@ def gp_close():
     </section>"""
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  The mystery discount — design_handoff_mystery_discount
+# ══════════════════════════════════════════════════════════════════════════
+# A modal sequence that fires on a game page four seconds after the visitor's
+# target-rank selection settles. It offers a sealed "mystery discount", takes an
+# email in exchange for opening it, reveals a 30% code and hands the buyer back
+# to their order with the discount already applied.
+#
+# It exists for one reason: the configurator proves intent — somebody who set two
+# ranks and read a price is a buyer — and captures nothing if they leave. This
+# trades a discount for an address at the moment intent is highest.
+#
+# ── The mechanic, and what the copy is therefore allowed to say ────────────
+# The deck shows three sealed cards. **Every card pays the same 30%**
+# (`mystery.OFFER_PCT`) — the pick is theatre, not chance. The handoff is
+# emphatic about the consequence and so is this port: the flow must never claim
+# the 30% was luck, that the buyer beat odds, or state any probability. Two
+# friends comparing cards, or one buyer opening a second tab, finds out in about
+# ten seconds, and a discovered lie on a store whose central pitch is "the price
+# does not move after checkout" costs far more than the twenty margin points.
+#
+# Two sentences of the handoff's own copy are **deliberately not shipped**, for
+# exactly that rule — they are the only places its prototype states something the
+# flat deck makes untrue:
+#
+#   * "The deck holds 10%, 20% and 30% off" — a claim about the deck's
+#     composition. It has one value in it. The band still reads "Up to 30%",
+#     which is true (and understated) whatever the deck holds.
+#   * "Bingo — card C was the best one" — "best" implies the others were worse.
+#     It reads "card C pays the top rate", which is true of every card and is
+#     still the emotional peak the handoff asks for.
+#
+# "on your first order" went the same way. Nothing here can tell a first-time
+# guest from a returning one before the modal fires, so the claim it makes is the
+# one the server actually enforces: **one card per inbox, ever**
+# (`mystery.find_by_email`). If an account backend ever lands, "first order" can
+# come back — with a suppression rule behind it.
+#
+# ── What is server-side, and must stay there ───────────────────────────────
+# The code is NOT minted here and is not `CLIMB30`: `D.PROMOS` ships to every
+# browser in data.js, so a guessable pattern would be on a coupon aggregator
+# within a week. `/api/bingo` issues one opaque single-use token per address,
+# resolves the percentage server-side (`mystery.redeemable`), mails the code
+# before this reveal renders, and burns it when the order is paid. The hour is
+# enforced by the store, not by the countdown in this markup.
+#
+# ── i18n ──────────────────────────────────────────────────────────────────
+# All five steps ship in the DOM with four of them `hidden`; a card written in by
+# JS would arrive untranslated, the same rule the auth tabs and the
+# mode-conditional add-ons follow. Figures and the card letter ride in their own
+# nodes so the sentences around them stay whole translatable text nodes.
+MYD_CARDS = ("A", "B", "C")
+MYD_DEFAULT_PICK = "C"      # pre-selected so the CTA is never dead on arrival
+
+# The three values the offer copy names. The TOP one IS the real payout
+# (mystery.OFFER_PCT) and is derived from it, never typed: the deck's ceiling
+# and the number the reveal quotes have to be the same figure or the card
+# contradicts itself two screens apart. The two rungs below it are the decoys,
+# rounded to a whole 5 so the list reads like a price list rather than
+# arithmetic. Asserted distinct at import — a deck that advertised "10%, 10%
+# and 10%" would ship on nine pages before anyone noticed.
+def _myd_deck(pct):
+    top = int(round(pct * 100))
+    return (int(round(top / 3 / 5.0)) * 5, int(round(top * 2 / 3 / 5.0)) * 5, top)
+
+
+MYD_DECK = _myd_deck(mystery.OFFER_PCT)
+assert len(set(MYD_DECK)) == 3 and MYD_DECK[-1] == int(round(mystery.OFFER_PCT * 100)), (
+    "MYD_DECK must be three distinct values topping out at mystery.OFFER_PCT: %r" % (MYD_DECK,))
+
+
+def _myd_card(letter):
+    """One sealed card. No value on the face — that is the mystery — and the
+    "Picked" tag is pinned above the top edge rather than inside it, so choosing
+    a card never reflows the row."""
+    on = letter == MYD_DEFAULT_PICK
+    return f"""<button type="button" class="myd-pick" data-myd-card="{letter}"
+        aria-pressed="{'true' if on else 'false'}">
+      <span class="myd-pick-tag">Picked</span>
+      <span class="myd-pick-face">{_ico("question", 30, "myd-pick-ico", stroke=True)}</span>
+      <span class="myd-pick-lab"><span>Card</span> <b>{letter}</b></span>
+    </button>"""
+
+
+def mystery_modal():
+    """The five-step card. One root, one step visible, everything else `hidden`.
+
+    `data-myd-view` on the root is the readable state, but the step that is
+    actually on screen is the one without `hidden` — app.js toggles the
+    attribute. That is not interchangeable with a CSS rule: `ashfall.css`
+    declares `[hidden] { display: none !important }` globally, so a step
+    rendered `hidden` here can never be revealed by a selector in site.css, at
+    any specificity. Four of the five ship hidden so the page is correct before
+    a line of JS runs.
+    """
+    pct = int(round(mystery.OFFER_PCT * 100))
+    mins = max(1, mystery.TOKEN_TTL // 60)
+    hourly = "1 hour" if mins == 60 else "%d minutes" % mins
+    auto = D.auto_promo()[1]
+    sale = int(round((auto or {}).get("pct", 0) * 100))
+    cards = "".join(_myd_card(c) for c in MYD_CARDS)
+    # One node, not three: French puts a non-breaking space before every `%`
+    # and joins with "et", so the list is a translatable phrase rather than
+    # digits a mechanical substitution could assemble.
+    deck = "%d%%, %d%% and %d%%" % MYD_DECK
+    close = ('<button type="button" class="myd-x" data-myd-close aria-label="Close">'
+             + _ico("x", 12, "ico", stroke=True) + "</button>")
+    hair = '<span class="myd-hair" aria-hidden="true"></span>'
+
+    return f"""<div class="myd" data-myd data-myd-view="offer" hidden>
+  <div class="myd-back" data-myd-back></div>
+  <div class="myd-scroll">
+
+    <div tabindex="-1" class="myd-card" data-myd-step="offer" role="dialog" aria-modal="true"
+         aria-labelledby="myd-offer-h">
+      {hair}{close}
+      <span class="myd-pill">{_ico("star", 12, "ico")}<span>Mystery discount</span></span>
+      <div class="myd-head">
+        <span class="myd-kicker"><span class="myd-dash" aria-hidden="true"></span>Sealed for you</span>
+        <!-- The gradient takes the WHOLE line, not just the two words the
+             handoff fills: splitting it leaves a bare "A" text node, and i18n.js
+             matches whole text nodes — a dictionary entry for "A" would also
+             rewrite the `<b>A</b>` that names the first sealed card. -->
+        <span class="myd-h myd-h-grad" id="myd-offer-h">A mystery discount</span>
+        <span class="myd-h-row">
+          <span class="myd-h myd-h-2">on this order</span>
+          <span class="myd-tag">One per customer</span>
+        </span>
+      </div>
+      <div class="myd-band">
+        <span class="myd-band-k">Up to</span>
+        <span class="myd-band-n"><b data-myd-pct>{pct}</b>%</span>
+        <span class="myd-band-u">off</span>
+      </div>
+      <p class="myd-p"><span>The deck holds</span> <b>{deck}</b> <span>off the order you just
+      configured. Pick a card, tell us where to send the code, and we open it on the spot.</span></p>
+      <div class="myd-picks">{cards}</div>
+      <div class="myd-acts">
+        <button type="button" class="myd-cta" data-myd-take>
+          {_ico("lock-open", 16, "ico", stroke=True)}<span>Hold card</span> <b data-myd-pick>{MYD_DEFAULT_PICK}</b>
+        </button>
+        <button type="button" class="myd-ghost" data-myd-pass>No thanks, I'll pay full price</button>
+      </div>
+    </div>
+
+    <div tabindex="-1" class="myd-card" data-myd-step="email" role="dialog" aria-modal="true"
+         aria-labelledby="myd-email-h" hidden>
+      {hair}{close}
+      <div class="myd-email-head">
+        <span class="myd-tile" data-myd-pick>{MYD_DEFAULT_PICK}</span>
+        <span class="myd-email-t">
+          <span class="myd-held"><span>Card</span> <b data-myd-pick>{MYD_DEFAULT_PICK}</b> <span>held for you</span></span>
+          <span class="myd-h3" id="myd-email-h">Where should we send it?</span>
+        </span>
+      </div>
+      <p class="myd-p myd-p-sm">We email the code so it survives a closed tab, then open the card
+      on the next screen.</p>
+
+      <label class="myd-lab" for="myd-email">Email</label>
+      <input class="myd-input" id="myd-email" type="email" inputmode="email"
+             autocomplete="email" spellcheck="false" placeholder="you@example.com"
+             data-myd-email>
+      <p class="myd-note" data-myd-note>The card is opened on the next screen either way.</p>
+
+      <button type="button" class="myd-optin" data-myd-optin aria-pressed="false">
+        <span class="myd-box" aria-hidden="true">{_ico("check", 10, "ico", stroke=True)}</span>
+        <span class="myd-optin-t">Also send me the free rank guides and patch notes. One email a
+        month, one click to stop.</span>
+      </button>
+
+      <button type="button" class="myd-cta myd-cta-mt" data-myd-open>
+        {_ico("lock-open", 16, "ico", stroke=True)}<span>Open card</span> <b data-myd-pick>{MYD_DEFAULT_PICK}</b>
+      </button>
+      <p class="myd-fine myd-fine-c">{_ico("shield-check", 13, "ico", stroke=True)}<span>Never sold or
+      rented.</span> <a href="/privacy.html">Privacy policy</a></p>
+    </div>
+
+    <div tabindex="-1" class="myd-card" data-myd-step="opening" role="dialog" aria-modal="true" hidden>
+      {hair}
+      <div class="myd-spin-wrap">
+        <span class="myd-spin" aria-hidden="true"></span>
+        <span class="myd-h3 myd-spin-t"><span>Opening card</span> <b data-myd-pick>{MYD_DEFAULT_PICK}</b></span>
+        <span class="myd-note myd-note-c">Drawing your code on the server</span>
+      </div>
+    </div>
+
+    <div tabindex="-1" class="myd-card myd-card-win" data-myd-step="reveal" role="dialog" aria-modal="true"
+         aria-labelledby="myd-reveal-h" hidden>
+      <span class="myd-hair myd-hair-win" aria-hidden="true"></span>{close}
+      <div class="myd-rev-top">
+        <span class="myd-won">{_ico("trophy", 12, "ico")}<span>Available for {hourly}</span></span>
+        <span class="myd-timer">{_ico("clock-countdown", 12, "ico", stroke=True)}<b
+          data-myd-timer aria-label="Time left on this code">59:59</b></span>
+      </div>
+
+      <div class="myd-prize" aria-live="polite">
+        <span class="myd-prize-k" id="myd-reveal-h"><span>Bingo — card</span> <b data-myd-pick>{MYD_DEFAULT_PICK}</b>
+          <span>pays the top rate</span></span>
+        <span class="myd-prize-n"><b data-myd-pct>{pct}</b>%<i>off</i></span>
+        <button type="button" class="myd-code" data-myd-copy>
+          <b data-myd-code>—</b>{_ico("copy", 12, "ico", stroke=True)}
+          <span class="myd-copied">Copied</span>
+        </button>
+        <span class="myd-prize-note">The best rate in the deck — double the {sale}% sale,
+          and live for {hourly} from the moment you opened it.</span>
+      </div>
+
+      <div class="myd-tot">
+        <span class="myd-tot-l">
+          <span class="myd-tot-k">Your order</span>
+          <span class="myd-tot-row"><s data-myd-was>—</s><b data-myd-now>—</b></span>
+        </span>
+        <span class="myd-tot-r">
+          <span class="myd-tot-k">You save</span>
+          <b class="myd-tot-save" data-myd-save>—</b>
+        </span>
+      </div>
+
+      <div class="myd-acts">
+        <button type="button" class="myd-cta" data-myd-apply>
+          <span>Apply my discount</span>{_ico("arrow", 15, "ico", stroke=True)}
+        </button>
+        <button type="button" class="myd-ghost" data-myd-fullprice>
+          <span>Continue at full price</span> <span aria-hidden="true">·</span> <b data-myd-full>—</b>
+        </button>
+      </div>
+      <p class="myd-fine" data-myd-inbox>Live for {hourly} on this order. A copy is in your inbox,
+      so closing this tab doesn't lose it.</p>
+      <p class="myd-fine" data-myd-nomail hidden>Live for {hourly} on this order. Copy the code
+      before you close this tab — we couldn't email it.</p>
+    </div>
+
+    <div tabindex="-1" class="myd-card" data-myd-step="passed" role="dialog" aria-modal="true"
+         aria-labelledby="myd-passed-h" hidden>
+      {close}
+      <div class="myd-mid">
+        <span class="myd-ring">{_ico("tag", 25, "myd-ring-ico", stroke=True)}</span>
+        <span class="myd-h3" id="myd-passed-h" data-myd-passed-h>No problem.</span>
+        <span class="myd-h3" data-myd-spent-h hidden>This address already used its card.</span>
+        <p class="myd-p myd-p-c" data-myd-passed-p>Your order stays where it is and we won't ask
+        again on this visit. The sitewide {sale}% code still applies at checkout.</p>
+        <p class="myd-p myd-p-c" data-myd-spent-p hidden>One card per customer, and this inbox has
+        opened its one. The sitewide {sale}% code still applies at checkout.</p>
+        <button type="button" class="myd-ghost myd-ghost-mt" data-myd-close>Back to my order</button>
+        <button type="button" class="myd-undo" data-myd-undo>Actually, let me pick a card</button>
+      </div>
+    </div>
+
+  </div>
+</div>"""
+
+
 def page_game(g):
     # money(), not usd(): this is the largest price on the page and the first
     # one a visitor reads, so it has to follow the currency switcher like every
@@ -5743,7 +6118,8 @@ def page_game(g):
 {gp_reviews(g, revs)}
 {gp_faq(g, faq)}
 </div>
-{cta_band(live=True, cta=("Continue your order", "/checkout.html"))}"""
+{cta_band(live=True, cta=("Continue your order", "/checkout.html"))}
+{mystery_modal()}"""
 
     # "<Game> boosting - eSports Boost" — a clean, consistent SERP title. The
     # longest game name ("Counter-Strike 2") lands at ~40 chars, well under
@@ -6375,7 +6751,7 @@ def page_support():
   </div>
 </section>
 
-{cta_band(title="Still stuck? Ask us.", sub="Discord is the fast one — our staff sit in it all day. Or write in above and it lands in the same inbox.", cta=("Ask us", "#discord"))}"""
+{cta_band(title="Still stuck? Ask us.", sub="Discord is the fast one — our staff sit in it all day. Or write in above and it lands in the same inbox.", cta=("Ask us", "#discord"), readback=False)}"""
     js = faq_accordion_js() + """<script>
 (function () {
   var form = document.querySelector('[data-sp-form]');
@@ -7176,21 +7552,31 @@ def _demo_lookup(O):
 </section>"""
 
 
-# The two titles the live-watch feature covers. It is deliberately a short
-# allow-list rather than a flag on every game, because the constraint is real
-# and per-title: Valorant has no spectator API at all (observers exist only in
-# custom/tournament lobbies) and League's Spectator-v5 is 3 minutes behind and
-# needs a Riot production key no boosting service is granted. So neither title
-# can be watched through the game — what the customer watches is the booster's
-# own screen, shared into a private Discord voice channel. Adding a game here
-# means confirming a booster on it will actually stream, nothing more.
-WATCH_GAMES = ("league-of-legends", "valorant")
+# The titles the live-watch feature covers — now EVERY game in the catalogue,
+# which is a business decision (the `stream` add-on in data.py is offered on all
+# nine) rather than a technical one. It stays a named list rather than being
+# deleted for the reason it existed: the constraint is real and per-title, and
+# narrowing it again has to be one edit here.
+#
+# What the customer watches is never the game's own spectator mode. Valorant has
+# no spectator API at all (observers exist only in custom/tournament lobbies),
+# and League's Spectator-v5 is ~3 minutes behind and needs a Riot production key
+# no boosting service is granted. So the product is the booster's OWN SCREEN,
+# shared into a private Discord voice channel — which is why it generalises to
+# all nine titles at once: it never depended on the game, only on the booster.
+#
+# ⚠ That is also the whole risk. Listing a game here is a claim that a booster
+# on it will actually stream, and the live half is NOT BUILT (see CLAUDE.md's
+# "Watch live" section — streams.py, the gated /api/stream, the Discord channel
+# per order). Nine titles is nine rosters that have to be briefed, not one.
+WATCH_GAMES = tuple(g["slug"] for g in D.GAMES)
 
 
 def offers_watch(g):
-    """True when this game's orders can be watched live. Honest by construction,
-    the same way offers_coaching() is: a title with nobody streaming it never
-    shows the panel."""
+    """True when this game's orders can be watched live — every catalogue title
+    today. Kept as a function rather than inlined `True` so narrowing it back to
+    an allow-list is one edit in WATCH_GAMES, the way offers_coaching() reads a
+    per-game field."""
     return (g or {}).get("slug") in WATCH_GAMES
 
 
@@ -7792,7 +8178,11 @@ def page_checkout():
     incl = "".join(
         f'<div class="co-incl">{_ico("seal", 15, "ico", evenodd=True)}'
         f'<span><b>{addon_name(a)}</b> <span>{esc(a["note"])}</span></span></div>'
-        for a in D.ADDONS if a["pct"] == 0)
+        # Zero-cost, but NOT the free-but-optional row: that one is the buyer's
+        # choice and is still sitting unticked in the upsell block above. A
+        # strip claiming it is already on would contradict the empty checkbox
+        # 200px away and hand them something they did not ask for.
+        for a in D.ADDONS if a["pct"] == 0 and not D.addon_is_free_opt(a))
 
     body = f"""<section class="co">
   <div class="co-fx co-glow" aria-hidden="true"></div>
@@ -7811,8 +8201,13 @@ def page_checkout():
             <label class="co-lab" for="k-email">Email</label>
             <span class="co-req">Required</span>
           </div>
+          <!-- `data-prefill-email` is the hook app.js fills when the site already
+               knows this visitor's address — today that means they gave it to the
+               mystery-discount modal on a game page, so arriving here they are not
+               asked for it twice. It only ever fills an EMPTY field. -->
           <input class="co-input" id="k-email" type="email" required
                  inputmode="email" autocomplete="email" spellcheck="false"
+                 data-prefill-email
                  placeholder="you@example.com" aria-describedby="k-email-note">
           <p class="co-note" id="k-email-note" data-email-note>Used for your order link, and to
           send you your cart if you don't finish. No marketing unless you tick the box at
@@ -8167,6 +8562,10 @@ def page_checkout():
       // server-side against the carts store, never sent from here, or a crafted
       // body would buy any climb for nothing.
       cart: (window.ESB_RECOVERY && window.ESB_RECOVERY.token) || '',
+      // The mystery-discount token, same contract: only the token travels and
+      // the server resolves the percentage against its own store. A crafted
+      // body carrying a percentage buys nothing — process_checkout() strips it.
+      bingo: (window.ESB_BINGO && window.ESB_BINGO.token) || '',
       booster: s.booster || '',
       // Charge in the currency the customer is viewing prices in. The amount is
       // still recomputed server-side; only the currency choice rides along.
@@ -8627,6 +9026,7 @@ OPS_TABS = [
     ("carts", "Carts"),
     ("accounts", "Accounts"),
     ("guides", "Guides mails"),
+    ("mystery", "Mystery"),
     ("boosters", "Boosters"),
     ("acquisition", "Acquisition"), ("friction", "Friction"), ("abandoned", "Abandoned"),
     ("live", "Stream"),

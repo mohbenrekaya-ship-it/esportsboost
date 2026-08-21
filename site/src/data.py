@@ -99,8 +99,8 @@ def company_registration():
     return "Registered in %s, company number %s" % (c["registry"], c["number"])
 
 
-PER_DIVISION = 26  # per-win / per-placement base; belongs in server-side pricing config
-PER_STEP = 7       # per single division rung on the ladder (see subdivide() below)
+PER_DIVISION = 29.9  # per-win / per-placement base; belongs in server-side pricing config
+PER_STEP = 8.05      # per single division rung on the ladder (see subdivide() below)
 
 
 class Ladder(list):
@@ -168,18 +168,18 @@ GAMES = [
                           "Diamond", "Master"],
                          ["IV", "III", "II", "I"],
                          apex=("Master",)),
-        prices={"Iron": 6, "Bronze": 8, "Silver": 9, "Gold": 12, "Platinum": 19,
-                "Emerald": 30, "Diamond": 48, "Master": 60},
+        prices={"Iron": 6.9, "Bronze": 9.2, "Silver": 10.35, "Gold": 13.8,
+                "Platinum": 21.85, "Emerald": 34.5, "Diamond": 55.2, "Master": 69},
         # Per-tier price of one net win (flat within a tier), keyed on the rank
         # the player is currently at. Present → the wins service prices off this
         # table instead of the shared per/climb formula, the same way `prices`
         # overrides the division formula. Mirrored in app.js as winPrices.
-        win_prices={"Iron": 3, "Bronze": 3, "Silver": 4, "Gold": 5, "Platinum": 8,
-                    "Emerald": 13, "Diamond": 20, "Master": 40},
+        win_prices={"Iron": 3.45, "Bronze": 3.45, "Silver": 4.6, "Gold": 5.75,
+                    "Platinum": 9.2, "Emerald": 14.95, "Diamond": 23, "Master": 46},
         # Per-tier price of one placement game, same shape as win_prices. Unranked
         # has no rank to read, so it prices at the ladder floor (Iron → 3).
-        placement_prices={"Iron": 3, "Bronze": 3, "Silver": 4, "Gold": 5, "Platinum": 8,
-                          "Emerald": 13, "Diamond": 20, "Master": 40},
+        placement_prices={"Iron": 3.45, "Bronze": 3.45, "Silver": 4.6, "Gold": 5.75,
+                          "Platinum": 9.2, "Emerald": 14.95, "Diamond": 23, "Master": 46},
         services="Elo boost · placements · net wins · duo · coaching",
         regions=["North America", "Europe West", "EU Nordic & East", "Oceania"],
         blurb="Solo/duo and flex, across NA and EU. Your booster plays your account inside your "
@@ -201,14 +201,14 @@ GAMES = [
         ladder=subdivide(["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond",
                           "Ascendant", "Immortal"],
                          ["1", "2", "3"], apex=("Immortal",)),
-        prices={"Iron": 4, "Bronze": 4, "Silver": 5, "Gold": 7, "Platinum": 9,
-                "Diamond": 18, "Ascendant": 35, "Immortal": 100},
+        prices={"Iron": 4.6, "Bronze": 4.6, "Silver": 5.75, "Gold": 8.05,
+                "Platinum": 10.35, "Diamond": 20.7, "Ascendant": 40.25, "Immortal": 115},
         # Per-tier price of one net win (flat within a tier), same shape as LoL's.
-        win_prices={"Iron": 3, "Bronze": 3, "Silver": 4, "Gold": 5, "Platinum": 6,
-                    "Diamond": 10, "Ascendant": 15, "Immortal": 22},
+        win_prices={"Iron": 3.45, "Bronze": 3.45, "Silver": 4.6, "Gold": 5.75,
+                    "Platinum": 6.9, "Diamond": 11.5, "Ascendant": 17.25, "Immortal": 25.3},
         # Placements share the win table; unranked prices at the floor (Iron → 3).
-        placement_prices={"Iron": 3, "Bronze": 3, "Silver": 4, "Gold": 5, "Platinum": 6,
-                          "Diamond": 10, "Ascendant": 15, "Immortal": 22},
+        placement_prices={"Iron": 3.45, "Bronze": 3.45, "Silver": 4.6, "Gold": 5.75,
+                          "Platinum": 6.9, "Diamond": 11.5, "Ascendant": 17.25, "Immortal": 25.3},
         services="Rank boost · placements · unrated wins · duo · coaching",
         regions=["North America", "Europe", "Asia", "Latin America"],
         # Same shape as League's: what is covered, then what actually happens to
@@ -468,10 +468,52 @@ def bundle_price(g, from_rank, to_rank, idx):
 # queue's option is simply not charged for it. `champ` is free on every order,
 # so it renders ticked and disabled — see addons_block() in build.py.
 #
+# THREE STATES, not two, and the third is what `was_pct` marks:
+#   pct > 0                → a paid option. Ticked by the buyer, charged.
+#   pct == 0, no was_pct   → an inclusion. Renders ticked AND disabled (`champ`),
+#                            or not at all (`incl`, e.g. `offline`). Not a choice.
+#   pct == 0, was_pct set  → FREE BUT OPTIONAL. Renders as a normal empty
+#                            checkbox the buyer has to tick, carries its own id
+#                            in state.addons like any paid option, and is
+#                            charged nothing — `_addon_total()` on both sides
+#                            skips a zero `pct`, so there is no path by which a
+#                            crafted payload can make it cost money.
+#
+# `was_pct` is DISPLAY ONLY and is never summed into a total. It is the rate
+# this option would carry if it were priced like the ones above it, and it is
+# drawn struck through beside the "Free" — see addons_block() in build.py and
+# `pricing.addon_list_price()`, which quotes it with the identical formula
+# `_addon_total()` charges with, so the struck figure and a real charge could
+# never be computed two different ways.
+#
+# ⚠ COMMERCIAL/LEGAL, not technical: a struck-through figure next to a price is
+# read as a former or usual price, and this one has never been charged by us.
+# pricing.quote() takes the sitewide discount off the boost alone precisely so
+# its strikethrough is "never a grossed-up reference price" — this row is the
+# one exception on the site, and it is a deliberate business call, not an
+# oversight. If legal wants it airtight, the fix is the LABEL, not the number:
+# see STREAM_WAS_NOTE below, which is the one string that frames what the struck
+# figure refers to.
+#
 # ⚠ The two 12% rates are the retired "Live game stream" slot's percentage,
 # carried over rather than measured. Confirm the real uplift for a restricted
 # queue and for held session slots before launch, the same standing as BUNDLES.
 ADDONS = [
+    # Free but optional, and FIRST in the list — see _addons_sorted() in
+    # build.py, which puts the zero-cost rows at the top so the block reads as
+    # generous before it asks for money. 50% is the rate the option would carry
+    # if it were priced: a booster streaming their screen is a booster playing
+    # under observation for the whole order, which is the single biggest ask
+    # made of them and is why every other site sells it or does not offer it.
+    #
+    # ⚠ The live half of this is NOT BUILT. watch_panel() renders real state
+    # against one demo fixture; nothing asks Discord whether anyone is
+    # streaming, and no order has a private channel behind it. See CLAUDE.md's
+    # "Watch live" section for the seam (streams.py). Ops has to be able to
+    # honour this on every game before the row ships to real traffic.
+    dict(id="stream", label="Watch your booster play", pct=0.0, was_pct=0.50,
+         note="Live screen share. Only site that gives it free.",
+         note_sm="Live screen share, every game."),
     dict(id="priority", label="Priority order", pct=0.15,
          note="First in the claim queue, claimed in about 6 minutes.",
          note_sm="First in the claim queue, about 6 minutes."),
@@ -485,7 +527,14 @@ ADDONS = [
     # champions. Each game carries its own wording in `picks`; this label is the
     # fallback for the surfaces that have no game in hand (analytics labels, a
     # stored order for a game that has since left the catalogue).
-    dict(id="champ", label="Champions, agents & roles", pct=0.0,
+    # `incl` since the stream row took the card's third checkbox slot: the order
+    # card's CTA has to clear the fold at 1440×900 and the budget is exactly
+    # three rows (see addons_block() / ob_included() in build.py). This is an
+    # always-on fact rather than a choice, so it loses the row and is STATED
+    # instead — on the card by ob_included(), at checkout by its green strip —
+    # which is the same trade `offline` below already made, and for the same
+    # reason. Nothing about the price changes: it was never charged.
+    dict(id="champ", label="Champions, agents & roles", pct=0.0, incl=True,
          note="Always free. Your booster plays the picks you choose.",
          # The phone drops the "always free" half — the price column beside it
          # already reads "Included" — and shortens the rest, because this row's
@@ -498,6 +547,33 @@ ADDONS = [
     dict(id="offline", label="Offline appearance", pct=0.0, incl=True,
          note="Always on. Friends see you offline for the whole order."),
 ]
+
+
+# The one string that frames what the struck figure on the free-but-optional row
+# refers to. It is the accessible name of that figure and the tooltip on it, and
+# it is deliberately a constant rather than five literals: if legal decides a
+# bare strikethrough reads as OUR former price, this is the single line that
+# changes — "What this is worth" → "What other sites charge" is the whole fix,
+# and the number, the markup and the layout all stay exactly as they are.
+STREAM_WAS_NOTE = "What this is worth"
+
+# The superlative in the `stream` note. ⚠ UNVERIFIED — "only site that gives it
+# free" is a comparative advertising claim about every competitor at once, and it
+# is falsifiable by one competitor offering the same thing. Kept as a constant so
+# it can be softened ("Free here" / "Free on every order") without touching the
+# add-on table. Same standing as the placeholder statistics: substantiate it or
+# soften it before launch.
+STREAM_CLAIM_VERIFIED = False
+
+
+def addon_is_free_opt(addon):
+    """Whether this add-on is free BUT still the buyer's choice.
+
+    The discriminator is `was_pct`: it is the only thing separating a row that
+    renders as an empty checkbox anyone may tick from an inclusion that renders
+    ticked and disabled. Both have `pct == 0` and neither is ever charged.
+    Mirrored by `isFreeOpt()` in app.js — change one, change the other."""
+    return not addon.get("pct") and bool(addon.get("was_pct"))
 
 
 def addon_applies(addon, mode):
@@ -638,50 +714,50 @@ BUNDLES = {
     # expensive order and a three-tier one would land on Master. None targets
     # Master (LP/leaderboard-gated — the top-rank rule above).
     "League of Legends": [
-        ("Iron", "Gold", 67),         # 3 tiers · full $98  · cheapest normal $68
-        ("Bronze", "Platinum", 87),   # 3 tiers · full $127 · cheapest normal $88
-        ("Silver", "Emerald", 130),   # 3 tiers · full $181 · cheapest normal $131
-        ("Platinum", "Diamond", 142),  # 2 tiers · full $225 · cheapest normal $143
-        ("Bronze", "Diamond", 275),   # 5 tiers · full $352 · cheapest normal $279
-        ("Iron", "Diamond", 305),     # 6 tiers · full $378 · cheapest normal $306
+        ("Iron", "Gold", 77),         # 3 tiers · full $113 · cheapest normal $78
+        ("Bronze", "Platinum", 99),   # 3 tiers · full $146 · cheapest normal $100
+        ("Silver", "Emerald", 149),   # 3 tiers · full $208 · cheapest normal $150
+        ("Platinum", "Diamond", 163),  # 2 tiers · full $259 · cheapest normal $164
+        ("Bronze", "Diamond", 316),   # 5 tiers · full $405 · cheapest normal $320
+        ("Iron", "Diamond", 351),     # 6 tiers · full $435 · cheapest normal $352
     ],
     "Valorant": [
-        ("Iron", "Silver", 20), ("Bronze", "Gold", 23), ("Silver", "Platinum", 29),
-        ("Gold", "Platinum", 16), ("Platinum", "Diamond", 24), ("Diamond", "Ascendant", 46),
+        ("Iron", "Silver", 23), ("Bronze", "Gold", 26), ("Silver", "Platinum", 33),
+        ("Gold", "Platinum", 18), ("Platinum", "Diamond", 28), ("Diamond", "Ascendant", 53),
     ],
     "Teamfight Tactics": [
-        ("Iron", "Silver", 37), ("Bronze", "Gold", 38), ("Silver", "Platinum", 42),
-        ("Gold", "Platinum", 23), ("Platinum", "Emerald", 26), ("Emerald", "Diamond", 27),
+        ("Iron", "Silver", 43), ("Bronze", "Gold", 44), ("Silver", "Platinum", 48),
+        ("Gold", "Platinum", 26), ("Platinum", "Emerald", 30), ("Emerald", "Diamond", 31),
     ],
     "Marvel Rivals": [
-        ("Bronze", "Gold", 33), ("Silver", "Platinum", 32), ("Gold", "Diamond", 35),
-        ("Platinum", "Diamond", 19), ("Diamond", "Grandmaster", 20),
-        ("Grandmaster", "Celestial", 21),
+        ("Bronze", "Gold", 38), ("Silver", "Platinum", 37), ("Gold", "Diamond", 40),
+        ("Platinum", "Diamond", 22), ("Diamond", "Grandmaster", 23),
+        ("Grandmaster", "Celestial", 24),
     ],
     "Overwatch 2": [
-        ("Bronze", "Gold", 51), ("Silver", "Platinum", 56), ("Gold", "Diamond", 64),
-        ("Platinum", "Diamond", 36), ("Diamond", "Master", 39),
-        ("Master", "Grandmaster", 43),
+        ("Bronze", "Gold", 59), ("Silver", "Platinum", 64), ("Gold", "Diamond", 74),
+        ("Platinum", "Diamond", 41), ("Diamond", "Master", 45),
+        ("Master", "Grandmaster", 49),
     ],
     "Rocket League": [
-        ("Bronze", "Gold", 32), ("Silver", "Platinum", 33), ("Gold", "Diamond", 37),
-        ("Platinum", "Diamond", 20), ("Diamond", "Champion", 22),
-        ("Champion", "Grand Champ", 23),
+        ("Bronze", "Gold", 37), ("Silver", "Platinum", 38), ("Gold", "Diamond", 43),
+        ("Platinum", "Diamond", 23), ("Diamond", "Champion", 25),
+        ("Champion", "Grand Champ", 26),
     ],
     "Dota 2": [
-        ("Herald", "Crusader", 71), ("Guardian", "Archon", 77), ("Crusader", "Legend", 89),
-        ("Archon", "Legend", 50), ("Legend", "Ancient", 55), ("Ancient", "Divine", 59),
+        ("Herald", "Crusader", 82), ("Guardian", "Archon", 89), ("Crusader", "Legend", 102),
+        ("Archon", "Legend", 57), ("Legend", "Ancient", 63), ("Ancient", "Divine", 68),
     ],
     "Apex Legends": [
-        ("Rookie", "Silver", 50), ("Bronze", "Gold", 53), ("Silver", "Platinum", 58),
-        ("Gold", "Platinum", 32), ("Platinum", "Diamond", 35), ("Diamond", "Master", 37),
+        ("Rookie", "Silver", 57), ("Bronze", "Gold", 61), ("Silver", "Platinum", 67),
+        ("Gold", "Platinum", 37), ("Platinum", "Diamond", 40), ("Diamond", "Master", 43),
     ],
     # Flat rating ladder — every rung is its own tier, so a bundle names two exact
     # CS Rating checkpoints rather than "any division of". bundle_strip() reads the
     # divmap and drops the "from any division" line for exactly this case.
     "Counter-Strike 2": [
-        ("5k", "13k", 16), ("10k", "15k", 16), ("13k", "17k", 15),
-        ("15k", "19k", 15), ("17k", "21k", 16), ("19k", "25k", 16),
+        ("5k", "13k", 18), ("10k", "15k", 18), ("13k", "17k", 17),
+        ("15k", "19k", 17), ("17k", "21k", 18), ("19k", "25k", 18),
     ],
 }
 

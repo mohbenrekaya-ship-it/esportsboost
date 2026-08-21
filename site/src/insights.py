@@ -53,6 +53,7 @@ EVENT_LABELS = {
     "session_start": "New session", "page_view": "Page view",
     "view_item": "Opened configurator", "configure": "Changed configuration",
     "select_promotion": "Applied a promo", "add_to_cart": "Added an add-on",
+    "view_promotion": "Saw the mystery offer",
     "begin_checkout": "Started checkout", "add_payment_info": "Reached payment",
     "purchase": "Paid", "generate_lead": "Submitted a form",
     "checkout_error": "Checkout error", "js_error": "Script error",

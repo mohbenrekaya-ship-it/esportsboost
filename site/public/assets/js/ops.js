@@ -624,6 +624,10 @@
                 // demand. Distinct from the "Abandoned" tab, which is the
                 // anonymous analytics view with no email attached.
                 carts: null, cartsLoading: false, cartsError: null,
+                // The mystery-discount store — the emails the configurator
+                // modal captured and the live token each one bought. Its own
+                // store again (PII + a real discount), fetched on demand.
+                mystery: null, mysteryLoading: false, mysteryError: null,
                 // Auto-refresh: poll the dashboard so the numbers stay live
                 // without a manual Refresh. Default on.
                 live: true };
@@ -700,6 +704,7 @@
           if (state.tab === "boosters") loadBoosters();
           if (state.tab === "orders" && !state.orderId) loadOrders();
           if (state.tab === "carts") loadCarts();
+          if (state.tab === "mystery") loadMystery();
           return;
         }
         toGate();
@@ -2617,6 +2622,241 @@
     return f;
   }
 
+  /* ── Mystery: the configurator's email capture and its live codes ───────
+     The seventh store (see mystery.py), and the one whose rows are worth real
+     money: each is an email next to a single-use token that takes 30% off for
+     one hour. Fetched on demand like Carts and Accounts.
+
+     The tab answers one question — does giving 30% away buy orders — so the
+     funnel it draws is the honest one: cards opened → Apply pressed → paid.
+     "Applied" is not a sale; only Redeemed is. */
+  var BINGO_STATUS = { issued: "Live", redeemed: "Redeemed", expired: "Expired" };
+  function bingoChip(s) {
+    return '<span class="ostat ostat-' + esc(s) + '">' + esc(BINGO_STATUS[s] || s) + "</span>";
+  }
+
+  function loadMystery() {
+    if (state.mysteryLoading) return;
+    state.mysteryLoading = true;
+    state.mysteryError = null;
+    api({ action: "mystery", token: state.token, days: state.days }).then(function (res) {
+      state.mysteryLoading = false;
+      if (res.status === 200 && res.body.mystery) {
+        state.mystery = res.body.mystery;
+      } else if (res.status === 401) {
+        toGate();
+        return;
+      } else if (res.status === 200) {
+        state.mysteryError = "This server doesn't serve the mystery store yet — it is running an " +
+          "older build. Restart serve.py (the /api routes only reload on restart), then Refresh.";
+      } else {
+        state.mysteryError = "Couldn't load the mystery store — the server returned " + res.status + ".";
+      }
+      if (state.tab === "mystery") render();
+    }).catch(function () {
+      state.mysteryLoading = false;
+      state.mysteryError = "Couldn't reach the server. Is it running?";
+      if (state.tab === "mystery") render();
+    });
+  }
+
+  function panelMystery() {
+    var f = document.createDocumentFragment();
+    var a = state.mystery;
+
+    if (state.mysteryError && !a) {
+      var er = document.createElement("div");
+      er.className = "card";
+      er.innerHTML = '<p class="empty">' + esc(state.mysteryError) + "</p>";
+      var retry = document.createElement("button");
+      retry.className = "btn btn-sm"; retry.type = "button"; retry.textContent = "Try again";
+      retry.style.cssText = "margin:0 auto 16px;display:block";
+      retry.addEventListener("click", function () { state.mysteryError = null; loadMystery(); render(); });
+      er.appendChild(retry);
+      f.appendChild(er);
+      return f;
+    }
+    if (!a) {
+      loadMystery();
+      var wait = document.createElement("div");
+      wait.className = "card";
+      wait.innerHTML = '<p class="empty">Loading the mystery store…</p>';
+      f.appendChild(wait);
+      return f;
+    }
+
+    var pct = Math.round((a.pct || 0) * 100);
+
+    // What this tab is. The margin note matters more here than anywhere else on
+    // the console: this is a flat give-away, not a blended average, so the cost
+    // of the programme is `Redeemed × pct`, and that is what has to be read.
+    var intro = document.createElement("div");
+    intro.className = "banner";
+    intro.innerHTML = '<span class="ico">✉</span><div><strong>Mystery discount — the configurator’s ' +
+      "email capture.</strong> Four seconds after a visitor settles their target rank, the game page offers a " +
+      "sealed card; the address buys the right to open it. <b>Every card pays " + pct + "%</b> — the pick is " +
+      "theatre and the copy never claims odds. One card per inbox ever, live for " + num(a.ttl_mins) +
+      " minutes, single-use, and it replaces the sitewide sale rather than stacking with it. " +
+      "Model the cost as a flat " + pct + "% on every <em>Redeemed</em> row, not as an average.</div>";
+    f.appendChild(intro);
+
+    if (a.synthetic > 0) {
+      var syn = document.createElement("div");
+      syn.className = "banner synthetic";
+      syn.innerHTML = '<span class="ico">▲</span><div><strong>Includes seeded rows.</strong> ' +
+        num(a.synthetic) + " row(s) were written for testing. Clear the store before launch.</div>";
+      f.appendChild(syn);
+    }
+
+    var kr = document.createElement("div");
+    kr.className = "kpis";
+    kr.appendChild(kpi("Cards opened", num(a.total), undefined, "", true));
+    kr.appendChild(kpi("Live right now", num(a.live)));
+    kr.appendChild(kpi("Applied", num(a.applied) + " · " + a.apply_rate + "%"));
+    kr.appendChild(kpi("Redeemed", num(a.redeemed) + " · " + a.redeem_rate + "%"));
+    kr.appendChild(kpi("Bought", usd(a.redeemed_value)));
+    kr.appendChild(kpi("Also took the guides mail", num(a.optins)));
+    f.appendChild(kr);
+
+    var statuses = (a.statuses || []).filter(function (s) { return s.count > 0; });
+    var games = a.games || [];
+    var g = document.createElement("div");
+    g.className = "grid";
+    g.appendChild(card({
+      cls: "half", title: "By status",
+      sub: "Live is inside its hour. Expired is an hour that ran out — the design, not a failure.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: statuses.map(function (s) { return { label: BINGO_STATUS[s.status] || s.status, value: s.count }; }),
+          color: SERIES[0], alt: "Mystery codes by status"
+        });
+      },
+      table: {
+        head: ["Status", "Codes"], num: [1],
+        rows: statuses.map(function (s) { return [BINGO_STATUS[s.status] || s.status, num(s.count)]; })
+      }
+    }));
+    g.appendChild(card({
+      cls: "half", title: "By game",
+      sub: "Which ladders the modal captures on, and how many of those codes were paid for.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: games.map(function (r) { return { label: r.game, value: r.count }; }),
+          color: SERIES[2], alt: "Mystery codes by game"
+        });
+      },
+      table: {
+        head: ["Game", "Codes", "Redeemed"], num: [1, 2],
+        rows: games.map(function (r) { return [r.game, num(r.count), num(r.redeemed)]; })
+      }
+    }));
+    f.appendChild(g);
+
+    // Which sealed card people tap. It changes nothing about the discount — it
+    // is here because C is pre-selected, so a flat A/B/C split would mean the
+    // pick is engaging people and a 95% C would mean it is pure friction.
+    var picks = a.picks || [];
+    var countries = a.countries || [];
+    var g2 = document.createElement("div");
+    g2.className = "grid";
+    g2.appendChild(card({
+      cls: "half", title: "Which card they picked",
+      sub: "C is pre-selected so the button is never dead. A flat split means the pick engages people; an all-C column means it is friction.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: picks.map(function (r) { return { label: "Card " + r.pick, value: r.count }; }),
+          color: SERIES[3], alt: "Mystery card picked"
+        });
+      },
+      table: {
+        head: ["Card", "Picks"], num: [1],
+        rows: picks.map(function (r) { return ["Card " + r.pick, num(r.count)]; })
+      }
+    }));
+    g2.appendChild(card({
+      cls: "half", title: "Where they opened it",
+      sub: "Country is resolved server-side, never from an IP — see how each was inferred in the table.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: countries.slice(0, 10).map(function (c) {
+            return { label: (flag(c.code) + " " + countryName(c.code)).trim(), value: c.count };
+          }),
+          color: SERIES[4], alt: "Mystery codes by country"
+        });
+      },
+      table: {
+        head: ["Country", "Codes"], num: [1],
+        rows: countries.map(function (c) { return [countryName(c.code), num(c.count)]; })
+      }
+    }));
+    f.appendChild(g2);
+
+    var recent = a.recent || [];
+    var el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML =
+      '<div class="card-hd"><h3>Every card</h3><span class="spacer"></span>' +
+      '<button class="btn btn-sm" type="button" data-export-mystery>Export CSV</button></div>' +
+      '<p class="card-sub">Newest first' +
+      (a.total > recent.length ? ", first " + num(recent.length) + " of " + num(a.total) : "") +
+      ". The value is re-priced from each stored configuration; the offer is what the " +
+      pct + "% code brings it to. <b>Mailed</b> is whether the code actually left the server — " +
+      "an unconfigured mailbox issues the code anyway and the modal drops its inbox line.</p>";
+
+    if (!recent.length) {
+      el.insertAdjacentHTML("beforeend",
+        '<p class="empty">No cards opened in this period. They appear once a visitor sets a target rank on a ' +
+        "game page, waits four seconds and gives the modal an address.</p>");
+      f.appendChild(el);
+      return f;
+    }
+
+    var head = ["When", "Email", "Game", "Config", "Card", "Value", "Offer", "Mailed", "Status"];
+    var html = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+      head.map(function (h, i) { return '<th class="' + (i === 5 || i === 6 ? "num" : "") + '">' + esc(h) + "</th>"; }).join("") +
+      "</tr></thead><tbody>";
+    recent.forEach(function (r) {
+      html += "<tr>" +
+        '<td class="dim">' + esc(ago(r.at)) + "</td>" +
+        "<td>" + esc(r.email) + (r.optin ? ' <span class="chip">guides</span>' : "") +
+          (r.syn ? ' <span class="chip">seeded</span>' : "") + "</td>" +
+        "<td>" + esc(r.game) + '<span class="dim"> · ' + esc(r.mode || "") + "</span></td>" +
+        '<td class="wrap-cell">' + esc(r.summary) + "</td>" +
+        '<td class="dim">' + esc(r.pick) + "</td>" +
+        '<td class="num">' + esc(usd(r.value)) + "</td>" +
+        '<td class="num">' + (r.offer ? esc(usd(r.offer)) : '<span class="dim">—</span>') + "</td>" +
+        "<td>" + (r.mailed ? "Yes" : '<span class="dim">No</span>') + "</td>" +
+        "<td>" + bingoChip(r.status) +
+          (r.order_id ? ' <span class="dim">' + esc(r.order_id) + "</span>"
+                      : (r.applied_at ? ' <span class="dim">applied</span>' : "")) + "</td>" +
+        "</tr>";
+    });
+    el.insertAdjacentHTML("beforeend", html + "</tbody></table></div>");
+
+    el.querySelector("[data-export-mystery]").addEventListener("click", function () {
+      var cols = ["opened", "email", "token", "game", "config", "mode", "card", "value_usd",
+                  "offer_usd", "mailed", "guides_optin", "status", "expires", "applied_at",
+                  "redeemed_at", "order_id", "country_code", "country", "country_source", "seeded"];
+      var lines = [cols.join(",")];
+      var iso = function (t) { return t ? new Date(t * 1000).toISOString() : ""; };
+      recent.forEach(function (r) {
+        lines.push([iso(r.at), r.email, r.token, r.game, r.summary, r.mode, r.pick, r.value,
+                    r.offer, r.mailed ? "yes" : "no", r.optin ? "yes" : "no", r.status,
+                    iso(r.expires), iso(r.applied_at), iso(r.redeemed_at), r.order_id,
+                    r.co, countryName(r.co), r.cosrc, r.syn ? "yes" : "no"]
+          .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; }).join(","));
+      });
+      var link = document.createElement("a");
+      link.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+      link.download = "esb-mystery-" + new Date().toISOString().slice(0, 10) + ".csv";
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+    });
+
+    f.appendChild(el);
+    return f;
+  }
+
   function panelAbandoned(d) {
     var rows = d.abandoned;
     var f = document.createDocumentFragment();
@@ -2950,6 +3190,7 @@
     overview: panelOverview, funnel: panelFunnel, configurator: panelConfigurator,
     journey: panelJourney, sessions: panelSessions, orders: panelOrders,
     carts: panelCarts,
+    mystery: panelMystery,
     accounts: panelAccounts,
     guides: panelGuides, boosters: panelBoosters,
     acquisition: panelAcquisition, friction: panelFriction, abandoned: panelAbandoned,
@@ -3154,6 +3395,7 @@
       if (state.tab === "boosters") loadBoosters();
       if (state.tab === "orders") loadOrders();
       if (state.tab === "carts") loadCarts();
+      if (state.tab === "mystery") loadMystery();
     });
   });
 

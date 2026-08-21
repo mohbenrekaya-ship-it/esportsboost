@@ -126,6 +126,10 @@ def build_session(order, base_url):
     # and an unrecognised handle must not reach fulfilment as an assignment.
     # It carries no charge: there is no named-booster fee in quote(), so this
     # cannot move the amount and the profile page says so out loud.
+    # Only a token the SERVER resolved reaches metadata — process_checkout()
+    # has already checked it against the store, so a body carrying a made-up
+    # token cannot get one burned (or credited) at fulfilment.
+    bingo = str(order.get("bingo") or "")[:40] if order.get("offer_label") else ""
     named = str(order.get("booster") or "").strip()
     booster = named if any(b["handle"] == named for b in D.BOOSTERS) else ""
     order_id = new_order_id()
@@ -162,12 +166,27 @@ def build_session(order, base_url):
         "metadata[booster]": booster,
         "metadata[hours]": (order.get("hours") or "")[:490],
         "metadata[notes]": (order.get("notes") or "")[:490],
+        # The options the buyer actually ticked, as ids. Fulfilment could infer
+        # the PAID ones from the amount, but not the free ones: a free-but-
+        # optional add-on (data.py's `was_pct` — "Watch your booster play")
+        # moves no money and would otherwise reach the board with nothing
+        # recording that it was asked for. It is an obligation on whoever
+        # claims the order, so it has to travel with the order.
+        "metadata[addons]": ",".join(
+            a for a in (order.get("addons") or [])
+            # Filtered by queue with the same call quote() makes, so the
+            # metadata can never name the other queue's option — fulfilment
+            # would otherwise be told to honour something never charged for.
+            if isinstance(a, str) and a in pricing.ADDON
+            and D.addon_applies(pricing.ADDON[a], order.get("mode", "Solo")))[:490],
         "metadata[eta]": q["eta"],
         "metadata[currency]": charge_cur,
         "metadata[promo]": q["promo_code"],
         # The recovery token, so the webhook can burn it once the order is paid
         # and the same code can never be spent twice. Empty on a normal order.
         "metadata[cart]": str(order.get("cart") or "")[:40],
+        # The mystery-discount token, burned by the webhook for the same reason.
+        "metadata[bingo]": bingo,
         "metadata[discount]": str(q["discount"]),
         "metadata[subtotal]": str(q["subtotal"]),
     }
@@ -201,6 +220,7 @@ def process_checkout(raw, base_url):
     # alone, which is checked against the store (`carts.redeemable()`: unknown,
     # already spent or expired all resolve to no discount).
     order.pop("recovery_pct", None)
+    order.pop("offer_label", None)
     cart_token = str(order.get("cart") or "")[:40]
     if cart_token:
         try:
@@ -209,6 +229,25 @@ def process_checkout(raw, base_url):
             if row:
                 order["recovery_pct"] = carts.RECOVERY_PCT
                 order["promo"] = row["token"]
+                order["offer_label"] = "Come back offer"
+        except Exception:                                       # noqa: BLE001
+            pass          # a store hiccup must not block a paying customer
+
+    # ── the mystery discount ─────────────────────────────────────────────
+    # The same seam, the same rule: the client sends a TOKEN and never a
+    # percentage. It rides in its own field rather than reusing `cart` so the
+    # two stores are never asked to resolve each other's codes, and it only wins
+    # when it is worth more than a recovery token the buyer also happens to hold
+    # — never-stack, best-wins, decided here rather than in the browser.
+    bingo_token = str(order.get("bingo") or "")[:40]
+    if bingo_token:
+        try:
+            import mystery
+            row = mystery.redeemable(bingo_token)
+            if row and (row.get("pct") or 0) > (order.get("recovery_pct") or 0):
+                order["recovery_pct"] = row.get("pct") or mystery.OFFER_PCT
+                order["promo"] = row["token"]
+                order["offer_label"] = mystery.OFFER_LABEL
         except Exception:                                       # noqa: BLE001
             pass          # a store hiccup must not block a paying customer
 
@@ -307,6 +346,14 @@ def process_webhook(raw, sig_header):
                               order_id=record.get("order_id") or "")
         except Exception as e:               # noqa: BLE001 — never break fulfilment
             sys.stderr.write("[cart] recover failed: %s\n" % e)
+        # Same for a mystery-discount token: single-use means burned on payment,
+        # or the code outlives the order it was minted for.
+        try:
+            if md.get("bingo"):
+                import mystery
+                mystery.redeem(md["bingo"], order_id=record.get("order_id") or "")
+        except Exception as e:               # noqa: BLE001 — never break fulfilment
+            sys.stderr.write("[bingo] redeem failed: %s\n" % e)
         try:
             _record_order(md, obj)
         except Exception as e:               # noqa: BLE001 — never break fulfilment
@@ -442,6 +489,20 @@ def _money(cents, currency):
             else "{:,.2f} {}".format(amount, cur.upper()))
 
 
+def _addon_names(ids):
+    """The ticked options as names, for the two order mails. Ids arrive as the
+    comma-joined `metadata[addons]`; anything unrecognised is dropped rather
+    than printed raw, so a stale id from an add-on the catalogue has retired
+    never reaches a customer's inbox. Free options are named the same as paid
+    ones — the booster claiming the order has to honour them either way."""
+    out = []
+    for aid in str(ids).split(","):
+        a = pricing.ADDON.get(aid.strip())
+        if a and a["label"] not in out:
+            out.append(a["label"])
+    return ", ".join(out)
+
+
 def _order_rows(record, md):
     """The facts both messages state, in one place so they cannot disagree.
     Only rows with something in them survive."""
@@ -452,6 +513,7 @@ def _order_rows(record, md):
         ("Region", md.get("region") or ""),
         ("Estimated", md.get("eta") or ""),
         ("Booster", md.get("booster") or ""),
+        ("Options", _addon_names(md.get("addons") or "")),
         ("Paid", _money(record.get("amount_total"), md.get("currency"))),
         # "Notes", not "Your notes" — one row list feeds both messages, and the
         # operator's copy is not the buyer's.

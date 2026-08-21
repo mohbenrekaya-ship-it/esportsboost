@@ -1599,6 +1599,26 @@ body.hd-locked {
 .opt input { accent-color: var(--ember); margin-top: 2px; }
 .opt .price { margin-left: auto; font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--ember-warm); white-space: nowrap; }
 .opt .note { display: block; color: var(--text-6); font-size: 11px; line-height: 1.5; }
+/* The free-but-optional row's price cell: the struck reference figure and the
+   live "+$0" beside it, on ONE line. It sits in the same `margin-left: auto`
+   column as every other price, so the row's geometry is unchanged — the struck
+   half is the only thing added, and it is `nowrap` because a reference price
+   that wraps under the figure it refers to reads as two prices. */
+.opt .price-freeopt { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.opt .opt-was { text-decoration: line-through; text-decoration-thickness: 1.5px; color: var(--text-6); opacity: .85; }
+.opt .opt-was[hidden] { display: none; }
+.opt .opt-now { color: var(--l-good, #8fd6a4); font-weight: 700; }
+/* The "FREE" flag beside the name. It rides on the LABEL's line, never the
+   note's — the note is the row's width constraint (it is one line by rule and
+   already measures to the millimetre), so anything added beside it wraps the
+   row and costs the fold budget a line. */
+.opt .opt-flag {
+  display: inline-block; margin-left: 7px; vertical-align: 1px;
+  font-family: var(--mono); font-size: 8.5px; font-weight: 700; letter-spacing: .12em;
+  padding: 2px 5px; border-radius: 3px; line-height: 1.35;
+  color: var(--l-good, #8fd6a4);
+  background: rgba(143, 214, 164, .13); border: 1px solid rgba(143, 214, 164, .3);
+}
 /* The mode-conditional pair (Solo only queue / Play on your schedule) is hidden
    with the attribute, and `.opt` carries a `display` that beats the UA's
    [hidden] — the same bug .co, .fc and the ops console's .banner each hit. */
@@ -2812,9 +2832,13 @@ body.hd-locked {
 .seg-pct { font-size: 10px; font-weight: 600; opacity: .85; }
 .ob .seg-full .seg-opt:has(input:checked) .seg-pct { color: var(--ink); opacity: .8; }
 
-.ob .opts { gap: 5px; }
+/* 4px/6px rather than the handoff's 5px/7px. The stream row is the third
+   checkbox in a card whose CTA has to clear the fold at 1440×900, and this buys
+   ~8px of that budget back without touching a type size or a hit target — the
+   rows are still 44px+ tall. */
+.ob .opts { gap: 4px; }
 .ob .opt {
-  padding: 7px 10px; gap: 10px; align-items: center; border-radius: 9px;
+  padding: 6px 10px; gap: 10px; align-items: center; border-radius: 9px;
   font-size: 12.5px; font-weight: 600; line-height: 1.2; color: var(--h-text);
   background: rgba(255, 255, 255, .02); border: 1px solid var(--h-line-2);
 }
@@ -2823,12 +2847,70 @@ body.hd-locked {
 .ob .opt .note {
   display: block; font-size: 11px; font-weight: 400; line-height: 1.3;
   margin-top: 1px; color: var(--h-muted);
+  /* THE FLOOR UNDER THE ONE-LINE RULE, and the same technique `.ob-cap` uses
+     for tier captions. An add-on note is one line by rule — a second costs
+     ~14px and the card's CTA has to clear the fold at 1440×900 — but the width
+     it gets is not a constant: the price column beside it grows with the game's
+     own prices and with the currency mark (League's "€48 +€0" is 25px wider
+     than Rocket League's), so the same sentence fits on one ladder and wraps on
+     another. Every translation is longer than the English too. Clipping keeps
+     the row height deterministic in every language, on every game, in every
+     currency; the copy below is then written short enough that nothing actually
+     reaches the ellipsis. Shorten the sentence, don't remove this. */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .ob .opt .price {
   font-family: var(--body); font-size: 12px; font-weight: 600; letter-spacing: 0;
   color: var(--h-muted);
 }
 .ob .opt:has(input:checked) .price { color: var(--h-tint-2); }
+/* The free-but-optional row inside the order card. Its "+$0" keeps the green
+   even when the row is checked — the ember `:has(input:checked)` rule above
+   would otherwise repaint it as an ordinary price the moment it is taken, which
+   is exactly when it most needs to read as free. `.ob` declares no `--l-good`
+   of its own and an unresolvable var() computes to the INITIAL value, not an
+   inherited one, so the literal is the fallback here the same way `.mobile-bar`
+   and `.dsh` carry theirs. */
+.ob .opt .opt-was { color: var(--h-dim, #7e7872); font-size: 11px; }
+.ob .opt .opt-now,
+.ob .opt:has(input:checked) .price .opt-now { color: var(--l-good, #8fd6a4); font-size: 13px; }
+
+/* ── the free row, given the weight it is worth ──────────────────────────
+   It is the card's headline offer and it was reading as the third item in a
+   list of three. The hierarchy is bought with colour, weight and padding — NOT
+   with height: the card's CTA has to clear the fold at 1440×900 and the
+   tightest ladders (Rivals, Rocket League) sit ~5px inside it. So the padding
+   this row gains is taken back off the two paid rows below it, which is also
+   the hierarchy stated a second way: the offer is the big row, the upsells are
+   the small ones. Net height change across the block is zero — re-measure all
+   nine games if you touch either number.
+
+   Green, deliberately, not ember. Ember is the CTA directly underneath, and a
+   second ember block 60px above it makes two primary actions out of one; green
+   is already the site's "free / included / live" colour (--l-good), so the row
+   reads as a gift rather than as a competing button. */
+.ob .opt-freeopt {
+  padding: 8px 10px;
+  background: rgba(143, 214, 164, .055);
+  border-color: rgba(143, 214, 164, .34);
+}
+.ob .opt-freeopt:hover { background: rgba(143, 214, 164, .09); }
+.ob .opt-freeopt > span > span:first-child { font-weight: 700; }
+/* Taken checked, it stays GREEN. The `.ob .opt:has(input:checked)` rule above
+   would repaint it ember at exactly the moment it most needs to read as free,
+   and these two selectors carry equal specificity — this one wins on source
+   order alone, so it must stay below it. */
+.ob .opt-freeopt:has(input:checked) {
+  background: rgba(143, 214, 164, .1);
+  border-color: rgba(143, 214, 164, .55);
+}
+.ob .opt-freeopt input[type="checkbox"]:checked {
+  background: var(--l-good, #8fd6a4); border-color: transparent;
+}
+/* The two paid rows give up the 4px the offer takes. Mobile is untouched —
+   `.ob .opt { padding: 11px 10px }` below 1000px overrides this, where the card
+   has dropped its own CTA and the fold budget does not apply. */
+.ob .opt:not(.opt-freeopt) { padding: 4px 10px; }
 /* Native checkbox restyled rather than replaced — it stays a real checkbox for
    the keyboard and the a11y tree. */
 .ob .opt input[type="checkbox"] {
@@ -2844,6 +2926,20 @@ body.hd-locked {
 }
 .ob .opt input[type="checkbox"]:checked { background: var(--ember-grad); border-color: transparent; }
 .ob .opt input[type="checkbox"]:checked::after { transform: scale(1); }
+/* The always-on inclusions, as one line under the CTA instead of a checkbox row
+   each — see ob_included() in build.py for why it sits below the button (the
+   fold budget) rather than beside the picker it used to be part of. The seal
+   glyph carries the green and the words stay muted, the same division the
+   mobile bar's assurance row makes: this is a footnote to the offer, not a
+   third accent under an ember button. */
+.ob-incl {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px;
+  margin-top: 9px; font-size: 11px; line-height: 1.45; color: var(--h-muted);
+}
+.ob-incl .ico { color: var(--l-good, #8fd6a4); flex: none; }
+.ob-incl-k { font-weight: 600; color: var(--h-text); }
+.ob-incl-sep { font-style: normal; opacity: .45; }
+
 /* The always-on inclusion is a fact, not a choice, so it reads as one line
    under the list instead of taking a fourth checkbox row. */
 
@@ -4183,6 +4279,30 @@ body.hd-locked {
   margin-top: 2px; color: var(--c-muted);
 }
 .co .opt:has(input:checked) .price { color: var(--c-tint-2); }
+/* Same pair on the checkout upsell — see the .ob rules above for why the green
+   has to beat the checked-row colour and why the literal is the fallback. */
+.co .opt .opt-was { color: var(--text-6); font-size: 11px; }
+.co .opt .opt-now,
+.co .opt:has(input:checked) .price .opt-now { color: var(--l-good, #8fd6a4); font-size: 13px; }
+/* The free row carries the same green offer treatment it has on the order card
+   — one offer, one look, or the thing the buyer nearly took on the game page
+   arrives at checkout as an ordinary line item. No padding rebalance here: the
+   fold budget is the order card's constraint, not this column's, so the paid
+   rows keep their full height. Must stay BELOW `.co .opt:has(input:checked)`,
+   which it ties with on specificity and beats on source order alone. */
+.co .opt-freeopt {
+  background: rgba(143, 214, 164, .055);
+  border-color: rgba(143, 214, 164, .34);
+}
+.co .opt-freeopt:hover { background: rgba(143, 214, 164, .09); }
+.co .opt-freeopt > span > span:first-child { font-weight: 700; }
+.co .opt-freeopt:has(input:checked) {
+  background: rgba(143, 214, 164, .1);
+  border-color: rgba(143, 214, 164, .55);
+}
+.co .opt-freeopt input[type="checkbox"]:checked {
+  background: var(--l-good, #8fd6a4); border-color: transparent;
+}
 
 /* Equal-height columns: `margin-top:auto` here collects the summary's spare
    height ABOVE the totals, so both cards end on the same baseline and the slack
@@ -7986,6 +8106,403 @@ body.gc-page { background: #0b0a09; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   THE MYSTERY DISCOUNT — design_handoff_mystery_discount
+   ══════════════════════════════════════════════════════════════════════════
+   The modal that fires on a game page four seconds after the target rank
+   settles: a sealed card, an email, a 30% code, and back to the order with the
+   discount applied. Ninth scoped port after .hero-a / .co / .gg / .dsh / .rst /
+   .tk / .hd / .gc — the handoff's own tokens are declared on `.myd`, radii are
+   explicit per element, and nothing leaks past the scope.
+
+   Load-bearing:
+
+   * **`.myd [hidden]` is the guard.** Every row and step in here carries a
+     `display`, which beats the UA's `[hidden]` — the same bug `.co`, `.tk`,
+     `.fc` and the ops console's `.banner` hit. `data-myd-view` on the root is
+     the one state hook; the steps hide themselves against it.
+   * **`position: fixed`, above everything.** z-index 95 puts it over the header
+     (90 is the auth panel, which app.js closes before opening this) and over
+     the sticky `.mobile-bar`, which is hidden outright while the modal is open —
+     a bar quoting the pre-discount total under a card announcing the discount is
+     two prices on one screen.
+   * **The card scrolls, the page does not.** `align-items: flex-start` +
+     `overflow: auto` on the scroller, per the handoff, so a tall card on a short
+     viewport scrolls instead of clipping. Body scroll is locked through app.js's
+     `lockScroll()`, which pins the body rather than setting `overflow:hidden` —
+     iOS ignores the latter.
+   * **The accent is `#ff5a1f`, the handoff's, not `var(--ember)`.** This sits
+     outside `.hero-a`, where the site's global ember is `#ff4a1f`; the modal is
+     drawn against the order card, so it takes the card's accent.
+   * **Every animation stops under `prefers-reduced-motion`.** A spinner that
+     cannot be turned off on a screen someone is reading is an accessibility
+     failure, and the reveal works without any of it.
+   ══════════════════════════════════════════════════════════════════════════ */
+.myd {
+  --m-ember: #ff5a1f;
+  --m-amber: #ffb03a;
+  --m-lit: #ffb887;
+  --m-good: #8fd6a4;
+  --m-card: linear-gradient(180deg, #1f1b18, #141211);
+  --m-line: rgba(255, 255, 255, .13);
+  --m-line-2: rgba(255, 255, 255, .10);
+  --m-plate: rgba(255, 255, 255, .03);
+  --m-fill: linear-gradient(94deg, #ffb03a, #ff5a1f);
+  --m-ink: #201004;
+  --m-t: #f2efec;
+  --m-t-2: #c9c2bb;
+  --m-t-3: #b6afa9;
+  --m-t-4: #9c958e;
+  --m-t-5: #8d8781;
+  --m-t-6: #7b746d;
+
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  font-family: var(--body);
+}
+/* The scoped repeat of ashfall.css's global `[hidden]` rule. Redundant while
+   that one carries `!important`, kept for the same reason `.co`, `.tk`, `.rvp`
+   and `.gc` keep theirs: every row in here carries a `display`, and if the
+   global is ever softened this is what stops all five steps rendering at once. */
+.myd [hidden] { display: none; }
+/* The sticky quote is hidden while the modal is open, for the same reason the
+   header sheet hides it: a bar quoting the pre-discount total under a card
+   announcing the discount is two prices on one screen. The flag lives on
+   <html>, not <body> — `lockScroll()` gives the body `position: fixed`, and a
+   second owner of that element's state is how one of them ends up stuck. */
+html.myd-open .mobile-bar { display: none; }
+.myd-back { position: absolute; inset: 0; background: rgba(6, 5, 5, .76); }
+.myd-scroll {
+  position: absolute; inset: 0; overflow: auto;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 22px;
+}
+
+/* One step visible at a time. The step to show is chosen by TOGGLING `hidden`
+   in app.js, not by a `[data-myd-view="…"] [data-myd-step="…"]` rule here — and
+   that is not a preference. `ashfall.css` declares `[hidden] { display: none
+   !important }` globally, so a step the server rendered with `hidden` can never
+   be revealed by any selector, at any specificity, from this file. The view
+   attribute stays on the root as the readable state (and is what the focus and
+   Escape handling keys off), but the display is the attribute's. */
+.myd [data-myd-step] { display: flex; }
+
+.myd-card {
+  position: relative; display: flex; flex-direction: column;
+  width: 404px; max-width: 100%; padding: 22px; border-radius: 16px;
+  background: var(--m-card); border: 1px solid var(--m-line);
+  box-shadow: 0 34px 80px rgba(0, 0, 0, .66);
+  color: var(--m-t);
+  animation: myd-rise .34s cubic-bezier(.2, .7, .2, 1) both;
+}
+.myd-hair {
+  position: absolute; top: 0; left: 0; right: 0; height: 2px; border-radius: 16px 16px 0 0;
+  background: linear-gradient(90deg, rgba(255, 90, 31, 0), var(--m-ember), rgba(255, 90, 31, 0));
+}
+.myd-hair-win { background: linear-gradient(90deg, rgba(70, 190, 110, 0), #46be6e, rgba(70, 190, 110, 0)); }
+.myd-x {
+  position: absolute; top: 14px; right: 14px; width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center; border-radius: 8px;
+  background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .11);
+  color: #a9a29b; cursor: pointer;
+}
+.myd-x:hover { background: rgba(255, 255, 255, .08); color: var(--m-t); }
+
+/* ── shared type ──────────────────────────────────────────────────────── */
+.myd-pill, .myd-tag, .myd-won {
+  display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+  font: 600 9.5px/1 var(--body); letter-spacing: .14em; text-transform: uppercase;
+  border-radius: 999px; padding: 7px 11px;
+}
+.myd-pill {
+  align-self: flex-start; color: var(--m-lit);
+  background: rgba(255, 90, 31, .10); border: 1px solid rgba(255, 90, 31, .28);
+}
+.myd-head { display: flex; flex-direction: column; margin-top: 22px; }
+.myd-kicker {
+  display: flex; align-items: center; gap: 10px;
+  font: 600 9px/1 var(--body); letter-spacing: .2em; text-transform: uppercase;
+  color: var(--m-t-5);
+}
+.myd-dash { width: 18px; height: 1px; flex: none; background: linear-gradient(90deg, rgba(255, 90, 31, 0), var(--m-ember)); }
+.myd-h {
+  display: block; margin-top: 13px;
+  font-size: 30px; font-weight: 600; letter-spacing: -.034em; line-height: 1.1;
+}
+.myd-h-grad {
+  background: linear-gradient(96deg, #ffd08a, #ff5a1f 72%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.myd-h-row { display: flex; align-items: flex-start; gap: 9px; }
+.myd-h-2 { margin-top: 9px; color: var(--m-t-2); }
+.myd-tag {
+  align-self: flex-start; margin-top: 12px; padding: 5px 8px;
+  font-size: 9px; letter-spacing: .13em; color: var(--m-lit);
+  background: rgba(255, 90, 31, .10); border: 1px solid rgba(255, 90, 31, .26);
+}
+.myd-h3 { font-size: 20px; font-weight: 600; letter-spacing: -.02em; line-height: 1.15; }
+.myd-p { margin: 14px 0 0; font-size: 14.5px; line-height: 1.6; color: var(--m-t-3); text-wrap: pretty; }
+.myd-p-sm { font-size: 14px; margin-top: 16px; }
+.myd-p-c { text-align: center; max-width: 36ch; }
+.myd-note { margin: 9px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--m-t-5); }
+.myd-note[data-err] { color: var(--m-lit); }
+.myd-note-c { margin-top: 10px; font-size: 13.5px; text-align: center; }
+.myd-fine {
+  display: block; margin: 13px 0 0; font-size: 12px; line-height: 1.5;
+  color: var(--m-t-6); text-align: center;
+}
+.myd-fine-c { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--m-t-5); }
+.myd-fine-c a { color: var(--m-lit); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── the "up to 30%" band ─────────────────────────────────────────────── */
+.myd-band {
+  display: flex; align-items: baseline; justify-content: center; gap: 10px;
+  margin-top: 16px; padding: 18px 15px; border-radius: 11px;
+  background: linear-gradient(150deg, rgba(255, 176, 58, .15), rgba(255, 90, 31, .05));
+  border: 1px solid rgba(255, 90, 31, .3);
+}
+.myd-band-k { font: 600 11px/1 var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--m-lit); }
+.myd-band-n { font-size: 44px; font-weight: 600; letter-spacing: -.04em; line-height: 1; color: var(--m-t); }
+.myd-band-u { font: 600 15px/1 var(--body); letter-spacing: .11em; text-transform: uppercase; color: var(--m-lit); }
+
+/* ── the three sealed cards ───────────────────────────────────────────── */
+.myd-picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-top: 20px; }
+.myd-pick {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 9px;
+  padding: 17px 8px 13px; border-radius: 12px; cursor: pointer;
+  background: rgba(255, 255, 255, .03); border: 1px solid var(--m-line-2);
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+.myd-pick-face { color: var(--m-t-6); display: flex; }
+.myd-pick-lab { font: 700 11px/1 var(--body); letter-spacing: .14em; color: var(--m-t-5); }
+.myd-pick-lab b { font-weight: 700; }
+/* The "Picked" tag is pinned ABOVE the top edge, so selecting a card never
+   changes the row's height and the three never jump under the pointer. */
+.myd-pick-tag {
+  position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
+  display: none; white-space: nowrap; border-radius: 999px; padding: 4px 7px;
+  font: 700 8px/1 var(--body); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--m-ink); background: var(--m-fill);
+}
+.myd-pick[aria-pressed="true"] {
+  background: linear-gradient(180deg, rgba(255, 176, 58, .18), rgba(255, 90, 31, .05));
+  border-color: rgba(255, 90, 31, .5);
+  box-shadow: 0 8px 22px rgba(255, 90, 31, .18);
+  transform: translateY(-2px);
+}
+.myd-pick[aria-pressed="true"] .myd-pick-tag { display: block; }
+.myd-pick[aria-pressed="true"] .myd-pick-face { color: var(--m-lit); }
+.myd-pick[aria-pressed="true"] .myd-pick-lab { color: var(--m-t); }
+
+/* ── actions ──────────────────────────────────────────────────────────── */
+.myd-acts { display: flex; flex-direction: column; gap: 9px; margin-top: 20px; }
+.myd-cta {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; height: 54px; border: 0; border-radius: 11px; cursor: pointer;
+  font: 700 13px/1 var(--body); letter-spacing: .06em; text-transform: uppercase;
+  background: var(--m-fill); color: var(--m-ink);
+  box-shadow: 0 10px 26px rgba(255, 90, 31, .3);
+}
+.myd-cta b { font-weight: 700; }
+.myd-cta-mt { margin-top: 18px; }
+.myd-cta[disabled] {
+  background: rgba(255, 255, 255, .05); color: var(--m-t-6);
+  box-shadow: none; border: 1px solid var(--m-line-2); cursor: default;
+}
+.myd-ghost {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; height: 46px; border-radius: 11px; cursor: pointer;
+  font: 600 13px/1 var(--body); letter-spacing: .01em;
+  background: transparent; border: 1px solid rgba(255, 255, 255, .14); color: #a9a29b;
+}
+.myd-ghost:hover { border-color: rgba(255, 255, 255, .26); color: var(--m-t-2); }
+.myd-ghost-mt { margin-top: 20px; }
+.myd-undo {
+  margin-top: 10px; background: transparent; border: 0; padding: 4px 0; cursor: pointer;
+  font: 600 12.5px/1 var(--body); color: #ff8a3d;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+
+/* ── step 2 — email ───────────────────────────────────────────────────── */
+.myd-email-head { display: flex; align-items: center; gap: 12px; padding-right: 34px; }
+.myd-tile {
+  width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center;
+  border-radius: 12px; font: 700 15px/1 var(--body); color: var(--m-lit);
+  background: linear-gradient(160deg, rgba(255, 176, 58, .2), rgba(255, 90, 31, .06));
+  border: 1px solid rgba(255, 90, 31, .34);
+}
+.myd-email-t { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.myd-held { font: 600 9.5px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--m-good); }
+.myd-lab {
+  display: block; margin-top: 20px;
+  font: 600 10px/1 var(--body); letter-spacing: .13em; text-transform: uppercase; color: var(--m-t-5);
+}
+.myd-input {
+  width: 100%; height: 50px; margin-top: 9px; padding: 0 13px; border-radius: 10px;
+  background: rgba(255, 255, 255, .035); border: 1px solid rgba(255, 255, 255, .12);
+  color: var(--m-t); font: 400 16px/1 var(--body);
+}
+.myd-input::placeholder { color: #6f6862; }
+.myd-input[data-valid] { border-color: rgba(70, 190, 110, .45); }
+.myd-input[data-err] { border-color: var(--m-ember); }
+.myd-optin {
+  display: flex; align-items: flex-start; gap: 11px; width: 100%; margin-top: 14px;
+  padding: 12px 13px; border-radius: 10px; cursor: pointer; text-align: left;
+  background: rgba(255, 255, 255, .022); border: 1px solid rgba(255, 255, 255, .09);
+}
+.myd-optin[aria-pressed="true"] { background: rgba(255, 90, 31, .07); border-color: rgba(255, 90, 31, .28); }
+.myd-box {
+  width: 18px; height: 18px; flex: none; display: flex; align-items: center; justify-content: center;
+  border-radius: 5px; margin-top: 1px; background: transparent;
+  border: 1px solid rgba(255, 255, 255, .2); color: transparent;
+}
+.myd-optin[aria-pressed="true"] .myd-box { background: var(--m-fill); border-color: transparent; color: var(--m-ink); }
+.myd-optin-t { flex: 1; font-size: 12.5px; line-height: 1.5; color: var(--m-t-4); }
+
+/* ── the 1.4s opening beat ────────────────────────────────────────────── */
+.myd-spin-wrap { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 34px 0 30px; }
+.myd-spin {
+  width: 62px; height: 62px; border-radius: 999px;
+  border: 2px solid rgba(255, 90, 31, .22); border-top-color: var(--m-ember);
+  animation: myd-spin .82s linear infinite;
+}
+.myd-spin-t { margin-top: 22px; display: flex; align-items: baseline; gap: 7px; }
+
+/* ── step 3 — the reveal ──────────────────────────────────────────────── */
+/* The header row reaches the card's right edge, so it reserves the close
+   button's width (30px) plus its inset (14px) or the timer paints underneath
+   it — a real bug that shipped once in the prototype. */
+.myd-rev-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-right: 34px; }
+.myd-won {
+  color: var(--m-good); background: rgba(70, 190, 110, .09);
+  border: 1px solid rgba(70, 190, 110, .22); font-size: 9.5px; letter-spacing: .13em;
+}
+.myd-timer {
+  display: flex; align-items: center; gap: 7px; flex: none; white-space: nowrap;
+  font: 600 11px/1 var(--body); letter-spacing: .08em; color: var(--m-lit);
+  background: rgba(255, 90, 31, .10); border: 1px solid rgba(255, 90, 31, .28);
+  border-radius: 999px; padding: 7px 10px;
+}
+.myd-timer b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.myd-prize {
+  position: relative; margin-top: 18px; padding: 20px; border-radius: 13px;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  background: linear-gradient(160deg, rgba(255, 176, 58, .18), rgba(255, 90, 31, .05));
+  border: 1px solid rgba(255, 90, 31, .36);
+  animation: myd-pop .4s cubic-bezier(.2, .7, .2, 1) both;
+}
+.myd-prize-k {
+  display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap; justify-content: center;
+  font: 600 10px/1.4 var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--m-lit);
+}
+.myd-prize-n {
+  display: flex; align-items: baseline; gap: 8px; margin-top: 12px;
+  font-size: 60px; font-weight: 600; letter-spacing: -.04em; line-height: 1; color: var(--m-t);
+}
+.myd-prize-n b { font-weight: 600; }
+.myd-prize-n i {
+  font: 600 17px/1 var(--body); font-style: normal; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--m-lit);
+}
+/* The code chip is a copy button — same affordance as the header's promo chip.
+   A dashed border with no button chrome reads as a coupon, and a code you
+   cannot click is a code people mistype. */
+.myd-code {
+  position: relative; display: flex; align-items: center; gap: 8px;
+  margin-top: 14px; padding: 8px 12px; border-radius: 8px; cursor: pointer;
+  background: rgba(20, 15, 12, .5); border: 1px dashed rgba(255, 90, 31, .5);
+  font: 700 13px/1 var(--body); letter-spacing: .1em; color: #ff8a3d;
+}
+.myd-code b { font-weight: 700; }
+.myd-code:hover { border-color: rgba(255, 90, 31, .8); }
+.myd-copied {
+  position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+  border-radius: 8px; background: rgba(20, 15, 12, .96);
+  font: 700 11px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--m-good);
+}
+.myd-code[data-copied] .myd-copied { display: flex; }
+.myd-prize-note {
+  display: block; margin-top: 12px; max-width: 34ch;
+  font: 600 11px/1.45 var(--body); letter-spacing: .02em; color: #a9a29b;
+}
+.myd-prize-note b { font-weight: 600; }
+.myd-tot {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  margin-top: 18px; padding: 14px; border-radius: 11px;
+  background: rgba(255, 255, 255, .025); border: 1px solid rgba(255, 255, 255, .09);
+}
+.myd-tot-l, .myd-tot-r { display: flex; flex-direction: column; gap: 6px; }
+.myd-tot-r { align-items: flex-end; }
+.myd-tot-k { font: 600 9.5px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--m-t-5); }
+.myd-tot-row { display: flex; align-items: baseline; gap: 9px; }
+.myd-tot-row s { font-size: 15px; color: #7e7872; }
+.myd-tot-row b { font-size: 28px; font-weight: 600; letter-spacing: -.03em; line-height: 1; color: #ff8a3d; }
+.myd-tot-save { font-size: 19px; font-weight: 600; letter-spacing: -.02em; color: var(--m-good); }
+
+/* ── the declined / already-used card ─────────────────────────────────── */
+.myd-mid { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 12px 0 4px; }
+.myd-ring {
+  width: 52px; height: 52px; display: flex; align-items: center; justify-content: center;
+  border-radius: 999px; background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .12);
+}
+.myd-ring-ico { color: #a9a29b; }
+.myd-mid .myd-h3 { margin-top: 18px; font-size: 21px; }
+
+/* ── focus, motion ────────────────────────────────────────────────────── */
+.myd :focus-visible { outline: 2px solid var(--m-ember); outline-offset: 2px; border-radius: 4px; }
+/* The card takes focus when a step opens (see setView() — the × is the first
+   button in source order, so focusing "the first focusable thing" would arm
+   Enter on Dismiss). It is a programmatic target, not a tab stop, so it must
+   not draw a ring of its own around the whole dialog. */
+.myd-card:focus, .myd-card:focus-visible { outline: none; }
+@keyframes myd-rise { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes myd-spin { to { transform: rotate(360deg); } }
+@keyframes myd-pop { 0% { opacity: 0; transform: scale(.72); } 62% { transform: scale(1.06); } 100% { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .myd-card, .myd-prize { animation: none; }
+  .myd-pick { transition: none; }
+  .myd-pick[aria-pressed="true"] { transform: none; }
+  /* The spinner still has to read as "working", so it steps rather than spins —
+     four frames a second is legible and is not a rotating element. */
+  .myd-spin { animation: myd-spin 3.2s steps(8) infinite; }
+}
+
+/* ── phone — the handoff's undesigned screen, resolved as a bottom sheet ──
+   Not drawn in the file, which asks for it to be confirmed with the designer.
+   It follows the pattern the site already has for the auth panel: the card
+   meets the bottom edge, grows a grab handle, the three cards stay in a row
+   (they are the whole mechanic), the before/after row stacks, and the actions
+   go full width at 52px. The `.mobile-bar` is hidden while this is open — see
+   app.js — so the phone never shows the pre-discount total under a card
+   announcing the discount. */
+@media (max-width: 560px) {
+  .myd-scroll { padding: 0; align-items: flex-end; }
+  .myd-card {
+    width: 100%; border-radius: 18px 18px 0 0; padding: 26px 18px calc(20px + env(safe-area-inset-bottom));
+    animation-name: myd-sheet;
+  }
+  .myd-hair { border-radius: 18px 18px 0 0; }
+  /* The grab handle. Decoration — the sheet is dismissed by the × , the
+     backdrop or Escape, and a handle that does not drag would be a dead
+     control if it were the only affordance. */
+  .myd-card::before {
+    content: ""; position: absolute; top: 9px; left: 50%; transform: translateX(-50%);
+    width: 38px; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, .16);
+  }
+  .myd-x { top: 18px; }
+  .myd-h { font-size: 26px; }
+  .myd-band-n { font-size: 38px; }
+  .myd-prize-n { font-size: 52px; }
+  .myd-cta, .myd-ghost { height: 52px; }
+  .myd-tot { flex-direction: column; align-items: stretch; gap: 12px; }
+  .myd-tot-r { align-items: flex-start; }
+}
+@keyframes myd-sheet { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@media (max-width: 560px) and (prefers-reduced-motion: reduce) {
+  .myd-card { animation: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    MOBILE PASS — defects found walking every page at 375px and 320px
    ══════════════════════════════════════════════════════════════════════════
    This block is last in the file on purpose: each rule below is a correction
@@ -8019,6 +8536,7 @@ body.gc-page { background: #0b0a09; }
   .sp-input, .sp-textarea,
   .tk-in, .tk-in-code,
   .gd-email, .gd-email-2,
+  .myd-input,
   .input, textarea.input, select.input {
     font-size: 16px;
   }

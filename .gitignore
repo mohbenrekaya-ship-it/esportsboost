@@ -49,6 +49,13 @@ guides.ndjson
 site/carts.ndjson
 carts.ndjson
 
+# Local mystery-discount store (src/mystery.py). Holds a captured email NEXT TO
+# the single-use 30% token that resolves to a real discount server-side — the
+# same sensitivity as carts.ndjson, and the same rule. Production writes to
+# Upstash. Never committed.
+site/mystery.ndjson
+mystery.ndjson
+
 # Vercel CLI project link (project/org ids). Local-only, never committed.
 .vercel
 

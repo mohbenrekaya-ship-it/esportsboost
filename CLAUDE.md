@@ -33,11 +33,14 @@ and rebuild after every source edit; there is no watcher and no HMR.
 like production. It also hosts the **Stripe payment API** the checkout page calls — see
 [Payments](#payments-stripe) below. With no `STRIPE_SECRET_KEY` set it stays a plain static preview.
 
-Verification is: the two test files pass — `python3 site/tests/test_pricing.py` (the pricing engine,
-the bundle rules, the JS/Python mirror, the currency charge and the checkout payload) and `python3
-site/tests/test_mail.py` (header injection, the honeypot, the rate cap and the two order mails) —
-the build succeeds (prints `built 114 pages + 207 images … (+ /ops console)`), then load the affected
-pages and check the browser console. There is no linter or formatter.
+Verification is: the four test files pass — `python3 site/tests/test_pricing.py` (the pricing engine,
+the bundle rules, the JS/Python mirror, the currency charge and the checkout payload), `python3
+site/tests/test_mail.py` (header injection, the honeypot, the rate cap and the two order mails),
+`python3 site/tests/test_carts.py` (abandoned-checkout capture and the recovery token) and `python3
+site/tests/test_mystery.py` (the mystery-discount token, its hour, one-card-per-inbox, and the copy
+rule that keeps the flat deck honest) — the build succeeds (prints `built 114 pages + 207 images …
+(+ /ops console)`), then load the affected pages and check the browser console. There is no linter
+or formatter.
 
 **The build has three environment switches**, all optional locally:
 
@@ -123,12 +126,63 @@ promises a 15% credit past the ETA, so a re-tune downward is a real commitment, 
 `pricing.py`, which closes the "prices are client-visible" pre-launch risk for the money that
 actually moves.
 
+### The saved order — one record per game
+
+The configuration a visitor builds is kept **one record per game**, `esb.order.g.<slug>`, and every
+surface that configures that game reads and writes the same key: the homepage Best Sellers band and
+that game's own page are two views of one order, not two orders. `esb.order.last.v1` names the game
+last configured anywhere; `esb.order.v1` is the separate hand-off snapshot `[data-continue]` commits
+and checkout reads.
+
+It used to be one record per *context* (`esb.order.home.v1` beside `esb.order.g.<slug>`), so a climb
+set in the band was gone the moment the visitor followed it to the page it was for, and switching
+game tabs reset the climb to the ladder default every time. `migrateLegacy()` files an existing
+`esb.order.home.v1` under the game it names — once, on the next load — so nobody's stored climb is
+dropped by the deploy.
+
+- **Per game, because ranks cannot be shared.** Nine ladders name their rungs differently and
+  "Gold II" is not a rung of CS2's. Everything that is *not* about a particular ladder is in
+  `SHARED` and travels with the visitor across games instead — queue, server, add-ons, promo, the
+  unit counts, the coaching picks. `from`/`to`, the bundle and the named booster stay with the game
+  they were chosen on.
+- **A page opens on its own game if it is pinned to one** (`data-game`), else the last game
+  configured anywhere, else the catalogue's first — then **clamped to what the page actually draws**.
+  The band carries four of the nine titles, so a visitor whose last order was on Apex cannot be shown
+  it there; `recentOffered()` falls back to the most recent climb they set on a game the band *does*
+  carry, rather than to the catalogue's first title over a climb they never set. Their Apex record is
+  untouched and returns on the Apex page.
+  Both lists are read off the DOM (`pageGames()` from `[data-game-tag]`, `pageServices()` from
+  `[role=tab][data-service]`), never written down, so the band's four tabs and a game's three-or-four
+  services stay the authority. A stored order naming something the page cannot draw is clamped, never
+  dropped — losing the ranks is the thing this record exists to stop.
+- **The service clamp is load-bearing.** The band is division-only and has no service tabs at all, so
+  a `wins` order set on a game page would otherwise quote net wins there under two rank panels; and a
+  game with no coaches has no Coaching tab for a booking carried in from one that has. It is applied
+  only where there IS a configurator — checkout draws no tabs and must charge the service bought.
+- **Pages with no configurator read the committed snapshot**, as before, and `HYDRATED` is what stops
+  them writing over a real record: a page holding `DEFAULT` (no configurator, no snapshot — reachable
+  from a stray `?booster=` link) writes `esb.order.v1` only.
+- **`normalize()` is the one validator** and it runs on every path — first load, a game switch, the
+  checkout snapshot. `fresh` (nothing stored at all) is what keeps the `regionPicked` migration off a
+  first visit; marking a resolved region as the visitor's own pick would pin every new browser's
+  server before it had touched the control.
+- **A bfcache restore re-reads the record**, through the `pageshow`/`e.persisted` listener at the
+  foot of app.js: back/forward hands a page back the JS state it held when the visitor left it, and
+  with one shared record that state can now be stale rather than merely separate. Storage is the
+  authority there, never the frozen object.
+- Ranks persist indefinitely; `STATE_TTL` (36h) expires only the bundle and the named booster, for
+  the reason on the constant.
+- **This is per browser, not per account.** Signing in does not move it — `captureCart()` already
+  posts a signed-in visitor's configuration to `carts.py`, but nothing reads it back, so restoring a
+  config on another device would need a session-scoped `GET /api/cart` and a client restore path.
+
 ### build.py ↔ app.js contract: `data-*` attributes
 
-`app.js` holds one order object in `localStorage` — **keyed per game** by `orderKey()`
-(`esb.order.g.<slug>` on a game page, `esb.order.home.v1` on the homepage, and `esb.order.v1` is the
-separate hand-off key checkout reads) — and every price on a page is
-derived from one `quote()` call in one `render()` pass. It finds what to update purely through
+`app.js` holds one order object in `localStorage` — **one record per game**, `esb.order.g.<slug>`
+via `keyFor()`, plus `esb.order.last.v1` (the game last configured anywhere) and `esb.order.v1`, the
+separate hand-off snapshot checkout reads. See
+[The saved order](#the-saved-order--one-record-per-game) for what that key scheme guarantees. Every
+price on a page is derived from one `quote()` call in one `render()` pass. It finds what to update purely through
 attributes that `build.py` emits — there are no IDs or classes in the wiring. When adding markup,
 reuse these rather than inventing new hooks:
 
@@ -166,6 +220,8 @@ reuse these rather than inventing new hooks:
 | `data-rv-stars` / `data-rv-game` | The two facts the reviews page filters and sorts a card on, emitted by `review_card(filterable=True)`. The whole feed reads only these, so a server-paged feed keeps working |
 | `data-rvp-*` | The reviews feed's controls: `data-rvp-game\|rating\|sort` (three radio groups) and `data-rvp-dist` (the distribution rows, `aria-pressed` toggles). Both rating controls write one state — `initReviews()` re-marks both whenever either fires. `data-rvp-grid\|shown\|total\|crumb\|clear\|empty\|more\|more-label` are what it rewrites; `data-rvp-worst` is the hero's "Read the worst first" |
 | `data-when-booster` / `data-out="booster"` / `data-sum="booster"` / `data-booster-clear` | The named booster. Rows that `hidden` themselves when none is set; it is an order attribute, never a price input — `quote()` must not read it |
+| `data-prefill-email` | An email field the site already knows the address for — checkout's, today. Filled by `prefillEmail()` in app.js from the address the mystery modal captured, **only when the field is empty**, and it dispatches `input` so checkout's abandoned-cart capture sees it as typed. An attribute rather than `#k-email` because the wiring in app.js is attribute-based throughout |
+| `data-myd-*` | The mystery-discount modal. `data-myd` is the root (`initMystery()` returns without it, so it only ever runs on a game page) and `data-myd-view` its readable state; `data-myd-step` marks the five cards, switched by **toggling `hidden`** — see that section for why a CSS rule cannot do it. `data-myd-card\|take\|pass\|open\|apply\|fullprice\|undo\|close\|back\|copy\|optin` are the controls, `data-myd-pick\|pct\|code\|was\|now\|save\|full\|timer\|note` the value nodes JS writes (all in i18n.js's `SKIP`) |
 | `data-hd` | The header root. `initHeader()` returns immediately without it, which is what keeps the pay flow's reduced header inert |
 | `data-hd-copy` | The promo code chip. Copies to the clipboard and flips to "Copied" for 1.5s via `data-copied` |
 | `data-hd-item` / `data-hd-menu` | A nav item that owns a menu, and its trigger. `data-open` on the item is the one open-state hook — desktop draws it as a mega menu, the sheet as an accordion row |
@@ -390,6 +446,57 @@ names, reviewer names, payment-network brands, and the invented review/testimoni
 and all flagged for replacement before launch anyway. Plus the two documented figure-in-the-middle
 sentences ("Last 5 of 38 games").
 
+### Register and voice — the copy is written, not translated
+
+Both dictionaries were reworked to read as a French and a German brand rather than an English one run
+through a translator. The rules below are what that consists of; a later sweep that "corrects" them
+puts the machine-translation smell back.
+
+- **French is `tu` in the shop and `vous` in the policy copy**, and the switch is the point where the
+  page stops selling and starts stating the contract: the safety & guarantee page's own hero, its
+  three refund cases, the ToS admission, the measure card and its FAQ are `vous`, as are the legal
+  pages and the footer disclaimer. Everything else — configurator, heroes, roster, support, checkout,
+  guides, the mystery card — is `tu`. Sentences shared between the two (the three `D.GUARANTEES`
+  cards) are written **impersonally** where French allows it, so they read right on either side of
+  the seam. This was the user's explicit call; German stays `du` throughout, with `Sie` only in the
+  legal block, because that is what a German esports brand does.
+- **Gaming loanwords are kept, not translated.** French players say *roster*, *winrate*, *kills*,
+  *peak*, *dispo*, *picks*, *classé*, *éco*, *half-buy*, *smokes*, *ladder*, *patch notes* — so the
+  dictionary does too, and "effectif" / "taux de victoire" / "éliminations" are gone. German keeps
+  *Winrate*, *Peak*, *Queue*, *Kader*, *Unranked*, *Eco*, *Crosshair-Placement*. **KDA is `K / D / A`
+  in both** — the old German `K / T / A` was over-translation.
+- **Words with a local meaning beat the literal one.** "Summer sale" is **"Promo d'été"**, never
+  "Soldes": *soldes* names two state-fixed periods in French law, and a shop using it outside them has
+  a DGCCRF problem, not a copy problem. Discord's own French UI says *salon*, not *canal*. Trustpilot's
+  German label for this score is *Hervorragend*, not *Ausgezeichnet*. Valorant's German client names
+  the roles *Duellant / Initiator / Wächter*.
+- **French typography is applied to every value**: `’` for apostrophes, and a no-break space before
+  `% : ; ? !`, inside `« »`, and in thousands separators. German gets the no-break space before `%`.
+  They are real U+00A0 characters in the source — that is deliberate, and it is what stops a price
+  wrapping away from its `%`.
+- **The `{}` capture that spells a count needs its word in the dictionary.** `Four` / `Twenty-nine` /
+  `Thirty-one` are entries for exactly that reason; a roster size that spells to a word with no entry
+  renders the whole sentence's capture in English.
+- **A key that carries a figure goes stale the moment the figure is re-tuned, and it fails silently** —
+  the sentence just renders in English on the French and German pages. Four had already drifted this
+  way (the catalogue's Valorant-vs-CS2 answer, the SPLIT15 answer, checkout's email note and the
+  /orders sign-in prompt). **When you re-tune pricing, bundles or promo copy, grep the dictionary for
+  the old figure**; there is no test for this. The cheapest check is to load a page in `fr`, walk the
+  DOM and look for anything still in English.
+- **Attributes take the `{}` patterns too.** `translateAttrs()` falls back to `patTranslate()` for the
+  same reason text nodes do: the promo chip's accessible name is assembled from the live code and
+  percentage ("Copy discount code SPLIT15 — 15% off"), so a fixed key would be stale on the next sale
+  — and per the header section that label is the **only** place a screen reader hears the discount.
+- **German has parity with French, and it has to keep it.** Every key in the `fr` block now has a `de`
+  entry (`de` carries one extra, `"boosters"`). 217 were missing and were shipping the support page,
+  the free-guides landing, the nine game pages' proof bands, the bundle strip, coaching and the unit
+  grids to German readers **in English**. Adding a French entry without a German one re-opens that
+  hole silently.
+- ⚠ **`"queue"` translates to the empty string in both languages, on purpose.** It is the middle
+  fragment of `VETTING["strip"]` (`pre` + `<b>Discord</b>` + `mid` + …), and neither language wants a
+  word after the server's name there. An empty value is a legal translation (`d[core] !== undefined`
+  is the test); do not "fix" it to a word.
+
 ## Mobile rules — the `MOBILE PASS` block at the foot of site.css
 
 The last section of `site.css` is a set of corrections found by walking every page at 375px and
@@ -611,14 +718,43 @@ Things that are load-bearing here:
 - **Availability lives in the card, not the hero stat row.** "N of M boosters free now" sits beside
   the delivery estimate, where it argues for ordering now; the hero's third stat is boosts delivered.
   Putting a roster count in both places is how the two conflicting numbers got shipped last time.
-- **The card shows three add-on rows, and it is three in both queues.** Four ship in the DOM: the
-  free picks inclusion, Priority order, and a **mode-conditional pair** — Solo is offered "Solo only
-  queue", Duo "Play on your schedule" — of which one is always `hidden`. Emitting both is the
-  whole-text-node rule (a label written in by JS arrives untranslated), and hiding one is what keeps
-  the row count, and so the card's height, the same whichever queue is picked. The `offline`
-  inclusion is flagged `incl` in data.py and renders in **no** picker: checkout states it in its
-  green strip, and a fourth visible row costs the fold budget. `addons_block(paid_only=True)` is
-  checkout's upsell only — a ticked, disabled row is not a "last chance to add".
+- **The card shows three add-on rows, and it is three in both queues.** Four ship in the DOM:
+  **"Watch your booster play"**, Priority order, and a **mode-conditional pair** — Solo is offered
+  "Solo only queue", Duo "Play on your schedule" — of which one is always `hidden`. Emitting both is
+  the whole-text-node rule (a label written in by JS arrives untranslated), and hiding one is what
+  keeps the row count, and so the card's height, the same whichever queue is picked. **Three is the
+  budget, not a preference**: a fourth row costs ~51px and puts the CTA under the fold at 1440×900 on
+  six of the nine ladders (measured — see the fold note below). Both inclusions are therefore flagged
+  `incl` in data.py and render in **no** picker; they are stated instead, by `ob_included()` under
+  the card's CTA (free of the fold budget, which is the whole reason it sits there) and by checkout's
+  green strip. `addons_block(paid_only=True)` is checkout's upsell only — a ticked, disabled row is
+  not a "last chance to add", but the free-but-optional row **is** kept there, because an untaken
+  free option is the strongest thing that block can offer.
+- **Add-ons have THREE states, and the third is `was_pct`.** `pct > 0` is a paid option; `pct == 0`
+  with no `was_pct` is an inclusion (ticked-and-disabled, or `incl` and not drawn at all); `pct == 0`
+  **with** `was_pct` is **free but optional** — an ordinary empty checkbox the buyer has to tick,
+  carried in `state.addons` like any paid option and charged nothing, because `_addon_total()` on
+  both sides skips a zero `pct`. `D.addon_is_free_opt()` is the discriminator, mirrored by
+  `isFreeOpt()` in app.js. It opens **unticked** — app.js's "a zero-cost add-on is always on" rule
+  has an explicit exception for it, and `test_free_optional_addons()` locks that, the $0 charge on
+  every game × queue × bundle path, and the JS mirror.
+- **The struck figure beside it is `pricing.addon_list_price()`, and it is the site's one reference
+  price.** ⚠ Worth knowing before you touch it: `quote()` takes the sitewide discount off the boost
+  alone *specifically* so its strikethrough is "never a grossed-up reference price" (the comment is
+  still in pricing.py). This row is the deliberate exception — 50% of the boost, struck, beside the
+  live "+$0". Two things keep it as defensible as it can be: it is quoted by the **same arithmetic
+  and the same `addon_base`** a real charge would use (so on a bundle it strikes 50% of the bundle's
+  flat price, not of the list climb — the trap that inflated add-ons before), and it is display-only,
+  never summed. It is a **business call, not a technical one**; if legal wants it airtight the fix is
+  `D.STREAM_WAS_NOTE`, the one string naming what the figure refers to, not the number or the markup.
+  ⚠ `D.STREAM_CLAIM_VERIFIED` is `False`: "Only site that gives it free" is an unsubstantiated
+  comparative claim, same standing as the placeholder statistics.
+- **A free option still has to reach fulfilment.** A paid add-on is implied by the amount; a free one
+  moves no money and would arrive at the board with nothing recording that it was asked for — and
+  this one is an obligation on whoever claims the order. `payments.build_session()` therefore carries
+  `metadata[addons]` (queue-filtered by the same `addon_applies()` call `quote()` makes), and both
+  order mails state an **Options** row through `_addon_names()`. ⚠ The live half of the feature is
+  still not built — see [Watch live](#watch-live--the-boosters-screen-share--watch_panel).
 - **The queue owns its add-ons on both sides.** `D.addon_applies()` (mirrored by `addonApplies()` in
   app.js) is the filter, and `pricing.quote()` re-applies it, so the other queue's option is never
   charged whatever the payload says. app.js drops it from `state.addons` on the mode change and once
@@ -630,8 +766,28 @@ Things that are load-bearing here:
   `D.picks_noun()` derives the bare noun the game-page FAQ builds a sentence around, so the two
   cannot drift. A game page renders its own wording; **checkout ships all nine** behind
   `data-when-game` and shows the order's, because it is one static page for all nine.
-- **Add-on notes must stay one line.** They are `data.py` copy; a second line costs ~14px of the
-  fold budget per row.
+- **Add-on notes must stay one line, and `.ob .opt .note` now enforces it** with
+  `nowrap`/`ellipsis` — the same floor `.ob-cap` puts under the tier captions. A second line costs
+  ~14px of the fold budget, and the width a note gets is **not a constant**: the price column beside
+  it grows with the game's own prices and with the currency mark (League's `$52 +$0` is ~25px wider
+  than Rocket League's, and `C$` wider again), so one sentence fits on one ladder and wraps on the
+  next. Every translation is longer than the English, too — the FR and DE notes for the stream,
+  priority, solo-queue and schedule rows were all over the line and were shortened. Clipping makes
+  the row height deterministic in every language, game and currency; the copy is then written short
+  enough that nothing reaches the ellipsis. **Shorten the sentence, don't remove the guard** — and
+  keep new notes inside ~62 characters. Checkout deliberately still wraps: no fold budget there.
+- **The free-but-optional row is drawn as the offer it is, and the hierarchy is bought without
+  height.** `.opt-freeopt` gets a green tint, a green border, a bold name and a **"FREE" flag**; the
+  4px of padding it gains is taken back off the two paid rows below it, so the block's total height
+  is unchanged and the CTA still clears the fold on all nine ladders in all three languages (832–900
+  measured). Green, **not ember**: ember is the CTA 60px underneath, and a second ember block there
+  makes two primary actions out of one — green is already the site's free/included/live colour. It
+  stays green when **checked**, which needs `.ob .opt-freeopt:has(input:checked)` to sit *below*
+  `.ob .opt:has(input:checked)` in the file: they tie on specificity and it wins on source order.
+- **⚠ The flag's text is uppercase `FREE` in the MARKUP, never `text-transform`.** i18n.js matches
+  whole text nodes **case-sensitively**, and `"Free"` is already a dictionary key — the roster's,
+  where free means *available* and French renders it "Libre". A lower-cased flag here would put a
+  green pill reading "Libre" beside a price. `"FREE"` is its own key (GRATUIT / GRATIS).
 - **Two things in the card size themselves to the game's longest tier name, and both measure the
   text rather than the box.** Tier *count* is not the test — Dota's eight long names overflow where
   Valorant's eight do not.
@@ -875,7 +1031,7 @@ trust · 04 FAQ · close.
   it used to be a fraction, and `gc_faq_items()` was left reading it as one, so the page published
   "bundle climbs at **1500% to 30500%** off" as copy *and* asserted it verbatim in the FAQPage
   JSON-LD. The reduction comes from `pricing.bundle_pct()`, the same call the strip's own `−N%` pill
-  makes, so the answer and the nine game pages state one number (19–37% today).
+  makes, so the answer and the nine game pages state one number (19–38% today).
 - **Breakpoints follow the site's 1200/1000/760**, not the handoff's 1280/1024/768: 1200 takes the
   services to two columns and narrows the rail; 1000 is two card columns, the head stacked and the
   FAQ column unsticky; 760 is the whole phone pattern (one card per row, chip rail, native sort,
@@ -1257,9 +1413,12 @@ watching their own order being played. **The video is Discord's; this panel is o
   granted to a service whose product breaks the game's ToS. So there is no path through Riot for
   either game, and what the customer watches is the booster's **own screen**, shared into a private
   Discord voice channel.
-- **`WATCH_GAMES` is a two-title allow-list, not a flag on every game.** `offers_watch(g)` gates the
-  panel the way `offers_coaching()` gates the fourth tab: a title nobody streams never shows it.
-  Adding a game here is a claim that a booster on it will actually stream.
+- **`WATCH_GAMES` is now every catalogue title, and that is a business decision.** It was a two-title
+  allow-list; the `stream` add-on is sold on all nine, so the panel follows. It generalises cleanly
+  *because* the product was never the game's spectator mode — it is the booster's own screen, which
+  never depended on the title. It stays a named list rather than an inlined `True` so narrowing it
+  again is one edit. ⚠ Listing a game is a claim that a booster on it will actually stream, and
+  nine titles is nine rosters to brief, not one.
 - **There is no embedded player and there is not going to be one.** Discord ships no iframe player
   for Go Live. Drawing a video frame here would be a mock-up of something the product cannot do —
   which is the exact trap `/demo.html` was renamed to avoid. The panel's job is the one fact Discord
@@ -1277,8 +1436,13 @@ watching their own order being played. **The video is Discord's; this panel is o
   ember guarantee note under it. The Discord mark is `_hd_brand()`'s, shared with the OAuth button,
   and carries the same pre-launch swap for the licensed asset as `pay_marks()`.
 
-⚠ **The live half is not built.** The panel's state is driven by the demo page's Pause control against
-one fixture; nothing asks Discord anything. What a real one needs, and the shape it should take:
+⚠ **The live half is not built, and it is now SOLD.** The panel's state is driven by the demo page's
+Pause control against one fixture; nothing asks Discord anything. That was tolerable while the panel
+was a demo-only facade — it is not, now that "Watch your booster play" is the first row of every
+configurator and rides into fulfilment as `metadata[addons]`. Until `streams.py` exists, honouring it
+is a manual ops promise: somebody has to open a channel and tell the booster to share. **Either build
+the seam below or take the row out** — the one thing that must not happen is a paid order carrying an
+option nobody knows about. What a real one needs, and the shape it should take:
 
 - **`src/streams.py`, a sixth store sibling** of `analytics` / `accounts` / `boosters` / `orders` /
   `carts` — `esb:streams`, one row per order (order id, booster handle, channel id, `offline|live`,
@@ -1312,9 +1476,26 @@ footer replaced a four-column strip with a centred copyright.
   already made — the climb in words, the live price, and a summary card. `live=True` says this page
   owns a configurator; only the homepage and the game pages pass it.
 - **`live=False` is the handoff's documented fallback, and it is deliberate.** A page with no
-  configurator has nothing to read back, so it gets no card, a headline quoting `catalogue_floor()`
-  and one CTA. Not an empty card, and not a fabricated default order — the handoff is explicit about
-  both. It is described but not drawn, and is flagged for the designer.
+  configurator has nothing *of its own* to read back, so it gets no card, a headline quoting
+  `catalogue_floor()` and one CTA. Not an empty card, and not a fabricated default order — the
+  handoff is explicit about both. It is described but not drawn, and is flagged for the designer.
+- **`readback=True` (the default on the `live=False` bands) ships the live version beside it,
+  hidden.** Since the order is now kept per game and shared site-wide (see
+  [The saved order](#the-saved-order--one-record-per-game)), a page with no configurator *can* close
+  on the visitor's own climb — which is the handoff's premise, and is not what "no fabricated
+  default" was protecting against: it appears **only when a real stored order is behind it**
+  (`HYDRATED`). The server always renders the FALLBACK visible, because a static page is cached for
+  everybody and cannot know which visitor it is; app.js's `[data-fc-when]` pass swaps them and drops
+  `fc-solo` when it unhides the card, so with no JS the band is still correct and every string is in
+  the DOM for the whole-text-node i18n rule (they are the live band's own strings, so `fr`/`de` were
+  already complete). `[data-fc-readback]` on the section is also what tells app.js this page
+  resolves the saved order rather than the checkout snapshot — the pay flow is the one page with
+  neither that marker nor a configurator.
+- **Coaching is deliberately not read back.** It is a booking, not a climb: "Your climb starts at
+  €79" over a card whose Climb row is empty describes nothing that was bought, and re-quoting the
+  stored ranks as a boost to fill it would invent a price the visitor was never shown.
+- **`readback=False` where the band is not an order close** — the support page's "Still stuck? Ask
+  us." is asking a different question, and its CTA is Discord.
 - **`catalogue_floor()` is quoted, never typed.** It is `pricing.quote()` over every rung of every
   game, so "Your climb starts at $3" and Valorant's "Cheapest single division $3" are the same claim.
 - **The card shares the checkout summary's data contract**, not just its shape — `data-sum` /
@@ -1719,6 +1900,12 @@ plays exactly one title**, and that **there is no cross-title bundle**. The firs
 ops has to hold; the second is structural — if sales ever wants a cross-title discount, that answer
 has to change before the offer ships.
 
+The **mystery-discount store** is the newest of these and the most sensitive: `mystery.ndjson` /
+`esb:bingo` holds a real email next to a token that is worth 30% of a real order for an hour. It is
+not placeholder data — a captured address is a real person — so it needs the same treatment as the
+carts and orders stores before launch: a lawful basis, a privacy-policy line and a deletion path.
+Clear any rows written while testing; the /ops **Mystery** tab banners seeded ones.
+
 The same rule covers **seeded analytics**: every event written by `tools/seed_analytics.py` carries
 `"syn": 1`, and `/ops` shows a standing "synthetic data — not real traffic" banner for as long as
 any are in the window. Keep that flag. Seeded funnel numbers are exactly the kind of thing that
@@ -1772,6 +1959,16 @@ checkout.html  ──POST /api/checkout──►  serve.py  ──►  Stripe Ch
   **Crypto** is present but disabled with a "coming soon" label. PayPal was removed.
 - Regenerate after editing `build.py`/`data.py`; the payment routes live in `serve.py` and take
   effect only when the server process is **restarted** (no watcher).
+- ⚠ **A price change in `data.py` needs the server restarted too, not just a rebuild**, and the
+  symptom is misleading. `serve.py` imports the price tables once at boot, so after a re-price the
+  browser is served a freshly built `data.js` with the NEW prices while the running process still
+  quotes the OLD ones. Every checkout then dies on the `client_total` guard with *"The price updated
+  since you configured this order. Please refresh the page and try again."* — which is the one thing
+  that does **not** fix it, because the client is the side that is right. The real tell is in
+  `serve.py`'s stderr: `[checkout] price mismatch: shown=227 server=197`, where the ratio between
+  the two numbers is exactly the re-price factor. The guard is working as designed — it refused to
+  charge a number the page never showed — so do not "fix" the guard; restart the server. In
+  production this cannot happen: a deploy replaces the functions.
 
 ## Outbound mail — the support form and the order confirmation
 
@@ -1883,8 +2080,144 @@ checkout email typed ─┴─► POST /api/cart ─► carts store ─┤
   exist. At today's volume it captures very few people — the typed-email path on checkout is the main
   source until sign-in adoption grows.
 - **Restart the server after touching these files** — `/api/cart`, `/api/sweep` live in `serve.py`,
-  no watcher. `api/cart.py` and `api/sweep.py` are the Vercel shells. Env knobs: `CART_SWEEP_SECRET`
+  no watcher. `api/cart.py`, `api/cart/unsubscribe.py` and `api/sweep.py` are the Vercel shells — the
+  unsubscribe one exists because every recovery mail carries that link and it 404'd in
+  production while working locally, which is a dead opt-out on the domain the order
+  confirmations go out on. Env knobs: `CART_SWEEP_SECRET`
   (required), `CART_RECOVERY_PCT` (0.30), `CART_DELAY_SECS` (1800), `CART_TOKEN_TTL` (604800).
+
+## The mystery discount — `mystery.py` + the modal on every game page
+
+`design_handoff_mystery_discount`. Four seconds after a visitor settles their **target rank** on a
+game page, a modal offers a sealed "mystery discount"; an email buys the right to open it; the reveal
+shows a 30% code and applying it hands them back to their order with the total already discounted. It
+exists because the configurator proves intent — somebody who set two ranks and read a price is a
+buyer — and captured nothing if they left.
+
+```
+target rank settles ──800ms──► 4s ──► modal ──email──► POST /api/bingo ──► token + mail
+                                                              │
+      every page load ──► GET /api/bingo?token= ──► ESB_BINGO ──► quote() re-prices
+                                                              │
+                       checkout POST { bingo: token } ──► payments re-resolves ──► Stripe
+                                                              │
+                                        webhook (paid) ──► mystery.redeem() burns it
+```
+
+- **Every card pays the same 30%, and that decides what the copy may say.** The pick is theatre, not
+  chance. The flow must never claim the 30% was luck, that the buyer beat odds, or state any
+  probability — two friends comparing cards find out in ten seconds, and a discovered lie on a store
+  whose central pitch is "the price does not move after checkout" costs more than twenty margin
+  points. `test_mystery.py::test_copy_claims_no_odds` asserts the shipped markup against that list.
+  Two of the handoff's own strings are **deliberately not shipped** for exactly this rule, and a
+  third was put back by the business after being flagged:
+  - *"Bingo — card C was the best one"* — "best" implies the others were worse. It reads **"card C
+    pays the top rate"**, which is true of every card and is still the emotional peak.
+  - *"on your first order"* + a **First order** pill — nothing here can tell a first-time guest from a
+    returning one before the modal fires. The pill claims only what the server enforces: **one card
+    per inbox, ever**. If an account backend lands, "first order" can come back with a real
+    suppression rule behind it.
+  - ⚠ *"The deck holds 10%, 20% and 30% off"* — **shipped, on the business's explicit instruction
+    (2026-08-21), having been told the deck holds one value.** It is the one line on the card that
+    states something the flat deck makes untrue, and it is the line a second tab disproves. Recorded
+    here rather than argued again: it is a standing decision, not an oversight, and it is not to be
+    "corrected" by a later pass. The two rungs are derived from `OFFER_PCT` (`MYD_DECK` in build.py,
+    asserted distinct and topping out at the real payout) so the deck's ceiling and the reveal can
+    never quote two different numbers. **If it is ever revisited, the honest fix is the mechanic, not
+    the sentence** — the handoff's v3 draws a real weighted 15/20/25/40 table at a blended 19.4%,
+    under which naming several values is true. `test_copy_claims_no_odds` still enforces everything
+    either side of it: no odds, no probability, no "lucky", no "was the best one".
+  If the business ever wants genuine variance, the handoff's v3 carries a weighted 15/20/25/40 table
+  at a blended 19.4% — its claims are honest *under randomness*. **Do not mix the two**: either every
+  card pays the same and the copy avoids odds, or the draw is real and the odds may be stated.
+- **`src/mystery.py` is the seventh store sibling** of analytics / accounts / boosters / orders /
+  carts / guides — same house rules, a **separate store** (`esb:bingo` / `mystery.ndjson`), and a
+  HASH keyed by token rather than a list, because rows move `issued → redeemed`. It reuses only
+  analytics' Upstash *transport*.
+- **The token IS the discount, and it never touches `data.py`.** `D.PROMOS` ships to every browser in
+  `data.js`, so `CLIMB30` would be on a coupon aggregator within a week — the handoff says so
+  outright. Each capture mints one unguessable single-use token; the percentage is resolved
+  **server-side only** (`mystery.redeemable()`), and it obeys the same never-stack, best-wins rule a
+  typed code does: 30% *replaces* the 15% sale, never 45%.
+- **`pricing.resolve_promo(code, recovery_pct, offer_label)` is the ONE seam both token offers arrive
+  through** — this one and the abandoned-cart recovery. `offer_label` exists only so the two do not
+  borrow each other's wording on the receipt; it is cosmetic and is stripped from the checkout body
+  alongside `recovery_pct`.
+- **The client cannot forge it.** `payments.process_checkout()` pops `recovery_pct` **and**
+  `offer_label` unconditionally and re-derives both from the token alone. `build_session()` only
+  writes `metadata[bingo]` for a token the server itself resolved, so a made-up one can never be
+  burned or credited at fulfilment. `test_mystery.py` locks all of it.
+- **The JS mirror reads the offer off the STATE, not off a global.** `resolvePromo(code, s)` checks
+  `s.recoveryPct` first and falls back to `window.ESB_BINGO` / `window.ESB_RECOVERY`. That is what
+  lets the modal ask for a *hypothetical* quote — its whole before/after row is "what would this cost
+  with 30% on it" — and it is the rule `pricing.py` already follows.
+- **One hour is a real deadline, enforced by the store.** `mydBoot()` re-validates the stored token on
+  **every** page load (checkout included — that page has no modal but must carry the price), and the
+  reveal's own countdown clears `ESB_BINGO` and re-renders the moment it hits zero. An offer that
+  quietly still works teaches buyers to ignore every future countdown.
+- **The trigger is a real interaction, never a restore.** `initMystery()` arms only from
+  `change`/`click` on the rank controls themselves, so a rehydrated localStorage state, a `?booster=`
+  link, a bundle click or a game switch cannot fire it. A **target** control (`data-sel="to"`,
+  `toTier`, `[data-subseg="to"]`) has to have been touched at least once — "after choosing his desired
+  rank" — and then ~800ms of no rank input settles it before the 4-second timer starts. `MYD_DELAY` in
+  app.js is that 4 seconds; the handoff drew 3.
+- **Once per visitor, and a decline is genuinely free.** The flag is written when the card is *shown*.
+  No exit-intent second attempt, no re-fire on the next page; the `passed` card's own reversal link is
+  the only way back in. It also never opens over an order that already carries a discount (a typed
+  code, an applied bundle, a recovery token, a `?cart=`/`?promo=` link), over the header's sheet or
+  auth panel, or on a page without a pinned configurator — so never on checkout, `/games/` or the
+  homepage.
+- **`ashfall.css` declares `[hidden] { display: none !important }` globally.** The five steps are
+  therefore switched by **toggling the attribute** in `setView()`, not by a
+  `[data-myd-view="…"] [data-myd-step="…"]` CSS rule — no selector in `site.css` can beat that
+  `!important` at any specificity. `data-myd-view` on the root stays as the readable state (Escape and
+  the focus trap key off it). Four of the five ship `hidden` so the page is correct before any JS runs.
+- **The reveal's code chip shows the real token**, not a friendly label: it is a copy button, and a
+  code you cannot paste at checkout is a support ticket. The order card's *save line* names the offer
+  instead (`You save €32 · Mystery discount`), the same treatment `BUNDLE` gets — an internal
+  identifier is not something a shopper reads mid-sentence. Checkout's discount row still prints the
+  code, because that row is a receipt. `wirePromo()` gives an unknown `BINGO-`/`BACK-` shaped code one
+  server lookup before calling it invalid, so a buyer who typed the code from their inbox is not
+  refused by their own checkout.
+- **The mail goes out before the reveal renders**, not after — the reveal promises a copy in the
+  inbox, and a send queued behind the animation would put that promise on screen before it was true.
+  With no SMTP the code is still issued and the modal swaps to a "copy it before you close this tab"
+  line; `mailed` in the response is what picks between them. Degrade, never pretend.
+- **The marketing opt-in is separate from the code.** The code mail is transactional and goes either
+  way; the ticked box writes to `guides.py`'s list — the same one `/guides.html` fills, per the
+  handoff's "one list, one preference centre, one unsubscribe". Bundling consent into a transactional
+  mail is what gets a sender blacklisted.
+- **The discount survives a reload AND a re-configure.** `quote()` re-prices against the new total
+  rather than dropping the token when the buyer extends their climb — taking a discount away at the
+  moment somebody increases their order is the worst possible time to take it back.
+- **The address carries to checkout, so nobody is asked for it twice.** The modal stores it as
+  `mail` on the `esb.bingo.v1` record and `mydBoot()` fills any `data-prefill-email` field from it
+  synchronously at boot — before the buyer can start typing over it, and **without waiting on the
+  token resolve**, which is what makes it outlive the code: someone who declined, or whose hour
+  lapsed, still doesn't re-type their email. It never overwrites a field that already has a value,
+  and it dispatches `input` so checkout's abandoned-cart capture treats it exactly like a typed
+  address — without that, a buyer who prefilled and then left would be uncapturable. A signed-in
+  visitor's verified address is the obvious second source and goes through the same helper rather
+  than growing a second mechanism.
+- **Applying returns to the configurator, not to checkout**, and there is no confirmation screen. The
+  trigger fires four seconds after the rank settles, so queue, server and add-ons may still be unset,
+  and a percentage scales with the order — time spent configuring with −30% visible is worth more than
+  one saved tap, and the sticky bar keeps checkout one tap away. **If the trigger ever moves to
+  exit-intent or onto the checkout button, flip this**: there is nothing left to configure at that
+  point and direct-to-checkout is right.
+- **`/ops` "Mystery" tab** (a sibling of Carts): cards opened, how many are live, Apply rate, redeem
+  rate, what was bought, the pick split and the rows, CSV-exportable. Read-only. The pick split is
+  there because C is pre-selected — a flat A/B/C column means the mechanic engages people and an
+  all-C column means it is pure friction. ⚠ **The cost is flat, not blended**: read
+  `Redeemed × 30%`, never an average.
+- **i18n**: all five steps ship in the DOM (a card written in by JS arrives untranslated), the card
+  letter and every figure ride in their own nodes, and the value nodes are in i18n.js's `SKIP` list.
+  Full `fr` and `de`.
+- **Restart the server after touching these files** — `/api/bingo` lives in `serve.py`, no watcher.
+  `api/bingo.py` is the Vercel shell. Env knobs: `BINGO_PCT` (0.30), `BINGO_TTL` (3600), `BINGO_MAX`.
+- ⚠ **It is a live margin decision, not a UI feature.** At today's prices a redeemed code is $18–$150
+  off a single order. `test_mystery.py` covers the plumbing; nothing can tell you whether the lift
+  pays for it except real traffic and the Mystery tab.
 
 ## Analytics & the /ops console
 
@@ -1911,7 +2244,8 @@ public/assets/js/analytics.js  ──►  POST /api/collect  ──►  src/anal
 | `site/src/accounts.py` | The header sign-up list — a **separate** store, `POST /api/account` to write, `ops.py`'s `accounts` action to read. Holds name + email, never a password. |
 | `site/src/boosters.py` | The roster store — another **separate** store (operator-write / public-read), `GET /api/boosters` to read, `ops.py`'s `boosters` action for the console. See [The roster store](#the-roster-store--boosters-in-the-backend). |
 | `site/tools/seed_boosters.py` | Fills the roster store from `data.py`'s `BOOSTERS` (tags rows `syn`). |
-| `api/collect.py`, `api/account.py`, `api/boosters.py`, `api/support.py`, `api/ops.py` | Vercel shells, mirroring the `serve.py` routes. |
+| `site/src/mystery.py` | The mystery-discount store — a **separate** store again, `POST /api/bingo` to capture + issue, `GET /api/bingo?token=` to resolve, `ops.py`'s `mystery` action to read. Holds an email next to a live single-use discount. See [The mystery discount](#the-mystery-discount--mysterypy--the-modal-on-every-game-page). |
+| `api/collect.py`, `api/account.py`, `api/boosters.py`, `api/support.py`, `api/bingo.py`, `api/ops.py` | Vercel shells, mirroring the `serve.py` routes. |
 
 **Two stores, chosen by environment.** With `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`
 set, events go to Upstash Redis over its REST API (stdlib `urllib`) — required in production,

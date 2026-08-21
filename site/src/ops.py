@@ -34,6 +34,7 @@ import boosters
 import carts
 import guides
 import insights
+import mystery
 import orders
 
 TOKEN_TTL = 12 * 3600      # a working day, then log in again
@@ -263,6 +264,13 @@ def process_ops(raw):
         # it holds emails (PII), so it is fetched on demand rather than bundled
         # into every dashboard refresh.
         return 200, {"guides": guides.summary(days)}
+
+    if action == "mystery":
+        # The mystery-discount store — the emails the configurator modal
+        # captured, next to the single-use token each one bought. PII plus a
+        # live discount, so it is fetched on demand like Accounts and Carts and
+        # never bundled into a dashboard refresh.
+        return 200, {"mystery": mystery.summary(days)}
 
     if action == "orders":
         # The orders store — the receipts fulfilment writes (and the seeder

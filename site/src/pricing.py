@@ -11,6 +11,7 @@ the other** (see CLAUDE.md).
 cards, so the Python formula lives in exactly one place.
 """
 import math
+import os
 
 import data as D
 
@@ -49,6 +50,70 @@ DAYS_PER_PLACEMENT = 0.26
 # today widens it instead of quoting a fortnight to the day.
 ETA_EXACT = 3
 ETA_SPAN_MIN, ETA_SPAN_PCT = 2, 0.3
+
+# ── hours of play, and what an hour of it costs ───────────────────────────
+# MAIL ONLY. Nothing on the site quotes an hourly rate, and nothing should:
+# `followup.py` is the single caller, because the value-per-hour argument only
+# makes sense once somebody has already read the total and decided it is a lot.
+# There is deliberately no app.js mirror — a figure with no page to disagree
+# with cannot drift from one.
+#
+# ⚠ PLAY_HOURS_PER_DAY IS AN OPS COMMITMENT, NOT A MEASUREMENT. It is the hours
+# a booster actually spends on one order per calendar day of its ETA, and it is
+# the one input here that is not already derived from something the site
+# publishes. It has to be **at or below** what the roster really does, because
+# the mail divides by it: a value set too high understates the hourly figure and
+# the claim stops being true. It sits at 8 because the ETA above is aggressive —
+# `DAYS_PER_RUNG` quotes a six-rung climb in two days, which is only deliverable
+# in long sessions — so the two constants describe the same working day from
+# opposite ends. Re-tune one, re-check the other, and confirm 8 with ops the way
+# SAFETY's measure notes need confirming. Same standing as the placeholder
+# statistics: falsifiable by a single order.
+PLAY_HOURS_PER_DAY = float(os.environ.get("ESB_PLAY_HOURS_PER_DAY", "8") or 8)
+
+# Above this, the per-hour argument is simply not made. A long climb prices at
+# $7–24/hour even discounted, and "it is only $23 an hour" is an argument
+# against the order — so `followup.py` drops the whole block rather than
+# printing a figure that loses the sale it was written to win. Same mechanism as
+# gc_faq_items()'s "the larger of the two" clause: the claim ships only while it
+# is true. 92% of catalogue climbs come in under it at the follow-up rate.
+PER_HOUR_MAX = float(os.environ.get("ESB_PER_HOUR_MAX", "6") or 6)
+
+
+def play_hours(days):
+    """Hours of play behind an order whose ETA is `days`.
+
+    Bounded BY the ETA rather than computed beside it: the delivery estimate is
+    the promise on the page (a missed one costs a 15% credit), so an hours
+    figure that implied more play than the ETA allows would contradict the
+    guarantee page. Always at least one session."""
+    try:
+        days = int(days)
+    except (TypeError, ValueError):
+        return 0
+    if days < 1:
+        return 0
+    return max(1, _jsround(days * PLAY_HOURS_PER_DAY))
+
+
+def per_hour(total, days):
+    """(hours, cost per hour) for an order, or (0, 0) when it does not price.
+
+    `total` is whatever the buyer would actually pay — on the follow-up that is
+    the discounted figure, because quoting the list price per hour would
+    describe an order nobody is being offered."""
+    hours = play_hours(days)
+    if not hours or not total:
+        return 0, 0.0
+    return hours, float(total) / hours
+
+
+def per_hour_worth_saying(total, days, ceiling=None):
+    """Whether the per-hour figure argues FOR the order. See PER_HOUR_MAX."""
+    hours, rate = per_hour(total, days)
+    if not hours:
+        return False
+    return rate <= (PER_HOUR_MAX if ceiling is None else ceiling)
 
 # Display/charge FX rates, MIRRORED EXACTLY from i18n.js `window.ESB_RATES`. The
 # quote is computed in USD, but the customer sees — and is charged in — whichever
@@ -121,6 +186,28 @@ def _addon_total(base, addons, mode="Solo"):
     return total
 
 
+def addon_list_price(addon_base, addon_id):
+    """What a free-but-optional add-on WOULD cost if it were priced like the
+    paid ones — the struck figure beside its "Free", and nothing else.
+
+    Deliberately the SAME arithmetic `_addon_total()` charges with, `was_pct` in
+    place of `pct` and the same $1 floor, taking the same `addon_base` (the
+    quote's, so a bundle order strikes 50% of the bundle's flat price and not of
+    the list climb it is discounted from — the trap documented in quote()).
+    Two formulas here would mean the struck price and the real charge could
+    disagree the day this option is ever turned on.
+
+    Returns 0 for anything without a `was_pct`, so a caller cannot accidentally
+    print a reference price for an add-on that has none.
+
+    Mirrored in app.js `addonListPrice()` — change one, change the other."""
+    a = ADDON.get(addon_id) or {}
+    pct = a.get("was_pct") or 0
+    if not pct or not addon_base:
+        return 0
+    return max(1, _jsround(addon_base * pct))
+
+
 _BUNDLE_PCT = {}
 
 
@@ -161,21 +248,28 @@ def bundle_discount(g, from_rank, to_rank, idx):
     return bundle_pct(g, b) if b else 0.0
 
 
-def resolve_promo(code=None, recovery_pct=0):
+def resolve_promo(code=None, recovery_pct=0, offer_label=""):
     """Pick the one discount that applies to an order.
 
     The auto promo applies with nothing typed; a typed code replaces it only
     when it is worth more. Discounts never stack, and an unknown or weaker code
     can never make the buyer's price worse. Returns (code, promo) or (None, None).
 
-    `recovery_pct` is the abandoned-cart offer, and it is **resolved server-side
-    only**. It is deliberately not a `D.PROMOS` entry: that table is shipped to
-    the browser in `data.js`, so a static recovery code would be readable by
-    anyone and the discount would leak to every visitor within days. `carts.py`
-    holds one unguessable single-use token per cart and hands the percentage in
-    here — see `carts.redeemable()`. It obeys the same never-stack, best-wins
-    rule as a typed code, so a recovered buyer gets 30% *instead of* the sitewide
-    15%, never 45%.
+    `recovery_pct` is a **server-resolved offer**, and it is the seam BOTH
+    token-backed discounts arrive through: the abandoned-cart recovery
+    (`carts.py`) and the mystery discount (`mystery.py`). Neither is a
+    `D.PROMOS` entry, and neither ever can be — that table is shipped to the
+    browser in `data.js`, so a static code would be readable by anyone and the
+    discount would leak to every visitor within days. Each store instead holds
+    one unguessable single-use token and hands the percentage in here (see
+    `carts.redeemable()` / `mystery.redeemable()`). It obeys the same
+    never-stack, best-wins rule as a typed code, so a buyer gets 30% *instead
+    of* the sitewide 15%, never 45%.
+
+    `offer_label` is what the receipt calls that discount. It is cosmetic — it
+    cannot move a price — but the two offers must not borrow each other's
+    wording, or a mystery discount reads "Come back offer" on the checkout
+    summary. Blank falls back to the recovery wording, which is the older caller.
     """
     best_code, best = D.auto_promo()
     if code:
@@ -188,7 +282,8 @@ def resolve_promo(code=None, recovery_pct=0):
         rp = 0
     if rp > 0 and (best is None or rp > best["pct"]):
         best_code = str(code).strip().upper() if code else "BACK"
-        best = {"pct": rp, "label": "Come back offer", "ends": ""}
+        label = str(offer_label or "").strip()[:40] or "Come back offer"
+        best = {"pct": rp, "label": label, "ends": ""}
     return best_code, best
 
 
@@ -329,7 +424,8 @@ def quote(state):
     if bpct:
         pcode, promo = "BUNDLE", {"pct": bpct, "label": "Bundle", "ends": ""}
     else:
-        pcode, promo = resolve_promo(state.get("promo"), state.get("recovery_pct"))
+        pcode, promo = resolve_promo(state.get("promo"), state.get("recovery_pct"),
+                                     state.get("offer_label"))
     discount = _jsround(boost * promo["pct"]) if promo else 0
     total = subtotal - discount
 
@@ -339,6 +435,11 @@ def quote(state):
         promo_code=pcode or "", promo_label=(promo or {}).get("label", ""),
         promo_pct=(promo or {}).get("pct", 0), promo_ends=(promo or {}).get("ends", ""),
         base=_jsround(base), addons=extra, days=days,
+        # The number add-ons are a percentage OF — the list boost normally, the
+        # bundle's flat price on a bundle order. It was a local until the
+        # free-but-optional row needed to strike a figure computed the same way
+        # a real charge would be. Mirrored as `addonBase` in app.js.
+        addon_base=base * (1 - bpct) if bpct else base,
         summary=summary,
         eta=eta_text(days),
     )

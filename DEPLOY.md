@@ -334,6 +334,79 @@ Notes worth keeping in mind:
 
 ---
 
+## Turn on the mystery discount (the configurator's email capture)
+
+Four seconds after a visitor settles their **target rank** on a game page, a modal
+offers a sealed "mystery discount". An email buys the right to open it; the reveal
+shows a 30% code, live for one hour and single-use, and applying it returns them to
+their order with the total already discounted. Every card opened, and how many were
+paid for, is in the **Mystery** tab of `/ops`.
+
+**Every card pays the same 30%.** The pick is theatre, and the copy is written so it
+never claims otherwise — no odds, no luck, no deck of mixed values. Do not add any.
+Two friends comparing cards find out in ten seconds, and a discovered lie on a store
+whose central pitch is "the price does not move after checkout" costs more than the
+twenty margin points earn.
+
+It needs the Upstash store (same credentials as analytics) and, to actually deliver
+the code, **email** ([Turn on email](#turn-on-email-hostinger-smtp)). It works
+without SMTP — the code is still issued and the reveal drops its "a copy is in your
+inbox" line for one that says to copy the code before closing the tab — but that is
+a degraded mode, not the design.
+
+1. Nothing is **required** in **Vercel → Project → Settings → Environment
+   Variables**; every knob has a default:
+
+   | Name | Value | Notes |
+   | --- | --- | --- |
+   | `BINGO_PCT` | `0.30` | The discount, as a fraction. **This is a flat cost on every redeemed code — model it as 30%, not as an average.** |
+   | `BINGO_TTL` | `3600` | How long a code works, in seconds. One hour. Change it and the modal's own copy follows (the band, the pill and the countdown all read this). |
+   | `BINGO_MAX` | `20000` | Caps the stored list. |
+
+2. **Check it.** Locally, open a game page, change the target rank and wait five
+   seconds. Or hit the API directly:
+
+   ```
+   curl -X POST localhost:4321/api/bingo -H 'Content-Type: application/json' \
+     -d '{"email":"you@example.com","game":"League of Legends","service":"division",
+          "from":"Gold IV","to":"Platinum IV","mode":"Solo","addons":[]}'
+   ```
+
+   It returns `{"ok": true, "token": "BINGO-…", "pct": 0.3, "seconds": 3600,
+   "mailed": true|false}`. `curl 'localhost:4321/api/bingo?token=BINGO-…'` resolves
+   it; a spent or expired one answers `{"valid": false}`.
+
+Notes worth keeping in mind:
+
+- **The code never leaks and never stacks.** It is not an entry in `data.py` (those
+  ship to every browser in `data.js`) — it is a per-buyer, single-use,
+  server-resolved token, and the browser only ever sends the token back. It
+  **replaces** the sitewide sale rather than adding to it, so a buyer gets 30%,
+  never 45%.
+- **One card per inbox, ever.** A second capture from the same address returns the
+  same token while it is live and says "already used its card" once it isn't —
+  clearing localStorage does not mint a second 30%.
+- **One hour is a real deadline.** The store enforces it, not the countdown: every
+  page load re-checks the token, and an expired one simply re-prices at the normal
+  sale. An offer that quietly still works teaches buyers to ignore every future
+  countdown, which costs more than one late order.
+- **It fires once per visitor and a decline is free.** No exit-intent second
+  attempt, no re-fire on the next page, and it never opens over an order that
+  already carries a discount (a typed code, a bundle, a recovery link).
+- **This store holds PII** (the email, the country) next to a live discount, so it
+  is the most sensitive of the six — same treatment as carts and orders: a lawful
+  basis, a privacy-policy line, a deletion path.
+- **The marketing opt-in is separate from the code.** The code mail is
+  transactional and goes either way; the ticked box writes to the same guides
+  mailing list `/guides.html` does. Bundling consent into the transactional mail is
+  what gets a sender blacklisted.
+- ⚠ **Margin.** At today's prices a 30% code on a typical League climb is roughly
+  $18–$150 off a single order. Decide what conversion lift makes that worth it
+  before pointing real traffic at it, and read the **Mystery** tab's
+  `Redeemed × 30%` rather than the lead count.
+
+---
+
 ## Turn on social sign-in (Google + Discord)
 
 The header's "Continue with Google / Discord" buttons run a real OAuth

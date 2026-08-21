@@ -101,13 +101,18 @@ def test_shown_equals_charged():
 # ── the exact case from the bug report ─────────────────────────────────────
 def test_iron_to_gold_regression():
     print("\n[regression] Iron I -> Gold IV, the reported climb")
-    # WITH the bundle (index 0): the flat hand-set price, $67 / EUR62.
+    # WITH the bundle (index 0): the flat hand-set price, whatever BUNDLES says
+    # it is. Read, never typed — a re-price changes one number in data.py and
+    # this stays true; the regression being guarded is the CLIMB resolving to
+    # the bundle at all, not any particular dollar figure.
+    want = D.bundle_climbs(LOL)[0]["price"]
     with_b = div_quote(LOL, "Iron I", "Gold IV", bundle=0)
-    check(with_b["total"] == 67, "with bundle: total is $67 (got $%d)" % with_b["total"])
-    check(pricing.charge_for(with_b["total"], "eur")[1] == 6200,
-          "with bundle: charges EUR 62.00")
+    check(with_b["total"] == want,
+          "with bundle: total is the hand-set $%d (got $%d)" % (want, with_b["total"]))
+    check(pricing.charge_for(with_b["total"], "eur")[1] == display_cents(want, "eur"),
+          "with bundle: charges EUR %.2f" % (display_cents(want, "eur") / 100))
     # WITHOUT the bundle field (the payload bug): falls to the sitewide sale,
-    # priced from the real Iron I -> $68 / EUR63. This is the stale-server symptom.
+    # priced from the real Iron I. This is the stale-server symptom.
     without_b = div_quote(LOL, "Iron I", "Gold IV")
     check(without_b["promo_code"] == "SPLIT15",
           "no bundle: falls back to the sitewide sale")
@@ -140,6 +145,72 @@ def test_addon_modes():
     for mode in ("Solo", "Duo queue"):
         q = div_quote(LOL, "Iron I", "Gold IV", mode=mode, addons=["champ"])
         check(q["addons"] == 0, "the picks add-on costs nothing on %s" % mode)
+
+
+# ── the free-but-optional add-on: shown as a saving, charged as nothing ─────
+def test_free_optional_addons():
+    """The `was_pct` row is the one place on the site that prints a reference
+    price the shop never charges, so the thing to lock is that the reference
+    stays *display only* and the charge stays $0 on every path into the engine.
+
+    Four ways this could break, and all four are checked below: someone gives
+    the row a `pct` and it silently starts billing; someone drops the $1 floor
+    or the base and the struck figure stops matching what a real charge would
+    be; the client mirror drifts from the Python; or the row loses its
+    `was_pct` and the markup goes on rendering a struck figure of $0."""
+    print("\n[free add-ons] a free-but-optional option is never charged")
+    free_opt = [a for a in D.ADDONS if D.addon_is_free_opt(a)]
+    check(bool(free_opt), "data.py carries at least one free-but-optional add-on")
+
+    for a in free_opt:
+        aid = a["id"]
+        check(a["pct"] == 0, "%s has no pct — the engine can never bill it" % aid)
+        check(not a.get("incl"),
+              "%s is not an inclusion, so it renders as a real checkbox" % aid)
+        check(not a.get("mode"),
+              "%s is offered in both queues" % aid)
+
+        # Charged nothing, on every service, queue and ladder — including the
+        # bundle path, where add-ons are a percentage of a DIFFERENT base.
+        for g in D.GAMES:
+            frm, to = g["ladder"][0], g["ladder"][min(6, len(g["ladder"]) - 1)]
+            for mode in ("Solo", "Duo queue"):
+                bare = div_quote(g, frm, to, mode=mode)
+                took = div_quote(g, frm, to, mode=mode, addons=[aid])
+                check(took["total"] == bare["total"] and took["addons"] == 0,
+                      "%s costs nothing on %s / %s" % (aid, g["short"], mode))
+
+        # Stacked with a paid option it must still add exactly nothing.
+        paid = next((x["id"] for x in D.ADDONS if x["pct"] > 0
+                     and not x.get("mode")), None)
+        if paid:
+            one = div_quote(LOL, "Iron I", "Gold IV", addons=[paid])["total"]
+            two = div_quote(LOL, "Iron I", "Gold IV", addons=[paid, aid])["total"]
+            check(one == two, "%s adds nothing beside a paid add-on" % aid)
+
+        # The struck figure is the same arithmetic a real charge would use.
+        q = div_quote(LOL, "Iron I", "Gold IV")
+        was = pricing.addon_list_price(q["addon_base"], aid)
+        check(was == max(1, pricing._jsround(q["addon_base"] * a["was_pct"])),
+              "%s's struck figure is was_pct off the quote's own addon_base" % aid)
+        check(was > 0, "%s's struck figure is a real number, not $0" % aid)
+        # It must never be quoted for an add-on that has no reference rate.
+        check(pricing.addon_list_price(q["addon_base"], paid) == 0,
+              "no reference price is invented for a paid add-on")
+
+    # The JS mirror. addonListPrice() has to carry the same floor, the same
+    # rounding and the same guard, or the card strikes one figure and a
+    # re-quote after any state change strikes another.
+    js = open(os.path.join(ROOT, "public", "assets", "js", "app.js"),
+              encoding="utf-8").read()
+    for frag in ("function addonListPrice(", "function isFreeOpt(",
+                 "Math.max(1, Math.round(addonBase * pct))",
+                 "addonBase: bpct ? base * (1 - bpct) : base"):
+        check(frag in js, "app.js mirrors `%s`" % frag)
+    # And the picker must not force it on: the checked line has to consult
+    # isFreeOpt(), or a free option arrives pre-ticked and is not a choice.
+    check("!isFreeOpt(a))" in js,
+          "app.js leaves a free-but-optional row unticked until the buyer taps it")
 
 
 # ── the per-game name of the picks add-on ───────────────────────────────────
@@ -653,7 +724,8 @@ def test_checkout_payload_sends_state():
 
 def main():
     for fn in (test_shown_equals_charged, test_iron_to_gold_regression,
-               test_addon_modes, test_picks_labels,
+               test_addon_modes, test_free_optional_addons,
+               test_picks_labels,
                test_bundle_does_not_stack, test_bundle_rules,
                test_bundle_never_costs_more,
                test_build_session_amount, test_client_total_guard,

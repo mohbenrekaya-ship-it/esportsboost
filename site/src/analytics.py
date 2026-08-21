@@ -48,6 +48,10 @@ LIST_KEY = "esb:ev"
 # than stored — otherwise the store is a free-form public write target.
 ALLOWED_EVENTS = {
     "session_start", "page_view", "view_item", "configure", "select_promotion",
+    # The mystery-discount modal was shown. The mystery store only records cards
+    # people actually opened, so without this there is no denominator for the
+    # flow — "N leads" reads as a win with no idea what it cost in interruptions.
+    "view_promotion",
     "add_to_cart", "begin_checkout", "add_payment_info", "purchase",
     "generate_lead", "checkout_error", "js_error", "scroll", "engage",
 }

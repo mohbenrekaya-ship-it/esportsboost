@@ -641,6 +641,14 @@ select.field { padding-right: 26px; }
 .ostat-recovered   { color: var(--good); border-color: color-mix(in srgb, var(--good) 55%, transparent); background: color-mix(in srgb, var(--good) 15%, transparent); }
 .ostat-expired     { color: var(--muted); border-color: var(--hairline); background: transparent; }
 
+/* Mystery-discount lifecycle (Mystery tab). `issued` is the live hour — amber,
+   because it is a discount running against a clock, not a settled state — and
+   `redeemed` shares Recovered's green: both mean a token bought an order.
+   `expired` is the shared muted chip; an hour running out is the design, not a
+   failure. */
+.ostat-issued      { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 55%, transparent); background: color-mix(in srgb, var(--warning) 14%, transparent); }
+.ostat-redeemed    { color: var(--good); border-color: color-mix(in srgb, var(--good) 55%, transparent); background: color-mix(in srgb, var(--good) 15%, transparent); }
+
 .order-hero { background:
     linear-gradient(120deg, color-mix(in srgb, var(--s1) 10%, transparent), transparent 62%),
     var(--surface); }

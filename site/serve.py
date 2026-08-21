@@ -68,6 +68,7 @@ import analytics  # noqa: E402  — first-party event ingest (also used by /api)
 import boosters   # noqa: E402  — roster store behind /api/boosters (also used by /api)
 import carts      # noqa: E402  — abandoned-checkout capture behind /api/cart (also used by /api)
 import guides     # noqa: E402  — free-guides mailing list behind /api/guides (also used by /api)
+import mystery    # noqa: E402  — mystery-discount capture behind /api/bingo (also used by /api)
 import mailer     # noqa: E402  — outbound SMTP seam (support tickets, order mail)
 import oauth      # noqa: E402  — social sign-in (Google/Discord), also used by /api
 import ops        # noqa: E402  — gated dashboard API (also used by /api)
@@ -211,6 +212,24 @@ class Handler(SimpleHTTPRequestHandler):
             # open sweep endpoint is a free way to make the site mail people.
             status, payload = carts.process_sweep(self._read_body(), self.headers.get)
             return self._json(status, payload)
+        if route == "/api/bingo":
+            # Public, like /api/collect: the mystery-discount modal is on the
+            # nine game pages. Captures an email and issues ONE single-use,
+            # one-hour discount token against it — the percentage is never read
+            # from the body and never shipped in data.js (see mystery.py).
+            # A signed-in visitor's address comes from the VERIFIED session
+            # cookie, the same rule /api/cart and /api/orders follow.
+            _ck = oauth.parse_cookies(self.headers.get("Cookie"))
+            _ss = oauth.read_session(_ck.get(oauth.SESSION_COOKIE))
+            status, payload = mystery.process_issue(
+                self._read_body(), self.headers.get,
+                session_email=(_ss or {}).get("email", ""))
+            if payload is None:
+                self.send_response(status)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            return self._json(status, payload)
         if route == "/api/support":
             # Public, like /api/collect: the contact form is on a public page.
             # Stores nothing — the ticket is composed and mailed to the support
@@ -259,6 +278,16 @@ class Handler(SimpleHTTPRequestHandler):
             tok = urllib.parse.parse_qs(
                 urllib.parse.urlsplit(self.path).query).get("token", [""])[0]
             status, payload = carts.process_resolve(tok)
+            return self._json(status, payload)
+        if route == "/api/bingo":
+            # Resolve a mystery-discount token → its percentage. The ONLY route
+            # to it, exactly like /api/cart: not in data.js, so a client cannot
+            # learn the discount without a token the server issued. This is also
+            # what makes the one-hour deadline real — the page re-checks on every
+            # load and simply re-prices at the normal sale once it lapses.
+            tok = urllib.parse.parse_qs(
+                urllib.parse.urlsplit(self.path).query).get("token", [""])[0]
+            status, payload = mystery.process_resolve(tok)
             return self._json(status, payload)
         if route == "/api/cart/unsubscribe":
             tok = urllib.parse.parse_qs(

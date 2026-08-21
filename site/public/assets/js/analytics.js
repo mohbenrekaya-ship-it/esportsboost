@@ -191,6 +191,7 @@
   // so mirroring them here too would double-count every re-quote.
   var BRIDGE = {
     view_item: "view_item", select_promotion: "select_promotion",
+    view_promotion: "view_promotion",
     begin_checkout: "begin_checkout", add_payment_info: "add_payment_info",
     purchase: "purchase", generate_lead: "generate_lead"
   };
