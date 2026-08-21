@@ -1437,6 +1437,24 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
     # and the roster without JS. app.js runs at the foot of the body, far too
     # late to clear it — hence the inline script rather than a class app.js
     # removes on load.
+    #
+    # THREE icon links, and the order is the contract. The SVG alone is what
+    # shipped, and it left `/favicon.ico` a 404 — which matters because Google
+    # crawls a favicon with a *different* crawler from Googlebot, against a
+    # cache that refreshes far more slowly than a page does. The redesign's
+    # title and description went live in the SERP within days while the
+    # previous site's logo sat next to them, because the only path to the new
+    # mark was a page crawl. The root .ico is the one Google re-requests on its
+    # own, so it is first; a browser that understands SVG takes the second and
+    # ignores it. iOS reads neither and needs the third.
+    #
+    # The .ico / apple-touch PNG are NOT under /assets/ on purpose: vercel.json
+    # serves that prefix `immutable` for a year, which is right for a URL that
+    # carries a content hash and a trap for an icon whose URL never changes.
+    # At the root they get the default must-revalidate. The SVG stays where it
+    # is and gets av()'d instead — same fix, the other way round. All three are
+    # rasterised from art.favicon() by tools/make_icons.py; re-run it when the
+    # mark changes.
     return f"""<!doctype html>
 <html lang="en" class="no-js">
 <head>
@@ -1455,7 +1473,9 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
 <meta property="og:image" content="{D.SITE}{og_image}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#06060a">
-<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="icon" href="{av('/assets/img/favicon.svg')}" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preload" href="/assets/fonts/inter-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/inter-600-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{av('/assets/css/ashfall.css')}">
@@ -4724,7 +4744,7 @@ def page_home():
 {cta_band(live=True, cta=("Continue your order", "/checkout.html"))}"""
 
     org = {"@context": "https://schema.org", "@type": "Organization",
-           "name": D.BRAND, "url": D.SITE, "logo": D.SITE + "/assets/img/favicon.svg",
+           "name": D.BRAND, "url": D.SITE, "logo": D.SITE + "/icon-512.png",
            # The postal address and mailbox the legal pages and the footer
            # print, asserted once to a crawler. Unlike aggregateRating below,
            # these are checkable facts about us rather than a claim about what
