@@ -36,10 +36,38 @@
   var K_ANON = "esb.anon.v1";
   var K_SESS = "esb.sess.v1";
   var K_TOUCH = "esb.touch.v1";
+  var K_INTERNAL = "esb.internal.v1";
 
   if (window.navigator && window.navigator.globalPrivacyControl) return;
   if (window.ESB_NO_ANALYTICS) return;
   if (location.pathname.indexOf("/ops") === 0) return;
+
+  /* Internal traffic — our own browser, permanently. Test orders used to walk
+     into the funnel as ordinary sessions, and over a few dozen clicks a handful
+     of them moves the conversion rate further than anything a real visitor did:
+     `paid` is simply "this session emitted purchase", so a test checkout counts
+     exactly like a customer's. Load any page with ?esb_internal=1 to mark this
+     browser and ?esb_internal=0 to clear it. A marked browser beacons NOTHING,
+     so the store stays clean rather than carrying rows every future reader has
+     to remember to filter out. It is per browser AND per profile — mark each
+     one you test from, and re-mark after clearing site data.
+     `window.ESB_NO_ANALYTICS` is still the one-page-load version of this. */
+  function internalBrowser() {
+    try {
+      var q = new URLSearchParams(location.search);
+      if (q.has("esb_internal")) {
+        if (q.get("esb_internal") === "0") {
+          localStorage.removeItem(K_INTERNAL);
+          if (window.console) console.log("[esb] analytics ON — this browser is counted again");
+        } else {
+          localStorage.setItem(K_INTERNAL, "1");
+          if (window.console) console.log("[esb] analytics OFF — this browser is marked internal");
+        }
+      }
+      return localStorage.getItem(K_INTERNAL) === "1";
+    } catch (e) { return false; }
+  }
+  if (internalBrowser()) return;
 
   /* ── storage helpers — analytics must never break a page ─────────────── */
   function get(key) {

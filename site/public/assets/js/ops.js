@@ -594,7 +594,17 @@
      state & API
      ══════════════════════════════════════════════════════════════════════ */
   var state = { token: null, days: 30, game: "", tab: "liveview", data: null, busy: false,
+                // The period, as a preset key plus the absolute pair it resolves
+                // to. `days` is kept in step because the Orders / Carts /
+                // Accounts / Guides / Boosters actions still take a trailing
+                // day count and have no range parameter yet.
+                range: "30d", start: null, end: null,
                 sessionId: null, sessionDetail: null,
+                // Seeded rows are excluded from every number server-side unless
+                // this is on. Off by default and deliberately not persisted: a
+                // sticky "include synthetic" is how a seeded conversion rate
+                // gets read as real three weeks later.
+                synthetic: false,
                 // The sign-up list is fetched on demand (it is PII, kept off the
                 // main payload) and cached until the period changes.
                 accounts: null, accountsLoading: false, accountsError: null,
@@ -609,6 +619,11 @@
                 // the same master-detail shape as Sessions.
                 orders: null, ordersLoading: false, ordersError: null,
                 orderId: null, orderDetail: null,
+                // The abandoned-checkout store — captured emails + the config the
+                // buyer was about to pay for. Its own store (PII), fetched on
+                // demand. Distinct from the "Abandoned" tab, which is the
+                // anonymous analytics view with no email attached.
+                carts: null, cartsLoading: false, cartsError: null,
                 // Auto-refresh: poll the dashboard so the numbers stay live
                 // without a manual Refresh. Default on.
                 live: true };
@@ -633,7 +648,9 @@
 
   function login(pw) {
     errBox.textContent = "";
-    return api({ action: "login", password: pw, days: state.days }).then(function (res) {
+    return api({ action: "login", password: pw, days: state.days,
+                 start: state.start, end: state.end,
+                 tzoff: new Date().getTimezoneOffset() }).then(function (res) {
       if (res.status === 200) {
         state.token = res.body.token;
         try { sessionStorage.setItem("esb.ops.token", state.token); } catch (e) {}
@@ -665,7 +682,10 @@
     if (!state.token || state.busy) return Promise.resolve();
     state.busy = true;
     if (!silent) app.classList.add("loading");   // hold the old render, never a skeleton flash
-    return api({ action: "data", token: state.token, days: state.days, game: state.game || null })
+    return api({ action: "data", token: state.token, days: state.days,
+                 start: state.start, end: state.end,
+                 tzoff: new Date().getTimezoneOffset(),
+                 game: state.game || null, synthetic: state.synthetic })
       .then(function (res) {
         state.busy = false;
         app.classList.remove("loading");
@@ -679,6 +699,7 @@
           if (state.tab === "guides") loadGuides();
           if (state.tab === "boosters") loadBoosters();
           if (state.tab === "orders" && !state.orderId) loadOrders();
+          if (state.tab === "carts") loadCarts();
           return;
         }
         toGate();
@@ -2096,7 +2117,12 @@
      like Accounts because it holds PII. Detail is a second on-click request, the
      same pattern Sessions uses, so the list payload never carries every order's
      full record. */
-  var CUR_SYM = { usd: "$", eur: "€", gbp: "£" };
+  // CAD is "C$", never a bare "$" — an operator scanning this list has no other
+  // way to tell a 415 Canadian order from a 415 US one, and the fallback below
+  // is a dollar sign, so a currency missing from this map is silently mislabelled
+  // rather than obviously broken. Mirrored in payments.CURRENCY_SIGNS, i18n.js
+  // CUR_MARK and build.py's CURRENCIES icon; test_pricing.py asserts all four.
+  var CUR_SYM = { usd: "$", eur: "€", gbp: "£", cad: "C$" };
   function money(n, cur) {
     var sym = CUR_SYM[(cur || "usd").toLowerCase()] || "$";
     return sym + fmtNum.format(Math.round(n || 0));
@@ -2409,6 +2435,188 @@
     return f;
   }
 
+  /* ── Carts: the abandoned-checkout store, recoverable emails ──────────── */
+  var CART_STATUS = {
+    pending: "Waiting", mailed: "Mailed", recovered: "Recovered", expired: "Closed"
+  };
+  function cartChip(s) {
+    return '<span class="ostat ostat-' + esc(s) + '">' + esc(CART_STATUS[s] || s) + "</span>";
+  }
+
+  function loadCarts() {
+    if (state.cartsLoading) return;
+    state.cartsLoading = true;
+    state.cartsError = null;
+    api({ action: "carts", token: state.token, days: state.days }).then(function (res) {
+      state.cartsLoading = false;
+      if (res.status === 200 && res.body.carts) {
+        state.carts = res.body.carts;
+      } else if (res.status === 401) {
+        toGate();
+        return;
+      } else if (res.status === 200) {
+        state.cartsError = "This server doesn't serve the carts store yet — it is running an " +
+          "older build. Restart serve.py (the /api routes only reload on restart), then Refresh.";
+      } else {
+        state.cartsError = "Couldn't load carts — the server returned " + res.status + ".";
+      }
+      if (state.tab === "carts") render();
+    }).catch(function () {
+      state.cartsLoading = false;
+      state.cartsError = "Couldn't reach the server. Is it running?";
+      if (state.tab === "carts") render();
+    });
+  }
+
+  function panelCarts() {
+    var f = document.createDocumentFragment();
+    var a = state.carts;
+
+    if (state.cartsError && !a) {
+      var er = document.createElement("div");
+      er.className = "card";
+      er.innerHTML = '<p class="empty">' + esc(state.cartsError) + "</p>";
+      var retry = document.createElement("button");
+      retry.className = "btn btn-sm"; retry.type = "button"; retry.textContent = "Try again";
+      retry.style.cssText = "margin:0 auto 16px;display:block";
+      retry.addEventListener("click", function () { state.cartsError = null; loadCarts(); render(); });
+      er.appendChild(retry);
+      f.appendChild(er);
+      return f;
+    }
+    if (!a) {
+      loadCarts();
+      var wait = document.createElement("div");
+      wait.className = "card";
+      wait.innerHTML = '<p class="empty">Loading carts…</p>';
+      f.appendChild(wait);
+      return f;
+    }
+
+    // What this tab is — and what it is not. A standing note, the same honesty
+    // the other PII stores carry: this is a recovery list, not proof of intent
+    // to buy, and its emails were typed into checkout or supplied by a session.
+    var intro = document.createElement("div");
+    intro.className = "banner";
+    intro.innerHTML = '<span class="ico">✉</span><div><strong>Abandoned-checkout recovery.</strong> ' +
+      "An email lands here when a signed-in visitor configures an order, or when anyone types their " +
+      "address on checkout, and then doesn't pay. After " + num(a.delay_mins) + " minutes the sweep mails " +
+      "a single-use " + Math.round(a.recovery_pct * 100) + "% code. A paid order burns the code and marks the row " +
+      "<em>Recovered</em>. This is the “Carts” store — distinct from the anonymous <b>Abandoned</b> tab, which has no email.</div>";
+    f.appendChild(intro);
+
+    if (a.synthetic > 0) {
+      var syn = document.createElement("div");
+      syn.className = "banner synthetic";
+      syn.innerHTML = '<span class="ico">▲</span><div><strong>Includes seeded carts.</strong> ' +
+        num(a.synthetic) + " row(s) were written for testing. Clear the store before launch.</div>";
+      f.appendChild(syn);
+    }
+
+    var kr = document.createElement("div");
+    kr.className = "kpis";
+    kr.appendChild(kpi("Captured", num(a.total), undefined, "", true));
+    kr.appendChild(kpi("Recovered", num(a.recovered)));
+    kr.appendChild(kpi("Recovery rate", a.recovery_rate + "%"));
+    kr.appendChild(kpi("Won back", usd(a.recovered_value)));
+    kr.appendChild(kpi("In flight", usd(a.potential_value)));
+    f.appendChild(kr);
+
+    var statuses = (a.statuses || []).filter(function (s) { return s.count > 0; });
+    var games = a.games || [];
+    var g = document.createElement("div");
+    g.className = "grid";
+    g.appendChild(card({
+      cls: "half", title: "By status",
+      sub: "Waiting → Mailed → Recovered. Closed is unsubscribed or an expired token.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: statuses.map(function (s) { return { label: CART_STATUS[s.status] || s.status, value: s.count }; }),
+          color: SERIES[0], alt: "Carts by status"
+        });
+      },
+      table: {
+        head: ["Status", "Carts"], num: [1],
+        rows: statuses.map(function (s) { return [CART_STATUS[s.status] || s.status, num(s.count)]; })
+      }
+    }));
+    g.appendChild(card({
+      cls: "half", title: "By game",
+      sub: "Which ladders visitors abandon, and how many came back.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: games.map(function (r) { return { label: r.game, value: r.count }; }),
+          color: SERIES[2], alt: "Carts by game"
+        });
+      },
+      table: {
+        head: ["Game", "Carts", "Recovered"], num: [1, 2],
+        rows: games.map(function (r) { return [r.game, num(r.count), num(r.recovered)]; })
+      }
+    }));
+    f.appendChild(g);
+
+    var recent = a.recent || [];
+    var el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML =
+      '<div class="card-hd"><h3>Every cart</h3><span class="spacer"></span>' +
+      '<button class="btn btn-sm" type="button" data-export-carts>Export CSV</button></div>' +
+      '<p class="card-sub">Newest first' +
+      (a.total > recent.length ? ", first " + num(recent.length) + " of " + num(a.total) : "") +
+      ". The value is re-priced from each stored configuration; the offer is what the " +
+      Math.round(a.recovery_pct * 100) + "% code brings it to.</p>";
+
+    if (!recent.length) {
+      el.insertAdjacentHTML("beforeend",
+        '<p class="empty">No captured carts in this period. They appear once a visitor configures while ' +
+        "signed in, or types an email on checkout without finishing.</p>");
+      f.appendChild(el);
+      return f;
+    }
+
+    var head = ["When", "Email", "Game", "Config", "Value", "Offer", "Status", "Age"];
+    var html = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+      head.map(function (h, i) { return '<th class="' + (i === 4 || i === 5 ? "num" : "") + '">' + esc(h) + "</th>"; }).join("") +
+      "</tr></thead><tbody>";
+    recent.forEach(function (r) {
+      html += "<tr>" +
+        '<td class="dim">' + esc(ago(r.at)) + "</td>" +
+        "<td>" + esc(r.email) + (r.syn ? ' <span class="chip">seeded</span>' : "") + "</td>" +
+        "<td>" + esc(r.game) + '<span class="dim"> · ' + esc(r.mode || "") + "</span></td>" +
+        '<td class="wrap-cell">' + esc(r.summary) + "</td>" +
+        '<td class="num">' + esc(usd(r.value)) + "</td>" +
+        '<td class="num">' + (r.offer ? esc(usd(r.offer)) : '<span class="dim">—</span>') + "</td>" +
+        "<td>" + cartChip(r.status) +
+          (r.order_id ? ' <span class="dim">' + esc(r.order_id) + "</span>" : "") + "</td>" +
+        '<td class="dim">' + esc(r.status === "mailed" && r.mailed_at ? "mailed " + ago(r.mailed_at) : ago(r.at)) + "</td>" +
+        "</tr>";
+    });
+    el.insertAdjacentHTML("beforeend", html + "</tbody></table></div>");
+
+    el.querySelector("[data-export-carts]").addEventListener("click", function () {
+      var cols = ["when", "email", "game", "service", "mode", "config", "region", "country",
+                  "value_usd", "offer_usd", "status", "order_id", "mailed_at", "recovered_at", "seeded"];
+      var lines = [cols.join(",")];
+      recent.forEach(function (r) {
+        lines.push([new Date(r.at * 1000).toISOString(), r.email, r.game, r.service, r.mode,
+                    r.summary, r.region, r.country, r.value, r.offer, r.status, r.order_id,
+                    r.mailed_at ? new Date(r.mailed_at * 1000).toISOString() : "",
+                    r.recovered_at ? new Date(r.recovered_at * 1000).toISOString() : "",
+                    r.syn ? "yes" : "no"]
+          .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; }).join(","));
+      });
+      var link = document.createElement("a");
+      link.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+      link.download = "esb-carts-" + new Date().toISOString().slice(0, 10) + ".csv";
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+    });
+
+    f.appendChild(el);
+    return f;
+  }
+
   function panelAbandoned(d) {
     var rows = d.abandoned;
     var f = document.createDocumentFragment();
@@ -2606,7 +2814,7 @@
           (bits ? ' <span class="lv-feed-cfg">' + esc(bits) + "</span>" : "") + "</span>" +
         val + fl + "</li>";
     }).join("");
-    var t = lv.today || { sessions: 0, orders: 0, revenue: 0 };
+    var t = lv.today || { sessions: 0, orders: 0, revenue: 0, cr: 0 };
 
     /* funnel boxes — what every live session is doing right now (site-wide) */
     var beh = lv.behavior || [];
@@ -2653,6 +2861,14 @@
           num(t.sessions) + "</div></div>" +
         '<div class="kpi"><div class="lab">Orders · 24h</div><div class="val">' +
           num(t.orders) + "</div></div>" +
+        /* Rolling 24h, so it will not match the Overview tile unless the period
+           happens to be a day — the label carries the window for that reason.
+           The rate is computed in insights.py, never divided here. */
+        '<div class="kpi"><div class="lab">Conversion · 24h</div><div class="val">' +
+          pct(t.cr) + "</div>" +
+          (t.sessions ? '<div class="delta">' + num(t.orders) + " of " +
+            num(t.sessions) + " session" + (t.sessions === 1 ? "" : "s") + "</div>" : "") +
+        "</div>" +
         '<div class="kpi"><div class="lab">Revenue · 24h</div><div class="val">' +
           usd(t.revenue) + "</div></div>" +
       "</div>" +
@@ -2733,6 +2949,7 @@
   var PANELS = {
     overview: panelOverview, funnel: panelFunnel, configurator: panelConfigurator,
     journey: panelJourney, sessions: panelSessions, orders: panelOrders,
+    carts: panelCarts,
     accounts: panelAccounts,
     guides: panelGuides, boosters: panelBoosters,
     acquisition: panelAcquisition, friction: panelFriction, abandoned: panelAbandoned,
@@ -2760,10 +2977,23 @@
     var banner = document.querySelector("[data-synthetic]");
     if (d.meta.synthetic > 0) {
       banner.hidden = false;
-      banner.innerHTML = '<span class="ico">▲</span><div><strong>Synthetic data — not real traffic.</strong> ' +
-        num(d.meta.synthetic) + " of " + num(d.meta.events) +
-        " events in this window were generated by <code>site/tools/seed_analytics.py</code> for testing. " +
-        "Clear the store before launch so no seeded number is ever read as real.</div>";
+      banner.innerHTML = '<span class="ico">▲</span><div>' + (d.meta.synthetic_excluded
+        ? '<strong>' + num(d.meta.synthetic) + " seeded event(s) excluded.</strong> " +
+          "They were generated by <code>site/tools/seed_analytics.py</code> and are left out of " +
+          "every number below, so what you are reading is real traffic only. " +
+          '<button type="button" data-syn-toggle>Include them</button> ' +
+          "(for checking the dashboard renders, never for reading a rate). " +
+          "Clear the store before launch."
+        : '<strong>Synthetic data — not real traffic.</strong> ' +
+          num(d.meta.synthetic) + " of " + num(d.meta.events) +
+          " events in this window were generated by <code>site/tools/seed_analytics.py</code>, and " +
+          "every number below includes them. " +
+          '<button type="button" data-syn-toggle>Exclude them</button>') + "</div>";
+      var syn = banner.querySelector("[data-syn-toggle]");
+      if (syn) syn.addEventListener("click", function () {
+        state.synthetic = !state.synthetic;
+        refresh();
+      });
     } else {
       banner.hidden = true;
     }
@@ -2791,7 +3021,55 @@
     resizeTimer = setTimeout(function () { painters.forEach(function (p) { p(); }); }, 180);
   });
 
+  /* ── the period ──────────────────────────────────────────────────────── */
+  /* A preset key becomes an absolute [start, end] pair HERE, in the reader's
+     own timezone, and the server is handed epochs. Resolving "today" on the
+     server would mean today in UTC — the wrong day for a European operator for
+     part of every evening, and the whole reason "Today" and "Yesterday" could
+     not be built on the old trailing-days control. */
+  function dayStart(d) { var x = new Date(d.getTime()); x.setHours(0, 0, 0, 0); return x; }
+  function secs(d) { return Math.floor(d.getTime() / 1000); }
+
+  function resolveRange(key) {
+    var now = new Date(), s = dayStart(now), e = new Date(now.getTime());
+    if (key === "yesterday") {
+      s.setDate(s.getDate() - 1);
+      e = dayStart(now); e.setSeconds(e.getSeconds() - 1);
+    } else if (key === "7d")  { s.setDate(s.getDate() - 6);
+    } else if (key === "30d") { s.setDate(s.getDate() - 29);
+    } else if (key === "90d") { s.setDate(s.getDate() - 89);
+    } else if (key === "mtd") { s.setDate(1);
+    } else if (key === "lastmonth") {
+      s.setDate(1); s.setMonth(s.getMonth() - 1);
+      e = dayStart(now); e.setDate(1); e.setSeconds(e.getSeconds() - 1);
+    } else if (key === "12m") { s.setFullYear(s.getFullYear() - 1);
+    }                                     // "today" is dayStart → now, as built
+    return { start: secs(s), end: secs(e) };
+  }
+
+  /* The two date fields, read as local midnight → end of that day, so a range
+     the reader picked as 1–7 August is the whole of the 7th, not 00:00 of it. */
+  function customRange() {
+    var f = (document.querySelector("[data-date-from]") || {}).value;
+    var t = (document.querySelector("[data-date-to]") || {}).value;
+    if (!f || !t) return null;
+    var s = new Date(f + "T00:00:00"), e = new Date(t + "T23:59:59");
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return null;
+    return { start: secs(s), end: secs(e) };
+  }
+
+  /* One place writes the period, so `days` can never drift from the pair. */
+  function setRange(key, pair) {
+    pair = pair || resolveRange(key);
+    state.range = key;
+    state.start = pair.start;
+    state.end = pair.end;
+    state.days = Math.max(1, Math.min(365, Math.ceil((pair.end - pair.start) / 86400)));
+  }
+
   /* ── wiring ──────────────────────────────────────────────────────────── */
+  setRange(state.range);
+
   var gateForm = document.querySelector("[data-gate] form");
   gateForm.addEventListener("submit", function (e) {
     e.preventDefault();
@@ -2799,14 +3077,35 @@
     if (pw) login(pw);
   });
 
-  document.querySelectorAll("[data-range] button").forEach(function (b) {
-    b.addEventListener("click", function () {
-      state.days = parseInt(b.getAttribute("data-days"), 10);
-      document.querySelectorAll("[data-range] button").forEach(function (o) {
-        o.setAttribute("aria-pressed", o === b ? "true" : "false");
-      });
-      refresh();
-    });
+  var rangeSel = document.querySelector("[data-range]");
+  var dateBox = document.querySelector("[data-dates]");
+
+  rangeSel.addEventListener("change", function () {
+    var key = rangeSel.value;
+    dateBox.hidden = key !== "custom";
+    if (key === "custom") {
+      // Seed the fields with the window already on screen, so the reader edits
+      // a range instead of facing two empty boxes.
+      var from = document.querySelector("[data-date-from]");
+      var to = document.querySelector("[data-date-to]");
+      if (!from.value) from.value = isoDate(new Date(state.start * 1000));
+      if (!to.value) to.value = isoDate(new Date(state.end * 1000));
+      return;                       // nothing is fetched until Apply
+    }
+    setRange(key);
+    refresh();
+  });
+
+  function isoDate(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") +
+           "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  document.querySelector("[data-date-apply]").addEventListener("click", function () {
+    var pair = customRange();
+    if (!pair) return;              // an empty or backwards range fetches nothing
+    setRange("custom", pair);
+    refresh();
   });
 
   document.querySelector("[data-game]").addEventListener("change", function (e) {
@@ -2854,6 +3153,7 @@
       if (state.tab === "guides") loadGuides();
       if (state.tab === "boosters") loadBoosters();
       if (state.tab === "orders") loadOrders();
+      if (state.tab === "carts") loadCarts();
     });
   });
 

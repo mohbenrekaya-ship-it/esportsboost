@@ -125,7 +125,9 @@ actually moves.
 
 ### build.py ↔ app.js contract: `data-*` attributes
 
-`app.js` holds one order object in `localStorage` (`esb.order.v1`), and every price on a page is
+`app.js` holds one order object in `localStorage` — **keyed per game** by `orderKey()`
+(`esb.order.g.<slug>` on a game page, `esb.order.home.v1` on the homepage, and `esb.order.v1` is the
+separate hand-off key checkout reads) — and every price on a page is
 derived from one `quote()` call in one `render()` pass. It finds what to update purely through
 attributes that `build.py` emits — there are no IDs or classes in the wiring. When adding markup,
 reuse these rather than inventing new hooks:
@@ -214,25 +216,132 @@ they only agree by accident otherwise, and `data-addon-price` depends on quoting
 ## Language and currency — `i18n.js`
 
 Two controls, persisted together in `esb.locale.v1`. They stay independent — a French reader can
-still ask for dollars — but they are **not independent defaults**.
+still ask for dollars — but they are **not independent defaults**. Four currencies ship: **USD, EUR,
+GBP and CAD**.
 
-- **A language implies a currency.** `LANG_CUR` maps `fr`/`de` → EUR, `en` → USD, and it is resolved
-  where the store is read, *before* `window.ESB_LOCALE` is published, because app.js takes its first
-  quote off that object — deriving it in `init()` would paint the page in dollars and swap it. The
-  French page used to headline "à partir de **$5**" over a card quoting euros, which is the same
-  one-set-of-numbers failure a bare `$5` in the chrome is.
-- **`curPinned` is the visitor's own pick and outranks the map.** Only a click on the currency
-  dropdown sets it (`applyCurrency(cur, true)`); restoring a stored preference at boot must not, or a
-  language-set currency could never be moved by a later language change. Records written before the
-  default existed carry no flag, and the migration test is **not** "does it disagree with the
-  language" — under the old code USD was the default in every language, so a stored USD means
-  nothing and a returning French visitor would be read as having chosen dollars and left on them.
-  Only a stored **EUR** migrates in as pinned.
+- **The markets, as the business set them** (`geo.currency_for()`): the **United States in dollars,
+  Canada in Canadian dollars, the UK and the crown dependencies in sterling, the rest of Europe in
+  euros**, and everywhere else the dollar — which is what an international price is quoted in, and
+  the only other thing there is a rate for. `EU_COUNTRIES` is derived from the timezone table's
+  `Europe/…` zones, so it is the whole continent rather than the eurozone: the rule is "the rest of
+  Europe", those visitors are all on the EU shard, and a Pole quoted in euros is at least quoted a
+  currency the site can actually charge, which a Pole quoted in złoty would not be.
+- **A location implies a currency; failing that, a language does.** `defaultCurrency(lang)` is a
+  six-step ladder and **the order is load-bearing at every rung** — see the comments on it, but the
+  two that are easy to get wrong: the *European zone* test has to beat the locale, or a visitor in
+  Paris whose browser is set to `en-GB` is quoted in pounds; and the *American zone* test has to sit
+  after the country map and before the European locale list, so Toronto-without-a-table-entry can
+  still reach CAD while an American with a French browser is quoted for the market he is in.
+  **English is not a market** — it is read in London, Toronto and Los Angeles — which is why
+  `LANG_CUR` (`fr`/`de` → EUR) is now the *last* resort rather than the first, reached only by a
+  browser that reports no usable location at all. It is resolved where the store is read, *before*
+  `window.ESB_LOCALE` is published, because app.js takes its first quote off that object — deriving
+  it in `init()` would paint the page in dollars and swap it. The French page used to headline
+  "à partir de **$5**" over a card quoting euros, which is the same one-set-of-numbers failure a
+  bare `$5` in the chrome is.
+- **CAD is a default nobody outside Canada gets, and that is the point.** It ships in the switcher
+  for anyone who wants it, but only Canadian traffic opens on it.
+- **Every currency these tables can hand somebody must have a charge rate.** A country mapped to a
+  code missing from `CHARGE_RATES` displays perfectly and is charged in **dollars** at the Stripe
+  page (`charge_for()` falls back), so the buyer sees one currency and pays another.
+  `test_fx_rate_mirror()` asserts it.
+- **`curPinned` is the visitor's own pick and outranks both.** Only a click on the currency dropdown
+  sets it (`applyCurrency(cur, true)`); restoring a stored preference at boot must not, or a
+  language- or region-set currency could never be moved by a later language change. Records written
+  before the default existed carry no flag, and the migration test is **not** "does it disagree with
+  the language" — under the old code USD was the default in every language *and every region*, so a
+  stored USD means nothing and a returning French or British visitor would be read as having chosen
+  dollars and left on them. Only a stored **non-USD** migrates in as pinned.
 - **A language switch re-marks every switcher**, not just the one clicked: `syncAll()` walks all
   `.loc` on the page, and three mount per document (promo bar, nav sheet, footer). Miss it and five
   controls contradict the prices beside them.
 - **The currency is also the Stripe charge** (`pricing.CHARGE_RATES` mirrors `ESB_RATES`), so this
-  makes EUR the default *charge* currency for French and German traffic, not just the display.
+  makes EUR the default *charge* currency for French and German traffic and GBP for British traffic,
+  not just the display.
+- **The rate table is the allowlist, and it exists three times.** `ESB_RATES` in i18n.js (display),
+  `CHARGE_RATES` in pricing.py (the charge) and `CURRENCIES` in build.py (the dropdown) must hold the
+  same four codes — `test_fx_rate_mirror()` asserts all three, in both directions, because the two
+  ways to get this wrong are both silent: a currency the switcher offers with no server rate behind
+  it is *charged in dollars* (`charge_for()` falls back to USD), so the buyer clicks "£72" and pays
+  $72; and a currency priced server-side that the switcher never offers is dead weight. The rates
+  are **hand-set, not a live feed** — the site quotes whole units, so a rate that moved with the
+  market would re-price every card between one load and the next.
+- **CAD is `C$` on every surface, and never a bare `$`.** Canada's own `en-CA` formats CAD as
+  "$72" — identical to USD — so a Canadian could not tell which currency the page was quoting.
+  `CUR_TAG` pins CAD to `en-US`; **do not "localise" it to `en-CA`/`fr-CA`.** That yields CLDR's
+  "CA$", and the site shows **`C$`**, so `CUR_MARK` in i18n.js overrides it — by rewriting the
+  formatter's `currency` **part** via `formatToParts()`, never by string-replacing the finished
+  output, because where the mark sits is the formatter's business (it leads in `en-US`, trails in
+  `fr-FR`). **Four surfaces draw that mark and all four must agree**: `CUR_MARK` (the displayed
+  price), the icon column of build.py's `CURRENCIES` (the switcher control), `payments.CURRENCY_SIGNS`
+  (the order confirmation mail) and `CUR_SYM` in ops.js (the /ops Orders tab). The last two fall back
+  to a bare `$` for a code they don't know, so a missing entry is not a broken glyph — it is a CAD
+  order labelled as US dollars in a customer's inbox. `test_currency_signs()` asserts all four agree,
+  that the two maps cover `CHARGE_RATES`, and that no two currencies share a mark.
+- **The pound is pinned to `en-GB` formatting, the euro follows the language.** `CUR_TAG` vs
+  `EUR_TAG` in `formatter()`: the euro's symbol placement is genuinely language-specific ("€72" for
+  an English reader, "72 €" for a French one), but the pound is a prefix mark wherever it is read and
+  a French formatter renders GBP as "72,00 £GB".
+- **A wider currency mark costs vertical space on the phone**, which is half of why the mark is `C$`
+  and not `CA$`. `.mb-money` wraps, and on a discounted order it carries the price, its struck
+  original and the save pill: at 375px that needs 201px against 188px available in `C$`, and 237px in
+  `CA$`. So the pill still drops to its own line on a game page (bar 139px, against 109px in GBP) —
+  but checkout, where `CA$` pushed it to a **third** row and a 166px bar, is back to two rows and
+  137px. Nothing is hidden either way, because the reserve is measured (see the `.mobile-bar`
+  section) — but this is why it had to stop being a constant.
+
+## The default server — `geo.py` + `window.esbGeo` in i18n.js
+
+The order form has to open on *some* server, and it opened on **North America for every visitor on
+earth**, so a European buyer's first act on the page was correcting the one control that decides who
+can take their order. It is now resolved from where the visitor is.
+
+- **The choice is binary — NA or EU — and that is a roster fact, not a simplification.**
+  `geo.server_area()` owns the call: 35 boosters sit on NA and 47 across the EU shards, against two
+  on OCE and one apiece on LATAM, SEA and KR. Defaulting somebody onto a shard one person covers is a
+  slower claim and an emptier board. Every other server is still one tap away in the same control.
+- **North America is the continent**, Central America and the Caribbean included (`NA_COUNTRIES`).
+  They are tens of milliseconds from the NA shard and a third of a world from Frankfurt, so grouping
+  them with Europe to satisfy a tidy north/south split would be wrong on the only measure a player
+  feels. ⚠ **South America resolves to EU**, which is the stated rule and is the one case where it
+  costs a real ping — six of the nine ladders list a South America or Brazil server. Changing it is
+  one entry in `REGION_CUR`-style resolution (`_region_for` gains an "SA" area); it is a business
+  call, not a technical one.
+- **The signal is the browser's IANA timezone**, which is `geo.py`'s *second* choice after the edge
+  header — a static page cannot read the header — and its third, the locale's region subtag, is the
+  fallback when there is no timezone at all. It is a better signal than the locale here: a timezone
+  says where the machine **is**, where `en-US` on a laptop in Berlin says only what language it is
+  in. No request, no permission prompt, no PII. `navigator.geolocation` would need all three for a
+  worse answer than a server list needs.
+- **There is ONE location resolver and it is `window.esbGeo`** (`zone` / `region` / `area`), which
+  lives in **i18n.js** purely because of load order: `data.js → i18n.js → app.js`, and the currency
+  default has to be settled before `ESB_LOCALE` is published. `app.js`'s `serverArea()` is a
+  delegation to it. Two copies of this reasoning is not a hypothetical — they existed for one
+  revision and disagreed, quoting an American living in Berlin in dollars off his locale while
+  sending him to the EU shard off his timezone.
+- **There is one timezone table and it is `geo.py`'s.** `client_data()` derives the client's copy
+  from it, and ships the **South American** zones as an *exception* list rather than the North
+  American ones as a membership list: app.js reads an `America/…` zone as North American unless it
+  appears there, so a zone neither table carries (`America/Regina`, `America/Whitehorse`) still lands
+  on the right side of the Atlantic. `Pacific/Honolulu` is the one US zone outside that prefix and is
+  special-cased. 508 bytes on the wire.
+- **The estate is resolved against each game's own region list, never written down per game.** The
+  nine ladders name the same two places five ways — "North America" / "North America East",
+  "Europe" / "Europe West" / "EU Nordic & East" — so `regionFor()` matches the exact name first and
+  the prefix second, which is what stops a game that has plain "Europe" being handed "Europe West".
+  `test_server_defaults()` asserts every ladder resolves **both** estates: a game added with no
+  European server would fall through to `list[0]`, which is a North America variant on all nine, and
+  every European visitor would silently land back on NA.
+- **It is a default, never an override.** A stored region the visitor picked is kept — the geo pick
+  only fills a state that has none. On a game change the **estate carries across** (`areaOf()`):
+  someone on "Europe West" moving to a ladder that calls it "Europe" has not asked to be moved to
+  America, and `list[0]` — the old fallback — would have done exactly that. A server that is neither
+  estate (Oceania, Korea, Brazil) is kept when the new ladder has it and falls back to the visitor's
+  own area when it does not.
+- **The `<select>` ships with no `selected` option**, so the server-rendered control shows the first
+  region until `paint()` writes `state.region` into it. That is one frame on DOMContentLoaded, the
+  same trade the currency default makes; do not "fix" it by server-rendering a default, which would
+  bake one estate into a static page cached for everybody.
 
 ### `{}` patterns in the dictionary
 
@@ -798,11 +907,21 @@ Load-bearing:
   was not enough on a dark ground.
 - **The home indicator is mock chrome; production uses the safe-area inset.** The root carries
   `padding-bottom: env(safe-area-inset-bottom)` so the CTA clears the iOS home bar.
-- **`body.has-bar` padding is measured, not guessed**: 116px (bar is 109px at ≥363px). Below 360px
-  the "Checkout" money line wraps the pill and the bar reaches ~139px → `body.has-bar` 146px there.
-  Coaching pages carry `has-bar-coach` (146px at every width), because the wider "Book 3 hours" CTA
-  wraps the line at 375px too — `initHeader`/app.js sets that class when a `[data-service="coaching"]`
-  tab exists, so the six non-coaching games never pay the taller reserve.
+- **`body.has-bar` padding is measured at RUNTIME, not written down.** The reserve keeps the last row
+  of the page reachable instead of pinned under the fixed bar, and the thing it has to clear *moves*:
+  `.mb-money` is `flex-wrap: wrap`, so the save pill drops to a second line whenever the price, its
+  struck original and the pill stop fitting, and the bar goes 109 → 139 → (on checkout) 166px.
+  **Which totals do that is a property of the number, not of the page** — a three-figure total
+  already wraps at 375px in dollars, and CAD's `C$` prefix over a 1.37× amount wraps at nearly all
+  of them. The four hand-set constants were each measured against one configuration and were wrong by
+  16–23px for the rest, so `initBarReserve()` in app.js measures the bar and publishes `--mb-h` on
+  `<html>`, re-measuring on every `esb:render`, on resize and on `document.fonts.ready` — the same way
+  `--hd-top` follows the header's live bottom edge. The constants survive as the `var()` fallbacks
+  (116 / 146 coaching / 146 below 360px / 150 checkout), which is what a no-JS page and the frame
+  before the first measurement get. `--mb-h` is cleared, not set to 0, when the bar is `display:none`
+  above its breakpoint. Coaching pages still carry `has-bar-coach` for that fallback — app.js sets it
+  when a `[data-service="coaching"]` tab exists, so the six non-coaching games never pay the taller
+  no-JS reserve.
 - **It declares its own `--h-tint` / `--l-good`**: a child of `<body>`, outside `.hero-a` and
   `.rail`, and an unresolvable `var()` computes to the *initial* value, not an inherited one.
 - **Every figure is a `data-out` the order card already fills**, so the bar and the card cannot quote
@@ -1106,6 +1225,60 @@ dashboard" and both checkout confirmations point at it.
 - **The match table's mobile columns are `.dm`'s, not the handoff's.** Below 760 the shared card drops
   K/D/A and keeps the champion square; the handoff asks for the reverse. One component, one
   behaviour — changing it changes the homepage.
+
+## Watch live — the booster's screen share (`watch_panel()`)
+
+`watch_panel()` renders in `_demo_rail()`, under the booster card, and is the customer's door into
+watching their own order being played. **The video is Discord's; this panel is only the state.**
+
+- **Neither title can be watched through the game, and that is why the design is what it is.**
+  Valorant has no spectator API at all — observers exist only in custom/tournament lobbies. League's
+  Spectator-v5 exists but is ~3 minutes behind and needs a Riot **production key**, which is not
+  granted to a service whose product breaks the game's ToS. So there is no path through Riot for
+  either game, and what the customer watches is the booster's **own screen**, shared into a private
+  Discord voice channel.
+- **`WATCH_GAMES` is a two-title allow-list, not a flag on every game.** `offers_watch(g)` gates the
+  panel the way `offers_coaching()` gates the fourth tab: a title nobody streams never shows it.
+  Adding a game here is a claim that a booster on it will actually stream.
+- **There is no embedded player and there is not going to be one.** Discord ships no iframe player
+  for Go Live. Drawing a video frame here would be a mock-up of something the product cannot do —
+  which is the exact trap `/demo.html` was renamed to avoid. The panel's job is the one fact Discord
+  does not surface from outside: *is my booster streaming right now*.
+- **The state follows Pause, because it has to.** A paused order is not being played, so it cannot be
+  being streamed; leaving the panel on "sharing their screen" beside the order's own paused banner is
+  the same two-things-at-once defect the status pill fixed. `setWatch()` is called from `setPaused()`,
+  never independently.
+- **Both states ship in the DOM with one hidden** — the whole-text-node rule the auth tabs and the
+  mode-conditional add-ons follow. A sentence written in by JS arrives untranslated. Same for the two
+  CTA labels; both are real destinations, so neither is a dead control.
+- **The CTA is an outline, and deliberately.** The order view has no filled action at all — the
+  visitor has already paid — so the one-filled-button-per-viewport rule holds across the page.
+  Blurple appears on the mark and on hover only, so the card is never a second accent beside the
+  ember guarantee note under it. The Discord mark is `_hd_brand()`'s, shared with the OAuth button,
+  and carries the same pre-launch swap for the licensed asset as `pay_marks()`.
+
+⚠ **The live half is not built.** The panel's state is driven by the demo page's Pause control against
+one fixture; nothing asks Discord anything. What a real one needs, and the shape it should take:
+
+- **`src/streams.py`, a sixth store sibling** of `analytics` / `accounts` / `boosters` / `orders` /
+  `carts` — `esb:streams`, one row per order (order id, booster handle, channel id, `offline|live`,
+  `started_at`). Operator-write, customer-read.
+- **`GET /api/stream?order=…`, gated exactly like `/api/orders`**: the email comes from the verified
+  session cookie, never the request, or one customer can watch another's boost.
+- **Discord's REST API needs no gateway connection** — creating a channel, setting permission
+  overwrites and reading who is in a voice channel are plain HTTPS calls with a bot token. That is
+  `urllib` and the house rules, and critically it runs on Vercel serverless, which a websocket bot
+  cannot.
+- **`oauth._profile()` currently discards `raw["id"]`** on the Discord branch. That snowflake is what
+  lets a permission overwrite grant *one named customer* access to *one channel* — capture it before
+  building the rest, or the fallback is invite links and strangers in the server.
+- **Two decisions to make before it ships**, both permission-overwrite one-liners and neither
+  reversible quietly: whether the customer gets mic permission (a private channel with the booster is
+  an unmonitored back channel, which is how orders get arranged off-platform), and whether Nitro is
+  bought per booster — free Go Live caps at 720p30.
+- The CSP in `vercel.json` does **not** need changing for this: the panel links out, it does not
+  embed. It would need `frame-src`/`media-src` only if V2 pulls the video back in-page behind a
+  managed provider (Cloudflare Stream Live, signed playback URLs, ~2–5s on LL-HLS).
 
 ## The closing band + the footer
 
@@ -1459,6 +1632,11 @@ one honest thing to put on an invented profile — a stock photograph of a real 
 that the invented booster exists. Replace them with real photographs of the real roster, not with
 better-looking stock ones (see [Booster faces](#booster-faces--the-avatar-in-the-ring)).
 
+**The "Watch live" panel is a facade too.** It renders real state transitions against the demo
+fixture and links to the public Discord invite, but no order has a private channel behind it and
+nothing asks Discord whether anyone is streaming — see the Watch live section for the seam. Do
+not put it on a game page or in the order mail until `streams.py` exists.
+
 **The header's auth panel is now partly real, not a pure facade.** `build.py`'s `AUTH_PLACEHOLDER`
 block carries the full list. Email/password **login is server-verified**: the form POSTs to
 `/api/account`, which checks the password against a salted PBKDF2 hash in the account store (see
@@ -1630,6 +1808,63 @@ the same path and prints the SMTP error verbatim; `--order` renders the buyer's 
   to advertise a mailbox nobody reads.
 - **Restart the server after touching these files** — `/api/support` lives in `serve.py`, no watcher.
   `api/support.py` is the Vercel shell mirroring it.
+
+## Abandoned-checkout recovery — `carts.py` + `recovery.py`
+
+`src/carts.py` is the **fifth store sibling** of `analytics.py` / `accounts.py` / `boosters.py` /
+`orders.py` (stdlib only, Upstash in prod / NDJSON in dev, separate `esb:carts` key), and the one
+place a captured email lives next to the configuration it was about to buy. `src/recovery.py` is the
+mailer that acts on it. The whole flow:
+
+```
+signed-in configure ─┐                          ┌─ sweep (every 5 min, /api/sweep) ─► recovery mail (30% token)
+checkout email typed ─┴─► POST /api/cart ─► carts store ─┤
+   Stripe webhook (paid) ─► carts.recover() burns token ─┘  (GET /api/cart?token= resolves the discount)
+```
+
+- **Two capture points, one of them silent.** A **signed-in** visitor is captured *while they
+  configure* (`app.js` `captureCart()` posts on every debounced state change) — no field, no prompt;
+  the email comes from the **verified session cookie**, read by the route shell exactly the way
+  `/api/orders` does, never from the body. Anyone else is captured when they **type** into `#k-email`
+  on checkout. An anonymous configure with no email **stores nothing** (204). `process_capture(raw,
+  header_get, session_email="")` — the session wins when both are present, because it is verified and
+  the field is not. This is what stops a browser writing a cart against someone else's inbox.
+- **It is not an append-only list.** A cart mutates `pending → mailed → recovered` (or `expired`), so
+  the Upstash side is a **HASH keyed by token** (`HSET`), not `LPUSH`. A mailer that can't mark a row
+  as sent will mail the same person every sweep.
+- **The token IS the discount, and it never touches `data.py`.** `D.PROMOS` ships to the browser in
+  `data.js`, so a static recovery code would be public the day it shipped. Each cart carries an
+  unguessable single-use token; the percentage is resolved **server-side only** — `carts.redeemable()`
+  (unknown / spent / expired → nothing) and `pricing.resolve_promo(recovery_pct=…)`, which obeys the
+  same **never-stack, best-wins** rule as a typed code: 30% *replaces* the 15% sale, never 45%.
+- **The client can't forge it.** `pricing.quote()` reads `recovery_pct` straight out of the order
+  dict, and that dict is the checkout body — so `payments.process_checkout()` **strips it
+  unconditionally** and re-derives it from the token alone (`order.pop("recovery_pct")` then a store
+  lookup). A crafted `{"recovery_pct": 0.99}` would otherwise buy a $450 climb for $4.
+  `test_carts.py` locks this.
+- **The price is re-quoted at send time**, never read off the stored row (`recovery.price_pair()`) —
+  same rule as `payments.build_session()`. A cart whose config no longer prices is mailed nothing.
+- **The mail marks the row before it sends** (`recovery.send_one()`): a half-succeeding SMTP call must
+  not leave the cart mailable again. Losing one recovery mail is a missed upsell; sending four is a
+  spam complaint on the domain the order confirmations go out on. And the **webhook burns the token**
+  on payment (`carts.recover()`), so a paid order is never mailed and a code is never spent twice.
+- **The sweep fails closed.** `/api/sweep` (and `/api/cart/sweep` on serve.py) is 503 without
+  `CART_SWEEP_SECRET` (16+ chars). The secret arrives as `x-sweep-secret`, or as
+  `Authorization: Bearer` (what **Vercel Cron** sends via `CRON_SECRET` — set the two equal), or a
+  body `secret`. `vercel.json` schedules it every 5 minutes (**Pro** plan; Hobby caps cron at daily —
+  use an external trigger there). A 5-min cadence lands the mail 30–35 min after capture.
+- **The checkout email note changed.** It used to promise "the order link and nothing else"; a
+  recovery mail breaks that, so it now says "and to send you your cart if you don't finish." Every
+  mail carries a one-click unsubscribe (`/api/cart/unsubscribe` → row `expired`).
+- **`/ops` "Carts" tab** (a sibling of Orders) shows capture/recovery totals, the status split, the
+  per-game breakdown and the rows, CSV-exportable. It is **distinct from the "Abandoned" tab**, which
+  is the anonymous analytics view with no email. Read-only; `ops.py`'s `carts` action → `carts.summary()`.
+- **Still placeholder-adjacent:** this only helps once real signed-in traffic and real checkouts
+  exist. At today's volume it captures very few people — the typed-email path on checkout is the main
+  source until sign-in adoption grows.
+- **Restart the server after touching these files** — `/api/cart`, `/api/sweep` live in `serve.py`,
+  no watcher. `api/cart.py` and `api/sweep.py` are the Vercel shells. Env knobs: `CART_SWEEP_SECRET`
+  (required), `CART_RECOVERY_PCT` (0.30), `CART_DELAY_SECS` (1800), `CART_TOKEN_TTL` (604800).
 
 ## Analytics & the /ops console
 

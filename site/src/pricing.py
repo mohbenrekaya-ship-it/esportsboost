@@ -54,8 +54,15 @@ ETA_SPAN_MIN, ETA_SPAN_PCT = 2, 0.3
 # quote is computed in USD, but the customer sees — and is charged in — whichever
 # currency they picked, converted at these fixed rates. The Stripe session is
 # created in that same currency at the same rate, so the amount on the Stripe page
-# equals the amount on the button. Change one, change the other (see CLAUDE.md).
-CHARGE_RATES = {"usd": 1.0, "eur": 0.92}
+# equals the amount on the button. Change one, change the other (see CLAUDE.md) —
+# `test_fx_rate_mirror()` asserts the two tables hold the same currencies at the
+# same rates, in both directions, so adding one here and not there fails the run.
+#
+# These are HAND-SET rates, not a live feed: the site quotes whole units in every
+# currency, so a rate that moved with the market would re-price every card on the
+# page between one load and the next. They sit slightly on our side of mid-market
+# to absorb drift and Stripe's conversion — re-check them when the market moves.
+CHARGE_RATES = {"usd": 1.0, "eur": 0.92, "gbp": 0.79, "cad": 1.37}
 
 
 def charge_for(total_usd, currency):
@@ -154,18 +161,34 @@ def bundle_discount(g, from_rank, to_rank, idx):
     return bundle_pct(g, b) if b else 0.0
 
 
-def resolve_promo(code=None):
+def resolve_promo(code=None, recovery_pct=0):
     """Pick the one discount that applies to an order.
 
     The auto promo applies with nothing typed; a typed code replaces it only
     when it is worth more. Discounts never stack, and an unknown or weaker code
     can never make the buyer's price worse. Returns (code, promo) or (None, None).
+
+    `recovery_pct` is the abandoned-cart offer, and it is **resolved server-side
+    only**. It is deliberately not a `D.PROMOS` entry: that table is shipped to
+    the browser in `data.js`, so a static recovery code would be readable by
+    anyone and the discount would leak to every visitor within days. `carts.py`
+    holds one unguessable single-use token per cart and hands the percentage in
+    here — see `carts.redeemable()`. It obeys the same never-stack, best-wins
+    rule as a typed code, so a recovered buyer gets 30% *instead of* the sitewide
+    15%, never 45%.
     """
     best_code, best = D.auto_promo()
     if code:
         typed = D.PROMOS.get(str(code).strip().upper())
         if typed and (best is None or typed["pct"] > best["pct"]):
             best_code, best = str(code).strip().upper(), typed
+    try:
+        rp = float(recovery_pct or 0)
+    except (TypeError, ValueError):
+        rp = 0
+    if rp > 0 and (best is None or rp > best["pct"]):
+        best_code = str(code).strip().upper() if code else "BACK"
+        best = {"pct": rp, "label": "Come back offer", "ends": ""}
     return best_code, best
 
 
@@ -306,7 +329,7 @@ def quote(state):
     if bpct:
         pcode, promo = "BUNDLE", {"pct": bpct, "label": "Bundle", "ends": ""}
     else:
-        pcode, promo = resolve_promo(state.get("promo"))
+        pcode, promo = resolve_promo(state.get("promo"), state.get("recovery_pct"))
     discount = _jsround(boost * promo["pct"]) if promo else 0
     total = subtotal - discount
 

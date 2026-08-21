@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.join(HERE, "src"))
 
 import art  # noqa: E402
 import data as D  # noqa: E402
+import geo  # noqa: E402
 import pricing  # noqa: E402
 
 DIST = os.path.join(HERE, "dist")
@@ -124,9 +125,9 @@ DEMO_HREF = "/demo.html"
 ORDERS_HREF = "/orders.html"
 
 NAV = [
-    ("/games/", "Games"),
+    ("/games", "Games"),
     ("/#live", "Live"),
-    ("/boosters/", "Boosters"),
+    ("/boosters", "Boosters"),
     ("/guarantee.html", "Safety"),
     # "Guides" is one word to match the rest of the nav — "Free" belongs on the
     # cards inside the page, where it reads as a benefit, not on the chrome,
@@ -139,7 +140,7 @@ NAV = [
 if not D.LIVE_FEED:
     NAV.remove(("/#live", "Live"))
 if not D.BOOSTERS:
-    NAV.remove(("/boosters/", "Boosters"))
+    NAV.remove(("/boosters", "Boosters"))
 if not getattr(D, "GUIDES", None):
     NAV.remove(("/guides.html", "Guides"))
 if not D.REVIEWS:
@@ -160,7 +161,16 @@ _CHEV = ('<svg class="loc-chev" width="9" height="9" viewBox="0 0 10 10" aria-hi
          '<path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" stroke-width="1.5" '
          'stroke-linecap="round" stroke-linejoin="round"/></svg>')
 
-CURRENCIES = [("USD", "$", "USD"), ("EUR", "€", "EUR")]
+# The picked value is validated against i18n.js's ESB_RATES / pricing.py's
+# CHARGE_RATES — a currency listed here with no rate behind it cannot be
+# charged, and falls back to USD at the Stripe session.
+# CAD wears "C$", not "$" — Canada's own formatting renders CAD as a bare
+# dollar sign, which is the one currency mark on this list a reader could
+# confuse with another. The icon column IS the mark the site prints, and every
+# surface that prints money agrees on it: i18n.js CUR_MARK, ops.js CUR_SYM and
+# payments.CURRENCY_SIGNS (the order mail). test_currency_signs() locks it.
+CURRENCIES = [("USD", "$", "USD"), ("EUR", "€", "EUR"),
+              ("GBP", "£", "GBP"), ("CAD", "C$", "CAD")]
 LANGUAGES = [("EN", "🇬🇧", "EN"), ("FR", "🇫🇷", "FR"), ("DE", "🇩🇪", "DE")]
 
 # Static "translate" mark (文 + A) for the language button. The flags stay in the
@@ -179,7 +189,7 @@ _LANG_GLYPH = (
 def _loc_dropdown(kind, label, options, glyph=None):
     """One switcher. `glyph` pins a fixed mark on the button (language); without
     it the button mirrors the selected option's icon, which i18n.js swaps
-    through `data-loc-icon` (currency: $ / €)."""
+    through `data-loc-icon` (currency: $ / € / £ / C$)."""
     opts = "".join(
         '<li class="loc-opt" role="option" data-value="%s" tabindex="-1">'
         '<span class="loc-flag">%s</span><span class="loc-code">%s</span></li>'
@@ -378,7 +388,7 @@ def hd_games_cards():
         # "+4" — how many ladders the five cards above don't name. The short
         # names are data and stay in their own node, so "are live too" survives
         # as a whole translatable phrase beside them.
-        cards += hd_card("/games/", "grid", "All %s games" % spell(len(D.GAMES)),
+        cards += hd_card("/games", "grid", "All %s games" % spell(len(D.GAMES)),
                          tag="+%d" % len(rest),
                          note_html='<b class="hd-card-fig">%s</b><span>are live too</span>'
                                    % esc(", ".join(rest)))
@@ -387,7 +397,7 @@ def hd_games_cards():
 
 def hd_boosters_cards():
     n = D.STATS.get("online") or len(D.BOOSTERS)
-    cards = hd_card("/boosters/", "users", "Browse the roster",
+    cards = hd_card("/boosters", "users", "Browse the roster",
                     "verified boosters, one game each", figure=n)
     top = D.by_handle.get(D.SPOTLIGHT.get("handle", "")) if hasattr(D, "by_handle") else None
     if top is None:
@@ -401,9 +411,9 @@ def hd_boosters_cards():
     # "No extra fee", not the handoff's "+10%": pricing.py charges nothing for a
     # named booster and the server recomputes every amount, so a fee here would
     # be a price the checkout refuses to honour. Same line the roster rail runs.
-    cards += hd_card("/boosters/", "user-focus", "Hire a specific booster",
+    cards += hd_card("/boosters", "user-focus", "Hire a specific booster",
                      "Name one at checkout, no extra fee")
-    cards += hd_card("/boosters/#vetting", "seal", "How we verify",
+    cards += hd_card("/boosters#vetting", "seal", "How we verify",
                      "Rank proof, trial orders, review floor")
     cards += hd_card("/become-a-booster.html", "briefcase", "Apply as a booster",
                      "Master+ with a clean account", tag="Hiring")
@@ -479,9 +489,9 @@ HD_BY_KEY = {k: (label, sec, cards, count) for k, label, sec, cards, count in HD
 # handoff is explicit that they get no menu, and a menu holding one link is a
 # worse control than the link.
 HD_NAV = [
-    ("games", "/games/", "Games"),
+    ("games", "/games", "Games"),
     (None, "/#live", "Live"),
-    ("boosters", "/boosters/", "Boosters"),
+    ("boosters", "/boosters", "Boosters"),
     ("safety", "/guarantee.html", "Safety"),
     # Guides is a single destination — a lead-capture page, no menu. Same shape
     # as Live and Reviews.
@@ -973,7 +983,7 @@ def chrome_guides():
     <div class="gd-nav-r">
       <span class="gd-nav-tag">{_ico("book", 15, "ico gd-nav-tag-ico", stroke=True)}<span>Free guides · no payment</span></span>
       <span class="gd-nav-sep" aria-hidden="true"></span>
-      <a class="gd-nav-back" href="/games/">{_ico("arrow", 15, "ico", stroke=True)}<span>Browse boosting</span></a>
+      <a class="gd-nav-back" href="/games">{_ico("arrow", 15, "ico", stroke=True)}<span>Browse boosting</span></a>
     </div>
   </div>
 </header>"""
@@ -1273,7 +1283,7 @@ def footer():
       <nav class="ft-col" aria-label="Games">
         <h2 class="ft-head">Games</h2>
         <ul class="ft-list">{games}
-          <li><a class="ft-all" href="/games/"><span>All <b>{len(D.GAMES)}</b> games</span>{_ico("arrow", 13, "ico", stroke=True)}</a></li>
+          <li><a class="ft-all" href="/games"><span>All <b>{len(D.GAMES)}</b> games</span>{_ico("arrow", 13, "ico", stroke=True)}</a></li>
         </ul>
       </nav>
 
@@ -1329,20 +1339,23 @@ def _canon(path):
     """The public (clean) URL for a built file path.
 
     Files are written at `.html` paths (that is where they live), but Vercel's
-    `cleanUrls` serves `/foo.html` at `/foo` and `/dir/index.html` at `/dir/`,
-    and the `.html` forms 308-redirect to those. So every URL a crawler reads as
+    `cleanUrls` serves `/foo.html` at `/foo` and `/dir/index.html` at `/dir`,
+    and the `.html` forms 308-redirect to those. `vercel.json` sets
+    `trailingSlash: false`, so the slashed form of a directory page 308s too
+    (`/games/` -> `/games`) — the clean form carries NO trailing slash, and the
+    root `/` is the one exception. So every URL a crawler reads as
     authoritative — canonical, og:url, sitemap, JSON-LD `url`/`item`/`@id` — must
     be the clean form, or it points Google at a redirect and the canonical the
     served page advertises no longer matches its own address. Internal `href`s
     may stay `.html` (they redirect once and land on the same clean page); the
     indexing signals may not."""
-    if path.endswith("/index.html"):
-        return path[:-len("index.html")] or "/"     # /boosters/index.html -> /boosters/
     if path == "/index.html":
         return "/"
-    if path.endswith(".html"):
-        return path[:-len(".html")]                  # /foo.html -> /foo
-    return path
+    if path.endswith("/index.html"):
+        path = path[:-len("/index.html")]            # /boosters/index.html -> /boosters
+    elif path.endswith(".html"):
+        path = path[:-len(".html")]                  # /foo.html -> /foo
+    return path.rstrip("/") or "/"                   # /games/ -> /games, / -> /
 
 
 def _indexable(path):
@@ -1355,7 +1368,7 @@ def _indexable(path):
     widen it the day the data is real (see the placeholder-data note in
     data.py)."""
     p = _canon(path)
-    if p in ("/", "/games/"):
+    if p in ("/", "/games"):
         return True
     if p.startswith("/games/"):
         rest = p[len("/games/"):]
@@ -1977,7 +1990,7 @@ def fc_card():
     </aside>"""
 
 
-def cta_band(live=False, title=None, sub=None, cta=("Configure your boost", "/games/")):
+def cta_band(live=False, title=None, sub=None, cta=("Configure your boost", "/games")):
     """The last ask — design_handoff_footer, band 1.
 
     The premise of the handoff: by the time someone reaches the bottom of the
@@ -2171,7 +2184,7 @@ def games_grid():
         joined = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
         # Names outside the translatable node — i18n.js matches whole text nodes,
         # so a generated list interpolated into the sentence could never match.
-        tiles.append(f"""<a class="gg-tile gg-more" href="/games/">
+        tiles.append(f"""<a class="gg-tile gg-more" href="/games">
       <span class="gg-more-top">
         <span class="gg-more-n">+{len(rest)}</span>
         <span class="gg-more-t"><b>{esc(joined)}</b> <span>are live too.</span></span>
@@ -2342,7 +2355,7 @@ def roster_card(rows):
         <span class="rc-count"><b>{n}</b> boosters</span>
       </div>
       <ul class="rc-list">{body}</ul>
-      <a class="rc-all" href="/boosters/"><span>Pick your booster</span>{_ico("arrow", 14, "ico", stroke=True)}</a>
+      <a class="rc-all" href="/boosters"><span>Pick your booster</span>{_ico("arrow", 14, "ico", stroke=True)}</a>
     </div>"""
 
 
@@ -2744,7 +2757,7 @@ DASHBOARD_CHIPS = (
 )
 
 
-def dashboard_section(num=None, on_demo=False, note=None, cta_href="/games/"):
+def dashboard_section(num=None, on_demo=False, note=None, cta_href="/games"):
     """The whole section: the mock, the three claims, the chips and the CTAs.
 
     `num` numbers the eyebrow on the homepage, where the section is 04 in a run
@@ -2822,7 +2835,7 @@ SPOT_PORTRAIT = "/assets/img/portrait-%s.svg" % SPOT_BOOSTER["handle"] if SPOT_B
 # a broken /games/.html — the same guard both of those use.
 _SPOT_GAME = BY_SLUG.get(SPOT_BOOSTER["slug"]) if SPOT_BOOSTER else None
 SPOT_HIRE = ("/games/%s.html?booster=%s" % (_SPOT_GAME["slug"], SPOT_BOOSTER["handle"])
-             if _SPOT_GAME else "/games/")
+             if _SPOT_GAME else "/games")
 
 
 def spotlight_card():
@@ -3119,7 +3132,7 @@ def roster_hero():
       the API, not typed into a form. Anyone whose win rate drops below {D.WR_FLOOR}% over a
       rolling month comes off the board until they climb it back.</p>
       <div class="rst-cta-row">
-        <a class="btn btn-primary" href="/games/">Start an order{_ico("arrow", 15, "ico", stroke=True)}</a>
+        <a class="btn btn-primary" href="/games">Start an order{_ico("arrow", 15, "ico", stroke=True)}</a>
         <a class="btn btn-outline" href="/become-a-booster.html">{_ico("badge-id", 17, "ico", stroke=True)}Apply as a booster</a>
       </div>
     </div>
@@ -3173,7 +3186,7 @@ def roster_row(b, i):
     "2 orders", so the action queues rather than being blocked."""
     g = BY_SLUG.get(b["slug"])
     free = is_free(b)
-    hire = ("/games/%s.html?booster=%s" % (g["slug"], b["handle"])) if g else "/games/"
+    hire = ("/games/%s.html?booster=%s" % (g["slug"], b["handle"])) if g else "/games"
     return f"""<div class="rst-row" data-rst-row data-game="{esc(g['short'] if g else '')}"
       data-free="{1 if free else 0}" data-win="{b['wr_n']}"{' hidden' if i >= ROSTER_PAGE else ''}>
       <a class="rst-who" href="{booster_href(b)}">
@@ -3221,7 +3234,7 @@ def roster_board():
         <span class="rst-empty-h" data-rst-empty-any-h>Nobody free right now</span>
         <span class="rst-empty-b"><b data-rst-empty-n>0</b> <span>on the board — start the order and the first one free claims it.</span></span>
         <span class="rst-empty-cta">
-          <a class="btn btn-primary btn-sm" href="/games/">Order anyway</a>
+          <a class="btn btn-primary btn-sm" href="/games">Order anyway</a>
           <button type="button" class="btn btn-outline btn-sm" data-rst-reset>Show everyone</button>
         </span>
       </div>
@@ -3372,7 +3385,7 @@ def request_card(b):
     invented "N slots open".
     """
     g = BY_SLUG.get(b["slug"])
-    href = ("/games/%s.html?booster=%s" % (g["slug"], b["handle"])) if g else "/games/"
+    href = ("/games/%s.html?booster=%s" % (g["slug"], b["handle"])) if g else "/games"
     free = is_free(b)
     state = ('<span class="bp-slots"><span class="dot-live dot-ok" aria-hidden="true"></span>Free now</span>'
              if free else ('<span class="bp-slots is-busy"><b>%s</b> <span>ahead of you</span></span>'
@@ -3489,7 +3502,7 @@ def page_booster(b):
         "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
             {"@type": "ListItem", "position": 1, "name": "Home", "item": D.SITE + "/"},
             {"@type": "ListItem", "position": 2, "name": "Boosters",
-             "item": D.SITE + "/boosters/"},
+             "item": D.SITE + "/boosters"},
             {"@type": "ListItem", "position": 3, "name": b["handle"],
              "item": D.SITE + _canon(booster_href(b))},
         ],
@@ -3500,7 +3513,7 @@ def page_booster(b):
   <div class="wrap">
     <nav class="bp-crumbs" aria-label="Breadcrumb">
       <a href="/">Home</a>{_ico("chevron-right", 12, "bp-crumb-i", stroke=True)}
-      <a href="/boosters/">Boosters</a>{_ico("chevron-right", 12, "bp-crumb-i", stroke=True)}
+      <a href="/boosters">Boosters</a>{_ico("chevron-right", 12, "bp-crumb-i", stroke=True)}
       <span aria-current="page">{esc(b['handle'])}</span>
     </nav>
     <div class="bp-grid">
@@ -3558,7 +3571,7 @@ def page_booster(b):
                   "%s boosts %s on %s: %s, %s win rate over 30 days, %s orders delivered. "
                   "Name them at checkout." % (b["handle"], g["name"] if g else "ranked",
                                               b["region"], b["peak"], b["wr"], b["orders"]),
-                  body, current="/boosters/", jsonld=ld, nav_outline=True,
+                  body, current="/boosters", jsonld=ld, nav_outline=True,
                   og_image=img(booster_portrait(b)))
 
 
@@ -4712,7 +4725,7 @@ def page_home():
       <h1>{esc(H['line1'])}<br><span class="grad-text">{esc(H['line2'])}</span></h1>
       <p class="lede">{esc(H['lede'])}</p>
       <div class="btn-row hero-h-cta">
-        <a class="btn btn-primary" href="/games/">Configure your boost{_ico("arrow", 15, "ico", stroke=True)}</a>
+        <a class="btn btn-primary" href="/games">Configure your boost{_ico("arrow", 15, "ico", stroke=True)}</a>
         <a class="btn btn-secondary" href="#live">{_ico("play", 18, "hero-h-play", evenodd=True)}Watch a live boost</a>
       </div>
       <div class="hero-h-proof">
@@ -5187,10 +5200,10 @@ def page_games_index():
                "/games/%s.html" % lead["slug"]))}
 
 {gc_bar(lead)}"""
-    return layout("/games/", "All Games Boosting - %s" % D.BRAND,
+    return layout("/games", "All Games Boosting - %s" % D.BRAND,
                   "Rank boosting for League of Legends, Valorant, CS2, TFT, Marvel Rivals, Dota 2, "
                   "Apex, Overwatch 2 and Rocket League. Live prices, no account needed.",
-                  body, current="/games/",
+                  body, current="/games",
                   jsonld=[faq_ld([(q, a) for _fid, q, a in faq])],
                   extra_js=faq_accordion_js(), body_class="gc-page")
 
@@ -5369,7 +5382,7 @@ def gp_who(g, roster):
     noun = "booster" if rest == 1 else "boosters"
     foot = (f"""<div class="gp-brow-foot">
         <span class="gp-brow-foot-t">{_ico("users", 15, "gp-dp-ico", stroke=True)}<span><b>{rest}</b> more {esc(tab)} {noun}</span> <i aria-hidden="true">on the roster, all {esc(floor_tier)} or above.</i></span>
-        <a class="gp-brow-all" href="/boosters/">See all <b>{n}</b>{_ico("arrow", 13, "ico", stroke=True)}</a>
+        <a class="gp-brow-all" href="/boosters">See all <b>{n}</b>{_ico("arrow", 13, "ico", stroke=True)}</a>
       </div>""") if rest else ""
     return f"""<section class="gp-sec">
       <div class="wrap gp-inner gp-who">
@@ -5384,7 +5397,7 @@ def gp_who(g, roster):
             <li>{_ico("seal", 15, "gp-dp-ico", evenodd=True)}<span>Rank verified every month</span></li>
             <li>{_ico("undo", 15, "gp-dp-ico", stroke=True)}<span>One free swap, no reason needed</span></li>
           </ul>
-          <a class="gp-outline" href="/boosters/">See the roster{_ico("arrow", 14, "ico", stroke=True)}</a>
+          <a class="gp-outline" href="/boosters">See the roster{_ico("arrow", 14, "ico", stroke=True)}</a>
         </div>
         <div class="gp-who-board">{rows}{foot}</div>
       </div>
@@ -5693,7 +5706,7 @@ def page_game(g):
         faq_ld(faq),
         {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
             {"@type": "ListItem", "position": 1, "name": "Home", "item": D.SITE + "/"},
-            {"@type": "ListItem", "position": 2, "name": "Games", "item": D.SITE + "/games/"},
+            {"@type": "ListItem", "position": 2, "name": "Games", "item": D.SITE + "/games"},
             {"@type": "ListItem", "position": 3, "name": g["name"],
              "item": "%s/games/%s" % (D.SITE, g["slug"])},
         ]},
@@ -5710,7 +5723,7 @@ def page_game(g):
   <div class="wrap hero-a-inner">
     <div class="hero-copy" style="max-width:none">
       <nav class="crumbs crumbs-slash" aria-label="Breadcrumb">
-        <a href="/">Home</a> <span aria-hidden="true">/</span> <a href="/games/">Games</a>
+        <a href="/">Home</a> <span aria-hidden="true">/</span> <a href="/games">Games</a>
         <span aria-hidden="true">/</span> <span class="crumbs-here">{esc(g['name'])}</span>
       </nav>
       <h1 class="h-lg" style="font-size:clamp(38px,5.4vw,68px)">{esc(g['name'])} boost<br><span class="grad-text">from {fp}.</span></h1>
@@ -5738,7 +5751,7 @@ def page_game(g):
     title = "%s Boosting - %s" % (g["name"], D.BRAND)
     return layout("/games/%s.html" % g["slug"],
                   title,
-                  g["meta"], body, current="/games/", jsonld=ld,
+                  g["meta"], body, current="/games", jsonld=ld,
                   og_image=img("/assets/img/keyart-%s.svg" % g["slug"]), mobile_bar=True,
                   nav_outline=True)
 
@@ -5753,7 +5766,7 @@ def page_how():
       is the entire point of the way this is built: the calculator is the first thing on every page,
       the number it shows is the number you pay, and the only thing checkout asks for is an email to
       send the order link to.</p>
-      <div class="btn-row"><a class="btn btn-primary" href="/games/">Start an order</a></div>
+      <div class="btn-row"><a class="btn btn-primary" href="/games">Start an order</a></div>
     </div>
     <div class="stack" style="gap:26px">{steps_block()}</div>
   </div>
@@ -5837,9 +5850,9 @@ def page_boosters():
 </section>
 
 {cta_band()}"""
-    return layout("/boosters/", "Boosters on shift — %s" % D.BRAND,
+    return layout("/boosters", "Boosters on shift — %s" % D.BRAND,
                   "Who plays your order: verified ranks, live trials, monthly review, one free swap "
-                  "per order.", body, current="/boosters/", nav_outline=True)
+                  "per order.", body, current="/boosters", nav_outline=True)
 
 
 def sg_stats():
@@ -6041,7 +6054,7 @@ def page_guarantee():
         <h1 class="sg-h1">Written down, not "depends on the order".</h1>
         <p class="sg-lede">A refund policy that needs a support ticket to explain isn't a
         policy. Here is the whole thing, in the three cases that actually happen.</p>
-        <a class="btn btn-primary sg-cta" href="/games/">Start an order{_ico("arrow", 15, "ico", stroke=True)}</a>
+        <a class="btn btn-primary sg-cta" href="/games">Start an order{_ico("arrow", 15, "ico", stroke=True)}</a>
         {sg_stats()}
       </div>
       {sg_cases()}
@@ -6707,7 +6720,7 @@ def page_reviews():
         Trustpilot and the order-page rating, then deduplicated. We don't filter by score, so
         one-star reviews sit in the same feed.</p>
         <div class="rvp-acts">
-          <a class="btn btn-primary" href="/games/">Start an order{_ico("arrow", 15, "ico", stroke=True)}</a>
+          <a class="btn btn-primary" href="/games">Start an order{_ico("arrow", 15, "ico", stroke=True)}</a>
           {second}
         </div>
       </div>
@@ -7163,6 +7176,76 @@ def _demo_lookup(O):
 </section>"""
 
 
+# The two titles the live-watch feature covers. It is deliberately a short
+# allow-list rather than a flag on every game, because the constraint is real
+# and per-title: Valorant has no spectator API at all (observers exist only in
+# custom/tournament lobbies) and League's Spectator-v5 is 3 minutes behind and
+# needs a Riot production key no boosting service is granted. So neither title
+# can be watched through the game — what the customer watches is the booster's
+# own screen, shared into a private Discord voice channel. Adding a game here
+# means confirming a booster on it will actually stream, nothing more.
+WATCH_GAMES = ("league-of-legends", "valorant")
+
+
+def offers_watch(g):
+    """True when this game's orders can be watched live. Honest by construction,
+    the same way offers_coaching() is: a title with nobody streaming it never
+    shows the panel."""
+    return (g or {}).get("slug") in WATCH_GAMES
+
+
+def watch_panel(O, b, game):
+    """"Watch live" — the customer's door into their booster's screen share.
+
+    Discord carries the video; this panel carries the *state*. There is no
+    embedded player and there is not going to be one: Discord has no iframe
+    player for Go Live, so the honest shape is a status card plus a link out,
+    not a video frame that would have to be faked. What the panel owes the
+    visitor is the one thing the dashboard knows and Discord does not surface
+    from outside — whether their booster is streaming right now.
+
+    Both states ship in the DOM with one hidden, the whole-text-node rule the
+    header's auth tabs and the mode-conditional add-ons follow: a sentence
+    written in by JS arrives untranslated. The state is driven by the page
+    script, which ties it to Pause — a paused order is not being played, so it
+    cannot be being streamed, and two panels contradicting each other is the
+    same defect the status pill fixed.
+
+    The Discord mark is `_hd_brand()`'s, so this button and the OAuth button
+    carry one mark; it is a simplified reproduction and carries the same
+    pre-launch swap as `pay_marks()`.
+    """
+    if not offers_watch(game):
+        return ""
+    handle = esc(O["booster"] if not b else b["handle"])
+    return f"""<div class="tko-watch" data-watch>
+          <div class="tko-watch-t">
+            <span class="tk-lab">Watch live</span>
+            <span class="tko-watch-st" data-watch-st>
+              <span class="dot-live dot-ok" aria-hidden="true"></span>
+              <span data-watch-when="live">Streaming now</span>
+              <span data-watch-when="off" hidden>Not streaming</span>
+            </span>
+          </div>
+          <div class="tko-watch-b">
+            {_ico("monitor", 19, "tko-watch-i", evenodd=True)}
+            <span class="tko-watch-c">
+              <span class="tko-watch-n"><b>{handle}</b>
+                <span data-watch-when="live">is sharing their screen.</span>
+                <span data-watch-when="off" hidden>isn't streaming right now.</span></span>
+              <span class="tko-watch-m">{esc(game["name"])}<i aria-hidden="true"> · </i>Discord screen share</span>
+            </span>
+          </div>
+          <a class="tko-watch-go" href="{esc(D.DISCORD_URL)}" target="_blank" rel="noopener">
+            {_hd_brand("discord", 16, "tko-watch-d")}
+            <span data-watch-when="live">Join and watch</span>
+            <span data-watch-when="off" hidden>Open the order channel</span>
+          </a>
+          <p class="tko-watch-p">{_ico("lock-key", 14, "tko-watch-l", stroke=True)}
+            <span>The channel is private to you and your booster, and closes when the order is delivered.</span></p>
+        </div>"""
+
+
 def _demo_rail(O):
     """The resolved order's right rail — booster, details, timeline, guarantee.
 
@@ -7229,6 +7312,7 @@ def _demo_rail(O):
     promise = D.GUARANTEE["cases"][1][3]
     return f"""<div class="tko-rail">
         {bst}
+        {watch_panel(O, b, _DEMO_GAME)}
         <div class="tko-card">
           <span class="tk-lab">Order details</span>
           <div class="tko-det">{det}</div>
@@ -7336,6 +7420,7 @@ def page_demo():
   var paused = order.querySelector('[data-demo-paused]');
   var status = order.querySelector('[data-demo-status]');
   var statusLabel = order.querySelector('[data-demo-status-label]');
+  var watch = order.querySelector('[data-watch]');
   var HELP = 'On your confirmation email, under the total.';
   var ERR = "We can't find that order number. Check the confirmation email, or use the address you paid with below.";
 
@@ -7409,6 +7494,22 @@ def page_demo():
     statusLabel.textContent = t(on ? 'Paused' : 'In progress');
     status.classList.toggle('is-paused', on);
     paused.hidden = !on;
+    setWatch(!on);
+  }
+
+  // Watch-live follows the pause, because it has to: a paused order is not
+  // being played, so it cannot be being streamed. Leaving the panel on "orvo is
+  // sharing their screen" beside the order's own "paused" banner is the same
+  // two-things-at-once defect the status pill above fixes. Both states are in
+  // the DOM and one is hidden — i18n matches whole text nodes, so a sentence
+  // written in here would arrive untranslated.
+  function setWatch(live) {
+    if (!watch) return;
+    var n = watch.querySelectorAll('[data-watch-when]');
+    for (var i = 0; i < n.length; i++) {
+      n[i].hidden = n[i].getAttribute('data-watch-when') !== (live ? 'live' : 'off');
+    }
+    watch.classList.toggle('is-off', !live);
   }
   pause.addEventListener('click', function () {
     setPaused(pause.getAttribute('aria-pressed') !== 'true');
@@ -7606,7 +7707,7 @@ def page_orders():
       <p class="ord-empty-p">When you place an order it shows up here — the climb, the price and its
       status, updated as your booster works. Ready to start?</p>
       <div class="ord-empty-a">
-        <a class="btn btn-primary btn-sm" href="/games/">Browse games</a>
+        <a class="btn btn-primary btn-sm" href="/games">Browse games</a>
         <a class="btn btn-outline btn-sm" href="{DEMO_HREF}">Track by link</a>
       </div>
     </div>
@@ -7713,8 +7814,9 @@ def page_checkout():
           <input class="co-input" id="k-email" type="email" required
                  inputmode="email" autocomplete="email" spellcheck="false"
                  placeholder="you@example.com" aria-describedby="k-email-note">
-          <p class="co-note" id="k-email-note" data-email-note>Used for the order link and nothing
-          else. No marketing unless you tick the box at the end.</p>
+          <p class="co-note" id="k-email-note" data-email-note>Used for your order link, and to
+          send you your cart if you don't finish. No marketing unless you tick the box at
+          the end.</p>
 
           <div class="co-two">
             <div class="co-fieldset">
@@ -7915,6 +8017,71 @@ def page_checkout():
   }
   window.esbTrack('add_payment_info', window.esbItemParams());
 
+  /* ── abandoned-cart capture ──────────────────────────────────────────
+     Save the address as soon as it is a real one, so a checkout that is
+     never finished can be recovered. Fires on blur and on a debounced
+     pause, not on every keystroke: the server keeps ONE open cart per
+     address (carts.find_pending), so a re-post updates the row rather than
+     minting a second token, but there is no reason to spend the requests.
+     Entirely best-effort — a failed capture must never surface to the buyer
+     or block the pay button. The note under the field says this happens. */
+  /* Arriving from a recovery mail: /checkout?cart=BACK-… The token alone is in
+     the link; the DISCOUNT is resolved server-side and handed back here, purely
+     so this page's live quote matches what the server will charge. A spent,
+     unknown or expired token answers {valid:false} and the page simply prices
+     at the normal sale — never an error, because the buyer did nothing wrong. */
+  var recTok = (location.search.match(/[?&]cart=([A-Za-z0-9-]+)/) || [])[1] || '';
+  if (recTok) {
+    fetch('/api/cart?token=' + encodeURIComponent(recTok))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || !j.valid) return;
+        window.ESB_RECOVERY = { token: j.token, pct: j.pct };
+        if (mail && !mail.value && j.email) mail.value = j.email;
+        if (window.esbRender) window.esbRender();     // repaint at the new price
+      }).catch(function () {});
+  }
+
+  var CART_KEY = 'esb.cart.v1';
+  var lastSent = '';
+  function captureCart() {
+    if (!mail || !mail.value) return;
+    var email = mail.value.trim();
+    if (!/^[^@\\s]+@[^@\\s.]+\\.[^@\\s]{2,}$/.test(email)) return;
+    var st = window.esbState ? window.esbState() : {};
+    var sig = email + '|' + JSON.stringify(st);
+    if (sig === lastSent) return;              // nothing changed since last post
+    lastSent = sig;
+    var body = {
+      email: email, game: st.game, service: st.service, from: st.from,
+      to: st.to, mode: st.mode, region: st.region, addons: st.addons || [],
+      wins: st.wins, placements: st.placements, unranked: !!st.unranked,
+      booster: st.booster || '', bundle: st.bundle || '',
+      tz: (Intl.DateTimeFormat().resolvedOptions().timeZone || ''),
+      lang: (navigator.language || '')
+    };
+    try {
+      fetch('/api/cart', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body), keepalive: true
+      }).then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          if (j && j.token) { try { localStorage.setItem(CART_KEY, j.token); } catch (e) {} }
+        }).catch(function () {});
+    } catch (e) { /* never surfaces to the buyer */ }
+  }
+  if (mail) {
+    var capT;
+    mail.addEventListener('blur', captureCart);
+    mail.addEventListener('input', function () {
+      clearTimeout(capT); capT = setTimeout(captureCart, 1200);
+    });
+    // The buyer leaving the tab is the whole point — take one last snapshot.
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') captureCart();
+    });
+  }
+
   if (/[?&]canceled=1/.test(location.search)) showError(
     'Payment canceled — nothing was charged. Your order is still here when you\\'re ready.',
     'canceled');
@@ -7995,6 +8162,11 @@ def page_checkout():
       // price — only compared — so a tampered value cannot lower the charge.
       client_total: (window.esbQuote ? (window.esbQuote(s) || {}).total : null),
       promo: s.promo || '',
+      // The recovery token from an abandoned-cart mail, if this order came back
+      // from one. Only the token travels — the discount PERCENTAGE is resolved
+      // server-side against the carts store, never sent from here, or a crafted
+      // body would buy any climb for nothing.
+      cart: (window.ESB_RECOVERY && window.ESB_RECOVERY.token) || '',
       booster: s.booster || '',
       // Charge in the currency the customer is viewing prices in. The amount is
       // still recomputed server-side; only the currency choice rides along.
@@ -8434,7 +8606,7 @@ def page_404():
     <p class="lede">The link is dead or the page moved. The calculator is two clicks away either
     way.</p>
     <div class="btn-row">
-      <a class="btn btn-primary" href="/games/">Pick a game</a>
+      <a class="btn btn-primary" href="/games">Pick a game</a>
       <a class="btn btn-secondary" href="/">Back to the homepage</a>
     </div>
   </div>
@@ -8452,6 +8624,7 @@ OPS_TABS = [
     ("liveview", "Live view"),
     ("overview", "Overview"), ("funnel", "Funnel"), ("configurator", "Configurator"),
     ("journey", "Journey"), ("sessions", "Sessions"), ("orders", "Orders"),
+    ("carts", "Carts"),
     ("accounts", "Accounts"),
     ("guides", "Guides mails"),
     ("boosters", "Boosters"),
@@ -8476,10 +8649,27 @@ def page_ops():
         % (key, "true" if i == 0 else "false", esc(label))
         for i, (key, label) in enumerate(OPS_TABS))
 
+    # The period control. It was four buttons — 7 / 30 / 90 / 365 — which could
+    # only ever say "the last N days", so there was no way to ask for a single
+    # day or for a calendar month. These are keys, not day counts: ops.js turns
+    # each into an absolute start/end pair IN THE READER'S TIMEZONE, because
+    # "today" resolved on the server is today in UTC, which is the wrong day for
+    # part of every European evening. `custom` reveals the two date fields.
+    OPS_RANGES = (
+        ("today",     "Today"),
+        ("yesterday", "Yesterday"),
+        ("7d",        "Last 7 days"),
+        ("30d",       "Last 30 days"),
+        ("90d",       "Last 90 days"),
+        ("mtd",       "This month"),
+        ("lastmonth", "Last month"),
+        ("12m",       "Last 12 months"),
+        ("custom",    "Custom range\u2026"),
+    )
     ranges = "".join(
-        '<button type="button" data-days="%d" aria-pressed="%s">%s</button>'
-        % (days, "true" if days == 30 else "false", esc(label))
-        for days, label in ((7, "7 days"), (30, "30 days"), (90, "90 days"), (365, "1 year")))
+        '<option value="%s"%s>%s</option>'
+        % (key, " selected" if key == "30d" else "", esc(label))
+        for key, label in OPS_RANGES)
 
     brand = ('<span class="brand-mark" aria-hidden="true"></span>'
              '<span class="brand-word">esports<b>boost</b></span>')
@@ -8537,7 +8727,13 @@ def page_ops():
       </button>
       <h1 class="topbar-title" data-tabtitle>Live view</h1>
       <span class="spacer"></span>
-      <span class="seg" data-range aria-label="Period">{ranges}</span>
+      <select class="field" id="ops-range" data-range aria-label="Period">{ranges}</select>
+      <span class="dates" data-dates hidden>
+        <input class="field" type="date" data-date-from aria-label="From date">
+        <span class="dates-sep" aria-hidden="true">→</span>
+        <input class="field" type="date" data-date-to aria-label="To date">
+        <button class="btn btn-sm" type="button" data-date-apply>Apply</button>
+      </span>
       <select class="field" id="ops-game" data-game aria-label="Filter by game">
         <option value="">All games</option>
       </select>
@@ -8668,12 +8864,51 @@ def minify_css(src):
     return css.replace(";}", "}").strip()
 
 
+# An internal link written as `/foo.html` is not wrong — it serves the right
+# page — but under `cleanUrls` it serves it via a 308 to `/foo`, so every such
+# href costs a crawler an extra hop on the way to a page it was already given
+# the clean URL for in the sitemap and the canonical. There were 4,892 of them
+# across the build, 294 of which pointed at an indexed game page. Rewriting
+# them at the one place every page passes through is what makes it impossible
+# for a new call site to reintroduce one; the alternative is 108 link literals
+# spread over ~1500 lines, each of which has to remember the rule.
+#
+# Query strings and fragments are preserved (`/games/x.html?booster=y`,
+# `/support.html#discord`), and a directory index collapses the way _canon()
+# collapses it, so the two agree on what the clean form of a path is.
+_HTML_HREF = re.compile(r'((?:href|action)=")(/[^"]*?)\.html((?:[#?][^"]*)?")')
+
+
+def _clean_links(html):
+    def one(m):
+        path = m.group(2)
+        if path.endswith("/index"):
+            path = path[:-len("/index")]
+        return m.group(1) + (path or "/") + m.group(3)
+    return _HTML_HREF.sub(one, html)
+
+
 def write(rel, content):
     path = os.path.join(DIST, rel.lstrip("/"))
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    if rel.endswith(".html"):
+        content = _clean_links(content)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
     return rel
+
+
+# The currency i18n.js's prefix rule gives a zone with no explicit entry. Keep
+# in step with defaultCurrency() there — this function exists only to work out
+# which entries are therefore redundant and can be left out of the payload.
+_PREFIX_CURRENCY = (("America/", "USD"), ("Europe/", "EUR"), ("Atlantic/", "EUR"))
+
+
+def _prefix_currency(zone):
+    for prefix, cur in _PREFIX_CURRENCY:
+        if zone.startswith(prefix):
+            return cur
+    return "USD"
 
 
 def client_data():
@@ -8696,6 +8931,31 @@ def client_data():
         "slugs": {g["name"]: g["slug"] for g in D.GAMES},
         "regions": {g["name"]: g["regions"] for g in D.GAMES},
         "regionShort": D.REGION_SHORT,
+        # Which server the form opens on. The page is static, so the client
+        # cannot read the edge header geo.py prefers — it uses geo.py's SECOND
+        # and THIRD signals instead (the browser's IANA timezone, then the
+        # locale's region subtag), and both tables below are DERIVED from
+        # geo.py's so there is no second copy to drift from it. `saZones` is
+        # the exception list, not the membership one: app.js reads an
+        # `America/…` zone as North American unless it appears here, so a zone
+        # neither table carries still lands on the right side of the Atlantic.
+        "geo": {
+            "saZones": sorted(z for z, c in geo.TZ_COUNTRY.items()
+                              if c in geo.SA_COUNTRIES),
+            "naCountries": sorted(geo.NA_COUNTRIES),
+            # Currency by location, same two signals. `zoneCur` carries only the
+            # zones whose answer DIFFERS from what i18n.js's prefix rule gives
+            # (America/… → USD, Europe/… and Atlantic/… → EUR) — which is the
+            # Canadian zones, Europe/London, and the handful of Russian and
+            # Cypriot zones filed under `Asia/`. The rest would be ~120 entries
+            # restating the prefix.
+            "zoneCur": {z: geo.currency_for(c)
+                        for z, c in geo.TZ_COUNTRY.items()
+                        if geo.currency_for(c) != _prefix_currency(z)},
+            # The locale fallback, for a browser that reports no timezone.
+            "curCountries": dict(geo.CUR_COUNTRIES),
+            "euCountries": sorted(geo.EU_COUNTRIES),
+        },
         "addons": D.ADDONS,
         "promos": D.PROMOS,
         # Coaching — the booking product. Its price never touches the rank

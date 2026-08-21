@@ -99,6 +99,81 @@ TZ_COUNTRY = {
 }
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  which of the two server estates a visitor belongs to
+# ══════════════════════════════════════════════════════════════════════════
+# The order form has to open on SOME server, and until now it opened on North
+# America for everyone — a European buyer's first act on the page was correcting
+# it. The choice is deliberately binary, NA or EU, because that is where the
+# roster actually is: 35 boosters on NA and 47 across the EU shards, against two
+# on OCE and one apiece on LATAM, SEA and KR. Defaulting someone onto a shard
+# one person covers is a slower claim and an emptier board, so the two big
+# estates are the only defaults; every other server stays one tap away in the
+# same control.
+#
+# North America here is the continent — Central America and the Caribbean
+# included. They are tens of milliseconds from the NA shard and a third of a
+# world from Frankfurt, so grouping them with Europe to satisfy a tidy
+# "north/south" split would be the one grouping that is wrong on the only
+# measure that matters to a player.
+NA_COUNTRIES = {
+    "US", "CA", "MX", "GT", "BZ", "SV", "HN", "NI", "CR", "PA",
+    "CU", "DO", "HT", "JM", "PR", "BS", "TT", "BB",
+}
+
+# South America is listed rather than inferred, because the client classifies an
+# `America/…` timezone as North American UNLESS it appears here — that way a zone
+# neither table carries (America/Regina, America/Whitehorse) lands on NA, which
+# is right far more often than not for that prefix.
+SA_COUNTRIES = {"BR", "AR", "CL", "CO", "PE", "VE", "EC", "BO",
+                "PY", "UY", "GY", "SR", "GF"}
+
+
+# ── which money a market is quoted in ──────────────────────────────────────
+# The business rule, in the words it was set in: the United States in dollars,
+# Canada in Canadian dollars, the UK and the crown dependencies in sterling, the
+# rest of Europe in euros. Everywhere else keeps the dollar, which is what an
+# international price is quoted in — there is no rate for anything else, and a
+# currency the site cannot charge in must never be displayed (see
+# test_fx_rate_mirror, which asserts every code named here is in CHARGE_RATES).
+#
+# Only the countries whose answer is NOT the fallback need an entry; US and MX
+# are listed anyway because being explicit is what stops them falling through to
+# the language map, where a American reading the site in French would be quoted
+# euros for a North American order.
+CUR_COUNTRIES = {
+    "CA": "CAD",
+    "GB": "GBP", "IM": "GBP", "JE": "GBP", "GG": "GBP",
+    "US": "USD", "MX": "USD",
+}
+
+# Europe, taken from the timezone table rather than listed by hand, so a country
+# added there joins the euro default without a second edit. Deliberately the
+# whole continent and not the eurozone: the rule is "the rest of Europe", these
+# visitors are all on the EU shard, and the site has no rate for zloty, krona or
+# forint — a Pole quoted in euros is being quoted a currency we can actually
+# charge, which a Pole quoted in złoty would not be.
+EU_COUNTRIES = frozenset(
+    c for z, c in TZ_COUNTRY.items() if z.startswith("Europe/")
+)
+
+
+def currency_for(code):
+    """The currency a country's traffic is quoted and charged in by default."""
+    code = str(code or "").strip().upper()
+    if code in CUR_COUNTRIES:
+        return CUR_COUNTRIES[code]
+    return "EUR" if code in EU_COUNTRIES else "USD"
+
+
+def server_area(code):
+    """"NA" or "EU" for a country code — the estate its traffic should default
+    to. Anything we cannot place (including an empty code) resolves to EU: it is
+    the larger of the two rosters, and it is where the non-American traffic this
+    falls through for actually is."""
+    return "NA" if str(code or "").strip().upper() in NA_COUNTRIES else "EU"
+
+
 def _from_locale(lang):
     """`fr-FR` → FR. Only an explicit two-letter region subtag counts; a bare
     `fr` says nothing about location and returns nothing."""

@@ -25,6 +25,7 @@ ROOT = os.path.dirname(HERE)                       # site/
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
 import data as D          # noqa: E402
+import geo               # noqa: E402
 import pricing            # noqa: E402
 import payments           # noqa: E402
 
@@ -55,19 +56,20 @@ def div_quote(g, frm, to, bundle=None, mode="Solo", promo="", addons=None):
     })
 
 
-def display_eur_cents(total_usd):
+def display_cents(total_usd, cur):
     """Replica of the client display: esbMoney formats total * rate with no
-    fraction digits (Intl 'halfExpand' == round half away from zero). This is
-    the euro figure the buyer reads on the button — it must equal charge_for()."""
-    rate = 0.92
-    v = total_usd * rate
-    euros = math.floor(v + 0.5)           # positive amounts only
-    return euros * 100
+    fraction digits (Intl 'halfExpand' == round half away from zero). This is the
+    figure the buyer reads on the button — it must equal charge_for(). The rate
+    is read from CHARGE_RATES, which test_fx_rate_mirror() has already proved
+    equals the one i18n.js formats with."""
+    v = total_usd * pricing.CHARGE_RATES[cur]
+    whole = math.floor(v + 0.5)           # positive amounts only
+    return whole * 100
 
 
 # ── the money invariant: shown == charged, for every League bundle ──────────
 def test_shown_equals_charged():
-    print("\n[shown == charged] every League bundle, USD and EUR")
+    print("\n[shown == charged] every League bundle, every currency")
     for i, b in enumerate(D.bundle_climbs(LOL)):
         # priced from the flat floor (defFrom), the figure the card advertises
         q = div_quote(LOL, b["defFrom"], b["target"], bundle=i)
@@ -86,11 +88,14 @@ def test_shown_equals_charged():
         usd_cur, usd_cents = pricing.charge_for(q["total"], "usd")
         check(usd_cur == "usd" and usd_cents == q["total"] * 100,
               "bundle %d USD charge == shown total $%d" % (i, q["total"]))
-        # EUR: the euro on the button equals the euro Stripe charges
-        eur_cur, eur_cents = pricing.charge_for(q["total"], "eur")
-        check(eur_cur == "eur" and eur_cents == display_eur_cents(q["total"]),
-              "bundle %d EUR charge (%d) == shown EUR (%d)"
-              % (i, eur_cents, display_eur_cents(q["total"])))
+        # Every other currency: the figure on the button is the figure Stripe
+        # charges, converted at the one rate both sides share.
+        for cur in sorted(c for c in pricing.CHARGE_RATES if c != "usd"):
+            got_cur, got_cents = pricing.charge_for(q["total"], cur)
+            want = display_cents(q["total"], cur)
+            check(got_cur == cur and got_cents == want,
+                  "bundle %d %s charge (%d) == shown %s (%d)"
+                  % (i, cur.upper(), got_cents, cur.upper(), want))
 
 
 # ── the exact case from the bug report ─────────────────────────────────────
@@ -255,7 +260,7 @@ def test_bundle_never_costs_more():
 # ── build_session: the Stripe amount IS the quote ───────────────────────────
 def test_build_session_amount():
     print("\n[stripe] build_session charges the re-quoted amount")
-    for cur in ("usd", "eur"):
+    for cur in sorted(pricing.CHARGE_RATES):
         order = {"game": "League of Legends", "service": "division",
                  "from": "Iron I", "to": "Gold IV", "mode": "Solo", "addons": [],
                  "bundle": 0, "currency": cur, "region": "Europe West"}
@@ -349,6 +354,11 @@ def test_client_bundle_mirror():
 
 
 def test_fx_rate_mirror():
+    """Both directions. A currency the browser can display and the server has no
+    rate for is charged in dollars at the Stripe page (`charge_for()` falls back)
+    — the buyer clicks "£72" and is charged $72. A currency the server prices and
+    the switcher never offers is dead weight. So the two tables must hold the same
+    keys, not merely agree on the ones they share."""
     print("\n[mirror] i18n.js ESB_RATES == pricing.CHARGE_RATES")
     p = os.path.join(ROOT, "public", "assets", "js", "i18n.js")
     txt = open(p, encoding="utf-8").read()
@@ -356,11 +366,178 @@ def test_fx_rate_mirror():
     check(bool(m), "found ESB_RATES in i18n.js")
     if not m:
         return
-    pairs = dict(re.findall(r"([A-Za-z]+)\s*:\s*([\d.]+)", m.group(1)))
-    check(abs(float(pairs.get("EUR", 0)) - pricing.CHARGE_RATES["eur"]) < 1e-9,
-          "EUR rate matches (%s == %s)" % (pairs.get("EUR"), pricing.CHARGE_RATES["eur"]))
-    check(abs(float(pairs.get("USD", 0)) - pricing.CHARGE_RATES["usd"]) < 1e-9,
-          "USD rate matches")
+    pairs = {k.lower(): float(v)
+             for k, v in re.findall(r"([A-Za-z]+)\s*:\s*([\d.]+)", m.group(1))}
+    check(set(pairs) == set(pricing.CHARGE_RATES),
+          "same currencies both sides (js %s == py %s)"
+          % (sorted(pairs), sorted(pricing.CHARGE_RATES)))
+    for cur in sorted(set(pairs) & set(pricing.CHARGE_RATES)):
+        check(abs(pairs[cur] - pricing.CHARGE_RATES[cur]) < 1e-9,
+              "%s rate matches (%s == %s)"
+              % (cur.upper(), pairs[cur], pricing.CHARGE_RATES[cur]))
+
+    # Every currency the geo defaults can HAND somebody must be one we can
+    # charge in. A country mapped to a code with no rate behind it displays
+    # perfectly and is charged in dollars at the Stripe page (charge_for() falls
+    # back), so the buyer sees one currency and pays another.
+    named = set(geo.CUR_COUNTRIES.values()) | {"EUR", "USD"}
+    for cur in sorted(named):
+        check(cur.lower() in pricing.CHARGE_RATES,
+              "%s (a geo default) has a charge rate" % cur)
+    check(geo.currency_for("").lower() in pricing.CHARGE_RATES,
+          "the unresolved-country fallback (%s) has a charge rate"
+          % geo.currency_for(""))
+
+    # And every rate the site can charge in is a currency the switcher offers,
+    # read off build.py's CURRENCIES — the third copy of the same list.
+    b = open(os.path.join(ROOT, "build.py"), encoding="utf-8").read()
+    mb = re.search(r"^CURRENCIES = \[(.*?)\]$", b, re.M | re.S)
+    check(bool(mb), "found CURRENCIES in build.py")
+    if mb:
+        offered = {c.lower() for c in re.findall(r'\("([A-Z]{3})"', mb.group(1))}
+        check(offered == set(pricing.CHARGE_RATES),
+              "switcher offers exactly the priced currencies (%s == %s)"
+              % (sorted(offered), sorted(pricing.CHARGE_RATES)))
+
+
+def test_currency_signs():
+    """One mark per currency, across every surface that draws one.
+
+    Three of them print a charged amount BACK to a human — the order
+    confirmation mail, the /ops Orders tab, and the switcher's own icon — and the
+    two lookup maps fall back to a bare "$" for a currency they don't know. So a
+    missing entry is not a broken glyph, it is a CAD order labelled as US dollars
+    in a customer's inbox. The fourth, i18n.js's CUR_MARK, is where the site
+    overrides the formatter's own symbol (CLDR gives CAD "CA$"; we show "C$"),
+    which is what makes the other three overrides load-bearing rather than
+    cosmetic: a page quoting "C$319" over a receipt saying "CA$319" is the same
+    one-set-of-numbers failure the whole build is written against."""
+    print("\n[mirror] one currency mark, on every surface that draws one")
+    signs = payments.CURRENCY_SIGNS
+    check(set(signs) == set(pricing.CHARGE_RATES),
+          "payments.CURRENCY_SIGNS covers CHARGE_RATES (%s == %s)"
+          % (sorted(signs), sorted(pricing.CHARGE_RATES)))
+
+    # /ops Orders tab
+    txt = open(os.path.join(ROOT, "public", "assets", "js", "ops.js"),
+               encoding="utf-8").read()
+    m = re.search(r"CUR_SYM\s*=\s*\{([^}]*)\}", txt)
+    check(bool(m), "found CUR_SYM in ops.js")
+    if m:
+        js = dict(re.findall(r'([a-z]{3})\s*:\s*"([^"]+)"', m.group(1)))
+        check(set(js) == set(pricing.CHARGE_RATES),
+              "ops.js CUR_SYM covers CHARGE_RATES (%s == %s)"
+              % (sorted(js), sorted(pricing.CHARGE_RATES)))
+        for cur in sorted(set(js) & set(signs)):
+            check(js[cur] == signs[cur],
+                  "%s: ops.js agrees with the mail (%s)" % (cur.upper(), js[cur]))
+
+    # the switcher's icon column, which is the mark the reader sees on the control
+    b = open(os.path.join(ROOT, "build.py"), encoding="utf-8").read()
+    mb = re.search(r"^CURRENCIES = \[(.*?)\]$", b, re.M | re.S)
+    if mb:
+        icons = {c.lower(): i
+                 for c, i in re.findall(r'\("([A-Z]{3})",\s*"([^"]+)"', mb.group(1))}
+        for cur in sorted(set(icons) & set(signs)):
+            check(icons[cur] == signs[cur],
+                  "%s: switcher icon agrees with the mail (%s)" % (cur.upper(), icons[cur]))
+
+    # i18n.js's override of the formatter's own symbol — the displayed price
+    ix = open(os.path.join(ROOT, "public", "assets", "js", "i18n.js"),
+              encoding="utf-8").read()
+    mi = re.search(r"CUR_MARK\s*=\s*\{([^}]*)\}", ix)
+    check(bool(mi), "found CUR_MARK in i18n.js")
+    if mi:
+        marks = dict(re.findall(r'([A-Z]{3})\s*:\s*"([^"]+)"', mi.group(1)))
+        for cur, mark in sorted(marks.items()):
+            check(cur.lower() in signs and signs[cur.lower()] == mark,
+                  "%s: the displayed mark is the charged one (%s)" % (cur, mark))
+
+    # The one that is not merely cosmetic: two currencies sharing a mark are two
+    # amounts a reader cannot tell apart.
+    check(len(set(signs.values())) == len(signs),
+          "no two currencies share a mark (%s)" % sorted(signs.values()))
+
+
+# ── the default server: geo.py's tables vs what app.js can actually read ────
+def _region_for(regions, area):
+    """Python twin of app.js's regionFor() — exact name, then prefix."""
+    pats = ([r"^North America$", r"^North America\b"] if area == "NA"
+            else [r"^Europe$", r"^Europe\b", r"^EU\b"])
+    for pat in pats:
+        for r in regions:
+            if re.match(pat, r):
+                return r
+    return ""
+
+
+def test_server_defaults():
+    """The order form opens on the visitor's own estate — NA or EU — resolved
+    client-side from the browser's timezone. Three things can break it silently,
+    and none of them raises anything at build time."""
+    print("\n[geo] every ladder offers both estates, and the client can see them")
+
+    # 1. A game whose region list has no European server would fall through
+    #    regionFor()'s patterns to list[0] — which is a North America variant on
+    #    all nine ladders — so every European visitor would land back on NA with
+    #    nothing to show for it. Same in reverse.
+    for g in D.GAMES:
+        for area in ("NA", "EU"):
+            hit = _region_for(g["regions"], area)
+            check(bool(hit) and hit in g["regions"],
+                  "%s: %s resolves to %r" % (g["short"], area, hit))
+
+    # 2. app.js only ever answers "NA" for a zone under `America/` (or the one
+    #    Pacific/Honolulu special case). A North American country added to
+    #    geo.py under any other prefix would be read as European by the client
+    #    while the server-side dashboard called it North America.
+    stray = sorted(z for z, c in geo.TZ_COUNTRY.items()
+                   if c in geo.NA_COUNTRIES
+                   and not z.startswith("America/") and z != "Pacific/Honolulu")
+    check(not stray,
+          "every NA timezone is under America/ or Pacific/Honolulu (%s)"
+          % (stray or "none"))
+
+    # 3. A country in both sets would make the client's exception list fight
+    #    geo.server_area().
+    both = sorted(geo.NA_COUNTRIES & geo.SA_COUNTRIES)
+    check(not both, "no country is both NA and SA (%s)" % (both or "none"))
+
+    # 4. The currency-by-location tables resolve the markets the business set.
+    for code, want in (("US", "USD"), ("CA", "CAD"), ("GB", "GBP"),
+                       ("FR", "EUR"), ("DE", "EUR"), ("PL", "EUR"),
+                       ("BR", "USD"), ("JP", "USD")):
+        check(geo.currency_for(code) == want,
+              "%s quotes in %s" % (code, want))
+    # GB is in EU_COUNTRIES too — the explicit map has to win, or the UK is
+    # quoted in euros by the continent it sits on.
+    check("GB" in geo.EU_COUNTRIES and geo.currency_for("GB") == "GBP",
+          "GB is European but still quotes in GBP")
+
+    # 5. The client payload is DERIVED from geo.py, so it has to still match it.
+    cd = _client_data()
+    if cd is None:
+        check(False, "data.js present (run build.py first)")
+        return
+    cg = cd.get("geo") or {}
+    want_sa = sorted(z for z, c in geo.TZ_COUNTRY.items() if c in geo.SA_COUNTRIES)
+    check(cg.get("saZones") == want_sa,
+          "data.js saZones == geo.py's South American zones (%d)" % len(want_sa))
+    check(cg.get("naCountries") == sorted(geo.NA_COUNTRIES),
+          "data.js naCountries == geo.NA_COUNTRIES (%d)" % len(geo.NA_COUNTRIES))
+    check(cg.get("curCountries") == dict(geo.CUR_COUNTRIES),
+          "data.js curCountries == geo.CUR_COUNTRIES")
+    check(cg.get("euCountries") == sorted(geo.EU_COUNTRIES),
+          "data.js euCountries == geo.EU_COUNTRIES (%d)" % len(geo.EU_COUNTRIES))
+    # zoneCur carries only what the prefix rule gets wrong; every entry in it
+    # must therefore actually disagree with that rule, or it is dead weight
+    # pretending to be a correction.
+    zc = cg.get("zoneCur") or {}
+    check(all(geo.currency_for(geo.TZ_COUNTRY[z]) == c for z, c in zc.items()),
+          "every zoneCur entry matches geo.currency_for its country (%d)" % len(zc))
+    # The exception list is only consulted under the America/ prefix.
+    off = [z for z in want_sa if not z.startswith("America/")]
+    check(not off, "every SA zone is under America/ (%s)" % (off or "none"))
 
 
 def test_eta_schedule_mirror():
@@ -441,7 +618,8 @@ def main():
                test_bundle_does_not_stack, test_bundle_rules,
                test_bundle_never_costs_more,
                test_build_session_amount, test_client_total_guard,
-               test_client_bundle_mirror, test_fx_rate_mirror,
+               test_client_bundle_mirror, test_fx_rate_mirror, test_currency_signs,
+               test_server_defaults,
                test_eta_schedule_mirror, test_eta_is_never_a_bare_long_figure,
                test_checkout_payload_sends_state):
         fn()

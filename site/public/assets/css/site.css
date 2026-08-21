@@ -1795,14 +1795,17 @@ body.hd-locked {
   .gamerow img { width: 44px; height: 44px; }
   .gamerow .cfg { display: none; }
   .mobile-bar { display: flex; }
-  /* Clears the bar (109px at 375) plus the safe-area inset. Measured, not
-     guessed — too small and the footer's last row sits under the bar with no
-     way to reach it. Below 400px the save pill wraps to its own line and the
-     bar grows; see the override there. */
-  body.has-bar { padding-bottom: calc(116px + env(safe-area-inset-bottom)); }
+  /* Clears the bar plus the safe-area inset — too small and the footer's last
+     row sits under the bar with no way to reach it. `--mb-h` is the bar's REAL
+     height, set by initBarReserve() in app.js on every re-quote and resize,
+     because the money line wraps with the size of the number in it (see the
+     comment there). The constant is the fallback: what a no-JS page gets, and
+     what holds for the frame before the first measurement. 116px is the bar at
+     375px with the pill on one line. */
+  body.has-bar { padding-bottom: calc(var(--mb-h, 116px) + env(safe-area-inset-bottom)); }
   /* Coaching pages: the "Book 3 hours" CTA squeezes the money line into a wrap,
      so the bar reaches ~139px on that tab. Reserved only where the tab exists. */
-  body.has-bar-coach { padding-bottom: calc(146px + env(safe-area-inset-bottom)); }
+  body.has-bar-coach { padding-bottom: calc(var(--mb-h, 146px) + env(safe-area-inset-bottom)); }
   .two-up { grid-template-columns: 1fr; }
   .stat-row { gap: 24px; }
   .wizard { padding: 18px 16px; }
@@ -4347,7 +4350,7 @@ body.hd-locked {
      ~139px here — like coaching's "Book N hours". Reserve that clearance at
      checkout's own 900px bar breakpoint: this beats app.js's ≤760 `body.has-bar`
      (116px) on specificity and also covers 760–900, where that rule can't reach. */
-  body.co-page.has-bar { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+  body.co-page.has-bar { padding-bottom: calc(var(--mb-h, 150px) + env(safe-area-inset-bottom)); }
 }
 /* Below the 375px baseline the full-width CTA pushes the money line to a third
    row (price / struck / pill) and the bar balloons to ~166px. Tighten the CTA so
@@ -7009,6 +7012,62 @@ body.hd-locked {
 }
 .tko-tl-w { font-size: 12px; color: var(--d-muted); }
 
+/* ── Watch live ──────────────────────────────────────────────────────────
+   The panel is a *status* card, not a player. Discord ships no iframe player
+   for Go Live, so the video is always in Discord and this card's whole job is
+   the one fact Discord does not surface from outside: is my booster streaming
+   right now. Faking a video frame here would be a mock-up of a thing the
+   product cannot do, which is the trap /demo.html is named for avoiding.
+
+   The CTA is an outline, not a filled button, and deliberately: the order view
+   has no filled action at all — the visitor has already paid — and the one
+   filled button per viewport rule holds across the page. Blurple appears only
+   on the mark and on hover, so the card never reads as a second accent beside
+   the ember guarantee note under it. --wd is Discord's brand blurple. */
+.tko-watch {
+  --wd: #5865F2;
+  display: flex; flex-direction: column; gap: 12px; min-width: 0;
+  padding: 14px 16px 15px; border-radius: 14px;
+  background: rgba(88, 101, 242, .05); border: 1px solid rgba(88, 101, 242, .26);
+}
+.tko-watch-t { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tko-watch-st {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  padding: 0 9px; height: 22px; border-radius: 999px;
+  background: rgba(255, 255, 255, .04); border: 1px solid var(--d-line-3);
+  font-size: 11.5px; font-weight: 600; color: var(--d-good);
+}
+.tko-watch-st .dot-live { width: 6px; height: 6px; }
+.tko-watch-b { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.tko-watch-i { flex: none; margin-top: 1px; color: var(--wd); }
+.tko-watch-c { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.tko-watch-n { font-size: 13.5px; line-height: 1.5; color: var(--d-text-3); }
+.tko-watch-n b { color: var(--d-text); }
+.tko-watch-m { font-size: 12px; color: var(--d-muted); }
+.tko-watch-go {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  height: 40px; padding: 0 14px; border-radius: 10px;
+  background: rgba(88, 101, 242, .10); border: 1px solid rgba(88, 101, 242, .45);
+  font-family: var(--body); font-weight: 600; font-size: 13.5px; letter-spacing: 0;
+  text-transform: none; color: var(--d-text); text-decoration: none;
+  transition: background .16s ease, border-color .16s ease;
+}
+.tko-watch-go:hover { background: rgba(88, 101, 242, .2); border-color: rgba(88, 101, 242, .7); }
+.tko-watch-d { flex: none; }
+.tko-watch-p {
+  display: flex; align-items: flex-start; gap: 8px; margin: 0;
+  font-size: 11.5px; line-height: 1.5; color: var(--d-muted);
+}
+.tko-watch-l { flex: none; margin-top: 1px; }
+/* Offline: the card drops to the rail's neutral treatment and the status pill
+   stops being green, so "not streaming" is legible from the colour alone and
+   not only from the word. The dot stops pulsing for the same reason the paused
+   status pill's does — a live dot over a dead stream is decoration. */
+.tko-watch.is-off { background: rgba(255, 255, 255, .02); border-color: var(--d-line-3); }
+.tko-watch.is-off .tko-watch-st { color: var(--d-muted); }
+.tko-watch.is-off .tko-watch-st .dot-live { --l-good: var(--d-dim); animation: none; }
+.tko-watch.is-off .tko-watch-i { color: var(--d-muted); }
+
 .tko-guar {
   display: flex; align-items: flex-start; gap: 11px; padding: 14px 16px; border-radius: 12px;
   background: rgba(255, 90, 31, .06); border: 1px solid rgba(255, 90, 31, .22);
@@ -7038,7 +7097,7 @@ body.hd-locked {
      void beside the tall ones. */
   .tko-grid { grid-template-columns: 1fr; gap: 10px; }
   .tko-rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-  .tko-rail > .tko-bst, .tko-rail > .tko-guar { grid-column: 1 / -1; }
+  .tko-rail > .tko-bst, .tko-rail > .tko-watch, .tko-rail > .tko-guar { grid-column: 1 / -1; }
 }
 @media (max-width: 1000px) {
   /* The form card comes first — it is the task, and the copy is what makes it
@@ -7077,9 +7136,12 @@ body.hd-locked {
   /* 38px is under the 44px touch floor, and this is the only way back out of
      the order view on a phone. */
   .tko-back { width: 44px; height: 44px; }
+  /* 40px is under the touch floor, and this is the order's one way through to
+     the stream. */
+  .tko-watch-go { height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .tk-in, .tk-submit, .tko-back, .tko-act, .tko-bst-go { transition: none; }
+  .tk-in, .tk-submit, .tko-back, .tko-act, .tko-bst-go, .tko-watch-go { transition: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -8019,7 +8081,7 @@ body.gc-page { background: #0b0a09; }
    pages carry their own taller reserve at every width (has-bar-coach), because
    the wider CTA wraps the line at 375 too. */
 @media (max-width: 360px) {
-  body.has-bar { padding-bottom: calc(146px + env(safe-area-inset-bottom)); }
+  body.has-bar { padding-bottom: calc(var(--mb-h, 146px) + env(safe-area-inset-bottom)); }
 }
 
 @media (max-width: 400px) {

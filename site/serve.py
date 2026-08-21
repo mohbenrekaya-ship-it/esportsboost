@@ -66,6 +66,7 @@ sys.path.insert(0, os.path.join(HERE, "src"))
 import accounts   # noqa: E402  — header sign-up list (also used by /api)
 import analytics  # noqa: E402  — first-party event ingest (also used by /api)
 import boosters   # noqa: E402  — roster store behind /api/boosters (also used by /api)
+import carts      # noqa: E402  — abandoned-checkout capture behind /api/cart (also used by /api)
 import guides     # noqa: E402  — free-guides mailing list behind /api/guides (also used by /api)
 import mailer     # noqa: E402  — outbound SMTP seam (support tickets, order mail)
 import oauth      # noqa: E402  — social sign-in (Google/Discord), also used by /api
@@ -78,11 +79,23 @@ import apply      # noqa: E402  — /api/apply, the become-a-booster form (also 
 class Handler(SimpleHTTPRequestHandler):
     # ── static site (unchanged behaviour) ─────────────────────────────────
     def translate_path(self, path):
-        p = super().translate_path(path.split("?", 1)[0])
-        if not os.path.exists(p) and not path.rstrip("/").endswith(".html"):
+        raw = path.split("?", 1)[0]
+        p = super().translate_path(raw)
+        if not os.path.exists(p) and not raw.rstrip("/").endswith(".html"):
             alt = p.rstrip("/") + ".html"
             if os.path.isfile(alt):
                 return alt
+        # A clean URL whose name is ALSO a directory: /checkout beside
+        # /checkout/success, /games beside /games/valorant. Vercel serves
+        # <name>.html when there is one and <name>/index.html otherwise —
+        # verified against production. The stdlib handler instead 301s to the
+        # trailing-slash form, which production never does, so without this the
+        # preview redirects on links the live site serves directly and stops
+        # walking like production.
+        if os.path.isdir(p) and not raw.endswith("/"):
+            for cand in (p.rstrip("/") + ".html", os.path.join(p, "index.html")):
+                if os.path.isfile(cand):
+                    return cand
         return p
 
     def send_error(self, code, message=None, explain=None):
@@ -146,6 +159,32 @@ class Handler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 return
             return self._json(status, payload)
+        if route == "/api/cart":
+            # Public, like /api/collect: the checkout form is reachable by anyone.
+            # Captures the email a buyer typed so an abandoned checkout can be
+            # recovered. A separate store from analytics (which holds no PII) —
+            # see carts.py. A bad body answers an empty 204.
+            # A signed-in visitor is captured with nothing to type: the email
+            # comes from the VERIFIED session cookie, never from the body — the
+            # same rule /api/orders follows, and what stops a browser writing a
+            # cart against somebody else's address.
+            _cookies = oauth.parse_cookies(self.headers.get("Cookie"))
+            _sess = oauth.read_session(_cookies.get(oauth.SESSION_COOKIE))
+            status, payload = carts.process_capture(
+                self._read_body(), self.headers.get,
+                session_email=(_sess or {}).get("email", ""))
+            if payload is None:
+                self.send_response(status)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            return self._json(status, payload)
+        if route == "/api/cart/sweep":
+            # The 30-minute timer. Vercel functions cannot sleep, so an external
+            # scheduler drives this. Fails CLOSED without CART_SWEEP_SECRET — an
+            # open sweep endpoint is a free way to make the site mail people.
+            status, payload = carts.process_sweep(self._read_body(), self.headers.get)
+            return self._json(status, payload)
         if route == "/api/support":
             # Public, like /api/collect: the contact form is on a public page.
             # Stores nothing — the ticket is composed and mailed to the support
@@ -186,6 +225,34 @@ class Handler(SimpleHTTPRequestHandler):
                 urllib.parse.urlsplit(self.path).query).get("id", [""])[0]
             status, payload = payments.process_session(sid)
             return self._json(status, payload)
+        if route == "/api/cart":
+            # Resolve a recovery token → its discount. The ONLY route to the
+            # percentage: it is deliberately not in data.js, so the client cannot
+            # learn it without a token the server issued. Unknown/spent/expired
+            # all answer {"valid": false}.
+            tok = urllib.parse.parse_qs(
+                urllib.parse.urlsplit(self.path).query).get("token", [""])[0]
+            status, payload = carts.process_resolve(tok)
+            return self._json(status, payload)
+        if route == "/api/cart/unsubscribe":
+            tok = urllib.parse.parse_qs(
+                urllib.parse.urlsplit(self.path).query).get("token", [""])[0]
+            carts.process_unsubscribe(tok)
+            # A human clicked a link in a mail client — answer with a page, not
+            # JSON. 200 either way: whether a token exists is not public.
+            body = (b"<!doctype html><meta charset=utf-8><title>Unsubscribed</title>"
+                    b"<style>body{background:#0b0a09;color:#e8e3dd;font:16px/1.6 "
+                    b"system-ui,sans-serif;display:grid;place-items:center;height:100vh;"
+                    b"margin:0;text-align:center}a{color:#ff7a3f}</style>"
+                    b"<div><h1>You're unsubscribed.</h1><p>We won't email you about "
+                    b"this order again.</p><p><a href=\"/\">Back to eSports Boost</a>"
+                    b"</p></div>")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if route == "/api/boosters":
             # Public, anonymous read of the roster store — the dynamic source for
             # the boosters board, the "On shift now" rail and the delivered feed.

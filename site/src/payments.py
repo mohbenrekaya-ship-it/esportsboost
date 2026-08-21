@@ -165,6 +165,9 @@ def build_session(order, base_url):
         "metadata[eta]": q["eta"],
         "metadata[currency]": charge_cur,
         "metadata[promo]": q["promo_code"],
+        # The recovery token, so the webhook can burn it once the order is paid
+        # and the same code can never be spent twice. Empty on a normal order.
+        "metadata[cart]": str(order.get("cart") or "")[:40],
         "metadata[discount]": str(q["discount"]),
         "metadata[subtotal]": str(q["subtotal"]),
     }
@@ -189,6 +192,26 @@ def process_checkout(raw, base_url):
         return 400, {"error": "Malformed request"}
     if not isinstance(order, dict):
         return 400, {"error": "Malformed request"}
+
+    # ── the abandoned-cart recovery discount ─────────────────────────────
+    # `pricing.quote()` reads `recovery_pct` straight out of this dict, and this
+    # dict is the request body, so the client MUST NOT be able to set it — a
+    # POST carrying {"recovery_pct": 0.99} would otherwise buy a $450 climb for
+    # $4. It is stripped unconditionally here and re-derived from the token
+    # alone, which is checked against the store (`carts.redeemable()`: unknown,
+    # already spent or expired all resolve to no discount).
+    order.pop("recovery_pct", None)
+    cart_token = str(order.get("cart") or "")[:40]
+    if cart_token:
+        try:
+            import carts
+            row = carts.redeemable(cart_token)
+            if row:
+                order["recovery_pct"] = carts.RECOVERY_PCT
+                order["promo"] = row["token"]
+        except Exception:                                       # noqa: BLE001
+            pass          # a store hiccup must not block a paying customer
+
     try:
         params, order_id, q = build_session(order, base_url)
         # Keyed on the order id we just minted, so a retry of THIS request
@@ -272,6 +295,18 @@ def process_webhook(raw, sig_header):
         # field the checkout put in Stripe metadata rides along. Best-effort by
         # design — a store hiccup must never fail the webhook (Stripe would retry
         # a non-200 and we'd double-fulfil), so it is wrapped and swallowed.
+        # Burn the recovery token, if this order came back from an abandoned-cart
+        # mail. Two things depend on it: the code cannot be spent a second time,
+        # and the sweep must never mail somebody who has already bought. Wrapped
+        # for the same reason as the store write — a cart hiccup must not make us
+        # answer non-200 and be re-delivered.
+        try:
+            if md.get("cart"):
+                import carts
+                carts.recover(md["cart"],
+                              order_id=record.get("order_id") or "")
+        except Exception as e:               # noqa: BLE001 — never break fulfilment
+            sys.stderr.write("[cart] recover failed: %s\n" % e)
         try:
             _record_order(md, obj)
         except Exception as e:               # noqa: BLE001 — never break fulfilment
@@ -362,7 +397,12 @@ def _record_order(md, obj):
 #     today; if ops can't hold it, cut the line rather than soften it.
 #   · Policy is linked, never restated. A refund window quoted in an email is a
 #     number that cannot be corrected after it is sent.
-CURRENCY_SIGNS = {"usd": "$", "eur": "€", "gbp": "£"}
+# CAD is "C$", never a bare "$": this row states what the card was charged,
+# and a Canadian buyer reading "$415" in their confirmation cannot tell
+# whether they were billed 415 Canadian or 415 US dollars. Mirrored in
+# ops.js CUR_SYM, i18n.js CUR_MARK and build.py's CURRENCIES icon —
+# test_pricing.py asserts all four agree and cover pricing.CHARGE_RATES.
+CURRENCY_SIGNS = {"usd": "$", "eur": "€", "gbp": "£", "cad": "C$"}
 
 
 SITE_ORIGIN_FALLBACK = "https://esportsboost.com"

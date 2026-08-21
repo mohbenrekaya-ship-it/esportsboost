@@ -4,10 +4,11 @@
    Loaded BEFORE app.js so window.esbMoney / window.ESB_LOCALE exist when the
    runtime takes its first quote. Two independent dimensions, both persisted:
 
-     currency : USD | EUR   (both display AND the Stripe charge — the checkout
-                             POSTs this and payments.py charges in it at the same
-                             fixed ESB_RATES rate, so the Stripe page matches the
-                             button. Amount is still recomputed server-side.)
+     currency : USD | EUR | GBP | CAD  (both display AND the Stripe charge — the
+                             checkout POSTs this and payments.py charges in it at
+                             the same fixed ESB_RATES rate, so the Stripe page
+                             matches the button. Amount is still recomputed
+                             server-side.)
      language : en | fr | de
 
    Language is applied by walking the DOM and swapping any text node / attribute
@@ -19,15 +20,116 @@
 
   var LKEY = "esb.locale.v1";
 
-  /* ── a language implies a currency ────────────────────────────────────────
-     The two controls stay independent — a French reader can still be quoted in
-     dollars — but they are not independent DEFAULTS: FR and DE are euro markets,
-     and a page reading "à partir de $5" over a euro price card is the same
-     one-set-of-numbers failure a bare `$5` in the chrome is. The map holds until
-     the visitor picks a currency themselves; `curPinned` records that pick and
-     outranks the map from then on, so an explicit USD in French survives a
-     reload and a language switch. */
-  var LANG_CUR = { en: "USD", fr: "EUR", de: "EUR" };
+  /* ── where the visitor is ─────────────────────────────────────────────────
+     ONE resolver, and it lives here rather than in app.js only because of load
+     order: data.js → i18n.js → app.js, and the currency below has to be settled
+     before ESB_LOCALE is published. app.js reads `area()` off window.esbGeo for
+     the order form's default server, so the two geo-derived defaults on the site
+     cannot disagree — which they briefly did, quoting an American living in
+     Berlin in dollars off his locale while sending him to the EU shard off his
+     timezone.
+
+     The signals are geo.py's, in geo.py's order, minus the edge header a static
+     page cannot read: the browser's IANA timezone first, the locale's region
+     subtag second. No request, no permission prompt, no PII —
+     navigator.geolocation would need all three for a worse answer than either
+     of these defaults needs. */
+  var GEO = (window.ESB_DATA || {}).geo || {};
+  var SA_ZONES = {}, NA_COUNTRIES = {}, EU_COUNTRIES = {};
+  (GEO.saZones || []).forEach(function (z) { SA_ZONES[z] = 1; });
+  (GEO.naCountries || []).forEach(function (c) { NA_COUNTRIES[c] = 1; });
+  (GEO.euCountries || []).forEach(function (c) { EU_COUNTRIES[c] = 1; });
+  var ZONE_CUR = GEO.zoneCur || {};
+  var REGION_CUR = GEO.curCountries || {};
+
+  function zone() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; }
+    catch (e) { return ""; }
+  }
+
+  /* `fr-FR` → FR. Only an explicit region subtag counts; a bare `fr` says
+     nothing about location. Same rule as geo.py's _from_locale(). */
+  function uiRegion() {
+    try {
+      var tags = navigator.languages && navigator.languages.length
+        ? navigator.languages : [navigator.language];
+      for (var i = 0; i < tags.length; i++) {
+        var m = /^[a-z]{2,3}[-_](?:[A-Za-z]{4}[-_])?([A-Za-z]{2})\b/.exec(tags[i] || "");
+        if (m) return m[1].toUpperCase();
+      }
+    } catch (e) {}
+    return "";
+  }
+
+  /* "NA" or "EU" — the two server estates, read by app.js. `America/…` is North
+     America unless the South-America exception list says otherwise, so a zone
+     neither table carries (America/Regina) still lands on the right side of the
+     Atlantic. See geo.server_area() for why the choice is binary. */
+  function area() {
+    var tz = zone();
+    if (tz) {
+      if (tz.indexOf("America/") === 0) return SA_ZONES[tz] ? "EU" : "NA";
+      if (tz === "Pacific/Honolulu") return "NA";
+      return "EU";
+    }
+    return NA_COUNTRIES[uiRegion()] ? "NA" : "EU";
+  }
+
+  window.esbGeo = { zone: zone, region: uiRegion, area: area };
+
+  /* ── a location implies a currency; failing that, a language does ─────────
+     The markets as the business set them (geo.currency_for()): the United
+     States in dollars, Canada in Canadian dollars, the UK and the crown
+     dependencies in sterling, the rest of Europe in euros, everywhere else the
+     dollar — which is what an international price is quoted in, and the only
+     other thing there is a rate for.
+
+     A page reading "à partir de $5" over a euro price card is the same
+     one-set-of-numbers failure a bare `$5` in the chrome is, which is what the
+     language map below was for. It survives as the LAST resort, because a
+     language is a poor proxy for a market — a good one for `fr`/`de`, a useless
+     one for English, which is read in London, Toronto and Los Angeles alike.
+
+     All of it sets a DEFAULT only: a visitor who opens the dropdown pins their
+     pick, and `curPinned` outranks every line of this forever after. */
+  var LANG_CUR = { fr: "EUR", de: "EUR" };
+
+  function defaultCurrency(lang) {
+    var tz = zone(), reg = uiRegion();
+    // The order matters, and every step earns its place:
+    //  1. A zone we can place exactly. The only signal that separates Toronto
+    //     from New York, or London from Dublin.
+    if (tz && ZONE_CUR[tz]) return ZONE_CUR[tz];
+    //  2. A European zone. Sterling is already answered above, so everything
+    //     still here is the euro rule — and it must beat the locale, or a
+    //     visitor in Paris whose browser is set to en-GB is quoted in pounds.
+    if (tz && (tz.indexOf("Europe/") === 0 || tz.indexOf("Atlantic/") === 0)) return "EUR";
+    //  3. The locale's own country, but only for the hard country→currency
+    //     facts. This is what tells a browser in Regina it is Canadian when the
+    //     zone table has never heard of America/Regina.
+    if (reg && REGION_CUR[reg]) return REGION_CUR[reg];
+    //  4. An American zone. AFTER the step above, so Toronto-without-a-table-
+    //     entry can still reach CAD; but BEFORE the European locale list, so an
+    //     American with a French browser is quoted for the market he is in.
+    //     The whole continent is dollars: North America by the rule, South
+    //     America because there is no rate for a real and the dollar is what an
+    //     international price is quoted in.
+    if (tz && (tz.indexOf("America/") === 0 || tz === "Pacific/Honolulu")) return "USD";
+    //  5. A European locale, for a browser that reported no usable zone at all.
+    if (reg && EU_COUNTRIES[reg]) return "EUR";
+    //  6. And finally the language, the weakest proxy of the lot.
+    return LANG_CUR[lang] || "USD";
+  }
+
+  /* ── the currencies, and the rate each is charged at ──────────────────────
+     Fixed FX rate for both the displayed price AND the Stripe charge. The amount
+     is recomputed server-side (pricing.py) in USD, then converted to the picked
+     currency at THIS rate for the charge — pricing.CHARGE_RATES mirrors this map
+     and test_pricing.py asserts they hold the same currencies at the same rates,
+     so change one, change the other, or the Stripe page won't match the button.
+     It doubles as the allowlist: a currency we have no rate for is one we cannot
+     charge, so a stored or hand-typed code that isn't a key here is discarded. */
+  var RATES = window.ESB_RATES = { USD: 1, EUR: 0.92, GBP: 0.79, CAD: 1.37 };
 
   /* ── persisted locale, read synchronously so app.js sees it ───────────── */
   var locale = { lang: "en", currency: "USD", curPinned: false };
@@ -36,34 +138,49 @@
     if (raw) {
       var s = JSON.parse(raw);
       if (s && (s.lang === "en" || s.lang === "fr" || s.lang === "de")) locale.lang = s.lang;
-      if (s && (s.currency === "USD" || s.currency === "EUR")) locale.currency = s.currency;
+      if (s && RATES[s.currency]) locale.currency = s.currency;
       // Records written before this default existed carry no flag, and the test
       // is NOT "does it disagree with the language" — under the old code USD was
-      // the default in every language, so a stored USD tells us nothing and a
-      // returning French visitor (the whole case this fixes) would be read as
-      // having chosen dollars and left on them. Only a stored EUR can have been
-      // picked deliberately, so only that migrates in as pinned.
+      // the default in every language and in every region, so a stored USD tells
+      // us nothing and a returning French (or British) visitor — the whole case
+      // this fixes — would be read as having chosen dollars and left on them.
+      // Only a stored non-USD can have been picked deliberately, so only that
+      // migrates in as pinned.
       locale.curPinned = (s && typeof s.curPinned === "boolean") ? s.curPinned
-        : !!(s && s.currency === "EUR");
+        : !!(s && s.currency && s.currency !== "USD");
     }
   } catch (e) {}
   // Resolved here, not in init(), because app.js reads ESB_LOCALE.currency on
   // its first quote — deriving it later would paint the page in $ and swap it.
-  if (!locale.curPinned) locale.currency = LANG_CUR[locale.lang] || "USD";
+  if (!locale.curPinned) locale.currency = defaultCurrency(locale.lang);
   window.ESB_LOCALE = locale;
 
   /* ── currency ─────────────────────────────────────────────────────────── */
-  // Fixed FX rate for both the displayed price AND the Stripe charge. The amount
-  // is recomputed server-side (pricing.py) in USD, then converted to the picked
-  // currency at THIS rate for the charge — pricing.CHARGE_RATES mirrors this map,
-  // so change one, change the other, or the Stripe page won't match the button.
-  window.ESB_RATES = { USD: 1, EUR: 0.92 };
-
   var LOCALE_TAG = { en: "en-US", fr: "fr-FR", de: "de-DE" };
+  // The euro's symbol placement is language-specific — "€72" for an English
+  // reader, "72 €" for a French or German one — so EUR follows the language.
+  // The rest are pinned to a tag of their own instead of following the reader:
+  // the dollar and the pound are prefix marks wherever they are read, a French
+  // formatter renders GBP as "72,00 £GB", and CAD is the one that actually
+  // matters — Canada's own en-CA formats it as a bare "$72", identical to USD,
+  // so a Canadian could not tell which currency the page was quoting. en-US
+  // gives it a distinct mark. Never move CAD to en-CA or fr-CA to "localise" it.
+  var CUR_TAG = { USD: "en-US", GBP: "en-GB", CAD: "en-US" };
   var EUR_TAG = { en: "en-IE", fr: "fr-FR", de: "de-DE" };
+
+  /* A currency whose mark we set ourselves rather than take from the formatter.
+     CLDR's en-US symbol for CAD is "CA$"; the site shows "C$" — shorter, and on
+     a 375px phone the money line is the width that decides whether the save pill
+     keeps its row. This is the ONLY place the site's own mark for a currency is
+     decided, and it has to agree with the three server-side surfaces that print
+     a charged amount back to a human — build.py's CURRENCIES icon, ops.js
+     CUR_SYM and payments.CURRENCY_SIGNS. `test_currency_signs()` asserts all
+     four, because a page quoting "C$319" over a receipt saying "CA$319" is the
+     same one-set-of-numbers failure as a bare "$5" in the chrome. */
+  var CUR_MARK = { CAD: "C$" };
   var _fmtCache = {};
   function formatter(cur, lang, cents) {
-    var tag = cur === "EUR" ? (EUR_TAG[lang] || "en-IE") : "en-US";
+    var tag = cur === "EUR" ? (EUR_TAG[lang] || "en-IE") : (CUR_TAG[cur] || "en-US");
     var key = cur + tag + (cents ? "2" : "0");
     if (!_fmtCache[key]) {
       _fmtCache[key] = new Intl.NumberFormat(tag, {
@@ -77,7 +194,16 @@
   // Currency-aware money. app.js delegates its usd() here.
   window.esbMoney = function (n, cents) {
     var cur = locale.currency, rate = window.ESB_RATES[cur] || 1;
-    return formatter(cur, locale.lang, cents).format(n * rate);
+    var f = formatter(cur, locale.lang, cents), v = n * rate;
+    var mark = CUR_MARK[cur];
+    if (!mark) return f.format(v);
+    // Rewrite the currency PART, not the finished string. Where the mark sits is
+    // the formatter's business — it leads in en-US and trails in fr-FR — and a
+    // string replace would have to know that, as well as never colliding with a
+    // digit group that happened to spell the symbol.
+    return f.formatToParts(v).map(function (part) {
+      return part.type === "currency" ? mark : part.value;
+    }).join("");
   };
 
   /* ── translation lookup, used by app.js for its dynamic strings ───────── */
@@ -972,6 +1098,16 @@
         "Le compte est libre en quelques minutes et le délai de livraison s'arrête. Reprenez quand vous avez fini de jouer.",
       "last game": "dernière partie",
       "Play window": "Créneau de jeu",
+      "Watch live": "Regarder en direct",
+      "Streaming now": "En diffusion",
+      "Not streaming": "Hors diffusion",
+      "is sharing their screen.": "partage son écran.",
+      "isn't streaming right now.": "ne diffuse pas pour le moment.",
+      "Discord screen share": "Partage d'écran Discord",
+      "Join and watch": "Rejoindre et regarder",
+      "Open the order channel": "Ouvrir le salon de la commande",
+      "The channel is private to you and your booster, and closes when the order is delivered.":
+        "Le salon est privé entre vous et votre booster, et se ferme à la livraison de la commande.",
       "Timeline": "Chronologie",
       "reached": "atteint",
       "claimed the order": "a pris la commande",
@@ -2352,6 +2488,16 @@
         "Das Konto ist innerhalb von Minuten frei und die Lieferzeit stoppt. Setze fort, wenn du fertig gespielt hast.",
       "last game": "letztes Spiel",
       "Play window": "Spielzeiten",
+      "Watch live": "Live zusehen",
+      "Streaming now": "Streamt gerade",
+      "Not streaming": "Streamt nicht",
+      "is sharing their screen.": "teilt gerade den Bildschirm.",
+      "isn't streaming right now.": "streamt gerade nicht.",
+      "Discord screen share": "Discord-Bildschirmübertragung",
+      "Join and watch": "Beitreten und zusehen",
+      "Open the order channel": "Kanal zur Bestellung öffnen",
+      "The channel is private to you and your booster, and closes when the order is delivered.":
+        "Der Kanal ist privat zwischen dir und deinem Booster und wird nach der Lieferung geschlossen.",
       "Timeline": "Verlauf",
       "reached": "erreicht",
       "claimed the order": "hat die Bestellung angenommen",
@@ -2672,7 +2818,7 @@
     // so the single reformatStaticMoney() / esbRender() pass at the foot of this
     // function does both jobs at once, and syncAll() re-marks the currency
     // control that just moved underneath the reader.
-    if (!locale.curPinned) locale.currency = LANG_CUR[lang] || "USD";
+    if (!locale.curPinned) locale.currency = defaultCurrency(lang);
     var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
       acceptNode: function (n) {
         if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;

@@ -42,6 +42,13 @@ boosters.ndjson
 site/guides.ndjson
 guides.ndjson
 
+# Local abandoned-cart store (src/carts.py). Holds a captured email NEXT TO the
+# order it was about to buy, plus the single-use recovery token that resolves to
+# a real discount server-side — so it is the most sensitive of these five, not
+# the least. Production writes to Upstash. Never committed.
+site/carts.ndjson
+carts.ndjson
+
 # Vercel CLI project link (project/org ids). Local-only, never committed.
 .vercel
 

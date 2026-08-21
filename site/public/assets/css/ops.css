@@ -200,6 +200,18 @@ select.field { padding-right: 26px; }
 .seg button[aria-pressed="true"] { background: var(--raised); color: var(--ink); }
 
 /* ── banners ─────────────────────────────────────────────────────────── */
+/* The custom-range row. It only shows when the period select is on "Custom
+   range", so it is free to push the topbar's other controls along; the toolbar
+   already wraps. `[hidden]` needs its own guard for the same reason .banner
+   does — an explicit `display` beats the UA rule. */
+.dates { display: inline-flex; align-items: center; gap: 6px; }
+.dates[hidden] { display: none; }
+.dates .field { min-width: 0; }
+.dates-sep { color: var(--muted); font-size: 13px; }
+@media (max-width: 860px) {
+  .dates { flex-wrap: wrap; }
+}
+
 .banner {
   display: flex; gap: 10px; align-items: flex-start;
   padding: 12px 14px; border-radius: var(--radius); margin-bottom: 18px;
@@ -215,6 +227,16 @@ select.field { padding-right: 26px; }
 }
 .banner strong { color: var(--ink); }
 .banner .ico { flex: 0 0 auto; font-size: 14px; }
+/* The synthetic banner's include/exclude switch. Deliberately an inline,
+   underlined control rather than a real button: it sits mid-sentence, and
+   button chrome inside a warning strip reads as the page's primary action,
+   which this is emphatically not. */
+.banner [data-syn-toggle] {
+  font: inherit; color: var(--ink); background: none; border: 0; padding: 0;
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.banner [data-syn-toggle]:hover { color: var(--warning); }
+.banner [data-syn-toggle]:focus-visible { outline: 2px solid var(--warning); outline-offset: 2px; }
 
 /* ── sidebar nav (was horizontal tabs) ─────────────────────────────────── */
 .tabs { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
@@ -414,6 +436,8 @@ select.field { padding-right: 26px; }
 
 @media (max-width: 1080px) {
   .kpis { grid-template-columns: repeat(3, 1fr); }
+  /* The live row holds four, so a 3-column grid strands the last one alone. */
+  .lv-kpis.kpis { grid-template-columns: repeat(4, 1fr); }
   .card.half, .card.third, .card.twothirds { grid-column: span 12; }
 }
 
@@ -609,6 +633,13 @@ select.field { padding-right: 26px; }
 .ostat-delivered   { color: var(--good); border-color: color-mix(in srgb, var(--good) 55%, transparent); background: color-mix(in srgb, var(--good) 15%, transparent); }
 .ostat-unclaimed   { color: var(--serious); border-color: color-mix(in srgb, var(--serious) 55%, transparent); background: color-mix(in srgb, var(--serious) 14%, transparent); }
 .ostat-refunded    { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 55%, transparent); background: color-mix(in srgb, var(--critical) 14%, transparent); }
+/* Cart lifecycle (Carts tab). Waiting is neutral, Mailed is in-flight amber,
+   Recovered is the good green, Closed is muted — an unsubscribe or a dead token
+   is not an error, so it is not red. */
+.ostat-pending     { color: var(--ink-2); border-color: var(--hairline); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.ostat-mailed      { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 55%, transparent); background: color-mix(in srgb, var(--warning) 14%, transparent); }
+.ostat-recovered   { color: var(--good); border-color: color-mix(in srgb, var(--good) 55%, transparent); background: color-mix(in srgb, var(--good) 15%, transparent); }
+.ostat-expired     { color: var(--muted); border-color: var(--hairline); background: transparent; }
 
 .order-hero { background:
     linear-gradient(120deg, color-mix(in srgb, var(--s1) 10%, transparent), transparent 62%),
@@ -627,7 +658,7 @@ select.field { padding-right: 26px; }
 
 @media (max-width: 640px) {
   .lv-now-n { font-size: 46px; }
-  .lv-kpis.kpis { grid-template-columns: repeat(3, 1fr); }
+  .lv-kpis.kpis { grid-template-columns: repeat(2, 1fr); }   /* 2×2, not 3 + orphan */
   .lv-behavior { flex-wrap: wrap; }
   .lv-stage { flex-basis: calc(50% - 2px); }
   .lv-stage-sep { display: none; }

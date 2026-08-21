@@ -57,6 +57,65 @@
   }
   window.esbTrack = track;
 
+  /* ── which server the form opens on ───────────────────────────────────────
+     It used to open on North America for every visitor on earth, so a European
+     buyer's first act on the page was correcting it — on the one control that
+     decides who can take their order. The default is now read from where they
+     are, and it is deliberately binary: NA or EU, the two estates the roster
+     actually covers in depth (see geo.py's server_area(), which owns that call
+     and the reasoning). Every other server is still one tap away in the same
+     control, and a visitor who picks one keeps it — this only decides what is
+     selected before anybody touches anything.
+
+     The signal is the browser's own IANA timezone. That is geo.py's second
+     choice after the edge header, which a static page cannot read, and it is a
+     better one here than the locale: it says where the machine IS, where
+     `en-US` on a laptop in Berlin says only what language it is in. It costs no
+     request, no permission prompt and no PII — navigator.geolocation would need
+     all three for a worse answer than a server list needs. */
+  /* The estate — "NA" or "EU" — comes from window.esbGeo, which i18n.js
+     publishes. It lives there rather than here purely because of load order:
+     i18n.js runs first and has to settle the currency off the same location
+     before ESB_LOCALE is published, and two copies of that reasoning would
+     disagree the day one of them was edited. i18n.js ships on every page
+     layout() renders, so the fallback below is inert. */
+  function serverArea() {
+    return (window.esbGeo && window.esbGeo.area()) || "EU";
+  }
+
+  /* The nine ladders name the same two estates five different ways — "North
+     America" / "North America East", "Europe" / "Europe West" / "EU Nordic &
+     East" — so the estate is resolved against the game's OWN list rather than
+     written down per game. Exact name first, then the prefix, so a game that
+     has plain "Europe" is never handed "Europe West". */
+  function regionFor(game, area) {
+    var list = D.regions[game] || [];
+    var pats = area === "NA"
+      ? [/^North America$/, /^North America\b/]
+      : [/^Europe$/, /^Europe\b/, /^EU\b/];
+    for (var p = 0; p < pats.length; p++) {
+      for (var i = 0; i < list.length; i++) {
+        if (pats[p].test(list[i])) return list[i];
+      }
+    }
+    return list[0] || "";
+  }
+
+  /* The estate a region NAME belongs to, so switching game carries the choice
+     across instead of resetting it — a visitor on "Europe West" who moves to a
+     ladder that calls it "Europe" has not asked to be moved to America. Returns
+     "" for the servers that are neither (Oceania, Korea, Brazil…), which fall
+     back to the visitor's own area. */
+  function areaOf(name) {
+    if (/^North America\b/.test(name || "")) return "NA";
+    if (/^Europe\b|^EU\b/.test(name || "")) return "EU";
+    return "";
+  }
+
+  function defaultRegion(game, current) {
+    return regionFor(game, areaOf(current) || serverArea());
+  }
+
   /* ── state ───────────────────────────────────────────────────────────── */
   var DEFAULT = {
     game: "League of Legends", service: "division",
@@ -67,11 +126,11 @@
     // and the price falls back to the ladder floor.
     wins: 3, placements: 3, unranked: false,
     // Full region name (not a short code): it must match an entry in
-    // D.regions[game] or a fresh visitor — who gets DEFAULT verbatim, before
-    // load()'s normalization runs — is left on an invalid region. "North
-    // America" is the first region for LoL and Valorant (and a valid NA variant
-    // for every other game), so it is the default server everywhere.
-    region: "North America", addons: [], promo: "",
+    // D.regions[game], because a fresh visitor gets DEFAULT verbatim before
+    // load()'s normalization runs. Filled in below rather than written here —
+    // it is resolved from the visitor's own timezone, so there is no one name
+    // that is right to store in the literal.
+    region: "", addons: [], promo: "",
     // Opt-in bundle (index into D.bundles[game]) — a real discount that replaces
     // the sitewide sale on a matching climb. Never auto-set; dropped when the
     // climb stops matching (tier or target change). See bundleDiscount().
@@ -87,6 +146,13 @@
     // goes into the formula on BOTH sides first.
     booster: ""
   };
+
+  // Resolved once, at parse time, so the object handed to a fresh visitor is
+  // already correct — paint() writes state.region into the <select>, and the
+  // server-rendered options carry no `selected`, so this is what the control
+  // opens on. DEFAULT.game is the resolution target: load() re-resolves per
+  // game for anyone arriving with a stored order on a different one.
+  DEFAULT.region = regionFor(DEFAULT.game, serverArea());
 
   /* How long a saved configuration still describes what the visitor wants.
      The ranks are worth remembering across a session or a day — someone who
@@ -115,7 +181,13 @@
         s.from = l[0];
         s.to = l[Math.min(12, l.length - 1)];
       }
-      if ((D.regions[s.game] || []).indexOf(s.region) < 0) s.region = (D.regions[s.game] || ["EU"])[0];
+      // A stored region this game doesn't offer: keep the ESTATE if the stored
+      // name names one (Europe West → Europe), else fall back to the visitor's
+      // own. list[0] is a North America variant on all nine ladders, so the old
+      // fallback quietly sent every European back to America on a game change.
+      if ((D.regions[s.game] || []).indexOf(s.region) < 0) {
+        s.region = defaultRegion(s.game, s.region);
+      }
       if (s.mode !== "Solo" && s.mode !== "Duo queue") s.mode = "Solo";  // migrate old "Piloted"
       // Drop anything the catalogue no longer sells (the retired stream option)
       // and anything belonging to the other queue — a stored state predates
@@ -136,6 +208,45 @@
       state.savedAt = Date.now();          // stamps the TTL load() reads
       localStorage.setItem(KEY, JSON.stringify(state));
     } catch (e) {}
+    captureCart();
+  }
+
+  /* ── abandoned-cart capture, while they configure ────────────────────────
+     Posts the configuration on every state change, heavily debounced. There is
+     NO email here and none is ever asked for: the server attaches the address
+     from the visitor's *verified* session cookie and answers 204 when there
+     isn't one, so an anonymous configurator stores nothing. That is also why
+     this can be unconditional — the browser never learns whether a cart was
+     written, and cannot name an account it isn't signed into.
+     Fire-and-forget: a failed capture must never surface or block the UI. */
+  var _capT = null, _capLast = "";
+  function captureCart() {
+    if (!window.fetch) return;
+    clearTimeout(_capT);
+    _capT = setTimeout(function () {
+      var q = quote(state);
+      if (!q || q.invalid) return;             // nothing worth recovering yet
+      var sig = JSON.stringify([state.game, state.service, state.from, state.to,
+                                state.mode, state.region, state.addons,
+                                state.wins, state.placements, state.unranked]);
+      if (sig === _capLast) return;
+      _capLast = sig;
+      try {
+        fetch("/api/cart", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",          // the session cookie is the point
+          body: JSON.stringify({
+            game: state.game, service: state.service, from: state.from,
+            to: state.to, mode: state.mode, region: state.region,
+            addons: state.addons || [], wins: state.wins,
+            placements: state.placements, unranked: !!state.unranked,
+            booster: state.booster || "", bundle: state.bundle || "",
+            tz: (Intl.DateTimeFormat().resolvedOptions().timeZone || ""),
+            lang: (navigator.language || "")
+          })
+        }).catch(function () {});
+      } catch (e) {}
+    }, 2500);
   }
 
   function set(patch, evt) {
@@ -264,6 +375,19 @@
       if (typed && (!best || typed.pct > best.pct)) {
         bestCode = String(code).trim().toUpperCase(); best = typed;
       }
+    }
+    /* The abandoned-cart recovery offer. Deliberately NOT in D.promos: that
+       table ships to every browser in data.js, so a static recovery code would
+       be public the day it shipped. window.ESB_RECOVERY is set only after the
+       server has validated a token the buyer arrived with (GET /api/cart), and
+       it exists here purely so this quote matches what the server will charge —
+       payments.build_session() refuses a total the page did not show. The
+       percentage is never sent back; only the token is. Same never-stack,
+       best-wins rule as pricing.resolvePromo(). */
+    var rec = window.ESB_RECOVERY;
+    if (rec && rec.pct > 0 && (!best || rec.pct > best.pct)) {
+      bestCode = rec.token || "BACK";
+      best = { pct: rec.pct, label: "Come back offer", ends: "" };
     }
     return { code: bestCode, promo: best };
   }
@@ -850,7 +974,7 @@
 
     // "Add options" and any other link that follows the selected game
     each("[data-game-link]", function (el) {
-      el.setAttribute("href", "/games/" + D.slugs[state.game] + ".html#configure");
+      el.setAttribute("href", "/games/" + D.slugs[state.game] + "#configure");
     });
 
     // game tags (home switcher)
@@ -1040,6 +1164,57 @@
     });
   }
 
+  /* ── the sticky bar's clearance, measured rather than assumed ─────────────
+     `body.has-bar` reserves the bar's height at the foot of the page so the last
+     row of content is reachable rather than pinned under a fixed element. That
+     reserve used to be four hand-set constants (116 / 146 coaching / 146 below
+     360px / 150 checkout), each measured against one configuration — and the
+     measurement they share is the one thing on the bar that MOVES: `.mb-money`
+     is `flex-wrap: wrap`, so the save pill drops to a second line whenever the
+     price, its struck original and the pill stop fitting on one, and the bar
+     goes 109px → 139px.
+
+     Which totals do that is not a property of the page, it is a property of the
+     number: a three-figure total already wraps at 375px in dollars and euros,
+     where the constant assumed only sub-360px phones and the coaching CTA could,
+     and adding CAD — a "C$" prefix over an amount 1.37× the dollar one — pushes
+     far more orders across the line. Chasing that with a fifth constant per
+     currency is not a thing anyone can keep true.
+
+     So the bar is measured and the reserve follows it, the same way `--hd-top`
+     follows the header's live bottom edge. The constants stay in the CSS as the
+     `var()` fallbacks, which is what a no-JS page and the moment before the
+     first measurement still get. */
+  function initBarReserve() {
+    var bar = document.querySelector(".mobile-bar");
+    if (!bar) return;
+    var last = -1;
+    function measure() {
+      // Above the bar's breakpoint it is `display: none` and measures 0. Writing
+      // that would hand the page a zero reserve; clearing the property instead
+      // drops it back to the CSS constant, which is inert while the bar is gone.
+      // `translateY`/`visibility` on the un-revealed bar do not change its
+      // height, so this is correct before the reveal as well as after.
+      var h = Math.ceil(bar.getBoundingClientRect().height);
+      if (h === last) return;
+      last = h;
+      if (h > 0) document.documentElement.style.setProperty("--mb-h", h + "px");
+      else document.documentElement.style.removeProperty("--mb-h");
+    }
+    measure();
+    // Every re-quote can change the number of lines the money takes, so the one
+    // event that fires on each is the hook. render() dispatches it after its
+    // writes, so the read here reflects the total that is now on screen.
+    document.addEventListener("esb:render", measure);
+    var rt;
+    window.addEventListener("resize", function () {
+      clearTimeout(rt); rt = setTimeout(measure, 150);
+    });
+    // A cold cache measures the fallback face; Inter is wider at these sizes and
+    // can be what tips the line into wrapping.
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
+  }
+
   /* Rebuild a fixed-length strip of spans only when it no longer matches the
      game it was built for — two games can share a rung count (LoL and Rocket
      League both have 29), so the count alone is not enough of a guard. */
@@ -1183,7 +1358,9 @@
     state.game = game;
     state.from = l[0];
     state.to = l[Math.min(12, l.length - 1)];
-    if ((D.regions[game] || []).indexOf(state.region) < 0) state.region = (D.regions[game] || [])[0];
+    if ((D.regions[game] || []).indexOf(state.region) < 0) {
+      state.region = defaultRegion(game, state.region);
+    }
     save();
   }
 
@@ -1484,6 +1661,7 @@
       if (document.querySelector('[data-service="coaching"]')) {
         document.body.classList.add("has-bar-coach");
       }
+      initBarReserve();
     }
 
     initHeader();

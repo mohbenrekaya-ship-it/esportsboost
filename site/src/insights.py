@@ -16,7 +16,12 @@ Definitions used throughout (stated once so the dashboard never has to guess):
   * **Visitor** — a distinct anonymous id. **Session** — a distinct session id;
     the client opens a new one after 30 minutes idle.
   * **Conversion rate** — purchasing sessions ÷ sessions. Session-based, not
-    visitor-based, so it matches what the funnel shows.
+    visitor-based, so it matches what the funnel shows. Both sides of that
+    fraction count only real traffic: seeded rows (`syn=1`) are dropped by
+    `compute()` unless it is asked for them, and our own browser never beacons
+    at all (`?esb_internal=1`, analytics.js). A test checkout is a `purchase`
+    event like any other, so at a few dozen sessions those two exclusions are
+    the difference between a rate and a rumour.
   * **Reached a funnel step** — the session emitted that event at least once.
     Steps are cumulative and monotonic by construction: reaching a later step
     back-fills the earlier ones, so a lost `view_item` beacon can never make a
@@ -221,16 +226,28 @@ def _mod_overview(sess, prev_sess, pageviews):
     }
 
 
-def _mod_timeseries(sess, start, end):
+def _mod_timeseries(sess, start, end, tzoff=0):
+    """Daily buckets aligned to the WINDOW's own boundaries, not to UTC.
+
+    `start` is already the reader's local midnight (ops.js resolves the period
+    in the browser), so stepping in whole days from it keeps every bucket on a
+    local day. Bucketing on `t % DAY` instead put a UTC+1 reader who asked for
+    1–3 August on a chart labelled 31 Jul → 3 Aug: the first local day began at
+    23:00 UTC the evening before, so it opened its own extra bucket. `tzoff` is
+    the browser's `getTimezoneOffset()` in minutes (west-positive, so UTC+1
+    sends -60) and only moves the printed label onto the right calendar day.
+    """
     days = OrderedDict()
-    d = start - (start % DAY)
+    d = start
     while d <= end:
-        days[d] = {"d": time.strftime("%Y-%m-%d", time.gmtime(d)),
+        days[d] = {"d": time.strftime("%Y-%m-%d", time.gmtime(d - tzoff * 60)),
                    "sessions": 0, "orders": 0, "revenue": 0.0, "visitors": 0}
         d += DAY
     seen = defaultdict(set)
     for s in sess:
-        key = s.start - (s.start % DAY)
+        if s.start < start:
+            continue
+        key = start + ((s.start - start) // DAY) * DAY
         row = days.get(key)
         if row is None:
             continue
@@ -796,11 +813,17 @@ def _mod_liveview(events, first_seen, now):
         "today": {
             "sessions": len(day), "orders": len(orders),
             "revenue": _money(sum(s.value for s in orders)),
+            # Same `_rate()` as the Overview tile and every breakdown — the
+            # window is what differs (a rolling 24h, never the period selector),
+            # which is why the console labels it "· 24h". Defined here rather
+            # than divided in ops.js so the dashboard keeps its rule that no
+            # number exists in two places.
+            "cr": _rate(len(orders), len(day)),
         },
     }
 
 
-def stripe_summary(days=30):
+def stripe_summary(days=30, start=None, end=None):
     """Paid orders straight from Stripe — the money's own source of truth,
     independent of whether a beacon ever fired. Returns None when no key is
     configured, which is the normal state in a static preview."""
@@ -811,9 +834,12 @@ def stripe_summary(days=30):
     if not payments.stripe_key():
         return None
     try:
+        if start is None or end is None:
+            end = int(time.time())
+            start = end - days * DAY
         res = payments.stripe_call(
             "/checkout/sessions",
-            {"limit": 100, "created[gte]": int(time.time()) - days * DAY},
+            {"limit": 100, "created[gte]": int(start), "created[lte]": int(end)},
             method="GET")
     except Exception:                                          # noqa: BLE001
         return None
@@ -854,13 +880,43 @@ def stripe_summary(days=30):
 # ══════════════════════════════════════════════════════════════════════════
 #  entry point
 # ══════════════════════════════════════════════════════════════════════════
-def compute(events, days=30, game=None, now=None, with_stripe=True):
+def compute(events, days=30, game=None, now=None, with_stripe=True,
+            synthetic=False, start=None, end=None, tzoff=0):
     """All dashboard modules for the trailing `days` window, plus the window
-    immediately before it for the deltas."""
+    immediately before it for the deltas.
+
+    Seeded rows (`syn=1`, from tools/seed_analytics.py) are DROPPED from every
+    number by default and only counted for the banner. Labelling them was not
+    enough: a synthetic session sits in the conversion rate's denominator
+    exactly like a real one, and `_rate()` cannot tell them apart, so a store
+    with any seeded traffic left in it published a blended figure under a
+    warning nobody re-reads after the first week. Pass `synthetic=True` to put
+    them back, which is what keeps the seeder useful for exercising the
+    renderer against a full-looking dashboard.
+    """
     now = int(now or time.time())
     days = max(1, min(int(days or 30), 365))
-    start = now - days * DAY
-    prev_start = start - days * DAY
+
+    # Two ways to name a window. `days` is the trailing-N-days shorthand every
+    # caller used before explicit ranges existed; `start`/`end` are absolute
+    # epochs and are what the console sends, because only the browser knows the
+    # reader's timezone — "today" computed here would be today in UTC, which is
+    # the wrong day for a European operator for part of every evening.
+    if start is not None and end is not None:
+        start, end = int(start), int(end)
+    else:
+        end = now
+        start = end - days * DAY
+    # The comparison window is the same LENGTH immediately before, so a delta
+    # means the same thing for a custom range as it does for "30 days".
+    span = max(60, end - start)
+    prev_start = start - span
+
+    # Counted before the filter, or the banner reports the zero it just made.
+    syn_in_window = sum(1 for e in events
+                        if e.get("syn") and start <= e.get("t", 0) <= end)
+    if not synthetic:
+        events = [e for e in events if not e.get("syn")]
 
     # First-seen is computed over everything we hold, not just the window, so a
     # visitor returning after the window opened is still counted as returning.
@@ -870,7 +926,7 @@ def compute(events, days=30, game=None, now=None, with_stripe=True):
         if a and (a not in first_seen or t < first_seen[a]):
             first_seen[a] = t
 
-    window = [e for e in events if e.get("t", 0) >= start]
+    window = [e for e in events if start <= e.get("t", 0) <= end]
     prev_window = [e for e in events if prev_start <= e.get("t", 0) < start]
 
     sess = sessionize(window)
@@ -882,16 +938,20 @@ def compute(events, days=30, game=None, now=None, with_stripe=True):
 
     return {
         "meta": {
-            "days": days, "start": start, "end": now,
+            "days": days, "start": start, "end": end,
             "generated": now, "events": len(window), "stored": len(events),
             # Seeded events carry syn=1 (see tools/seed_analytics.py). The
             # dashboard must keep saying so for as long as any are in the
             # window — placeholder numbers that lose their label become real
-            # numbers in someone's head.
-            "synthetic": sum(1 for e in window if e.get("syn")),
+            # numbers in someone's head. `synthetic` is the count found BEFORE
+            # the filter above; `synthetic_excluded` says whether the numbers
+            # below were computed without them, so the banner can state which
+            # of the two it is instead of leaving the reader to guess.
+            "synthetic": syn_in_window,
+            "synthetic_excluded": not synthetic,
         },
         "overview": _mod_overview(sess, prev_sess, pageviews),
-        "timeseries": _mod_timeseries(sess, start, now),
+        "timeseries": _mod_timeseries(sess, start, end, tzoff),
         "funnel": _mod_funnel(sess),
         "configurator": _mod_configurator(sess, game),
         "journey": _mod_journey(sess, first_seen),
@@ -903,5 +963,5 @@ def compute(events, days=30, game=None, now=None, with_stripe=True):
         # The live view is always "right now", not the selected period — it
         # reads its own short windows off the full store.
         "liveview": _mod_liveview(events, first_seen, now),
-        "stripe": stripe_summary(days) if with_stripe else None,
+        "stripe": stripe_summary(days, start, end) if with_stripe else None,
     }

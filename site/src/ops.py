@@ -31,6 +31,7 @@ from hashlib import sha256
 import accounts
 import analytics
 import boosters
+import carts
 import guides
 import insights
 import orders
@@ -141,9 +142,33 @@ def _clear_failures():
 
 
 # ── the one route ────────────────────────────────────────────────────────
-def dashboard_data(days=30, game=None):
+MAX_RANGE = 400 * 86400          # a hair over a year, so "12 months" always fits
+
+
+def _range(body):
+    """An absolute window from the console, or None to fall back to `days`.
+
+    The browser sends epochs because it is the only side that knows the
+    reader's timezone. Validated here rather than trusted: an end before its
+    start, or a range wider than MAX_RANGE, would walk the whole event store.
+    """
+    a, b = body.get("start"), body.get("end")
+    if a is None or b is None:
+        return None, None
+    try:
+        a, b = int(a), int(b)
+    except (TypeError, ValueError):
+        return None, None
+    if a < 0 or b <= a or (b - a) > MAX_RANGE:
+        return None, None
+    return a, b
+
+
+def dashboard_data(days=30, game=None, synthetic=False, start=None, end=None,
+                   tzoff=0):
     events = analytics.read()
-    payload = insights.compute(events, days=days, game=game)
+    payload = insights.compute(events, days=days, game=game, synthetic=synthetic,
+                               start=start, end=end, tzoff=tzoff)
     payload["meta"]["store"] = analytics.store_name()
     return payload
 
@@ -172,6 +197,17 @@ def process_ops(raw):
     except (TypeError, ValueError):
         days = 30
     game = body.get("game") if isinstance(body.get("game"), str) else None
+    # Off by default: the dashboard's job is to report real traffic, and seeded
+    # rows in the denominator are indistinguishable from real ones once they are
+    # in. The console's own toggle is the only thing that turns them back on.
+    synthetic = body.get("synthetic") is True
+    r_start, r_end = _range(body)
+    # getTimezoneOffset(), minutes. Bounded to the real range of world offsets
+    # so a junk value cannot shift a label by years.
+    try:
+        tzoff = max(-900, min(900, int(body.get("tzoff") or 0)))
+    except (TypeError, ValueError):
+        tzoff = 0
 
     if action == "login":
         if _too_many_attempts():
@@ -184,7 +220,8 @@ def process_ops(raw):
             time.sleep(0.4)          # blunt the online guessing rate
             return 401, {"error": "bad_password"}
         _clear_failures()
-        return 200, {"token": make_token(), "data": dashboard_data(days, game)}
+        return 200, {"token": make_token(),
+                     "data": dashboard_data(days, game, synthetic, r_start, r_end, tzoff)}
 
     if not check_token(body.get("token")):
         return 401, {"error": "expired"}
@@ -214,6 +251,13 @@ def process_ops(raw):
         # the same way rather than bundled into every dashboard refresh.
         return 200, {"boosters": boosters.summary()}
 
+    if action == "carts":
+        # The abandoned-checkout store — a separate store again, and like Accounts
+        # and Orders it holds PII (the email a buyer typed or their session
+        # supplied), so it is fetched on demand rather than bundled into every
+        # dashboard refresh.
+        return 200, {"carts": carts.summary(days)}
+
     if action == "guides":
         # The free-guides mailing list — its own store again, and like Accounts
         # it holds emails (PII), so it is fetched on demand rather than bundled
@@ -237,4 +281,4 @@ def process_ops(raw):
             return 404, {"error": "not_found"}
         return 200, {"order": det}
 
-    return 200, {"data": dashboard_data(days, game)}
+    return 200, {"data": dashboard_data(days, game, synthetic, r_start, r_end, tzoff)}

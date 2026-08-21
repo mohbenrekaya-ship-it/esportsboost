@@ -266,6 +266,74 @@ Notes worth keeping in mind:
 
 ---
 
+## Turn on abandoned-checkout recovery
+
+When a **signed-in** visitor configures an order, or **anyone** types their email
+on the checkout page, and then doesn't pay, the configuration is captured. Thirty
+minutes later a sweep mails them a single-use 30%-off link. A paid order burns the
+code. The captured carts, and how many came back, are in the **Carts** tab of
+`/ops`.
+
+It needs three things already covered elsewhere in this doc — the Upstash store
+(same credentials as analytics), **email** (the [Turn on email](#turn-on-email-hostinger-smtp)
+section — the recovery mail goes out through the same SMTP seam), and Stripe (so
+a payment can burn the token) — plus two of its own:
+
+1. In **Vercel → Project → Settings → Environment Variables**, add:
+
+   | Name | Value | Notes |
+   | --- | --- | --- |
+   | `CART_SWEEP_SECRET` | a long random string (16+ chars) | **Required.** Protects `/api/sweep`. Without it the sweep is `503` and **no recovery mail is ever sent** — an unprotected sweep endpoint would let anyone make the site send mail on demand. |
+   | `CRON_SECRET` | **the same value** as `CART_SWEEP_SECRET` | Vercel Cron sends `Authorization: Bearer $CRON_SECRET`; the sweep accepts that as its secret, so setting the two equal makes native cron authenticate itself. |
+   | `CART_RECOVERY_PCT` | `0.30` | Optional. The discount, as a fraction. Defaults to 30%. |
+   | `CART_DELAY_SECS` | `1800` | Optional. How long after capture a cart becomes mailable. Defaults to 30 minutes. |
+   | `CART_TOKEN_TTL` | `604800` | Optional. How long a recovery code works. Defaults to 7 days. |
+   | `CARTS_MAX` | `5000` | Optional. Caps the stored cart list. |
+
+   **Redeploy** after adding.
+
+2. **The sweep is already scheduled.** `vercel.json` carries a `crons` entry that
+   hits `/api/sweep` every 5 minutes — this needs the **Vercel Pro** plan (Hobby
+   caps cron at once per day, which cannot honour a 30-minute delay; on Hobby,
+   point an external scheduler such as cron-job.org at
+   `https://<your-domain>/api/sweep` with an `x-sweep-secret: <CART_SWEEP_SECRET>`
+   header instead, and remove the `crons` block). A 5-minute cadence means the
+   mail lands 30–35 minutes after capture — close enough to the promise, and
+   deliberately not per-minute.
+
+3. **Check it.** Locally, run the server with the secret set and a real captured
+   cart older than the delay:
+
+   ```
+   CART_SWEEP_SECRET=… CART_DELAY_SECS=0 SMTP_USER=… SMTP_PASSWORD=… \
+     python3 site/serve.py 4321
+   curl -X POST localhost:4321/api/cart/sweep -H 'x-sweep-secret: …'
+   ```
+
+   It returns `{"due": N, "sent": N, …}`. In production, the **Carts** tab shows
+   each cart move `Waiting → Mailed → Recovered`.
+
+Notes worth keeping in mind:
+
+- **The recovery discount never leaks and never stacks.** It is not a code in
+  `data.py` (those ship to every browser in `data.js`) — it is a per-cart,
+  single-use, server-resolved token. It **replaces** the sitewide sale rather
+  than adding to it, so a recovered buyer gets 30%, never 45%.
+- **The 30% is off the list price**, so someone who saw $88 (already 15% off)
+  pays $73. The email states both figures honestly ("You saw $88 — now $73").
+- **This store holds PII** (the email, the country), like the sign-up and orders
+  stores — same treatment applies: a lawful basis, a privacy-policy line, a
+  deletion path. The captured address is only ever used to recover *that* order;
+  the checkout note under the email field says so, and every recovery mail
+  carries a one-click unsubscribe.
+- **A signed-in capture uses the verified session email**, never an address the
+  browser names — so no one can write a cart against someone else's inbox. An
+  anonymous configuration with no email stores nothing.
+- **Clear seeded carts before launch**, the same as every other store — `/ops`
+  banners any it finds.
+
+---
+
 ## Turn on social sign-in (Google + Discord)
 
 The header's "Continue with Google / Discord" buttons run a real OAuth
