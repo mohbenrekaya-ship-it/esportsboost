@@ -744,9 +744,29 @@ def _state(row, pct=0):
     }
 
 
+def list_total(row):
+    """The order's LIST price — `subtotal`, before any discount.
+
+    ⚠ This, not `price_pair()`'s first element, is what a mail may strike
+    through. That one is the price **with the sitewide sale already on it**, so
+    striking it while claiming "30% off" states a reduction that is not what the
+    arithmetic did: a $48 climb sells at $41 in a 15% sale and at $34 with the
+    code, and "30% off — $34 instead of $41" is a 17% claim wearing a 30% label.
+    It also disagreed with the checkout page the mail links to, which strikes the
+    list. Every discount on this site is a percentage of the list, so the list is
+    the only figure a percentage may be quoted against."""
+    import pricing
+    q = pricing.quote(_state(row))
+    return 0 if q.get("invalid") else _int(q.get("subtotal"))
+
+
 def price_pair(row):
     """(normal_total, offer_total) for a stored row, recomputed — never a total
-    the client sent. (0, 0) when the configuration no longer prices."""
+    the client sent. (0, 0) when the configuration no longer prices.
+
+    The first element is the price **at today's sale**, which is what /ops means
+    by what an order is worth. For the figure a mail strikes through, use
+    `list_total()` — see the warning there."""
     import pricing
     now_q = pricing.quote(_state(row))
     if now_q.get("invalid"):
@@ -784,7 +804,8 @@ def send_code(row):
         import mailer
         if not mailer.configured() or not mailer.valid(row.get("email") or ""):
             return False
-        total, offer_total = price_pair(row)
+        _sale, offer_total = price_pair(row)
+        total = list_total(row)        # strike the LIST, never the sale price
         origin = _origin()
         ok, err = mailer.send(
             row["email"], SUBJECT % int(round((row.get("pct") or OFFER_PCT) * 100)),

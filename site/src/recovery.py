@@ -108,7 +108,7 @@ def _text(cart, now_q, off_q, origin):
         "sale rather than stacking with it, so %s is the final price.\n\n"
         "Not interested? Unsubscribe: %s\n"
         % (cart.get("game") or "boost", climb,
-           _usd(now_q["total"]), _usd(off_q["total"]),
+           _usd(now_q["subtotal"]), _usd(off_q["total"]),
            token, _link(origin, token), _usd(off_q["total"]),
            _unsub(origin, token))
     )
@@ -160,7 +160,7 @@ Finish my order</a></p>
     <a href="%(unsub)s" style="color:#77706a">Unsubscribe</a></p>
 </div></body></html>""" % {
         "game": game, "climb": climb, "eta": eta, "token": token, "link": link,
-        "unsub": unsub, "was": esc(_usd(now_q["total"])),
+        "unsub": unsub, "was": esc(_usd(now_q["subtotal"])),
         "now": esc(_usd(off_q["total"])),
     }
 

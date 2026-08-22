@@ -210,7 +210,7 @@ def _text(row, now_q, off_q, origin, cur):
         "  %s\n"
         "  %s instead of %s. Delivery %s.\n\n"
         % (was, token, pct, was, climb,
-           money(off_q["total"], cur), money(now_q["total"], cur), now_q.get("eta") or "")
+           money(off_q["total"], cur), money(now_q["subtotal"], cur), now_q.get("eta") or "")
     )
     if hours:
         out += (
@@ -320,7 +320,7 @@ Finish my order — %(newp)s</a></p>
         "pct": pct, "was": was,
         "climb": esc(now_q.get("summary") or row.get("game") or "your order"),
         "eta": esc(now_q.get("eta") or ""),
-        "oldp": esc(money(now_q["total"], cur)), "newp": esc(money(off_q["total"], cur)),
+        "oldp": esc(money(now_q["subtotal"], cur)), "newp": esc(money(off_q["total"], cur)),
         "hour_block": hour_block,
         "worth_tag": (" — worth %s" % esc(worth)) if worth else "",
         "stream": esc(stream_line()), "stream_label": esc(stream_label()),
@@ -363,9 +363,9 @@ def _warn_text(row, now_q, off_q, origin, cur, mins):
         "Not interested? Unsubscribe: %s\n"
         % (mins, token, int(round((row.get("pct") or mystery.OFFER_PCT) * 100)), mins,
            now_q.get("summary") or row.get("game") or "your order",
-           money(off_q["total"], cur), money(now_q["total"], cur),
+           money(off_q["total"], cur), money(now_q["subtotal"], cur),
            now_q.get("eta") or "", _link(origin, token), mins,
-           money(now_q["total"], cur), _unsub(origin, token)))
+           money(now_q["subtotal"], cur), _unsub(origin, token)))
 
 
 def _warn_html(row, now_q, off_q, origin, cur, mins):
@@ -412,7 +412,7 @@ Finish my order &mdash; %(newp)s</a></p>
         "mins": mins, "pct": pct,
         "climb": esc(now_q.get("summary") or row.get("game") or "your order"),
         "eta": esc(now_q.get("eta") or ""),
-        "oldp": esc(money(now_q["total"], cur)), "newp": esc(money(off_q["total"], cur)),
+        "oldp": esc(money(now_q["subtotal"], cur)), "newp": esc(money(off_q["total"], cur)),
         "token": esc(token), "link": esc(_link(origin, token)),
         "unsub": esc(_unsub(origin, token)),
     }

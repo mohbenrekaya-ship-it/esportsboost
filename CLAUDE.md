@@ -2324,6 +2324,15 @@ replaced in the same five minutes.
   only mail the store sends. `/api/bingo/unsubscribe` mirrors the cart route in `serve.py`, with
   `api/bingo/unsubscribe.py` as its Vercel shell for the reason `api/cart/unsubscribe.py` exists.
   It retires the row from **both** sweeps, since `nomail` is read by each.
+- ⚠ **A struck price in a mail is the LIST (`subtotal`), never the sale price.** Every
+  discount here is a percentage of the list, and the sitewide sale is already one of them,
+  so striking the post-sale total while quoting the code's rate states a reduction the
+  arithmetic never made: a $48 climb sells at $41 in a 15% sale and $34 with the code, and
+  the code mail shipped *"30% off your order — $34 instead of $41"*, which is 17%. It also
+  disagreed with the checkout page it links to, which strikes `subtotal`.
+  `mystery.list_total()` exists for this; `price_pair()`'s first element is the sale price
+  and belongs only in /ops, where "what an order is worth" is the question.
+  `test_a_struck_price_is_the_list_never_the_sale_price()` holds all three mails to it.
 - **The mail argues with four derived numbers and types none of them.** The price pair is re-quoted
   at send time (`price_pair()`), never read off the row — same rule as `payments.build_session()`;
   the ETA is `quote()`'s; the screen share's worth is `was_pct × addon_base`, the same arithmetic

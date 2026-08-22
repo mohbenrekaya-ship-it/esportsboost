@@ -459,6 +459,53 @@ def test_a_lapsed_card_still_tracks_the_order():
     check(len(mystery.due_followup()) == 1, "it is still due exactly one chase")
 
 
+def test_a_struck_price_is_the_list_never_the_sale_price():
+    """REGRESSION — a real mail said "30% off your order — $34 instead of $41",
+    which is 17%.
+
+    Every discount here is a percentage of the LIST, and the sitewide sale is
+    already one of them. Striking the post-sale total while quoting the code's
+    rate states a reduction the arithmetic never made, and it disagreed with the
+    checkout page the mail links to, which strikes `subtotal`. So the struck
+    figure in any mail is `subtotal` and the claimed percentage has to hold
+    against it."""
+    reset()
+    row = _lapsed("struck@x.com")
+
+    # the exact shape that produced the bad mail: a live sitewide sale
+    q = pricing.quote(mystery._state(row))
+    check(q["discount"] > 0 and q["subtotal"] > q["total"],
+          "there IS a sitewide sale on this order, so the two differ")
+
+    # the code mail
+    listed, offer = mystery.list_total(row), mystery.price_pair(row)[1]
+    check(listed == q["subtotal"], "list_total() is the pre-discount subtotal")
+    check(listed > q["total"], "and it is above today's sale price")
+    text = mystery._mail_text(row, "https://x.test", listed, offer)
+    pct = int(round(mystery.OFFER_PCT * 100))
+    check(("%d%%" % pct) in text, "the code mail claims %d%%" % pct)
+    check(mystery._usd(listed) in text and mystery._usd(offer) in text,
+          "and strikes the list against the offer price")
+    real = (1 - offer / float(listed)) * 100
+    check(abs(real - pct) <= 2,
+          "the claim holds: %s → %s is %.0f%%, claimed %d%%"
+          % (mystery._usd(listed), mystery._usd(offer), real, pct))
+
+    # the reminder and the chase
+    for label, pair, rate in (
+            ("reminder", followup.price_pair(row, mystery.OFFER_PCT), mystery.OFFER_PCT),
+            ("chase", followup.price_pair(row, mystery.FOLLOWUP_PCT), mystery.FOLLOWUP_PCT)):
+        nq, oq = pair
+        want = int(round(rate * 100))
+        got = (1 - oq["total"] / float(nq["subtotal"])) * 100
+        check(abs(got - want) <= 2,
+              "the %s's %s → %s is %.0f%%, claimed %d%%"
+              % (label, followup.money(nq["subtotal"], "usd"),
+                 followup.money(oq["total"], "usd"), got, want))
+        check(nq["subtotal"] != nq["total"],
+              "and it is NOT the sale price being struck (%s)" % label)
+
+
 def test_mail_figures_come_from_the_real_sources():
     """Every number and name in these mails is read, never typed. Each check
     here is a way one of them could silently drift from the page it claims to
@@ -1012,6 +1059,7 @@ def test_summary():
 def main():
     for fn in (test_clean_capture, test_token_shape, test_one_card_per_address,
                test_followup_due_rules, test_followup_is_once_ever,
+               test_a_struck_price_is_the_list_never_the_sale_price,
                test_mail_figures_come_from_the_real_sources,
                test_stream_pitch_is_gated_on_the_verification_flag,
                test_the_warning_marks_before_it_sends,
