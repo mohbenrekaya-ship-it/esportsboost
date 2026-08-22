@@ -2244,7 +2244,7 @@ has — somebody set two ranks, read a price, gave an address and then stopped �
 ```
 capture ──► MAIL 1  the code            30%, 1h    (mystery.send_code)
    +30m ──► MAIL 2  the reminder        30%, 30m left — NO new offer
-   +60m ──► MAIL 3  the chase           35%, 24h   (mystery.revive: SAME token)
+   +60m ──► MAIL 3  card is over        35%, 24h   (mystery.revive: SAME token)
                           │
      all three ──► /checkout?bingo=<token> ──► the resolve carries the CONFIG
 ```
@@ -2372,10 +2372,19 @@ replaced in the same five minutes.
   understates the programme by the difference on every one.
 - **Restart the server after touching these files** — `/api/bingo/unsubscribe` and `/api/cart/sweep`
   live in `serve.py`, no watcher. Env knobs: `BINGO_FOLLOWUP_PCT` (0.35), `BINGO_FOLLOWUP_DELAY`
-  (**0** — the chase lands as the card dies, per the business's "30 minutes a
-  reminder, one hour the 35%"), `BINGO_FOLLOWUP_TTL` (86400),
+  (**0** — the third mail's subject IS the expiry, so it lands on it: the
+  business's spec is "one with the code, one reminder after 30 min, and one
+  after 1 hour to say card and promo is over and last chance is 35%"),
+  `BINGO_FOLLOWUP_TTL` (86400),
   `BINGO_FOLLOWUP_MAX_AGE` (259200),
   `BINGO_WARN_DELAY` (1800), `ESB_PLAY_HOURS_PER_DAY` (8), `ESB_PER_HOUR_MAX` (6).
+- **`site/tools/rehearse_mail_sequence.py`** drives the whole lifecycle on a fake
+  clock against throwaway stores with a captured transport — the three mails at the
+  right minutes, what each says, every guard (a buyer is never chased, an unsubscribe
+  sticks, a re-capture cannot reset a chased card, nothing sends twice) and the outbox.
+  No socket is opened. Run it before touching the cron; it is the only way to see a
+  time-based sequence whole, and it exists because two incidents reached real customers
+  first.
 - **`site/tools/send_test_mail.py --sequence`** renders and sends all three against a
   sample card in a **throwaway store**, so no real row is touched and no live token is
   spent. `--code` / `--warn` / `--chase` send one. It is the only way to look at these

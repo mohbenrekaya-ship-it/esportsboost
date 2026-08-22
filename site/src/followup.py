@@ -71,7 +71,10 @@ import mystery
 import pricing
 
 
-SUBJECT = "One more step: %d%% off your %s order"
+# Mail 3's whole subject is that the card is gone. The business's wording:
+# "one after 1 hour to say card and promo is over and last chance is 35%" — so
+# the expiry leads, the last chance follows, and the rate is the proof.
+SUBJECT = "Your card expired — last chance, %d%% off your %s order"
 # The struck figure beside the free screen share, as a fraction of the boost —
 # the add-on table's own `was_pct`, read rather than repeated so the mail and
 # the order card cannot quote two different values for the same option.
@@ -201,11 +204,12 @@ def _text(row, now_q, off_q, origin, cur):
     worth = stream_worth(off_q, cur)
     _t, pause = pause_promise()
     out = (
-        "Your card expired before you used it, so we put something better behind it.\n\n"
+        "Your card has expired and the %d%% went with it.\n\n"
+        "So here is the last one: we put a better rate behind the same code.\n\n"
         "  %s  —  now %d%% off, up from %d%%.\n\n"
         "  %s\n"
         "  %s instead of %s. Delivery %s.\n\n"
-        % (token, pct, was, climb,
+        % (was, token, pct, was, climb,
            money(off_q["total"], cur), money(now_q["total"], cur), now_q.get("eta") or "")
     )
     if hours:
@@ -263,10 +267,11 @@ Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e8e3dd">
 <div style="max-width:520px;margin:0 auto;padding:32px 24px">
   <p style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#ff7a3f;\
 margin:0 0 8px">eSports Boost</p>
-  <h1 style="font-size:26px;line-height:1.25;margin:0 0 16px">Your card expired. This one is better.</h1>
+  <h1 style="font-size:26px;line-height:1.25;margin:0 0 16px">Your card expired.<br>Last chance, at %(pct)d%%.</h1>
   <p style="font-size:15px;line-height:1.6;color:#b9b2aa;margin:0 0 24px">
-    You did not use it in the hour, so we put <b style="color:#e8e3dd">%(pct)d%% off</b> behind
-    the same code — up from %(was)d%%. Nothing else to do; it is already on the order below.</p>
+    The hour ran out and the %(was)d%% went with it. So we put
+    <b style="color:#e8e3dd">%(pct)d%% off</b> behind the same code instead — up from
+    %(was)d%%. Nothing else to do; it is already on the order below.</p>
 
   <table style="width:100%%;border-collapse:collapse;background:#141210;border:1px solid \
 rgba(255,255,255,.10);border-radius:10px;margin:0 0 20px">

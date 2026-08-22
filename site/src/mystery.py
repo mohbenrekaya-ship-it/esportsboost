@@ -96,22 +96,19 @@ OFFER_LABEL = "Mystery discount"
 # only the /ops Mystery tab against real traffic can. It is set by the business
 # (2026-08-22); see CLAUDE.md.
 FOLLOWUP_PCT = float(os.environ.get("BINGO_FOLLOWUP_PCT", "0.35") or 0.35)
-# How long after the first hour lapses the second mail goes out. **One hour**,
-# by the business's spec (2026-08-22): capture → +30 min a reminder → the card
-# dies at +60 min → the 35% lands an hour after that, at +120 min. Measured from
-# the EXPIRY, not from capture, so re-tuning `TOKEN_TTL` moves the chase with the
-# deadline it is chasing instead of silently overlapping it.
+# How long after the card expires the last-chance mail goes out. **Zero**, by
+# the business's spec (2026-08-22): three mails — the code, a reminder at
+# +30 min, and at +60 min one saying the card and the promo are over and the
+# last chance is 35%. That third mail's whole subject is the expiry, so it lands
+# ON it; the sweep runs every five minutes, so in practice 60–65 minutes after
+# capture.
 #
-# The gap is deliberate. Offering a better rate in the same minute the first one
-# dies tells the buyer the countdown was theatre — which is the one thing
-# `TOKEN_TTL` exists to stop. An hour is long enough that the card really is
-# gone and short enough that they still remember the price.
-#
-# The two windows are defined against this: `due_warning()` requires the card
-# still be inside its hour and `due_followup()` requires
-# `now >= expires + FOLLOWUP_DELAY`, so any non-negative value keeps them
-# disjoint and a negative one would not.
-FOLLOWUP_DELAY = max(0, int(os.environ.get("BINGO_FOLLOWUP_DELAY", "3600") or 3600))
+# Measured from the EXPIRY rather than from capture, so re-tuning `TOKEN_TTL`
+# moves the chase with the deadline it is announcing instead of drifting into
+# the live window. The two sweeps stay disjoint at any non-negative value:
+# `due_warning()` requires `now < expires`, `due_followup()` requires
+# `now >= expires + FOLLOWUP_DELAY`.
+FOLLOWUP_DELAY = max(0, int(os.environ.get("BINGO_FOLLOWUP_DELAY", "0") or 0))
 # The second window. Longer than the first hour — this one has to survive a
 # night's sleep, and the mail says so — but still a real deadline, enforced by
 # `redeemable()` exactly like the first.

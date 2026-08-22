@@ -943,11 +943,18 @@ def test_followup_copy():
     text = followup._text(revived, now_q, off_q, origin, "usd")
     html = followup._html(revived, now_q, off_q, origin, "usd")
 
+    # The ban is on the PROBABILITY sense — every card pays the same rate, so
+    # the copy must never imply a draw was involved. It is deliberately not a
+    # ban on the bare word "chance": mail 3's own subject is "last chance",
+    # which is a claim about a deadline the store enforces, not about odds.
     for blob, name in ((text, "text"), (html, "html")):
         low = blob.lower()
-        for phrase in ("chance", "odds", "lucky", "randomly", "guarantee your rank",
-                       "risk-free", "no risk"):
+        for phrase in ("chance of", "chances", "1 in ", "odds", "probability",
+                       "lucky", "luck", "random", "you won", "winner",
+                       "guarantee your rank", "risk-free", "no risk"):
             check(phrase not in low, "the %s mail never says %r" % (name, phrase))
+        check("last chance" in low or "expired" in low,
+              "but the %s mail DOES say the card is gone" % name)
         check(revived["token"] in blob, "the %s mail carries the working code" % name)
         check("/checkout?bingo=" + revived["token"] in blob,
               "and links straight to checkout with it (%s)" % name)
