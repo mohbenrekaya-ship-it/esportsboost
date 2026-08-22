@@ -39,7 +39,9 @@ site/tests/test_mail.py` (header injection, the honeypot, the rate cap and the t
 `python3 site/tests/test_carts.py` (abandoned-checkout capture and the recovery token) and `python3
 site/tests/test_mystery.py` (the mystery-discount token, its hour, one-card-per-inbox, the copy
 rule that keeps the flat deck honest, and the follow-up: revive-not-reissue, one chase ever, and the
-per-hour claim that drops itself when it stops arguing for the order) — the build succeeds (prints `built 114 pages + 207 images …
+per-hour claim that drops itself when it stops arguing for the order, the halfway
+warning's window, the config beacon's allowlist and the figures the mails are
+built from) — the build succeeds (prints `built 114 pages + 207 images …
 (+ /ops console)`), then load the affected pages and check the browser console. There is no linter
 or formatter.
 
@@ -2248,7 +2250,15 @@ capture ──► MAIL 1  the code            30%, 1h    (mystery.send_code)
 ```
 
 `/api/sweep` — the **same cron and secret as the cart recovery** — runs
-`followup.sweep_all()`, which does warnings then chases. **The two windows cannot
+`followup.sweep_all()`, which does warnings then chases. ⚠ **It is held behind
+`BINGO_FOLLOWUP_ENABLED=1` and is OFF by default**, checked in
+`carts.process_sweep()` before `followup` is even imported. That cron already runs
+every five minutes in production, so without the gate the deploy carrying this
+feature would have started mailing real addresses within minutes, unattended, on
+the domain the order confirmations go out on. The default is the safety property,
+not an oversight — `test_followup_is_off_unless_switched_on()` asserts it, along
+with the fact that only an exact `"1"` arms it. A broken follow-up is caught and
+must never take the cart recovery down with it; that has its own test too. **The two windows cannot
 overlap by construction**: `due_warning()` requires the card still be inside its
 hour, `due_followup()` requires it be past it. `test_warning_and_chase_can_never_collide()`
 walks a card's whole life and asserts no minute claims both, because the failure it

@@ -83,7 +83,8 @@ def _h(headers=None):
     return lambda name: low.get(str(name).lower(), "")
 
 
-import data as _D                                                    # noqa: E402
+import data as D                                                     # noqa: E402
+_D = D
 D_STREAM_VERIFIED = getattr(_D, "STREAM_CLAIM_VERIFIED", False)
 
 ORDER = {"game": "League of Legends", "service": "division", "from": "Gold IV",
@@ -458,6 +459,138 @@ def test_a_lapsed_card_still_tracks_the_order():
     check(len(mystery.due_followup()) == 1, "it is still due exactly one chase")
 
 
+def test_mail_figures_come_from_the_real_sources():
+    """Every number and name in these mails is read, never typed. Each check
+    here is a way one of them could silently drift from the page it claims to
+    agree with — the failure mode is a mail quoting a figure the site does not."""
+    reset()
+    row = _lapsed("figs@x.com")
+    _n, off = followup.price_pair(row)
+
+    # The screen share's worth must be the SAME figure the order card strikes,
+    # from the same arithmetic — not a second formula that happens to match.
+    worth = followup.stream_worth(off, "usd")
+    canon = pricing.addon_list_price(off.get("addon_base") or 0, "stream")
+    check(worth == followup.money(canon, "usd"),
+          "the stream figure is pricing.addon_list_price(), not a second formula")
+    check(canon > 0, "and it is a real number on this order (%s)" % worth)
+
+    # The row's name must be the add-on's own label, so the mail tells the buyer
+    # to tick something they will actually see on the checkout page.
+    labels = [a["label"] for a in D.ADDONS if a.get("id") == "stream"]
+    check(followup.stream_label() == labels[0],
+          "the mail names the add-on exactly as the picker does")
+
+    # Pause is a signed-off product promise, not sales copy written for a mail.
+    title, body = followup.pause_promise()
+    check(any(title == t and body == b for _g, t, b in D.DASHBOARD_POINTS),
+          "the pause line is lifted verbatim from D.DASHBOARD_POINTS")
+
+    # The ETA in the mail is the engine's, and the hours are bounded by it.
+    check(off["eta"] == pricing.eta_text(off["days"]),
+          "the delivery line is pricing.eta_text(), not a restatement")
+    hours = pricing.play_hours(off["days"])
+    check(hours <= off["days"] * 24,
+          "and the hours claim cannot exceed the calendar the ETA promised")
+
+
+def test_stream_pitch_is_gated_on_the_verification_flag():
+    """A comparative claim about every competitor at once, falsifiable by one
+    of them. It ships only when the flag says it is substantiated — the same
+    mechanism rating_ld() uses to wait on TRUSTPILOT_URL."""
+    real = D.STREAM_CLAIM_VERIFIED
+    try:
+        D.STREAM_CLAIM_VERIFIED = False
+        off = followup.stream_line().lower()
+        check("other sites" not in off and "most sites" not in off,
+              "unverified: the mail claims nothing about competitors")
+        D.STREAM_CLAIM_VERIFIED = True
+        on = followup.stream_line().lower()
+        check("sites" in on, "verified: the comparative sentence ships")
+        check(off != on, "and the flag is what decides, with no code change")
+    finally:
+        D.STREAM_CLAIM_VERIFIED = real
+    check(D.STREAM_CLAIM_VERIFIED is False,
+          "it is still False today — the claim is not substantiated")
+
+
+def test_the_warning_marks_before_it_sends():
+    """Same rule as the chase: a half-succeeding SMTP call must not leave the
+    card warnable on every sweep for the rest of its hour."""
+    reset()
+    _st, p = _capture("wmark@x.com")
+    row = mystery.get(p["token"])
+    row["at"] = int(time.time()) - mystery.WARN_DELAY - 60
+    row["expires"] = row["at"] + mystery.TOKEN_TTL
+    mystery.put(row)
+
+    import mailer
+    real_conf, real_send = mailer.configured, mailer.send
+    try:
+        mailer.configured = lambda: True
+        mailer.send = lambda *a, **k: (_ for _ in ()).throw(AssertionError("unreachable"))
+        # A transport that reports failure rather than raising.
+        mailer.send = lambda *a, **k: (False, "550 mailbox unavailable")
+        out = followup.sweep_warnings()
+        check(out["sent"] == 0 and out["failed"] == 1, "the send failed")
+        check(mystery.get(p["token"]).get("warned") == 1,
+              "and the row is still marked, so the next sweep does not retry it")
+        check(mystery.due_warning() == [], "it is out of the due set for good")
+    finally:
+        mailer.configured, mailer.send = real_conf, real_send
+
+
+def test_unsubscribe_route_contract():
+    """One click, no login, and it must not disclose whether a token exists."""
+    reset()
+    _st, p = _capture("unsub@x.com")
+    st, body = mystery.process_unsubscribe(p["token"])
+    check(st == 200 and body.get("ok"), "a real token answers 200 ok")
+    st2, body2 = mystery.process_unsubscribe("BINGO-NOTATOKEN")
+    check((st2, body2) == (st, body),
+          "and an unknown one answers identically — no existence oracle")
+    check(mystery.get(p["token"]).get("nomail") == 1, "the real row is flagged")
+    check(mystery.redeemable(p["token"]) is not None,
+          "and the discount it was offered still works")
+
+
+def test_ops_counters_track_the_sequence():
+    """The Mystery tab is the only place the two give-aways are visible, and
+    they cost different rates — folding them together understates the
+    programme by the difference on every chased row."""
+    reset()
+    _st, a = _capture("ops1@x.com")                      # untouched card
+    warned = _lapsed("ops2@x.com")                       # will be warned
+    mystery.mark_warned(warned["token"])
+    chased = _lapsed("ops3@x.com")                       # will be chased + paid
+    mystery.revive(chased["token"])
+    mystery.redeem(chased["token"], order_id="ESB-OPS")
+    due = _lapsed("ops4@x.com")                          # waiting for the chase
+    gone = _lapsed("ops5@x.com")
+    mystery.unsubscribe(gone["token"])
+
+    s = mystery.summary(days=30)
+    check(s["warned"] == 1, "warned counts the halfway mails")
+    check(s["chased"] == 1 and s["chased_redeemed"] == 1, "chased and its conversion")
+    check(s["chase_rate"] == 100.0, "the chase rate is over chased rows, not all rows")
+    # Two: the plain lapsed row AND the warned one. A warning does not consume
+    # the chase — it adds no offer, so the card it warned about is still owed
+    # its one last call.
+    check(s["chase_due"] == 2, "two rows are waiting on the next sweep")
+    check(sorted(r["email"] for r in mystery.due_followup())
+          == ["ops2@x.com", "ops4@x.com"],
+          "including the already-warned one — a warning is not a chase")
+    check(s["unsubs"] == 1, "and one opted out")
+    check(s["followup_pct"] == mystery.FOLLOWUP_PCT
+          and s["pct"] == mystery.OFFER_PCT
+          and s["followup_pct"] != s["pct"],
+          "both rates are reported, and they are not the same number")
+    check(s["warn_delay_mins"] == mystery.WARN_DELAY // 60,
+          "the panel reads the real constants, never a typed pair")
+    stages = sorted(r["stage"] for r in s["recent"])
+    check(stages.count("followup") == 1, "and each row carries its own stage")
+
+
 def test_warning_and_chase_can_never_collide():
     """Mail 2 fires INSIDE the hour, mail 3 only once it is dead. If the two
     windows ever overlapped, one visitor would be told their discount is
@@ -780,6 +913,10 @@ def test_summary():
 def main():
     for fn in (test_clean_capture, test_token_shape, test_one_card_per_address,
                test_followup_due_rules, test_followup_is_once_ever,
+               test_mail_figures_come_from_the_real_sources,
+               test_stream_pitch_is_gated_on_the_verification_flag,
+               test_the_warning_marks_before_it_sends,
+               test_unsubscribe_route_contract, test_ops_counters_track_the_sequence,
                test_config_beacon_tracks_the_latest_order,
                test_config_beacon_cannot_move_the_offer,
                test_config_beacon_freezes_on_a_paid_row,

@@ -40,6 +40,12 @@ for _k in ("UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"):
 _TMP = tempfile.NamedTemporaryFile(prefix="esb-carts-test-", suffix=".ndjson", delete=False)
 _TMP.close()
 os.environ["CARTS_LOG"] = _TMP.name
+# The sweep also drives the mystery follow-up (behind BINGO_FOLLOWUP_ENABLED),
+# so that store needs a throwaway file too — importing followup would otherwise
+# read the real mystery.ndjson.
+_TMPB = tempfile.NamedTemporaryFile(prefix="esb-carts-bingo-", suffix=".ndjson", delete=False)
+_TMPB.close()
+os.environ["BINGO_LOG"] = _TMPB.name
 
 import carts             # noqa: E402
 import pricing           # noqa: E402
@@ -241,6 +247,64 @@ def test_sweep_requires_a_secret():
     os.environ.pop("CART_SWEEP_SECRET", None)
 
 
+def test_followup_is_off_unless_switched_on():
+    """The sweep drives TWO mailers now, and the second is off by default.
+
+    The cron already runs every five minutes in production, so a deploy that
+    carried the follow-up would have started mailing real addresses within
+    minutes, unattended, on the domain the order confirmations go out on. The
+    default is the safety property — if this test starts failing because the
+    default flipped, that is the bug, not the test."""
+    os.environ["CART_SWEEP_SECRET"] = "x" * 20
+    os.environ.pop("BINGO_FOLLOWUP_ENABLED", None)
+
+    st, pl = carts.process_sweep(b"{}", _h({"x-sweep-secret": "x" * 20}))
+    check(st == 200, "the sweep still runs")
+    check(pl.get("followup", {}).get("skipped"),
+          "but the follow-up is skipped with the switch unset")
+    check("sent" in pl, "and the cart recovery is unaffected")
+
+    for val in ("", "0", "true", "yes", "TRUE", " 1 x"):
+        os.environ["BINGO_FOLLOWUP_ENABLED"] = val
+        _st, pl = carts.process_sweep(b"{}", _h({"x-sweep-secret": "x" * 20}))
+        check(pl.get("followup", {}).get("skipped"),
+              "only an exact '1' arms it, not %r" % val)
+
+    os.environ["BINGO_FOLLOWUP_ENABLED"] = "1"
+    _st, pl = carts.process_sweep(b"{}", _h({"x-sweep-secret": "x" * 20}))
+    f = pl.get("followup", {})
+    check("skipped" not in f, "'1' arms it")
+    check("warn" in f and "chase" in f,
+          "and it runs BOTH stages — the warning and the chase")
+
+    os.environ.pop("BINGO_FOLLOWUP_ENABLED", None)
+    os.environ.pop("CART_SWEEP_SECRET", None)
+
+
+def test_a_broken_followup_never_takes_the_cart_sweep_down():
+    """They share one timer. Losing an upsell mail is cheaper than losing the
+    recovery mail that has been live for months."""
+    import followup
+    os.environ["CART_SWEEP_SECRET"] = "x" * 20
+    os.environ["BINGO_FOLLOWUP_ENABLED"] = "1"
+    real = followup.sweep_all
+
+    def boom(*a, **k):
+        raise RuntimeError("upstash on fire")
+    followup.sweep_all = boom
+    try:
+        st, pl = carts.process_sweep(b"{}", _h({"x-sweep-secret": "x" * 20}))
+        check(st == 200, "the sweep still answers 200")
+        check("sent" in pl and "due" in pl,
+              "the cart recovery still ran and reported")
+        check("fire" in str(pl.get("followup", {}).get("error", "")),
+              "and the follow-up failure is reported, not raised")
+    finally:
+        followup.sweep_all = real
+        os.environ.pop("BINGO_FOLLOWUP_ENABLED", None)
+        os.environ.pop("CART_SWEEP_SECRET", None)
+
+
 # ── summary shape ──────────────────────────────────────────────────────────
 def test_summary():
     reset()
@@ -282,7 +346,9 @@ def main():
                test_recovery_pct_is_never_read_from_the_client, test_token_is_single_use,
                test_token_expires, test_resolve_endpoint,
                test_recovery_never_stacks_and_never_worsens, test_due_respects_the_delay,
-               test_sweep_requires_a_secret, test_summary):
+               test_sweep_requires_a_secret,
+               test_followup_is_off_unless_switched_on,
+               test_a_broken_followup_never_takes_the_cart_sweep_down, test_summary):
         print("\n" + fn.__name__)
         fn()
     try:
