@@ -37,8 +37,9 @@ Verification is: the four test files pass — `python3 site/tests/test_pricing.p
 the bundle rules, the JS/Python mirror, the currency charge and the checkout payload), `python3
 site/tests/test_mail.py` (header injection, the honeypot, the rate cap and the two order mails),
 `python3 site/tests/test_carts.py` (abandoned-checkout capture and the recovery token) and `python3
-site/tests/test_mystery.py` (the mystery-discount token, its hour, one-card-per-inbox, and the copy
-rule that keeps the flat deck honest) — the build succeeds (prints `built 114 pages + 207 images …
+site/tests/test_mystery.py` (the mystery-discount token, its hour, one-card-per-inbox, the copy
+rule that keeps the flat deck honest, and the follow-up: revive-not-reissue, one chase ever, and the
+per-hour claim that drops itself when it stops arguing for the order) — the build succeeds (prints `built 114 pages + 207 images …
 (+ /ops console)`), then load the affected pages and check the browser console. There is no linter
 or formatter.
 
@@ -2223,6 +2224,138 @@ target rank settles ──800ms──► 4s ──► modal ──email──►
   off a single order. `test_mystery.py` covers the plumbing; nothing can tell you whether the lift
   pays for it except real traffic and the Mystery tab.
 
+### The mail sequence — `followup.py`, two more mails after the code
+
+`src/followup.py` is to `mystery.py` what `recovery.py` is to `carts.py`: the mailer that works the
+rows the store says are ready. A card that ran out of its hour unbought is the best lead the site
+has — somebody set two ranks, read a price, gave an address and then stopped — and this is the
+**only** other message that will ever be sent about it.
+
+```
+capture ──► MAIL 1  the code            30%, 1h    (mystery.send_code)
+   +30m ──► MAIL 2  halfway warning     30%, ~30m left — NO new offer
+   +90m ──► MAIL 3  the chase           35%, 24h   (mystery.revive: SAME token)
+                          │
+     all three ──► /checkout?bingo=<token> ──► the resolve carries the CONFIG
+```
+
+`/api/sweep` — the **same cron and secret as the cart recovery** — runs
+`followup.sweep_all()`, which does warnings then chases. **The two windows cannot
+overlap by construction**: `due_warning()` requires the card still be inside its
+hour, `due_followup()` requires it be past it. `test_warning_and_chase_can_never_collide()`
+walks a card's whole life and asserts no minute claims both, because the failure it
+prevents is a visitor told their discount is running out and that it has been
+replaced in the same five minutes.
+
+- ⚠ **The row tracks the LIVE order, or none of this is worth sending.** The card is
+  offered ~8s after the target rank settles and people keep configuring afterwards —
+  they add Priority, switch to Duo, move the server, extend the climb. A row frozen at
+  capture makes all three mails quote an order the visitor abandoned two steps later,
+  and `/checkout?bingo=` hydrate a basket they never wanted: not a slightly stale mail,
+  an irrelevant one. `captureBingoConfig()` in app.js therefore beacons the current
+  state on every `save()` (debounced 2.5s, same contract as `captureCart()`, and it
+  runs on checkout too), and `mystery.update_config()` writes **`CONFIG_FIELDS` and
+  nothing else**. Not `expires` — an edit is not a reason to restart a countdown, and a
+  deadline that renews itself whenever the buyer touches a control is not a deadline.
+  Not `pct`, `status`, `stage` or `email` either, so the beacon can neither improve its
+  own offer, revive a dead card, nor re-point a row at another inbox. A **redeemed**
+  row is frozen: its configuration is the record of what was bought. A **lapsed** one
+  still tracks, because somebody who let the hour go and kept building is exactly who
+  the chase is for.
+- **Mail 2 adds nothing, and that is the design.** It does not raise the rate,
+  extend the clock or change the stage — `mark_warned()` writes one flag. It argues
+  the deadline the store already enforces, which is the one claim on this whole flow
+  that is unarguably true, so it is short: the reader saw the pitch half an hour ago.
+  `warned` is its own field rather than a `stage`, precisely because the card is
+  still on stage `card` afterwards.
+- ⚠ **No mail may claim to be the last one.** A draft of mail 3 said "there is no
+  third email" and mail 2 then made it false. A promise about what we will *not*
+  send is a promise about the roadmap, not about the order in front of the reader —
+  the mails state the deadline and stop. `test_no_mail_claims_it_is_the_last()`
+  holds every variant to it.
+
+- **The row is revived, never reissued.** `revive()` raises `pct` on the existing row and restarts
+  its clock, keeping `status: issued` and flipping `stage` to `followup`. So the code already in the
+  buyer's inbox is the one that works, one-card-per-inbox still holds, and **every client path picks
+  the new rate up from `/api/bingo?token=` with no change on the client at all**. A second row would
+  give one address two live discounts and break `find_by_email()`.
+- **One of each, ever, and that is the whole idempotency story.** `due_followup()` requires
+  `stage == "card"`, and `send_one()` revives the row — flipping it out of that set — *before* the
+  message goes to SMTP. A sweep running every five minutes therefore cannot mail twice, and a crash
+  between the two leaves the row chased rather than chaseable. Same trade `recovery.send_one()`
+  makes: losing one upsell beats sending four.
+- **A paid card is never chased and a live one is never undercut.** `revive()` refuses a `redeemed`
+  row outright, and `due_followup()` waits until `expires + FOLLOWUP_DELAY` — offering a better rate
+  while the first offer is still running teaches the buyer that the countdown is theatre, which is
+  the one thing `TOKEN_TTL` exists to stop. A row with `applied_at` set **is** chased: somebody who
+  pressed Apply and still did not pay is the strongest lead in the store, not a spent one.
+- **The unsubscribe stops the mail and keeps the code.** Deliberately not `carts.py`'s
+  `status="expired"` — a cart *is* its offer, but this row is a live discount the reader was just
+  handed, and voiding it because they asked for fewer emails punishes them for using the link.
+  `nomail` is the flag, `due_followup()` reads it, and it is the whole opt-out because this is the
+  only mail the store sends. `/api/bingo/unsubscribe` mirrors the cart route in `serve.py`, with
+  `api/bingo/unsubscribe.py` as its Vercel shell for the reason `api/cart/unsubscribe.py` exists.
+  It retires the row from **both** sweeps, since `nomail` is read by each.
+- **The mail argues with four derived numbers and types none of them.** The price pair is re-quoted
+  at send time (`price_pair()`), never read off the row — same rule as `payments.build_session()`;
+  the ETA is `quote()`'s; the screen share's worth is `was_pct × addon_base`, the same arithmetic
+  behind the struck figure on the order card, so the mail and the page state one number; and the
+  per-hour figure comes through `pricing.per_hour()`.
+- ⚠ **The per-hour claim is dropped when it does not argue for the order.** `pricing.play_hours()` is
+  `days × PLAY_HOURS_PER_DAY`, **bounded by the ETA** rather than computed beside it — the ETA is the
+  promise on the page and a missed one costs a 15% credit, so an hours figure implying more play than
+  it allows would contradict the guarantee page. A long climb still prices at $7–24/hour even at 35%,
+  and `per_hour_worth_saying()` (`PER_HOUR_MAX`, $6) drops the whole block rather than printing a
+  figure that argues against the sale. 92% of catalogue climbs come in under it. Same mechanism as
+  `gc_faq_items()`'s "the larger of the two" clause: the claim ships only while it is true.
+  **`PLAY_HOURS_PER_DAY` is an ops commitment, not a measurement** — the mail divides by it, so a
+  value set too high understates the rate and the claim stops being true. Confirm 8 with ops the way
+  `SAFETY`'s measure notes need confirming.
+- ⚠ **The comparative half of the stream pitch is gated on `D.STREAM_CLAIM_VERIFIED`**, which is
+  `False`. "Other sites charge for this" is a claim about every competitor at once and is falsifiable
+  by one of them; the shipped sentence says only what is true of us. Flip the flag when it is
+  substantiated and the sentence ships with no code change — the same mechanism `rating_ld()` uses to
+  wait on `TRUSTPILOT_URL`.
+- **The mail says "tick it", not "it is included".** `stream` is `pct=0` **with** a `was_pct`, which
+  is free-but-*optional* and ships **unticked** on purpose. A mail promising an option the buyer then
+  has to find, on a checkout where it sits unchecked, sells something the order does not carry — and
+  pre-ticking it from a link would override a deliberate default `test_free_optional_addons()` locks.
+  Naming the row is the honest fix and it is also the one that gets it attached.
+- **The checkout link carries the configuration, and it has to.** A cart is captured *on* the
+  checkout page, so a returning buyer's order is already in localStorage; a mystery card is opened on
+  a **game** page, and `esb.order.v1` is only written when somebody presses Continue. Someone who
+  never did — or who opens the mail on their phone — would land on a checkout pricing whatever that
+  browser was holding, or the catalogue default. So `process_resolve()` returns `order` and
+  `window.esbHydrate()` (new, in app.js) installs it **through `normalize()`**, the one validator.
+  `window.esbBingoAdopt()` stores the token so stepping back into the configurator does not lose it.
+- **One cron, two mailers.** `carts.process_sweep()` owns `CART_SWEEP_SECRET`, so it is the function
+  holding the door; it now calls `followup.sweep()` after `recovery.sweep()` and returns it under
+  `followup`, with the cart fields left at the top level so anything already reading that response
+  keeps working. A broken follow-up is caught and logged rather than taking the cart sweep down with
+  it. No second cron entry, no second secret to keep in step.
+- **The row stores the buyer's currency** (`cur`, sent by app.js from `ESB_LOCALE.currency`), because
+  this mail quotes money and a French buyer chased in dollars is the same one-set-of-numbers failure
+  a bare `$5` in the chrome is. `currency_of()` falls back to `geo.currency_for(country)` and then to
+  USD, so a currency with no charge rate behind it can never be displayed. `followup.money()` reads
+  `pricing.CHARGE_RATES` and `payments.CURRENCY_SIGNS` — **no fifth sign table**, per the four-surfaces
+  rule above.
+- **`/ops` Mystery tab** gains its own banner: chased, bought, waiting, opted out, and the chase rate.
+  ⚠ **Read the two rates separately** — a chased row costs 35%, not 30%, so folding them together
+  understates the programme by the difference on every one.
+- **Restart the server after touching these files** — `/api/bingo/unsubscribe` and `/api/cart/sweep`
+  live in `serve.py`, no watcher. Env knobs: `BINGO_FOLLOWUP_PCT` (0.35), `BINGO_FOLLOWUP_DELAY`
+  (1800), `BINGO_FOLLOWUP_TTL` (86400), `BINGO_FOLLOWUP_MAX_AGE` (259200),
+  `BINGO_WARN_DELAY` (1800), `ESB_PLAY_HOURS_PER_DAY` (8), `ESB_PER_HOUR_MAX` (6).
+- **`site/tools/send_test_mail.py --sequence`** renders and sends all three against a
+  sample card in a **throwaway store**, so no real row is touched and no live token is
+  spent. `--code` / `--warn` / `--chase` send one. It is the only way to look at these
+  in a real client without waiting out an hour.
+- ⚠ **The watch-live pitch is the load-bearing risk here, and it is a product one.** `streams.py`
+  does not exist: nothing opens a Discord channel and nothing tells a booster to share their screen.
+  This mail makes that the centrepiece of the offer, on top of the configurator row that already
+  sells it. Until the seam is built, every order it wins is a manual promise ops has to keep. See
+  [Watch live](#watch-live--the-boosters-screen-share--watch_panel).
+
 ## Analytics & the /ops console
 
 `app.js` has always pushed a clean funnel into `window.dataLayer` — nothing read it. The analytics
@@ -2249,7 +2382,8 @@ public/assets/js/analytics.js  ──►  POST /api/collect  ──►  src/anal
 | `site/src/boosters.py` | The roster store — another **separate** store (operator-write / public-read), `GET /api/boosters` to read, `ops.py`'s `boosters` action for the console. See [The roster store](#the-roster-store--boosters-in-the-backend). |
 | `site/tools/seed_boosters.py` | Fills the roster store from `data.py`'s `BOOSTERS` (tags rows `syn`). |
 | `site/src/mystery.py` | The mystery-discount store — a **separate** store again, `POST /api/bingo` to capture + issue, `GET /api/bingo?token=` to resolve, `ops.py`'s `mystery` action to read. Holds an email next to a live single-use discount. See [The mystery discount](#the-mystery-discount--mysterypy--the-modal-on-every-game-page). |
-| `api/collect.py`, `api/account.py`, `api/boosters.py`, `api/support.py`, `api/bingo.py`, `api/ops.py` | Vercel shells, mirroring the `serve.py` routes. |
+| `site/src/followup.py` | The second mystery mail — revives a lapsed card to 35% and chases it once, on the same cron as the cart sweep. Composes its own message; shares only `mailer.py`'s transport. See [The follow-up](#the-follow-up--followuppy-one-second-mail-on-a-lapsed-card). |
+| `api/collect.py`, `api/account.py`, `api/boosters.py`, `api/support.py`, `api/bingo.py`, `api/bingo/unsubscribe.py`, `api/ops.py` | Vercel shells, mirroring the `serve.py` routes. |
 
 **Two stores, chosen by environment.** With `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`
 set, events go to Upstash Redis over its REST API (stdlib `urllib`) — required in production,

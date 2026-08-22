@@ -1687,6 +1687,11 @@
          the card ships in the DOM, so all five are translated here; the card
          letter, the issued code, the money and the countdown are in SKIP. */
       "Mystery discount": "Remise mystère",
+      /* The other two labels a server-resolved offer can carry on the
+         checkout receipt. Untranslated they render in English beside a
+         French price — the one line on that page naming the discount. */
+      "Last-chance discount": "Remise dernière chance",
+      "Come back offer": "Offre retour",
       "Sealed for you": "Scellée pour toi",
       "A mystery discount": "Une remise mystère",
       "on this order": "sur cette commande",
@@ -3154,6 +3159,8 @@
 
       /* the mystery discount — design_handoff_mystery_discount */
       "Mystery discount": "Geheimrabatt",
+      "Last-chance discount": "Last-Minute-Rabatt",
+      "Come back offer": "Willkommen-zurück-Angebot",
       "Sealed for you": "Für dich versiegelt",
       "A mystery discount": "Ein Geheimrabatt",
       "on this order": "auf diese Bestellung",

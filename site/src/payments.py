@@ -247,7 +247,13 @@ def process_checkout(raw, base_url):
             if row and (row.get("pct") or 0) > (order.get("recovery_pct") or 0):
                 order["recovery_pct"] = row.get("pct") or mystery.OFFER_PCT
                 order["promo"] = row["token"]
-                order["offer_label"] = mystery.OFFER_LABEL
+                # `label_for()`, never the OFFER_LABEL constant: a row revived by
+                # the follow-up mail carries a different rate AND a different
+                # name, and the browser already renders the store's own label
+                # (GET /api/bingo returns it). Hard-coding the first-offer
+                # wording here made the page say "Last-chance discount" while the
+                # server called the same order a "Mystery discount".
+                order["offer_label"] = mystery.label_for(row)
         except Exception:                                       # noqa: BLE001
             pass          # a store hiccup must not block a paying customer
 

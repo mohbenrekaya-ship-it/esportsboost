@@ -8437,6 +8437,36 @@ def page_checkout():
       }).catch(function () {});
   }
 
+  /* Arriving from the mystery follow-up mail: /checkout?bingo=BINGO-…
+     Same contract as ?cart= above — the link carries only the token and the
+     discount is resolved server-side — with one addition that this flow needs
+     and the cart flow does not. A cart is captured ON this page, so a returning
+     buyer's configuration is already in localStorage; a mystery card is opened
+     on a GAME page, and `esb.order.v1` is only written when someone presses
+     Continue. Somebody who never did that — or who opens the mail on their
+     phone — would land here with no order behind the price the mail quoted. So
+     the row's stored configuration comes back with the token and is hydrated
+     through app.js's own validator before the page renders. */
+  var mydTok = (location.search.match(/[?&]bingo=([A-Za-z0-9-]+)/) || [])[1] || '';
+  if (mydTok) {
+    fetch('/api/bingo?token=' + encodeURIComponent(mydTok))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || !j.valid) return;      // spent, expired or unknown: normal sale
+        window.ESB_BINGO = { token: j.token, pct: j.pct,
+                             label: j.label || 'Mystery discount' };
+        // Keep it past this page load, so a buyer who steps back into the
+        // configurator to change something does not lose the discount.
+        // Also fills the email field — with the address the mail actually went
+        // to, which outranks anything this browser prefilled earlier.
+        if (window.esbBingoAdopt) window.esbBingoAdopt(j);
+        else if (mail && !mail.value && j.email) mail.value = j.email;
+        // Hydrate LAST: it renders, so the offer above is already in the price.
+        if (j.order && window.esbHydrate) window.esbHydrate(j.order);
+        else if (window.esbRender) window.esbRender();
+      }).catch(function () {});
+  }
+
   var CART_KEY = 'esb.cart.v1';
   var lastSent = '';
   function captureCart() {

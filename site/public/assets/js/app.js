@@ -415,6 +415,7 @@
       if (!CFG) localStorage.setItem(CHECKOUT_KEY, JSON.stringify(state));
     } catch (e) {}
     captureCart();
+    captureBingoConfig();
   }
 
   /* ── abandoned-cart capture, while they configure ────────────────────────
@@ -455,6 +456,52 @@
     }, 2500);
   }
 
+  /* ── keep a live mystery card pointed at the CURRENT order ───────────────
+     The card is offered ~8s after the target rank settles, and people keep
+     configuring afterwards. Without this the row freezes at the moment the
+     address was typed, and all three mails quote an order the visitor moved on
+     from two steps later — the wrong price against the wrong climb, and
+     /checkout?bingo= hydrating a basket they abandoned. That is not a slightly
+     stale mail, it is an irrelevant one.
+
+     Carries the token and the configuration, nothing else: the server writes
+     `CONFIG_FIELDS` only, so this can never extend the hour, raise the rate or
+     revive a dead card. Same debounce and same fire-and-forget contract as
+     `captureCart()` above — a failed beacon must never surface or block.
+     Runs wherever `save()` does, so a change made on the game page and one made
+     on checkout are both picked up. */
+  var _mydT = null, _mydLast = "";
+  function captureBingoConfig() {
+    if (!window.fetch) return;
+    var rec = mydRead();
+    if (!rec.token) return;                    // no card, nothing to point
+    clearTimeout(_mydT);
+    _mydT = setTimeout(function () {
+      var q = quote(state);
+      if (!q || q.invalid) return;             // never re-point at a broken pair
+      var sig = JSON.stringify([rec.token, state.game, state.service, state.from,
+                                state.to, state.mode, state.region, state.addons,
+                                state.wins, state.placements, state.unranked,
+                                state.bundle, state.booster]);
+      if (sig === _mydLast) return;
+      _mydLast = sig;
+      try {
+        fetch("/api/bingo", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "config", token: rec.token,
+            game: state.game, service: state.service, from: state.from,
+            to: state.to, mode: state.mode, region: state.region,
+            addons: state.addons || [], wins: state.wins,
+            placements: state.placements, unranked: !!state.unranked,
+            booster: state.booster || "", bundle: state.bundle || "",
+            cur: ((window.ESB_LOCALE && window.ESB_LOCALE.currency) || "").toLowerCase()
+          }), keepalive: true
+        }).catch(function () {});
+      } catch (e) {}
+    }, 2500);
+  }
+
   function set(patch, evt) {
     Object.assign(state, patch);
     save();
@@ -462,6 +509,28 @@
     if (evt) track(evt, itemParams());
   }
   window.esbState = function () { return state; };
+
+  /* Replace the live order with a server-supplied one.
+
+     One caller today: checkout, arriving from a mystery follow-up mail at
+     /checkout?bingo=… on a browser that may never have configured anything. The
+     mail quotes a specific climb at a specific price, and that page has no
+     configurator to rebuild it from — without this it would price whatever the
+     browser happened to be holding, or the catalogue default on a fresh device,
+     and the total under the CTA would not be the total in the mail.
+
+     It goes through `normalize()` like every other path into `state`: the config
+     comes back from the row the token names, so it is server-vouched, but a
+     validator that only runs on the paths we happen to distrust is not one. */
+  window.esbHydrate = function (order) {
+    if (!order || typeof order !== "object") return false;
+    var next = normalize(Object.assign({}, state, order), order.game || state.game);
+    HYDRATED = true;             // a real order, so save() may write the record
+    Object.assign(state, next);
+    save();
+    render();
+    return true;
+  };
 
   /* ── pricing — the handoff formula, unchanged, plus the two unit
         services and the add-on multipliers. Server-side in production. ─── */
@@ -3879,6 +3948,20 @@
     return rec;
   }
 
+  /* Adopt a token that arrived by link rather than through the modal — today
+     the follow-up mail's /checkout?bingo=…, on a browser that may never have
+     seen the card. Exposed so checkout's own script does not have to name
+     MYD_KEY: this file owns that key, and a second literal spelling of it is
+     how the two come to disagree. `prefillEmail` runs for the same reason it
+     runs at boot — the address is already known, so nobody is asked twice. */
+  window.esbBingoAdopt = function (rec) {
+    if (!rec || !rec.token) return;
+    mydWrite({ token: rec.token, pct: rec.pct || 0,
+               exp: (rec.expires || 0) * 1000,
+               mail: rec.email || mydRead().mail || "" });
+    if (rec.email) prefillEmail(rec.email, true);   // server-resolved for this token
+  };
+
   /* Fill an email field the site already knows the address for.
 
      Marked with `data-prefill-email`, not an id — the wiring in this file is
@@ -3892,14 +3975,32 @@
      Today there is one source (the mystery modal) and one target (checkout).
      A signed-in visitor's verified address is the obvious second source; it
      goes through here rather than growing a second mechanism. */
-  function prefillEmail(addr) {
+  function prefillEmail(addr, vouched) {
     if (!addr) return;
     each("[data-prefill-email]", function (el) {
-      if (el.value) return;
+      /* Never over-type the buyer. The one exception is a `vouched` address —
+         one the SERVER just resolved for the token in the link they followed —
+         landing on a field this function filled itself and nobody has touched
+         since. Without it a stale local record wins over the address the mail
+         was actually sent to, and the order confirmation goes to the wrong
+         inbox on a shared browser. `data-prefilled` is cleared by the first
+         real keystroke below, so a typed value is never at risk. */
+      if (el.value && !(vouched && el.hasAttribute("data-prefilled"))) return;
+      if (el.value === addr) return;
       el.value = addr;
+      el.setAttribute("data-prefilled", "");
       el.dispatchEvent(new Event("input", { bubbles: true }));
     });
   }
+
+  /* One listener, not one per fill: a keystroke means the value on screen is
+     the buyer's, whatever put it there first. */
+  document.addEventListener("input", function (e) {
+    var el = e.target;
+    if (el && el.hasAttribute && el.hasAttribute("data-prefilled") && e.isTrusted) {
+      el.removeAttribute("data-prefilled");
+    }
+  }, true);
 
   /* Publish a validated offer to the pricing engine. Runs on EVERY page, not
      just the ones with the modal on them: the discount has to be in the price
@@ -3935,9 +4036,12 @@
     // when they say no; either one closes the door for good, and a live token
     // means they already have the discount this modal exists to hand out.
     if (rec.seen || rec.declined || rec.token) return;
-    // A campaign or recovery link carries its own discount — never stack an
-    // offer on top of an offer.
-    if (/[?&](cart|promo)=/.test(location.search)) return;
+    // A campaign, recovery or follow-up link carries its own discount — never
+    // stack an offer on top of an offer. `bingo` matters on a FRESH browser:
+    // the `rec.token` check above covers the visitor whose own card this is,
+    // but a link opened somewhere that has never seen the modal has no record
+    // to be stopped by.
+    if (/[?&](cart|promo|bingo)=/.test(location.search)) return;
 
     var cards = Array.prototype.slice.call(root.querySelectorAll("[data-myd-card]"));
     var input = root.querySelector("[data-myd-email]");
@@ -4155,6 +4259,12 @@
           region: s.region, addons: s.addons || [], wins: s.wins,
           placements: s.placements, unranked: !!s.unranked,
           booster: s.booster || "", bundle: s.bundle || "",
+          /* The currency they are reading the site in. Stored on the row so the
+             follow-up mail quotes them in it — a French buyer chased in dollars
+             is the same one-set-of-numbers failure a bare `$5` in the chrome
+             is. The server re-checks it against pricing.CHARGE_RATES and falls
+             back to their country's market, so a junk value cannot mis-quote. */
+          cur: ((window.ESB_LOCALE && window.ESB_LOCALE.currency) || "").toLowerCase(),
           tz: (Intl.DateTimeFormat().resolvedOptions().timeZone || ""),
           lang: (navigator.language || "")
         })

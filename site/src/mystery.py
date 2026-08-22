@@ -117,7 +117,28 @@ FOLLOWUP_MAX_AGE = int(os.environ.get("BINGO_FOLLOWUP_MAX_AGE", str(3 * 86400))
 # the card paid a rate no card pays.
 FOLLOWUP_LABEL = "Last-chance discount"
 
+# ── the halfway warning ───────────────────────────────────────────────────
+# Half an hour into the card's own hour, while the code is still LIVE and still
+# at OFFER_PCT, one short mail says the clock is running out. It is the only
+# message in the sequence that adds no offer at all — it argues the deadline
+# the store already enforces, which is the one thing here that is unarguably
+# true. Sent once, tracked by `warned` on the row.
+#
+# It must land INSIDE the hour or it is not a warning: `due_warning()` requires
+# both `now >= at + WARN_DELAY` and `now < expires`, so a card that somehow
+# slipped past its own deadline is left to the follow-up instead of being
+# warned about a discount that has already gone.
+WARN_DELAY = int(os.environ.get("BINGO_WARN_DELAY", "1800") or 1800)
+
 STAGES = ("card", "followup")
+
+# The configuration half of a row — everything that describes the ORDER rather
+# than the offer. `update_config()` may write exactly these and nothing else,
+# which is what stops a config beacon from touching the clock, the rate or the
+# status. Named once here so the allowlist and the mail's `_state()` cannot
+# drift apart.
+CONFIG_FIELDS = ("game", "service", "from", "to", "mode", "region", "addons",
+                 "wins", "placements", "unranked", "booster", "bundle", "cur")
 
 _CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+\.[^@\s]{2,}$")
@@ -210,6 +231,10 @@ def clean_capture(body, now=None, country="", cosrc=""):
         # modal opened; `followup` is the revived second window. It is also the
         # once-ever flag on the second mail — see `due_followup()`.
         "stage": "card",
+        # The halfway warning went out. Its own flag rather than a `stage`,
+        # because the card is still on stage `card` afterwards — the warning
+        # changes nothing about the offer, which is the point of it.
+        "warned": 0,
         "followup_at": 0,
         "followup_mailed": 0,
         # One click in the second mail retires the row from every future sweep
@@ -373,6 +398,181 @@ def redeem(token, order_id="", now=None):
                 redeemed_at=_int(now or time.time()))
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  the follow-up — one second offer on a card that lapsed unbought
+# ══════════════════════════════════════════════════════════════════════════
+def stage_of(row):
+    return (row or {}).get("stage") or "card"
+
+
+def label_for(row):
+    """What the receipt calls this row's discount. Read from the row rather
+    than passed around, so the checkout summary, the order mail and /ops cannot
+    label one token three ways."""
+    return FOLLOWUP_LABEL if stage_of(row) == "followup" else OFFER_LABEL
+
+
+def revive(token, pct=None, ttl=None, now=None):
+    """Raise a lapsed card to the follow-up rate and restart its clock.
+
+    **The same row and the same token.** The code already in the buyer's inbox
+    keeps working, `find_by_email()` still finds exactly one card, and every
+    client path — `mydBoot()`, the promo box, checkout — picks the new
+    percentage up from `/api/bingo?token=` with no change on the client at all.
+
+    Returns the revived row, or None if the token is unknown. It deliberately
+    does NOT check whether the row is expired: a lapsed card is precisely what
+    this exists to bring back. It will not touch a **redeemed** one, though —
+    that order is paid, and re-opening a spent token is free money.
+    """
+    row = get(token)
+    if not row or row.get("status") == "redeemed":
+        return None
+    now = _int(now or time.time())
+    return mark(row["token"], status="issued", stage="followup",
+                pct=float(FOLLOWUP_PCT if pct is None else pct),
+                expires=now + _int(FOLLOWUP_TTL if ttl is None else ttl),
+                followup_at=now)
+
+
+def due_followup(now=None, limit=200, delay=None):
+    """Cards ready for the second mail: the lapsed, unbought, un-chased ones.
+
+    Five conditions, and each one is a way the mail would otherwise be wrong:
+
+      * `status == "issued"` — never a paid order (`redeemed`) and never a row
+        somebody unsubscribed into `expired`;
+      * `stage == "card"` — **one follow-up, ever**. This is the whole
+        idempotency story: `revive()` flips the stage before the message goes
+        out, so a sweep running every five minutes cannot mail twice, and a
+        crash between the two leaves the row chased rather than chaseable;
+      * past `expires + delay` — the first offer has genuinely died. Mailing a
+        better rate while the first one is still live would teach the buyer the
+        countdown is theatre, which is the one thing `TOKEN_TTL` exists to stop;
+      * younger than `FOLLOWUP_MAX_AGE` — a stale configuration is not intent;
+      * `nomail` unset and an address present.
+
+    An `applied_at` row is deliberately **included**: somebody who pressed Apply
+    and still did not pay is the strongest lead in the store, not a spent one.
+    """
+    now = _int(now or time.time())
+    delay = FOLLOWUP_DELAY if delay is None else _int(delay)
+    out = []
+    for r in read():
+        if r.get("status") != "issued" or stage_of(r) != "card":
+            continue
+        if r.get("nomail") or not r.get("email"):
+            continue
+        if now < _int(r.get("expires")) + delay:
+            continue
+        if now - _int(r.get("at")) > FOLLOWUP_MAX_AGE:
+            continue
+        out.append(r)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def update_config(token, body):
+    """Re-point a live row at the order the visitor is building NOW.
+
+    The card is offered ~8 seconds after the target rank settles, and people
+    keep configuring afterwards — they add Priority, switch to Duo, move the
+    server, extend the climb, apply a bundle. Without this the row freezes at
+    the moment the address was typed and all three mails quote an order that was
+    abandoned two steps later, which makes the mail irrelevant rather than
+    merely inaccurate: the price is wrong, the climb is wrong, and
+    `/checkout?bingo=…` hydrates the wrong basket.
+
+    **It writes `CONFIG_FIELDS` and nothing else.** Not `expires` — an edit is
+    not a reason to restart a countdown, and a deadline that renews itself every
+    time the buyer touches a control is not a deadline. Not `pct`, `status` or
+    `stage` either, so a beacon can neither improve its own offer nor revive a
+    dead one; `redeemable()` still decides that on the clock alone.
+
+    A **redeemed** row is frozen: its configuration is the record of what was
+    actually bought, and a later beacon from a browser still holding the token
+    must not rewrite the receipt.
+    """
+    row = get(token)
+    if not row or row.get("status") == "redeemed":
+        return None
+    fresh = clean_capture(dict(body or {}, email=row.get("email") or "x@y.zz"))
+    if fresh is None:
+        return None
+    patch = {k: fresh[k] for k in CONFIG_FIELDS if k in fresh}
+    # A blank currency means the beacon did not carry one; keep what we had
+    # rather than losing a known market to an empty string.
+    if not patch.get("cur"):
+        patch.pop("cur", None)
+    row.update(patch)
+    put(row)
+    return row
+
+
+def due_warning(now=None, limit=200, delay=None):
+    """Cards halfway through their hour that have not been warned yet.
+
+    The mirror of `due_followup()`, with the window inverted: this one fires
+    while the offer is still LIVE, that one only once it is dead. The two can
+    never both pick up the same row on the same sweep, which is what stops a
+    visitor being told their discount is ending and that it has been replaced
+    in the same five minutes.
+
+      * `status == "issued"` and `stage == "card"` — never a paid card, never
+        one already chased (a revived row has its own 24h clock and is not
+        halfway through anything);
+      * `warned` unset — **once, ever**, the same guarantee the chase makes;
+      * past `at + WARN_DELAY` and still **inside** `expires` — a warning that
+        arrives after the thing it warns about is a worse mail than none;
+      * `nomail` unset and an address present.
+    """
+    now = _int(now or time.time())
+    delay = WARN_DELAY if delay is None else _int(delay)
+    out = []
+    for r in read():
+        if r.get("status") != "issued" or stage_of(r) != "card":
+            continue
+        if r.get("warned") or r.get("nomail") or not r.get("email"):
+            continue
+        at, exp = _int(r.get("at")), _int(r.get("expires"))
+        if now < at + delay or now >= exp:
+            continue
+        out.append(r)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def mark_warned(token, now=None):
+    """Stamp the halfway warning. Never changes the offer or the clock."""
+    return mark(token, warned=1, warned_at=_int(now or time.time()))
+
+
+def unsubscribe(token):
+    """Retire a row from every future sweep, keeping its discount alive.
+
+    Deliberately NOT `carts.process_unsubscribe()`'s `status="expired"`. A cart
+    IS its offer, so retiring one costs nothing; here the row is a live code the
+    reader was just handed, and voiding it because they asked for fewer emails
+    punishes them for using the link. `due_followup()` reads `nomail`, and the
+    follow-up is the only mail this store ever sends, so one flag is the whole
+    opt-out."""
+    row = get(token)
+    if not row:
+        return None
+    return mark(row["token"], nomail=1)
+
+
+def process_unsubscribe(token):
+    """GET /api/bingo/unsubscribe?token=… → (status, payload).
+
+    One click, no login, no confirmation step. Answers 200 either way: whether
+    a token exists is not something an unauthenticated caller should learn."""
+    unsubscribe(token)
+    return 200, {"ok": True}
+
+
 def clear():
     if _up():
         try:
@@ -512,7 +712,7 @@ def _state(row, pct=0):
         "coach": 0, "pack": 1, "focus": [0], "slot": "",
         "promo": row.get("token") or "",
         "recovery_pct": pct,
-        "offer_label": OFFER_LABEL,
+        "offer_label": label_for(row),
     }
 
 
@@ -527,6 +727,23 @@ def price_pair(row):
     if off_q.get("invalid"):
         return 0, 0
     return _int(now_q.get("total")), _int(off_q.get("total"))
+
+
+def currency_of(row):
+    """The currency this row should be quoted in.
+
+    The visitor's own pick when the capture carried one, else the market their
+    country belongs to — `geo.currency_for()`, the same rule `i18n.js` opens the
+    storefront on, so the mail and the page they left agree. Anything without a
+    charge rate behind it falls back to dollars rather than displaying a
+    currency the site could not actually bill (see `pricing.CHARGE_RATES` and
+    CLAUDE.md's "every currency these tables can hand somebody must have a
+    charge rate")."""
+    import pricing
+    cur = _s((row or {}).get("cur"), 3).lower()
+    if cur not in pricing.CHARGE_RATES:
+        cur = geo.currency_for(_s((row or {}).get("country"), 2).upper()).lower()
+    return cur if cur in pricing.CHARGE_RATES else "usd"
 
 
 def send_code(row):
@@ -608,8 +825,18 @@ def process_issue(raw, header_get, session_email=""):
     # the buyer pressed Apply on the reveal, which is the only place the funnel
     # between "opened a card" and "paid for one" can be measured. It carries a
     # token and nothing else, and it can never mint or extend anything.
-    if _s(body.get("action"), 12) == "apply":
+    action = _s(body.get("action"), 12)
+    if action == "apply":
         mark_applied(_s(body.get("token"), 40).upper())
+        return 200, {"ok": True}
+
+    # The config beacon. Like `apply` it is a write against an EXISTING token
+    # and can never mint, extend or improve anything — see `update_config()`.
+    # The token is the whole authorisation, which is sound because the only
+    # thing it can change is which order that same token quotes, and every
+    # price is re-computed server-side at send and at checkout regardless.
+    if action == "config":
+        update_config(_s(body.get("token"), 40).upper(), body)
         return 200, {"ok": True}
 
     if session_email:
@@ -675,9 +902,33 @@ def process_resolve(token):
     if not row:
         return 200, {"valid": False, "pct": 0}
     return 200, {"valid": True, "token": row["token"], "pct": row.get("pct", OFFER_PCT),
-                 "label": OFFER_LABEL, "expires": _int(row.get("expires")),
+                 "label": label_for(row), "stage": stage_of(row),
+                 "expires": _int(row.get("expires")),
                  "seconds": max(0, _int(row.get("expires")) - _int(time.time())),
-                 "email": row.get("email", "")}
+                 "email": row.get("email", ""),
+                 # The configuration the card was opened against. The follow-up
+                 # mail links straight to /checkout?bingo=…, and that page has
+                 # no configurator: without this it would price whatever the
+                 # browser happened to be holding — a different order from the
+                 # one the mail quoted, or on a fresh device no order at all.
+                 # It is the row's own config handed back to the row's own
+                 # token, so it discloses nothing the token did not already.
+                 "order": order_of(row)}
+
+
+def order_of(row):
+    """The stored configuration, in the shape app.js's `normalize()` wants.
+
+    Mirrors `carts.py`'s resolve payload. Everything here was written through
+    `clean_capture()` and is re-validated by `normalize()` on arrival, so the
+    client end is not trusting this any more than it trusts localStorage."""
+    return {"game": row.get("game", ""), "service": row.get("service", "division"),
+            "from": row.get("from", ""), "to": row.get("to", ""),
+            "mode": row.get("mode", ""), "region": row.get("region", ""),
+            "addons": row.get("addons", []), "wins": row.get("wins", 0),
+            "placements": row.get("placements", 0),
+            "unranked": bool(row.get("unranked")),
+            "booster": row.get("booster", ""), "bundle": row.get("bundle", "")}
 
 
 def mark_applied(token, now=None):
@@ -704,6 +955,11 @@ def summary(days=30, now=None):
     by_status = {s: 0 for s in STATUSES}
     by_game, by_country, by_pick = {}, {}, {}
     applied = optins = mailed = live = 0
+    # The second mail's own funnel. `chased` is how many lapsed cards were
+    # revived; `chased_redeemed` how many of those were then paid for. Read
+    # together they are the only thing that says whether giving the extra five
+    # points back is buying orders or buying nothing — see FOLLOWUP_PCT.
+    chased = chased_redeemed = chase_due = unsubs = warned = 0
     redeemed_value = potential_value = 0
     recent = []
     for r in sorted(rows, key=lambda r: -_int(r.get("at"))):
@@ -726,6 +982,18 @@ def summary(days=30, now=None):
             optins += 1
         if r.get("mailed"):
             mailed += 1
+        if stage_of(r) == "followup":
+            chased += 1
+            if r.get("status") == "redeemed":
+                chased_redeemed += 1
+        elif (r.get("status") == "issued" and not r.get("nomail") and r.get("email")
+              and now >= _int(r.get("expires")) + FOLLOWUP_DELAY
+              and now - _int(r.get("at")) <= FOLLOWUP_MAX_AGE):
+            chase_due += 1
+        if r.get("nomail"):
+            unsubs += 1
+        if r.get("warned"):
+            warned += 1
 
         g = r.get("game") or "—"
         gs = by_game.setdefault(g, {"game": g, "count": 0, "redeemed": 0})
@@ -745,6 +1013,9 @@ def summary(days=30, now=None):
                 "applied_at": _int(r.get("applied_at")),
                 "redeemed_at": _int(r.get("redeemed_at")),
                 "status": st, "game": g, "pick": p,
+                "stage": stage_of(r), "followup_at": _int(r.get("followup_at")),
+                "warned": 1 if r.get("warned") else 0,
+                "nomail": 1 if r.get("nomail") else 0,
                 "summary": _climb(r), "mode": r.get("mode", ""),
                 "optin": 1 if r.get("optin") else 0,
                 "mailed": 1 if r.get("mailed") else 0,
@@ -767,6 +1038,13 @@ def summary(days=30, now=None):
         "redeemed": redeemed, "redeem_rate": rate,
         "redeemed_value": redeemed_value, "potential_value": potential_value,
         "optins": optins, "pct": OFFER_PCT, "ttl_mins": TOKEN_TTL // 60,
+        "warned": warned, "warn_delay_mins": WARN_DELAY // 60,
+        "chased": chased, "chased_redeemed": chased_redeemed,
+        "chase_due": chase_due, "unsubs": unsubs,
+        "followup_pct": FOLLOWUP_PCT, "followup_ttl_mins": FOLLOWUP_TTL // 60,
+        # Of the cards actually chased — "did the second mail convert", which is
+        # a different question from the programme's overall redeem rate above.
+        "chase_rate": (round(100.0 * chased_redeemed / chased, 1) if chased else 0.0),
         "synthetic": sum(1 for r in rows if r.get("syn")),
         "statuses": [{"status": s, "count": by_status.get(s, 0)} for s in STATUSES],
         "games": sorted(by_game.values(), key=lambda x: -x["count"]),

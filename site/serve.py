@@ -289,10 +289,17 @@ class Handler(SimpleHTTPRequestHandler):
                 urllib.parse.urlsplit(self.path).query).get("token", [""])[0]
             status, payload = mystery.process_resolve(tok)
             return self._json(status, payload)
-        if route == "/api/cart/unsubscribe":
+        if route in ("/api/cart/unsubscribe", "/api/bingo/unsubscribe"):
             tok = urllib.parse.parse_qs(
                 urllib.parse.urlsplit(self.path).query).get("token", [""])[0]
-            carts.process_unsubscribe(tok)
+            # Two stores, one page. The cart's link retires the cart; the
+            # mystery one only stops the mail and deliberately leaves the code
+            # alive (see mystery.unsubscribe) — the reader asked for fewer
+            # emails, not to lose the discount they were just offered.
+            if route == "/api/bingo/unsubscribe":
+                mystery.process_unsubscribe(tok)
+            else:
+                carts.process_unsubscribe(tok)
             # A human clicked a link in a mail client — answer with a page, not
             # JSON. 200 either way: whether a token exists is not public.
             body = (b"<!doctype html><meta charset=utf-8><title>Unsubscribed</title>"

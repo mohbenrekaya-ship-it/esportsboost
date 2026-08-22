@@ -52,6 +52,7 @@ _TMPG.close()
 os.environ["BINGO_LOG"] = _TMP.name
 os.environ["GUIDES_LOG"] = _TMPG.name
 
+import followup         # noqa: E402
 import mystery          # noqa: E402
 import payments         # noqa: E402
 import pricing          # noqa: E402
@@ -81,6 +82,9 @@ def _h(headers=None):
     low = {k.lower(): v for k, v in headers.items()}
     return lambda name: low.get(str(name).lower(), "")
 
+
+import data as _D                                                    # noqa: E402
+D_STREAM_VERIFIED = getattr(_D, "STREAM_CLAIM_VERIFIED", False)
 
 ORDER = {"game": "League of Legends", "service": "division", "from": "Gold IV",
          "to": "Platinum IV", "mode": "Solo", "addons": [], "region": "Europe West"}
@@ -307,6 +311,455 @@ def test_copy_claims_no_odds():
     check(("%d%%" % top) in lowered, "which the copy actually prints")
 
 
+# ── the follow-up: one second mail, at a better rate ───────────────────────
+def _lapsed(email="lapse@x.com", **extra):
+    """A captured card whose hour has already run out."""
+    _st, p = _capture(email, **extra)
+    row = mystery.get(p["token"])
+    old = int(time.time()) - mystery.TOKEN_TTL - mystery.FOLLOWUP_DELAY - 60
+    row["at"] = old
+    row["expires"] = old + mystery.TOKEN_TTL
+    mystery.put(row)
+    return mystery.get(p["token"])
+
+
+def test_followup_due_rules():
+    """Each condition in `due_followup()` is a way the second mail would
+    otherwise be wrong — a live offer undercut, a paid order chased, a
+    three-week-old configuration mailed, or the same person mailed forever."""
+    reset()
+    lapsed = _lapsed("due@x.com")
+    check([r["token"] for r in mystery.due_followup()] == [lapsed["token"]],
+          "a lapsed, unbought card is due")
+
+    reset()
+    _st, live = _capture("live@x.com")
+    check(mystery.due_followup() == [],
+          "a card still inside its hour is not chased — the countdown is real")
+
+    reset()
+    row = _lapsed("paid@x.com")
+    mystery.redeem(row["token"], order_id="ESB-1")
+    check(mystery.due_followup() == [], "a paid card is never chased")
+
+    reset()
+    row = _lapsed("old@x.com")
+    r = mystery.get(row["token"])
+    r["at"] = int(time.time()) - mystery.FOLLOWUP_MAX_AGE - 60
+    mystery.put(r)
+    check(mystery.due_followup() == [],
+          "a configuration older than FOLLOWUP_MAX_AGE is left alone")
+
+    reset()
+    row = _lapsed("gone@x.com")
+    mystery.unsubscribe(row["token"])
+    check(mystery.due_followup() == [], "an unsubscribed row is never chased again")
+    kept = mystery.get(row["token"])
+    check(kept.get("status") == "issued" and kept.get("pct") == mystery.OFFER_PCT,
+          "and unsubscribing does not void the discount they were offered")
+
+    reset()
+    row = _lapsed("applied@x.com")
+    mystery.mark(row["token"], applied_at=int(time.time()))
+    check(len(mystery.due_followup()) == 1,
+          "somebody who applied the code and still didn't pay IS chased — the "
+          "strongest lead in the store, not a spent one")
+
+
+def test_config_beacon_tracks_the_latest_order():
+    """The card is offered ~8s after the target rank settles and people keep
+    configuring. A row frozen at capture makes every mail quote an order the
+    visitor abandoned two steps later — the wrong price against the wrong climb."""
+    reset()
+    _st, p = _capture("live@x.com")
+    tok = p["token"]
+    before = mystery.get(tok)
+    check(before["to"] == "Platinum IV" and before["addons"] == [],
+          "the row starts on the climb the card was opened against")
+
+    # …they carry on: extend the climb, go Duo, tick Priority, move the server.
+    st, body = mystery.process_issue(_json({
+        "action": "config", "token": tok, "game": "League of Legends",
+        "service": "division", "from": "Gold IV", "to": "Diamond IV",
+        "mode": "Duo queue", "region": "Europe Nordic & East",
+        "addons": ["priority"], "cur": "eur"}), _h())
+    check(st == 200 and body.get("ok"), "the beacon is accepted")
+
+    after = mystery.get(tok)
+    check(after["to"] == "Diamond IV", "the row follows the new target")
+    check(after["mode"] == "Duo queue" and after["addons"] == ["priority"],
+          "and the queue and add-ons")
+    check(mystery.currency_of(after) == "eur", "and the currency they are reading in")
+
+    # The thing the mail actually quotes must move with it.
+    now_q, off_q = followup.price_pair(after)
+    check("Diamond IV" in (now_q.get("summary") or ""),
+          "so the mail describes the order they actually built")
+    old_q = pricing.quote(mystery._state(before))
+    check(now_q["total"] > old_q["total"],
+          "and prices it, rather than the cheaper one they left behind")
+    check(mystery.process_resolve(tok)[1]["order"]["to"] == "Diamond IV",
+          "and /checkout?bingo= hydrates the same order")
+
+
+def test_config_beacon_cannot_move_the_offer():
+    """The token is the whole authorisation, so the beacon must be able to
+    change WHICH order is quoted and nothing else — not the clock, not the
+    rate, not the status."""
+    reset()
+    _st, p = _capture("guard@x.com")
+    tok = p["token"]
+    before = mystery.get(tok)
+
+    mystery.process_issue(_json({
+        "action": "config", "token": tok, "game": "League of Legends",
+        "service": "division", "from": "Gold IV", "to": "Diamond IV",
+        "mode": "Solo", "region": "Europe West",
+        # everything below is an attempt to buy something with a beacon
+        "pct": 0.9, "expires": 99999999999, "status": "issued",
+        "stage": "card", "recovery_pct": 0.9, "warned": 0, "nomail": 0,
+        "token_": "x", "email": "attacker@x.com"}), _h())
+    after = mystery.get(tok)
+    check(after["expires"] == before["expires"], "the deadline is never extended")
+    check(after["pct"] == before["pct"], "the rate is never raised")
+    check(after["status"] == before["status"], "the status is never changed")
+    check(after["email"] == before["email"],
+          "and the address is never re-pointed at another inbox")
+    check(after["token"] == tok, "same token throughout")
+
+
+def test_config_beacon_freezes_on_a_paid_row():
+    """A redeemed row's configuration is the record of what was bought."""
+    reset()
+    _st, p = _capture("paidcfg@x.com")
+    tok = p["token"]
+    mystery.redeem(tok, order_id="ESB-CFG")
+    mystery.process_issue(_json({
+        "action": "config", "token": tok, "game": "League of Legends",
+        "service": "division", "from": "Gold IV", "to": "Diamond IV",
+        "mode": "Solo", "region": "Europe West"}), _h())
+    check(mystery.get(tok)["to"] == "Platinum IV",
+          "a beacon can never rewrite what a paid order says it was")
+
+
+def test_a_lapsed_card_still_tracks_the_order():
+    """Somebody who let the hour go and then kept building is exactly who the
+    chase is for — it must quote what they have now, not what they had then."""
+    reset()
+    row = _lapsed("lapcfg@x.com")
+    mystery.process_issue(_json({
+        "action": "config", "token": row["token"], "game": "League of Legends",
+        "service": "division", "from": "Gold IV", "to": "Diamond IV",
+        "mode": "Solo", "region": "Europe West"}), _h())
+    updated = mystery.get(row["token"])
+    check(updated["to"] == "Diamond IV", "a dead card still follows the order")
+    check(mystery.redeemable(row["token"]) is None,
+          "and updating it does not bring the discount back to life")
+    check(len(mystery.due_followup()) == 1, "it is still due exactly one chase")
+
+
+def test_warning_and_chase_can_never_collide():
+    """Mail 2 fires INSIDE the hour, mail 3 only once it is dead. If the two
+    windows ever overlapped, one visitor would be told their discount is
+    running out and that it has been replaced in the same five minutes."""
+    reset()
+    _st, p = _capture("win@x.com")
+    row = mystery.get(p["token"])
+    at, exp = row["at"], row["expires"]
+
+    seen = []
+    for mins in (0, 20, 31, 45, 59, 61, 91, 200):
+        t = at + mins * 60
+        w = len(mystery.due_warning(now=t))
+        c = len(mystery.due_followup(now=t))
+        seen.append((mins, w, c))
+        check(not (w and c), "at +%dmin the two sweeps never both claim the row" % mins)
+    check([m for m, w, _c in seen if w] == [31, 45, 59],
+          "the warning fires only between WARN_DELAY and the deadline")
+    check([m for m, _w, c in seen if c] == [91, 200],
+          "and the chase only after the deadline plus FOLLOWUP_DELAY")
+    check(mystery.due_warning(now=exp) == [],
+          "a warning is never sent about a discount that has already gone")
+
+
+def test_warning_is_once_and_changes_nothing():
+    """It is the one mail in the sequence that adds no offer — so it must not
+    move the rate, the clock or the stage, and it must not repeat."""
+    reset()
+    _st, p = _capture("warn@x.com")
+    row = mystery.get(p["token"])
+    t = row["at"] + mystery.WARN_DELAY + 60
+    check(len(mystery.due_warning(now=t)) == 1, "due once the halfway point passes")
+
+    mystery.mark_warned(row["token"])
+    after = mystery.get(row["token"])
+    check(mystery.due_warning(now=t) == [], "and never due again")
+    check(after["pct"] == row["pct"], "the rate is untouched")
+    check(after["expires"] == row["expires"], "the clock is untouched")
+    check(mystery.stage_of(after) == "card", "and the card is still on its own stage")
+    check(mystery.redeemable(row["token"], now=t) is not None,
+          "the offer it warns about is still the one they have")
+
+
+def test_warning_skips_paid_and_opted_out():
+    reset()
+    _st, p = _capture("wpaid@x.com")
+    row = mystery.get(p["token"])
+    t = row["at"] + mystery.WARN_DELAY + 60
+    mystery.redeem(row["token"], order_id="ESB-W")
+    check(mystery.due_warning(now=t) == [], "a paid card is never warned")
+
+    reset()
+    _st, p = _capture("wgone@x.com")
+    row = mystery.get(p["token"])
+    t = row["at"] + mystery.WARN_DELAY + 60
+    mystery.unsubscribe(row["token"])
+    check(mystery.due_warning(now=t) == [], "nor an unsubscribed one")
+
+
+def test_warning_copy():
+    """It argues one thing — the deadline the store enforces — so it must not
+    quote a rate or a price that differs from the live card."""
+    reset()
+    _st, p = _capture("wcopy@x.com")
+    row = mystery.get(p["token"])
+    row["at"] = int(time.time()) - mystery.WARN_DELAY
+    row["expires"] = row["at"] + mystery.TOKEN_TTL
+    mystery.put(row)
+    row = mystery.get(p["token"])
+
+    now_q, off_q = followup.price_pair(row, mystery.OFFER_PCT)
+    mins = followup._mins_left(row)
+    origin = "https://example.test"
+    text = followup._warn_text(row, now_q, off_q, origin, "usd", mins)
+    html = followup._warn_html(row, now_q, off_q, origin, "usd", mins)
+
+    for blob, name in ((text, "text"), (html, "html")):
+        check(row["token"] in blob, "the %s warning carries the live code" % name)
+        check("/checkout?bingo=" + row["token"] in blob,
+              "and the checkout button/link (%s)" % name)
+        check("unsubscribe?token=" + row["token"] in blob,
+              "and a one-click unsubscribe (%s)" % name)
+        check("30%" in blob and "35%" not in blob,
+              "it quotes the card's OWN rate, never the chase's (%s)" % name)
+        check(followup.money(off_q["total"], "usd") in blob,
+              "and the price that rate actually gives (%s)" % name)
+    check(20 <= mins <= 31, "the countdown is the real remaining time (%d)" % mins)
+
+
+def test_no_mail_claims_it_is_the_last():
+    """The sequence is meant to grow. A mail promising nothing further is a
+    promise about the roadmap, and the third mail already broke one draft of
+    it — see the note in followup.py."""
+    reset()
+    row = _lapsed("last@x.com")
+    revived = mystery.revive(row["token"])
+    now_q, off_q = followup.price_pair(revived)
+    blobs = [followup._text(revived, now_q, off_q, "https://x.test", "usd"),
+             followup._html(revived, now_q, off_q, "https://x.test", "usd")]
+    r2 = mystery.get(row["token"])
+    blobs += [followup._warn_text(r2, now_q, off_q, "https://x.test", "usd", 30),
+              followup._warn_html(r2, now_q, off_q, "https://x.test", "usd", 30)]
+    for blob in blobs:
+        low = blob.lower()
+        for phrase in ("no third email", "last email", "final email",
+                       "we won't email you again", "no more emails"):
+            check(phrase not in low, "no mail claims it is the last (%r)" % phrase)
+
+
+def test_followup_is_once_ever():
+    """`revive()` flips the stage out of the due set BEFORE the mail goes out,
+    so a sweep running every five minutes cannot mail the same person twice."""
+    reset()
+    row = _lapsed("once@x.com")
+    check(len(mystery.due_followup()) == 1, "due before the chase")
+    revived = mystery.revive(row["token"])
+    check(revived is not None, "the row revives")
+    check(mystery.due_followup() == [], "and is never due again")
+    check(mystery.revive(row["token"]) is not None,
+          "revive itself stays callable (it is the sweep that de-duplicates)")
+
+
+def test_revive_raises_the_rate_on_the_same_token():
+    """The code already in the buyer's inbox is the one that works. A second
+    row would give one address two live discounts and break one-card-per-inbox."""
+    reset()
+    row = _lapsed("same@x.com")
+    check(mystery.redeemable(row["token"]) is None, "the card really was dead")
+    revived = mystery.revive(row["token"])
+    check(revived["token"] == row["token"], "same token")
+    check(revived["pct"] == mystery.FOLLOWUP_PCT, "at the follow-up rate")
+    check(revived["stage"] == "followup", "and marked as chased")
+    live = mystery.redeemable(row["token"])
+    check(live is not None, "it is redeemable again")
+    check(mystery.find_by_email("same@x.com")["token"] == row["token"],
+          "and the inbox still has exactly one card")
+    res = mystery.process_resolve(row["token"])[1]
+    check(res["valid"] and res["pct"] == mystery.FOLLOWUP_PCT,
+          "the browser learns the new rate from the same endpoint, unchanged")
+    check(res["label"] == mystery.FOLLOWUP_LABEL,
+          "and the receipt calls it the follow-up offer, not a card that pays 35%")
+
+    # The SERVER-side re-resolve in payments.process_checkout must reach the same
+    # label. It used to hard-code OFFER_LABEL, so a revived row had the browser
+    # showing "Last-chance discount" over a charge the server called a "Mystery
+    # discount" — one order, two names, on the page where money moves.
+    order = dict(ORDER, bingo=row["token"])
+    q = pricing.quote(mystery._state(mystery.get(row["token"]), mystery.FOLLOWUP_PCT))
+    check(q["promo_label"] == mystery.FOLLOWUP_LABEL,
+          "and the server prices it under that same name")
+    check(mystery.label_for(mystery.get(row["token"])) == mystery.FOLLOWUP_LABEL
+          and mystery.label_for({"stage": "card"}) == mystery.OFFER_LABEL,
+          "label_for is the one place either name is decided")
+
+
+def test_revive_never_reopens_a_paid_order():
+    reset()
+    row = _lapsed("paid2@x.com")
+    mystery.redeem(row["token"], order_id="ESB-2")
+    check(mystery.revive(row["token"]) is None, "a redeemed token cannot be revived")
+    check(mystery.redeemable(row["token"]) is None, "and stays spent")
+
+
+def test_followup_rate_cannot_be_forged():
+    """Same guarantee the card has: `recovery_pct` is stripped from the checkout
+    body and re-derived from the token, so nobody types their own 35%."""
+    reset()
+    row = _lapsed("forge@x.com")
+    mystery.revive(row["token"])
+    honest = pricing.quote(mystery._state(mystery.get(row["token"]), mystery.FOLLOWUP_PCT))
+    forged = dict(ORDER, recovery_pct=0.95, offer_label="lol", bingo=row["token"])
+    cleaned = payments.process_checkout(_json({"order": forged, "email": "f@x.com",
+                                               "client_total": 1}), _h())
+    q = pricing.quote(mystery._state(mystery.get(row["token"]),
+                                     mystery.redeemable(row["token"])["pct"]))
+    check(q["total"] == honest["total"],
+          "the server prices at the stored rate, never a body-supplied one")
+    check(q["promo_pct"] == mystery.FOLLOWUP_PCT, "which is exactly the follow-up rate")
+    check(isinstance(cleaned, tuple), "and the checkout route still answers")
+
+
+def test_followup_resolve_carries_the_order():
+    """The mail links to /checkout?bingo=…, and that page has no configurator.
+    Without the stored config it would price whatever the browser was holding."""
+    reset()
+    row = _lapsed("cfg@x.com", **{"from": "Silver III", "to": "Gold I"})
+    mystery.revive(row["token"])
+    res = mystery.process_resolve(row["token"])[1]
+    o = res.get("order") or {}
+    check(o.get("from") == "Silver III" and o.get("to") == "Gold I",
+          "the resolve hands back the climb the card was opened against")
+    check(o.get("game") == ORDER["game"], "and its game")
+    check(mystery.process_resolve("BINGO-NOPENOPE")[1].get("order") is None,
+          "an unknown token discloses nothing")
+
+
+def test_followup_currency():
+    """A French buyer chased in dollars is the same one-set-of-numbers failure a
+    bare `$5` in the chrome is."""
+    reset()
+    _st, p = _capture("fr@x.com", cur="eur")
+    check(mystery.currency_of(mystery.get(p["token"])) == "eur",
+          "the stored pick is used")
+    reset()
+    _st, p = _capture("uk@x.com")
+    row = mystery.get(p["token"]); row["cur"] = ""; row["country"] = "GB"
+    check(mystery.currency_of(row) == "gbp",
+          "with no pick it falls back to the country's market")
+    row["country"] = "JP"
+    check(mystery.currency_of(row) == "usd",
+          "and a market with no charge rate is quoted in dollars, never a "
+          "currency the site could not bill")
+    for cur in pricing.CHARGE_RATES:
+        check(followup.money(100, cur)[:1] not in ("1", "0"),
+              "%s renders with its mark" % cur)
+
+
+def test_per_hour_claim_is_dropped_when_it_argues_against_the_order():
+    """A long climb prices at $7–24/hour even at 35% off. The block ships only
+    while the figure helps — the same mechanism gc_faq_items() uses."""
+    reset()
+    short = _lapsed("short@x.com", **{"from": "Gold IV", "to": "Platinum II"})
+    _n, off = followup.price_pair(short)
+    hours, rate = followup.hourly(off, "usd")
+    check(hours > 0 and rate, "a normal climb gets the per-hour argument")
+    check(pricing.per_hour(off["total"], off["days"])[1] <= pricing.PER_HOUR_MAX,
+          "and only because the figure is under the ceiling")
+
+    reset()
+    long_ = _lapsed("long@x.com", **{"from": "Iron IV", "to": "Diamond IV"})
+    _n2, off2 = followup.price_pair(long_)
+    h2, r2 = followup.hourly(off2, "usd")
+    check(pricing.per_hour(off2["total"], off2["days"])[1] > pricing.PER_HOUR_MAX,
+          "a full-ladder climb prices above the ceiling")
+    check(h2 == 0 and r2 == "",
+          "so the mail makes no per-hour claim at all rather than a bad one")
+
+
+def test_hours_never_outrun_the_eta():
+    """The ETA is the promise on the page — a missed one costs a 15% credit — so
+    an hours figure implying more play than it allows would contradict it."""
+    for days in (1, 2, 3, 5, 8, 12):
+        h = pricing.play_hours(days)
+        check(0 < h <= days * 24,
+              "%d days implies %d hours, inside the calendar it was quoted in" % (days, h))
+    check(pricing.play_hours(0) == 0 and pricing.play_hours("x") == 0,
+          "and an unpriceable order yields no hours to divide by")
+
+
+def test_followup_copy():
+    """The second mail is the one that argues hardest, so it is the one most
+    able to overclaim. Same standing as the card's own copy test."""
+    reset()
+    row = _lapsed("copy@x.com")
+    revived = mystery.revive(row["token"])
+    now_q, off_q = followup.price_pair(revived)
+    origin = "https://example.test"
+    text = followup._text(revived, now_q, off_q, origin, "usd")
+    html = followup._html(revived, now_q, off_q, origin, "usd")
+
+    for blob, name in ((text, "text"), (html, "html")):
+        low = blob.lower()
+        for phrase in ("chance", "odds", "lucky", "randomly", "guarantee your rank",
+                       "risk-free", "no risk"):
+            check(phrase not in low, "the %s mail never says %r" % (name, phrase))
+        check(revived["token"] in blob, "the %s mail carries the working code" % name)
+        check("/checkout?bingo=" + revived["token"] in blob,
+              "and links straight to checkout with it (%s)" % name)
+        check("unsubscribe?token=" + revived["token"] in blob,
+              "and carries a one-click unsubscribe (%s)" % name)
+        check("35%" in blob, "it states the new rate (%s)" % name)
+
+    # The comparative claim about competitors is gated, exactly like the
+    # add-on note's superlative and rating_ld()'s aggregateRating.
+    if not D_STREAM_VERIFIED:
+        for blob in (text, html):
+            low = blob.lower()
+            check("other sites" not in low and "most sites" not in low,
+                  "no unsubstantiated comparative claim while STREAM_CLAIM_VERIFIED is False")
+
+    # The prices in the mail are the prices the server would charge.
+    check(followup.money(off_q["total"], "usd") in text,
+          "the discounted total in the copy is the quoted one")
+    check(off_q["total"] < now_q["total"], "and it really is lower")
+
+
+def test_followup_send_marks_before_it_sends():
+    """`mailer.configured()` is False here, so nothing leaves — but the sweep
+    must still be safe to run on a schedule."""
+    reset()
+    row = _lapsed("sweep@x.com")
+    out = followup.sweep()
+    check(out["due"] == 1, "the sweep sees the due row")
+    check(out["sent"] == 0 and out["failed"] == 1,
+          "and sends nothing with no mailbox configured")
+    check(out["reasons"].get("smtp_unconfigured") == 1, "saying why")
+    still = mystery.get(row["token"])
+    check(still.get("stage") == "card",
+          "an unconfigured mailbox must NOT burn the row — it is still chaseable "
+          "once SMTP is set up")
+
+
 def test_summary():
     reset()
     _st, a = _capture("s1@x.com")
@@ -326,6 +779,22 @@ def test_summary():
 
 def main():
     for fn in (test_clean_capture, test_token_shape, test_one_card_per_address,
+               test_followup_due_rules, test_followup_is_once_ever,
+               test_config_beacon_tracks_the_latest_order,
+               test_config_beacon_cannot_move_the_offer,
+               test_config_beacon_freezes_on_a_paid_row,
+               test_a_lapsed_card_still_tracks_the_order,
+               test_warning_and_chase_can_never_collide,
+               test_warning_is_once_and_changes_nothing,
+               test_warning_skips_paid_and_opted_out, test_warning_copy,
+               test_no_mail_claims_it_is_the_last,
+               test_revive_raises_the_rate_on_the_same_token,
+               test_revive_never_reopens_a_paid_order,
+               test_followup_rate_cannot_be_forged,
+               test_followup_resolve_carries_the_order, test_followup_currency,
+               test_per_hour_claim_is_dropped_when_it_argues_against_the_order,
+               test_hours_never_outrun_the_eta, test_followup_copy,
+               test_followup_send_marks_before_it_sends,
                test_a_spent_card_is_not_reissued, test_capture_keeps_the_original_clock,
                test_session_email_wins_over_body, test_apply_is_a_beacon_not_an_issue,
                test_pct_is_never_read_from_the_client,

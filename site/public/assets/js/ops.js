@@ -2700,6 +2700,22 @@
       "Model the cost as a flat " + pct + "% on every <em>Redeemed</em> row, not as an average.</div>";
     f.appendChild(intro);
 
+    // The second mail. Kept as its own banner rather than folded into the one
+    // above because it is a SECOND flat give-away on the same order, and the
+    // two rates have to be read separately or the programme's cost is
+    // understated by the difference on every chased row.
+    var fpct = Math.round((a.followup_pct || 0) * 100);
+    var chase = document.createElement("div");
+    chase.className = "banner";
+    chase.innerHTML = '<span class="ico">↻</span><div><strong>The sequence.</strong> Three mails: the ' +
+      "code, a warning <b>" + num(a.warn_delay_mins) + " minutes</b> in that adds no offer (<b>" +
+      num(a.warned) + " sent</b>), then — if the card lapses unbought — <b>one</b> chase raising it to <b>" +
+      fpct + "%</b> for " + num(a.followup_ttl_mins / 60) + " hours. <b>Chased " + num(a.chased) + "</b> · bought " +
+      num(a.chased_redeemed) + " (" + a.chase_rate + "%) · " + num(a.chase_due) +
+      " waiting on the next sweep · " + num(a.unsubs) + " opted out. Those rows cost <b>" + fpct +
+      "%</b>, not " + pct + "% — read the two separately.</div>";
+    f.appendChild(chase);
+
     if (a.synthetic > 0) {
       var syn = document.createElement("div");
       syn.className = "banner synthetic";
@@ -2801,7 +2817,9 @@
       (a.total > recent.length ? ", first " + num(recent.length) + " of " + num(a.total) : "") +
       ". The value is re-priced from each stored configuration; the offer is what the " +
       pct + "% code brings it to. <b>Mailed</b> is whether the code actually left the server — " +
-      "an unconfigured mailbox issues the code anyway and the modal drops its inbox line.</p>";
+      "an unconfigured mailbox issues the code anyway and the modal drops its inbox line. " +
+      "<b>Chased</b> marks a row the follow-up mail revived — those are priced at the " +
+      "follow-up rate, so their offer figure is the lower one.</p>";
 
     if (!recent.length) {
       el.insertAdjacentHTML("beforeend",
@@ -2825,7 +2843,10 @@
         '<td class="dim">' + esc(r.pick) + "</td>" +
         '<td class="num">' + esc(usd(r.value)) + "</td>" +
         '<td class="num">' + (r.offer ? esc(usd(r.offer)) : '<span class="dim">—</span>') + "</td>" +
-        "<td>" + (r.mailed ? "Yes" : '<span class="dim">No</span>') + "</td>" +
+        "<td>" + (r.mailed ? "Yes" : '<span class="dim">No</span>') +
+          (r.warned ? ' <span class="chip">warned</span>' : "") +
+          (r.stage === "followup" ? ' <span class="chip">chased</span>' : "") +
+          (r.nomail ? ' <span class="chip">opted out</span>' : "") + "</td>" +
         "<td>" + bingoChip(r.status) +
           (r.order_id ? ' <span class="dim">' + esc(r.order_id) + "</span>"
                       : (r.applied_at ? ' <span class="dim">applied</span>' : "")) + "</td>" +
@@ -2835,13 +2856,16 @@
 
     el.querySelector("[data-export-mystery]").addEventListener("click", function () {
       var cols = ["opened", "email", "token", "game", "config", "mode", "card", "value_usd",
-                  "offer_usd", "mailed", "guides_optin", "status", "expires", "applied_at",
+                  "offer_usd", "mailed", "guides_optin", "status", "stage", "followed_up_at",
+                  "warned", "opted_out", "expires", "applied_at",
                   "redeemed_at", "order_id", "country_code", "country", "country_source", "seeded"];
       var lines = [cols.join(",")];
       var iso = function (t) { return t ? new Date(t * 1000).toISOString() : ""; };
       recent.forEach(function (r) {
         lines.push([iso(r.at), r.email, r.token, r.game, r.summary, r.mode, r.pick, r.value,
                     r.offer, r.mailed ? "yes" : "no", r.optin ? "yes" : "no", r.status,
+                    r.stage || "card", iso(r.followup_at), r.warned ? "yes" : "no",
+                    r.nomail ? "yes" : "no",
                     iso(r.expires), iso(r.applied_at), iso(r.redeemed_at), r.order_id,
                     r.co, countryName(r.co), r.cosrc, r.syn ? "yes" : "no"]
           .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; }).join(","));

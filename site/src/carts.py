@@ -591,5 +591,21 @@ def process_sweep(raw, header_get):
     if not _hmac.compare_digest(given, secret):
         return 401, {"error": "unauthorized"}
 
+    # Two mailers, one timer. The mystery store's follow-up (`followup.py`)
+    # runs on the same cadence and behind the same secret rather than growing a
+    # second cron entry and a second shared secret to keep in step — the auth
+    # above is the only reason this function is the one holding the door. Its
+    # summary rides in `followup`; the cart fields stay at the top level so
+    # anything already reading this response keeps working.
     import recovery
-    return 200, recovery.sweep()
+    out = recovery.sweep()
+    try:
+        import followup
+        out["followup"] = followup.sweep_all()
+    except Exception as e:                                     # noqa: BLE001
+        # A broken follow-up must never stop the cart recovery that shares this
+        # timer — losing one upsell mail is cheaper than losing the sweep.
+        import sys
+        sys.stderr.write("[sweep] followup skipped: %s\n" % e)
+        out["followup"] = {"error": str(e)[:200]}
+    return 200, out

@@ -362,6 +362,17 @@ a degraded mode, not the design.
    | `BINGO_PCT` | `0.30` | The discount, as a fraction. **This is a flat cost on every redeemed code — model it as 30%, not as an average.** |
    | `BINGO_TTL` | `3600` | How long a code works, in seconds. One hour. Change it and the modal's own copy follows (the band, the pill and the countdown all read this). |
    | `BINGO_MAX` | `20000` | Caps the stored list. |
+   | `BINGO_WARN_DELAY` | `1800` | Seconds after the code is issued before the **halfway warning** goes out. It adds no discount — it only says the hour is running out. |
+   | `BINGO_FOLLOWUP_PCT` | `0.35` | The **second** offer, on a card that lapsed unbought. Another flat cost — model a chased row at 35%, not 30%. |
+   | `BINGO_FOLLOWUP_DELAY` | `1800` | Seconds after the hour lapses before the follow-up goes out. |
+   | `BINGO_FOLLOWUP_TTL` | `86400` | How long the revived code works. 24 hours. |
+   | `BINGO_FOLLOWUP_MAX_AGE` | `259200` | Past this age a lapsed card is left alone entirely. 3 days. |
+   | `ESB_PLAY_HOURS_PER_DAY` | `8` | Hours of play behind one ETA day. The follow-up divides the total by it to quote a per-hour figure — **set it at or below what the roster really does**, or the claim stops being true. |
+   | `ESB_PER_HOUR_MAX` | `6` | Above this the per-hour block is dropped from the mail rather than printed. |
+
+   The follow-up rides on the **same cron and the same secret** as the
+   abandoned-cart sweep — `/api/sweep` runs both. If `CART_SWEEP_SECRET` is
+   unset, neither mail is ever sent.
 
 2. **Check it.** Locally, open a game page, change the target rank and wait five
    seconds. Or hit the API directly:
@@ -396,6 +407,30 @@ Notes worth keeping in mind:
 - **This store holds PII** (the email, the country) next to a live discount, so it
   is the most sensitive of the six — same treatment as carts and orders: a lawful
   basis, a privacy-policy line, a deletion path.
+- **Three mails, one of each, ever.** The code (30%, 1 hour); a **warning 30 minutes
+  in** that adds no offer and just says the clock is running out; and, only if the card
+  lapses unbought, the chase below. The warning fires *inside* the hour and the chase
+  only *after* it, so they can never both pick up the same card — a test walks a card's
+  whole life and asserts it. Preview all three without waiting an hour:
+  `python3 site/tools/send_test_mail.py you@example.com --sequence` (it uses a throwaway
+  store, so no real row is touched and no live token is spent).
+- **Every mail quotes the order as it stands, not as it was when they gave us the
+  address.** The browser beacons the live configuration back to the card while they keep
+  building, so extending the climb or ticking Priority moves what the mails say and what
+  the checkout link restores. It can only change *which order* the token quotes — never
+  the deadline, the rate or the address.
+- **The chase.** 30 minutes after
+  the hour dies, `followup.py` raises the *same* token to 35% for 24 hours and mails
+  it once — with the order's price per hour of play, what the free screen share is
+  worth on it, and a link straight to `/checkout?bingo=…` that carries the
+  configuration so the page prices the order the mail quoted. `revive()` flips the
+  row's stage before the send, so a sweep every five minutes cannot mail twice. A
+  paid card is never chased; an unsubscribe stops the mail and **keeps** the code.
+- **The per-hour figure is a claim, and it is dropped when it is not a good one.**
+  A long climb prices above `ESB_PER_HOUR_MAX` even at 35%, and the mail then makes
+  no per-hour argument at all rather than a bad one. `ESB_PLAY_HOURS_PER_DAY` is an
+  **ops commitment, not a measurement** — confirm 8 with ops the way `SAFETY`'s
+  measure notes need confirming.
 - **The marketing opt-in is separate from the code.** The code mail is
   transactional and goes either way; the ticked box writes to the same guides
   mailing list `/guides.html` does. Bundling consent into the transactional mail is
