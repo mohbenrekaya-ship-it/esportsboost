@@ -594,6 +594,12 @@
      state & API
      ══════════════════════════════════════════════════════════════════════ */
   var state = { token: null, days: 30, game: "", tab: "liveview", data: null, busy: false,
+                // The Sessions tab's traffic-source filter — "google.com / referral",
+                // the pair that table prints. Applied server-side, before the
+                // newest-300 cap, so it reaches the whole period rather than the
+                // page: filtering the rows here would answer a different question
+                // and look identical.
+                source: "",
                 // The period, as a preset key plus the absolute pair it resolves
                 // to. `days` is kept in step because the Orders / Carts /
                 // Accounts / Guides / Boosters actions still take a trailing
@@ -695,7 +701,8 @@
     return api({ action: "data", token: state.token, days: state.days,
                  start: state.start, end: state.end,
                  tzoff: new Date().getTimezoneOffset(),
-                 game: state.game || null, synthetic: state.synthetic })
+                 game: state.game || null, source: state.source || null,
+                 synthetic: state.synthetic })
       .then(function (res) {
         state.busy = false;
         app.classList.remove("loading");
@@ -1321,43 +1328,74 @@
   function panelSessions(d) {
     if (state.sessionId) return panelSessionDetail();
 
-    var rows = d.sessions || [];
+    // The payload carries the page (capped), the matched total, the menu of
+    // sources and the tiles — all computed server-side over every matched
+    // session, not over the page below.
+    var sd = d.sessions || {};
+    if (Array.isArray(sd)) sd = { rows: sd };          // pre-filter payload shape
+    var rows = sd.rows || [];
+    var st = sd.stats || {};
+    var picked = sd.source || "";
+    var total = sd.total == null ? rows.length : sd.total;
     var f = document.createDocumentFragment();
 
     var kr = document.createElement("div");
     kr.className = "kpis";
-    var withPages = rows.filter(function (r) { return r.duration > 0; });
-    var median = 0;
-    if (withPages.length) {
-      var ds = withPages.map(function (r) { return r.duration; }).sort(function (a, b) { return a - b; });
-      median = ds[Math.floor(ds.length / 2)];
-    }
-    kr.appendChild(kpi("Sessions", num(rows.length)));
-    kr.appendChild(kpi("Median duration", dur(median)));
-    kr.appendChild(kpi("Pages per session",
-      rows.length ? (rows.reduce(function (n, r) { return n + r.pages; }, 0) / rows.length).toFixed(1) : "0"));
-    kr.appendChild(kpi("Events per session",
-      rows.length ? (rows.reduce(function (n, r) { return n + r.events; }, 0) / rows.length).toFixed(1) : "0"));
-    kr.appendChild(kpi("Converted", num(rows.filter(function (r) { return r.paid; }).length)));
-    kr.appendChild(kpi("Returning", num(rows.filter(function (r) { return r.returning; }).length)));
+    // Every tile is the server's, counted over all `total` matched sessions.
+    // Recomputing them from `rows` would count the newest 300 only and print
+    // that as the period's figure — which is exactly the number a source filter
+    // is opened to read.
+    kr.appendChild(kpi("Sessions", num(st.sessions == null ? rows.length : st.sessions)));
+    kr.appendChild(kpi("Median duration", dur(st.median_duration || 0)));
+    kr.appendChild(kpi("Pages per session", (st.pages_per || 0).toFixed(1)));
+    kr.appendChild(kpi("Events per session", (st.events_per || 0).toFixed(1)));
+    kr.appendChild(kpi("Converted", num(st.converted || 0)));
+    kr.appendChild(kpi("Returning", num(st.returning || 0)));
     // Sign-ups made IN these sessions — deliberately not "sessions with an
     // account", which folds in everyone who was already logged in and reads as
     // a far bigger number than the panel actually produced.
-    kr.appendChild(kpi("Signed up",
-      num(rows.filter(function (r) { return r.acct === "signed_up"; }).length)));
+    kr.appendChild(kpi("Signed up", num(st.signed_up || 0)));
     f.appendChild(kr);
+
+    // Traffic source: the "source / medium" pair the column prints, tallied
+    // over the unfiltered period so the menu never collapses to the one already
+    // picked. A pick that has since gone quiet is kept in the list rather than
+    // dropped, or the control would silently show "All sources" over an empty
+    // table.
+    var srcs = (sd.sources || []).slice();
+    if (picked && !srcs.some(function (o) { return o.key === picked; })) {
+      srcs.unshift({ key: picked, sessions: 0 });
+    }
+    // Every source's tally adds up to the period's whole session count, which is
+    // what the filtered line below compares against.
+    var windowTotal = srcs.reduce(function (n, o) { return n + o.sessions; }, 0) || total;
+    var srcOpts = '<option value="">All sources (' + num(windowTotal) + ")</option>" +
+      srcs.map(function (o) {
+        return '<option value="' + esc(o.key) + '"' + (o.key === picked ? " selected" : "") +
+               ">" + esc(o.key) + " (" + num(o.sessions) + ")</option>";
+      }).join("");
 
     var el = document.createElement("div");
     el.className = "card";
     el.innerHTML =
       '<div class="card-hd"><h3>Every session</h3><span class="spacer"></span>' +
+      '<select class="field" data-source-filter aria-label="Filter by traffic source">' +
+        srcOpts + "</select>" +
       '<button class="btn btn-sm" type="button" data-export-sessions>Export CSV</button></div>' +
       '<p class="card-sub">Newest first. Click a session id to see everything that visitor did, ' +
-      "in order, with the time spent on each page.</p>";
+      "in order, with the time spent on each page." +
+      (picked ? " Showing <strong>" + esc(picked) + "</strong> only — " + num(total) +
+                " of " + num(windowTotal) + " sessions in this period." : "") +
+      (total > rows.length
+        ? ' The table lists the newest ' + num(rows.length) + " of them; the tiles above count all " +
+          num(total) + "."
+        : "") + "</p>";
 
     if (!rows.length) {
-      el.insertAdjacentHTML("beforeend",
-        '<p class="empty">No sessions in this period yet. Browse the site and hit Refresh.</p>');
+      el.insertAdjacentHTML("beforeend", picked
+        ? '<p class="empty">No sessions from ' + esc(picked) + " in this period.</p>"
+        : '<p class="empty">No sessions in this period yet. Browse the site and hit Refresh.</p>');
+      wireSourceFilter(el);
       f.appendChild(el);
       return f;
     }
@@ -1414,13 +1452,31 @@
       });
       var a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
-      a.download = "esb-sessions-" + new Date().toISOString().slice(0, 10) + ".csv";
+      // The file holds exactly what the table holds — the filtered page. Naming
+      // the source in it is what stops one source's export being read later as
+      // the whole period's.
+      a.download = "esb-sessions-" +
+        (picked ? picked.replace(/[^a-z0-9.]+/gi, "-").replace(/^-|-$/g, "") + "-" : "") +
+        new Date().toISOString().slice(0, 10) + ".csv";
       a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
     });
 
+    wireSourceFilter(el);
     f.appendChild(el);
     return f;
+  }
+
+  /* The traffic-source filter. Server-side, so changing it refetches — the same
+     trade the game filter in the top bar makes, and the only way the filter can
+     reach past the newest-300 cap the table draws. */
+  function wireSourceFilter(el) {
+    var sel = el.querySelector("[data-source-filter]");
+    if (!sel) return;
+    sel.addEventListener("change", function () {
+      state.source = sel.value;
+      refresh();
+    });
   }
 
   /* The account flow, in words. The events carry a step and an outcome and

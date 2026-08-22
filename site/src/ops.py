@@ -42,6 +42,7 @@ import orders
 TOKEN_TTL = 12 * 3600      # a working day, then log in again
 MIN_PASSWORD = 12          # refuse to protect the dashboard with less
 MAX_BODY = 8 * 1024
+MAX_SOURCE = 160           # "source / medium", capped like every other body field
 MAX_ATTEMPTS = 10          # per window, per deployment
 ATTEMPT_WINDOW = 900       # 15 minutes
 
@@ -168,10 +169,10 @@ def _range(body):
 
 
 def dashboard_data(days=30, game=None, synthetic=False, start=None, end=None,
-                   tzoff=0):
+                   tzoff=0, source=None):
     events = analytics.read()
     payload = insights.compute(events, days=days, game=game, synthetic=synthetic,
-                               start=start, end=end, tzoff=tzoff)
+                               start=start, end=end, tzoff=tzoff, source=source)
     payload["meta"]["store"] = analytics.store_name()
     return payload
 
@@ -179,7 +180,8 @@ def dashboard_data(days=30, game=None, synthetic=False, start=None, end=None,
 def process_ops(raw):
     """POST /api/ops → (status, payload).
 
-    Body: {"action": "login"|"data", "password"?, "token"?, "days"?, "game"?}
+    Body: {"action": "login"|"data", "password"?, "token"?, "days"?, "game"?,
+           "source"?}
     """
     if not configured():
         return 503, {"error": "not_configured",
@@ -200,6 +202,12 @@ def process_ops(raw):
     except (TypeError, ValueError):
         days = 30
     game = body.get("game") if isinstance(body.get("game"), str) else None
+    # The Sessions tab's traffic-source filter — "google.com / referral", the
+    # pair the table prints. Matched against a key the server itself built, so
+    # anything unrecognised simply matches nothing; capped because it arrives
+    # from the body like everything else here.
+    source = body.get("source")
+    source = source[:MAX_SOURCE] if isinstance(source, str) and source else None
     # Off by default: the dashboard's job is to report real traffic, and seeded
     # rows in the denominator are indistinguishable from real ones once they are
     # in. The console's own toggle is the only thing that turns them back on.
@@ -224,7 +232,8 @@ def process_ops(raw):
             return 401, {"error": "bad_password"}
         _clear_failures()
         return 200, {"token": make_token(),
-                     "data": dashboard_data(days, game, synthetic, r_start, r_end, tzoff)}
+                     "data": dashboard_data(days, game, synthetic, r_start, r_end,
+                                            tzoff, source)}
 
     if not check_token(body.get("token")):
         return 401, {"error": "expired"}
@@ -309,4 +318,5 @@ def process_ops(raw):
             return 404, {"error": "not_found"}
         return 200, {"order": det}
 
-    return 200, {"data": dashboard_data(days, game, synthetic, r_start, r_end, tzoff)}
+    return 200, {"data": dashboard_data(days, game, synthetic, r_start, r_end,
+                                        tzoff, source)}

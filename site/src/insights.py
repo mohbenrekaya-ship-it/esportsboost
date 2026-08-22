@@ -635,9 +635,56 @@ def _session_row(s):
     }
 
 
-def _mod_sessions(sess, limit=300):
+def _source_key(src, med):
+    """The pair the Sessions table prints — "google.com / referral".
+
+    Filtered on the PAIR, not the source alone: a utm-tagged `google.com / cpc`
+    visit and an organic `google.com / referral` one are different traffic and
+    reading them as one is how a paid campaign hides inside its own brand
+    search. Built from the same two values `_session_row()` renders, so a menu
+    entry always names a string that is actually in the column.
+    """
+    return (src or "direct") + " / " + (med or "none")
+
+
+def _session_stats(rows):
+    """The tiles above the sessions table, computed over every MATCHED session
+    rather than the capped page under them. The table only ever draws the newest
+    `limit`; a tile counted off that page reads as the period's total and is
+    wrong by however much the cap trimmed — and with a source filter on, that is
+    the one number the reader is there for."""
+    n = len(rows)
+    durs = [r["duration"] for r in rows if r["duration"] > 0]
+    return {
+        "sessions": n,
+        "median_duration": int(_median(durs)),
+        "pages_per": round(sum(r["pages"] for r in rows) / n, 1) if n else 0.0,
+        "events_per": round(sum(r["events"] for r in rows) / n, 1) if n else 0.0,
+        "converted": sum(1 for r in rows if r["paid"]),
+        "returning": sum(1 for r in rows if r["returning"]),
+        "signed_up": sum(1 for r in rows if r["acct"] == "signed_up"),
+    }
+
+
+def _mod_sessions(sess, source=None, limit=300):
+    """The sessions list, optionally narrowed to one traffic source.
+
+    The filter is applied HERE, before the cap, so it reaches the whole window
+    rather than whichever sessions happened to survive the newest-`limit` trim —
+    the difference between "every google.com visit this month" and "the google
+    visits among the last 300 sessions", which are not the same claim and look
+    identical on screen.
+    """
     rows = [_session_row(s) for s in sorted(sess, key=lambda x: -x.start)]
-    return rows[:limit]
+    # Tallied BEFORE the filter, or picking a source collapses the menu to the
+    # one thing already picked and there is no way back to the others.
+    tally = Counter(_source_key(r["src"], r["med"]) for r in rows)
+    sources = [{"key": k, "sessions": n} for k, n in tally.most_common()]
+    if source:
+        rows = [r for r in rows if _source_key(r["src"], r["med"]) == source]
+    return {"rows": rows[:limit], "total": len(rows), "limit": limit,
+            "source": source or "", "sources": sources,
+            "stats": _session_stats(rows)}
 
 
 def session_detail(events, session_id, first_seen=None):
@@ -906,7 +953,7 @@ def stripe_summary(days=30, start=None, end=None):
 #  entry point
 # ══════════════════════════════════════════════════════════════════════════
 def compute(events, days=30, game=None, now=None, with_stripe=True,
-            synthetic=False, start=None, end=None, tzoff=0):
+            synthetic=False, start=None, end=None, tzoff=0, source=None):
     """All dashboard modules for the trailing `days` window, plus the window
     immediately before it for the deltas.
 
@@ -982,7 +1029,7 @@ def compute(events, days=30, game=None, now=None, with_stripe=True,
         "journey": _mod_journey(sess, first_seen),
         "acquisition": _mod_acquisition(sess),
         "friction": _mod_friction(sess, window),
-        "sessions": _mod_sessions(sess),
+        "sessions": _mod_sessions(sess, source),
         "abandoned": _mod_abandoned(sess),
         "live": _mod_live(window),
         # The live view is always "right now", not the selected period — it

@@ -2508,6 +2508,19 @@ with nothing to configure.
   where the chart is read most. They still count as re-quotes, and surface separately in Friction.
 - **Chart colors were computed, not chosen.** `ops.css` uses the data-viz reference palette's dark
   column, validated against its own `--surface`. Changing a hex means re-running those checks.
+- **The Sessions tab's traffic-source filter is applied SERVER-side, before the newest-300 cap.**
+  `_mod_sessions(sess, source)` narrows on the `"source / medium"` pair the table prints — the pair,
+  not the source alone, so a `google.com / cpc` campaign can never hide inside `google.com /
+  referral`. Filtering the rows in the browser would answer a different question and look identical:
+  "every google visit this month" against "the google visits among the last 300 sessions". The menu
+  is tallied **before** the filter, or picking one collapses it to the thing already picked, and a
+  pick with nothing left in the period is kept in the control with a `(0)` rather than snapping back
+  to All. The payload is `{rows, total, limit, source, sources, stats}` — it was a bare list.
+- **That tab's tiles are counted over every MATCHED session, not over the page below them.** They
+  used to be recomputed in `ops.js` from the capped rows, so a store with more than 300 sessions in
+  the window published the cap as the period's session count (the tile read exactly `300`). `stats`
+  in the sessions payload is the one definition now, and the sub-line says when the table is showing
+  fewer rows than the tiles counted.
 - **Session timelines are fetched one at a time** (`action: "session"`), never bundled into the
   dashboard payload — bundling them would ship the entire event store to the browser on every
   refresh. Time-on-page is derived from gaps between consecutive events; there is no unload event,

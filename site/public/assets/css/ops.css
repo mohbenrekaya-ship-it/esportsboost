@@ -270,9 +270,14 @@ select.field { padding-right: 26px; }
 .card.third { grid-column: span 4; }
 .card.twothirds { grid-column: span 8; }
 
-.card-hd { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+.card-hd { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
 .card-hd h3 { font-size: 14px; }
 .card-hd .spacer { flex: 1 1 auto; }
+/* A filter that changes ONE card lives in that card's header. The top bar's
+   controls re-cut every panel on the dashboard; this one re-cuts the table
+   under it, and putting it up there would say otherwise. Sized to the .btn-sm
+   it sits beside. */
+.card-hd .field { font-size: 12px; padding: 4px 22px 4px 9px; max-width: min(280px, 60vw); }
 .card-sub { color: var(--muted); font-size: 12px; margin: 0 0 16px; max-width: 68ch; }
 .toggle {
   font: inherit; font-size: 11px; cursor: pointer; color: var(--muted);

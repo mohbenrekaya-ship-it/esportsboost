@@ -9116,7 +9116,12 @@ def page_ops():
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#08080c">
 <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/assets/css/ops.css">
+<!-- av()'d like every shop asset, and for a sharper reason here: /assets/* is
+     served immutable for a year (vercel.json), and the console's JS talks to an
+     API whose payload shape it has to agree with. An un-versioned ops.js means a
+     deploy that changes /api/ops leaves the operator's cached script parsing a
+     response it was never written for, with no reload that fixes it. -->
+<link rel="stylesheet" href="{av('/assets/css/ops.css')}">
 </head>
 <body class="ops">
 
@@ -9181,7 +9186,7 @@ def page_ops():
   </main>
 </div>
 
-<script src="/assets/js/ops.js"></script>
+<script src="{av('/assets/js/ops.js')}"></script>
 </body>
 </html>
 """
