@@ -121,6 +121,7 @@ def build_session(order, base_url):
 
     game = order.get("game", "")
     region = order.get("region", "")
+    service = order.get("service", "") or "division"
     # A booster the customer named on the roster or a profile page. Resolved
     # against the real roster, never taken as written — the browser POSTs it,
     # and an unrecognised handle must not reach fulfilment as an assignment.
@@ -160,8 +161,17 @@ def build_session(order, base_url):
         # order details ride along so fulfilment (webhook) has what it needs
         "metadata[order_id]": order_id,
         "metadata[game]": game,
-        "metadata[service]": order.get("service", ""),
+        "metadata[service]": service,
         "metadata[detail]": q["summary"][:490],
+        # The climb and the queue as FIELDS, not as a sentence. `detail` is the
+        # human summary and fulfilment used to recover the ranks by splitting it
+        # on the arrow — which reads nothing at all on a wins/placements order,
+        # whose summary has no arrow, so those orders reached the board with no
+        # starting rank on them. The parse survives in order_row() as the
+        # fallback for a Session created before these keys existed.
+        "metadata[from]": str(order.get("from") or "")[:60],
+        "metadata[to]": str(order.get("to") or "")[:60],
+        "metadata[mode]": str(order.get("mode") or "")[:20],
         "metadata[region]": region,
         "metadata[booster]": booster,
         "metadata[hours]": (order.get("hours") or "")[:490],
@@ -190,6 +200,20 @@ def build_session(order, base_url):
         "metadata[discount]": str(q["discount"]),
         "metadata[subtotal]": str(q["subtotal"]),
     }
+    # Product-specific configuration, resolved through pricing's own clamps so
+    # the metadata names what was CHARGED for, never what the body asked for. A
+    # unit count or a coach that only exists in the summary sentence cannot be
+    # recorded, and the /ops row then states a figure nobody bought.
+    if service in ("wins", "placements"):
+        params["metadata[units]"] = str(pricing.unit_count(order))
+        if service == "placements" and order.get("unranked"):
+            params["metadata[unranked]"] = "1"
+    elif service == "coaching":
+        coach, pack = pricing.coach_pick(order)
+        params["metadata[coach]"] = coach["name"][:60]
+        # Deliberately NOT metadata[hours]: that key is the buyer's preferred
+        # PLAY WINDOW, a different fact that also has to survive to fulfilment.
+        params["metadata[coach_hours]"] = str(pack["hours"])
     email = order.get("email", "").strip()
     if email:
         params["customer_email"] = email
@@ -398,26 +422,44 @@ def _seen_event(event_id):
     return False
 
 
-def _record_order(md, obj):
-    """Turn a completed Stripe session's metadata into an orders-store row. Kept
-    out of the webhook body so its import is lazy — the store module is only
-    needed on the fulfilment path, not on every checkout/session call."""
-    import orders  # noqa: E402 — lazy: only the webhook needs the store
-    frm, to = "", ""
+def order_row(md, obj):
+    """A completed Stripe session's metadata → one orders-store row.
+
+    **Every option the buyer paid for has to survive this function**, because it
+    is the only thing that writes the order down: the confirmation mail states
+    the add-ons from the same metadata, but the mail is not a record anybody can
+    look up later, and whoever claims the order reads /ops. A row that drops the
+    add-ons shows "No add-ons on this order" over an order that was charged a
+    15% priority uplift — the operator is then told to deliver less than was
+    bought, and a free-but-optional row (the screen share) has nothing at all
+    recording that it was asked for.
+
+    Pure by design — `_record_order` does the store write — so the round trip
+    metadata → row → `orders.clean_order()` is testable without a store.
+    """
     detail = md.get("detail") or ""
-    if "→" in detail:                        # "Gold IV → Platinum II · Solo"
+    # The climb, from its own metadata keys; the sentence-parse is the fallback
+    # for a Checkout Session created before those keys shipped and paid after.
+    frm, to = md.get("from") or "", md.get("to") or ""
+    if not frm and "→" in detail:            # "Gold IV → Platinum II · Solo"
         climb = detail.split("·")[0]
         frm, _, to = climb.partition("→")
         frm, to = frm.strip(), to.strip()
-    mode = "Duo queue" if "duo" in detail.lower() else "Piloted"
-    orders.append([{
+    # "Piloted" is the store's own name for a solo order (data.py reads it as
+    # solo, and the seeded rows use it) — so this normalises to that, rather
+    # than putting a second word for one queue in the same column.
+    mode = md.get("mode") or ""
+    duo = mode == "Duo queue" or (not mode and "duo" in detail.lower())
+    service = md.get("service") or "division"
+
+    row = {
         "order_id": obj.get("client_reference_id") or md.get("order_id"),
         "at": int(time.time()),
         "status": "paid",
         "game": md.get("game", ""),
-        "service": md.get("service", "division"),
+        "service": service,
         "from_rank": frm, "to_rank": to,
-        "mode": mode,
+        "mode": "Duo queue" if duo else "Piloted",
         "region": md.get("region", ""),
         "currency": md.get("currency", "usd"),
         "booster": md.get("booster", ""),
@@ -425,10 +467,34 @@ def _record_order(md, obj):
         "eta": md.get("eta", ""),
         "email": (obj.get("customer_details") or {}).get("email", ""),
         "notes": md.get("notes", ""),
+        # The options ticked, as ids — the comma-joined list build_session put
+        # in metadata, already queue-filtered there. Unrecognised ids are
+        # dropped by orders.clean_order(), so nothing here has to be trusted.
+        "addons": [a for a in (md.get("addons") or "").split(",") if a.strip()],
         "subtotal": _cents_to_whole(md.get("subtotal")),
         "discount": _cents_to_whole(md.get("discount")),
         "total": _amount_whole(obj.get("amount_total")),
-    }])
+    }
+    # The rest of the product. Without these a 5-win order is stored as a
+    # 1-win one (clean_order clamps a missing count to UNIT_MIN) and a 10-hour
+    # coaching booking as a 1-hour one — a wrong figure stated as fact, which
+    # is worse than the blank the add-ons left.
+    if service in ("wins", "placements"):
+        row["units"] = md.get("units")
+        if md.get("unranked"):
+            row["unranked"] = 1
+    elif service == "coaching":
+        row["coach"] = md.get("coach", "")
+        row["hours"] = md.get("coach_hours")
+    return row
+
+
+def _record_order(md, obj):
+    """Write one fulfilled order into the store. Kept out of the webhook body so
+    its import is lazy — the store module is only needed on the fulfilment path,
+    not on every checkout/session call."""
+    import orders  # noqa: E402 — lazy: only the webhook needs the store
+    orders.append([order_row(md, obj)])
 
 
 # ── the confirmation mail ──────────────────────────────────────────────────

@@ -753,9 +753,17 @@ Things that are load-bearing here:
 - **A free option still has to reach fulfilment.** A paid add-on is implied by the amount; a free one
   moves no money and would arrive at the board with nothing recording that it was asked for — and
   this one is an obligation on whoever claims the order. `payments.build_session()` therefore carries
-  `metadata[addons]` (queue-filtered by the same `addon_applies()` call `quote()` makes), and both
-  order mails state an **Options** row through `_addon_names()`. ⚠ The live half of the feature is
-  still not built — see [Watch live](#watch-live--the-boosters-screen-share--watch_panel).
+  `metadata[addons]` (queue-filtered by the same `addon_applies()` call `quote()` makes), both
+  order mails state an **Options** row through `_addon_names()`, and `payments.order_row()` writes
+  the ids into the **orders store**, which is the only record anybody can look up after the mail is
+  read — the /ops drill-down's "Options chosen" table is that row. ⚠ **Every field in that row comes
+  from Stripe metadata, so a product fact that exists only inside `metadata[detail]`'s sentence is
+  not recorded**: the row carried no add-ons at all for a while, and the unit count and coaching pack
+  were silently clamped to their minimums, which states a figure nobody bought. Adding a product
+  option means adding it in `build_session()` **and** `order_row()`; `test_pricing.py`'s
+  `test_order_row_records_what_was_bought()` walks the round trip for all four products. ⚠ The live
+  half of the feature is still not built — see
+  [Watch live](#watch-live--the-boosters-screen-share--watch_panel).
 - **The queue owns its add-ons on both sides.** `D.addon_applies()` (mirrored by `addonApplies()` in
   app.js) is the filter, and `pricing.quote()` re-applies it, so the other queue's option is never
   charged whatever the payload says. app.js drops it from `state.addons` on the mode change and once

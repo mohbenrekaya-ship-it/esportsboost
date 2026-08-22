@@ -722,6 +722,97 @@ def test_checkout_payload_sends_state():
         check(field in html, "payload includes `%s`" % field.split(":")[0])
 
 
+# ── the receipt: what was bought has to survive to the orders store ────────
+def test_order_row_records_what_was_bought():
+    """A fulfilled order is written down ONCE, by payments.order_row(), and the
+    /ops Orders tab is the only place anyone can look it up afterwards. So every
+    option the buyer was charged for has to survive the metadata round trip.
+
+    The regression: the row carried no `addons` at all, so an order charged a
+    15% priority uplift showed "No add-ons on this order" to the operator who
+    had to deliver it — and a free-but-optional row (the screen share, which
+    moves no money and can't be inferred from the amount) had nothing anywhere
+    recording that it was asked for. The unit count and the coaching pack were
+    dropped the same way, which is worse than blank: clean_order() clamps a
+    missing count to UNIT_MIN, so a 5-win order was stored as a 1-win one.
+    """
+    print("\n[orders] the stored row carries every option that was charged")
+    import orders                                    # noqa: E402 — same lazy import
+    val = next(g for g in D.GAMES if g["name"] == "Valorant")
+
+    def roundtrip(order, total):
+        """Everything the webhook sees: build the Session, read its metadata back
+        exactly as Stripe hands it over, and run the row through the store's own
+        validator — a field that doesn't survive clean_order() isn't recorded."""
+        params, oid, q = payments.build_session(order, "http://localhost:4321")
+        md = {k[9:-1]: v for k, v in params.items() if k.startswith("metadata[")}
+        row = payments.order_row(md, {
+            "client_reference_id": oid, "amount_total": total * 100,
+            "customer_details": {"email": "buyer@example.com"}})
+        return orders.clean_order(row), q
+
+    # 1 — a division order with a paid add-on and a free-but-optional one.
+    st = {"game": val["name"], "service": "division", "from": val["ladder"][8],
+          "to": val["ladder"][12], "mode": "Duo queue", "region": "North America",
+          "addons": ["priority", "stream"], "currency": "usd"}
+    stored, q = roundtrip(st, q0 := pricing.quote(st)["total"])
+    check(stored is not None, "the row survives orders.clean_order()")
+    check(stored["addons"] == ["priority", "stream"],
+          "both options stored (got %r)" % (stored["addons"],))
+    check(stored["from_rank"] == val["ladder"][8] and stored["to_rank"] == val["ladder"][12],
+          "the climb is stored from its own fields, not parsed out of a sentence")
+    check(stored["mode"] == "Duo queue", "the queue is stored")
+    # …and the drill-down's per-add-on cost adds up against what was charged.
+    bd = {a["id"]: a["cost"] for a in orders._addon_breakdown(stored)}
+    plain = pricing.quote(dict(st, addons=[]))["total"]
+    check(bd.get("priority") == q0 - plain,
+          "priority's cost on this order (%s) is what it added to the charge (%s)"
+          % (bd.get("priority"), q0 - plain))
+    check(bd.get("stream") == 0, "the free option reads as included, not as missing")
+
+    # A queue-only option can never be recorded in the queue it isn't offered in
+    # — quote() filters it out of the charge, so the receipt must not name it.
+    solo = dict(st, mode="Solo", addons=["soloq", "schedule"])
+    stored, _ = roundtrip(solo, pricing.quote(solo)["total"])
+    check(stored["addons"] == ["soloq"],
+          "the other queue's option is not stored (got %r)" % (stored["addons"],))
+
+    # 2 — units, which clean_order() would otherwise clamp to UNIT_MIN.
+    wins = {"game": val["name"], "service": "wins", "from": val["ladder"][8],
+            "wins": pricing.UNIT_MAX, "mode": "Solo", "region": "North America",
+            "addons": [], "currency": "usd"}
+    stored, _ = roundtrip(wins, pricing.quote(wins)["total"])
+    check(stored["units"] == pricing.UNIT_MAX,
+          "a %d-win order stores %d wins" % (pricing.UNIT_MAX, stored["units"]))
+    check(stored["from_rank"] == val["ladder"][8],
+          "a unit order keeps its starting rank (its summary has no arrow to parse)")
+
+    pl = {"game": val["name"], "service": "placements", "placements": 5,
+          "unranked": True, "mode": "Solo", "region": "North America",
+          "addons": [], "currency": "usd"}
+    stored, _ = roundtrip(pl, pricing.quote(pl)["total"])
+    check(stored["units"] == 5 and stored.get("unranked") == 1,
+          "an unranked placements order stores both the count and unranked")
+
+    # 3 — coaching: the coach and the pack's hours, resolved server-side.
+    packs = D.COACH_PACKS
+    pi = max(range(len(packs)), key=lambda i: packs[i]["hours"])
+    co = {"game": LOL["name"], "service": "coaching", "coach": 1, "pack": pi,
+          "mode": "Solo", "region": "Europe West", "addons": [], "currency": "usd"}
+    stored, _ = roundtrip(co, pricing.quote(co)["total"])
+    check(stored["hours"] == packs[pi]["hours"],
+          "the %dh pack stores %s hours" % (packs[pi]["hours"], stored["hours"]))
+    check(stored["coach"] == D.COACHES[1]["name"],
+          "the booking names the coach that was quoted (got %r)" % (stored["coach"],))
+    # metadata[hours] is the buyer's preferred PLAY WINDOW, a different fact —
+    # reading it as the pack length would state a booking nobody made.
+    co2 = dict(co, hours="18:00–23:00")
+    params, _, _ = payments.build_session(co2, "http://x")
+    check(params["metadata[hours]"] == "18:00–23:00"
+          and params["metadata[coach_hours]"] == str(packs[pi]["hours"]),
+          "the play window and the pack length are two separate metadata keys")
+
+
 def main():
     for fn in (test_shown_equals_charged, test_iron_to_gold_regression,
                test_addon_modes, test_free_optional_addons,
@@ -732,7 +823,8 @@ def main():
                test_client_bundle_mirror, test_fx_rate_mirror, test_currency_signs,
                test_server_defaults,
                test_eta_schedule_mirror, test_eta_is_never_a_bare_long_figure,
-               test_checkout_payload_sends_state):
+               test_checkout_payload_sends_state,
+               test_order_row_records_what_was_bought):
         fn()
     print("\n" + ("=" * 52))
     if _fails:

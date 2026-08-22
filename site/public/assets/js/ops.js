@@ -2288,9 +2288,9 @@
       return f;
     }
 
-    var head = ["When", "Order", "Game", "Product", "Config", "Booster", "Region", "Country", "Status", "Total"];
+    var head = ["When", "Order", "Game", "Product", "Config", "Add-ons", "Booster", "Region", "Country", "Status", "Total"];
     var html = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
-      head.map(function (h, i) { return '<th class="' + (i === 9 ? "num" : "") + '">' + esc(h) + "</th>"; }).join("") +
+      head.map(function (h, i) { return '<th class="' + (i === head.length - 1 ? "num" : "") + '">' + esc(h) + "</th>"; }).join("") +
       "</tr></thead><tbody>";
     recent.forEach(function (r) {
       html += "<tr>" +
@@ -2300,6 +2300,9 @@
         "<td>" + esc(r.game) + "</td>" +
         "<td>" + esc(SERVICE_LABEL[r.service] || r.service) + '<span class="dim"> · ' + esc(r.mode || "") + "</span></td>" +
         '<td class="wrap-cell">' + esc(r.summary) + "</td>" +
+        '<td class="wrap-cell">' + ((r.addons && r.addons.length)
+          ? r.addons.map(function (n) { return '<span class="chip">' + esc(n) + "</span>"; }).join(" ")
+          : '<span class="dim">—</span>') + "</td>" +
         "<td>" + (r.booster ? esc(r.booster) : '<span class="dim">unassigned</span>') + "</td>" +
         '<td class="dim">' + esc(r.region || "—") + "</td>" +
         "<td>" + countryCell(r.country) + "</td>" +
@@ -2315,12 +2318,13 @@
     });
 
     el.querySelector("[data-export-orders]").addEventListener("click", function () {
-      var cols = ["when", "order_id", "game", "service", "mode", "config", "booster",
+      var cols = ["when", "order_id", "game", "service", "mode", "config", "addons", "booster",
                   "region", "country", "currency", "status", "total", "seeded"];
       var lines = [cols.join(",")];
       recent.forEach(function (r) {
         lines.push([new Date(r.at * 1000).toISOString(), r.order_id, r.game, r.service, r.mode,
-                    r.summary, r.booster, r.region, r.country, r.currency, r.status, r.total,
+                    r.summary, (r.addons || []).join(" | "), r.booster, r.region, r.country,
+                    r.currency, r.status, r.total,
                     r.syn ? "yes" : "no"]
           .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; }).join(","));
       });

@@ -455,6 +455,12 @@ def summary(days=30):
             "game": _short(r),
             "service": r.get("service", "division"),
             "summary": _climb_summary(r),
+            # The options ticked, by NAME — the list is what an operator scans
+            # to see who bought what, so it must not make them open every order
+            # to find the one that was charged a priority uplift, or the one
+            # carrying a free screen share somebody has to actually honour.
+            "addons": [_ADDON_BY_ID.get(a, {}).get("label", a)
+                       for a in (r.get("addons") or [])],
             "mode": r.get("mode", ""),
             "booster": r.get("booster", ""),
             "region": r.get("region", ""),

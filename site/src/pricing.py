@@ -307,10 +307,7 @@ def quote(state):
         # nothing else — no rank, no duo, no add-ons, no sitewide promo. The
         # pack discount is expressed as `discount` so the card's struck price and
         # save line read it the same way a promo would.
-        coaches, packs = D.COACHES, D.COACH_PACKS
-        ci = _idx(state.get("coach", 0), len(coaches))
-        pi = _idx(state.get("pack", 1), len(packs))
-        coach, pack = coaches[ci], packs[pi]
+        coach, pack = coach_pick(state)
         hours = pack["hours"]
         listed = coach["rate"] * hours
         total = _jsround(listed * (1 - pack["disc"]))
@@ -328,7 +325,7 @@ def quote(state):
         frm = state.get("from")
         if frm not in g["ladder"]:
             return _invalid("Unknown rank")
-        w = _clamp(state.get("wins", 1))
+        w = unit_count(state)
         wp = g.get("win_prices")
         if wp:
             # Per-tier win table: flat price per win within the tier the player
@@ -345,7 +342,7 @@ def quote(state):
         unranked = bool(state.get("unranked"))
         if not unranked and frm not in g["ladder"]:
             return _invalid("Unknown rank")
-        p = _clamp(state.get("placements", 1))
+        p = unit_count(state)
         pp = g.get("placement_prices")
         if pp:
             # Per-tier placement table, same shape as win_prices. Unranked has no
@@ -482,6 +479,24 @@ def _clamp(n):
     except (TypeError, ValueError):
         n = UNIT_MIN
     return max(UNIT_MIN, min(UNIT_MAX, n))
+
+
+def unit_count(state):
+    """The number of games a wins/placements order is charged for — the ONE
+    clamp, so anything that has to RECORD what was bought (the Stripe metadata,
+    and through it the orders store) reads the same figure quote() charged for.
+    Duplicating the clamp is how a receipt comes to disagree with the charge."""
+    key = "wins" if state.get("service") == "wins" else "placements"
+    return _clamp(state.get(key, 1))
+
+
+def coach_pick(state):
+    """(coach, pack) for a coaching booking, resolved from the client's list
+    indices through the same clamp quote() uses — so a tampered index can never
+    read past the list, and the metadata that records the booking names the
+    coach and the hours the buyer was actually quoted."""
+    return (D.COACHES[_idx(state.get("coach", 0), len(D.COACHES))],
+            D.COACH_PACKS[_idx(state.get("pack", 1), len(D.COACH_PACKS))])
 
 
 def _invalid(msg):
