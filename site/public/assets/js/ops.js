@@ -628,6 +628,9 @@
                 // modal captured and the live token each one bought. Its own
                 // store again (PII + a real discount), fetched on demand.
                 mystery: null, mysteryLoading: false, mysteryError: null,
+                // Mail discounts — a read-only JOIN over the other stores
+                // (maillist.py), fetched on demand like every PII panel.
+                ml: null, mlLoading: false, mlError: null,
                 // Auto-refresh: poll the dashboard so the numbers stay live
                 // without a manual Refresh. Default on.
                 live: true };
@@ -705,6 +708,7 @@
           if (state.tab === "orders" && !state.orderId) loadOrders();
           if (state.tab === "carts") loadCarts();
           if (state.tab === "mystery") loadMystery();
+          if (state.tab === "maildiscounts") loadMailDiscounts();
           return;
         }
         toGate();
@@ -2881,6 +2885,254 @@
     return f;
   }
 
+  /* ── Mail discounts — every captured address, and what happened to it ────
+     A read-only JOIN, not a store (see maillist.py). One row per person: the
+     mails they were sent, what they did about them, and whether they converted.
+
+     The two numbers that matter are deliberately separated. "Converted" over
+     every captured address answers "is collecting emails worth it"; converted
+     over the people we actually MAILED answers "are the mails worth it". A lead
+     nobody could contact belongs in the first and must not drag the second. */
+  var ML_STATUS = { converted: "Converted", open: "Offer live",
+                    lapsed: "Not converted", unsubscribed: "Opted out" };
+  var ML_MAIL = { code: "Code", warning: "Warning", chase: "Last chance", recovery: "Come back" };
+  var ML_SOURCE = { mystery: "Mystery card", cart: "Abandoned cart",
+                    guides: "Guides list", account: "Sign-up", order: "Paid order" };
+
+  function mlChip(s) {
+    var cls = { converted: "recovered", open: "mailed", lapsed: "pending", unsubscribed: "expired" }[s] || "pending";
+    return '<span class="ostat ostat-' + cls + '">' + esc(ML_STATUS[s] || s) + "</span>";
+  }
+
+  function loadMailDiscounts() {
+    if (state.mlLoading) return;
+    state.mlLoading = true;
+    state.mlError = null;
+    api({ action: "maildiscounts", token: state.token, days: state.days }).then(function (res) {
+      state.mlLoading = false;
+      if (res.status === 200 && res.body.maildiscounts) {
+        state.ml = res.body.maildiscounts;
+      } else if (res.status === 401) { toGate(); return; }
+      else if (res.status === 200) {
+        state.mlError = "This server doesn't serve the mail list yet — it is running an older " +
+          "build. Restart serve.py (the /api routes only reload on restart), then Refresh.";
+      } else {
+        state.mlError = "Couldn't load mail discounts — the server returned " + res.status + ".";
+      }
+      if (state.tab === "maildiscounts") render();
+    }).catch(function () {
+      state.mlLoading = false;
+      state.mlError = "Couldn't reach the server. Is it running?";
+      if (state.tab === "maildiscounts") render();
+    });
+  }
+
+  function panelMailDiscounts() {
+    var f = document.createDocumentFragment();
+    var a = state.ml;
+
+    if (state.mlError && !a) {
+      var er = document.createElement("div");
+      er.className = "card";
+      er.innerHTML = '<p class="empty">' + esc(state.mlError) + "</p>";
+      var retry = document.createElement("button");
+      retry.className = "btn btn-sm"; retry.type = "button"; retry.textContent = "Try again";
+      retry.style.cssText = "margin:0 auto 16px;display:block";
+      retry.addEventListener("click", function () { state.mlError = null; loadMailDiscounts(); render(); });
+      er.appendChild(retry); f.appendChild(er); return f;
+    }
+    if (!a) {
+      loadMailDiscounts();
+      var wait = document.createElement("div");
+      wait.className = "card";
+      wait.innerHTML = '<p class="empty">Loading mail discounts…</p>';
+      f.appendChild(wait); return f;
+    }
+
+    var intro = document.createElement("div");
+    intro.className = "banner";
+    intro.innerHTML = '<span class="ico">✉</span><div><strong>Every address the site has captured, ' +
+      'and what happened to it.</strong> One row per person, joined across the mystery cards, the ' +
+      "abandoned carts, the guides list and the sign-ups — with the orders store deciding who actually " +
+      "paid. Nothing is stored here: this is a read-only view over those stores, so a deletion request " +
+      "is honoured in one place, not five. <b>Mailed</b> counts messages that left the server — there " +
+      "is no open- or click-tracking on this site, and adding it is a consent decision, not a feature.</div>";
+    f.appendChild(intro);
+
+    if (a.synthetic > 0) {
+      var syn = document.createElement("div");
+      syn.className = "banner synthetic";
+      syn.innerHTML = '<span class="ico">▲</span><div><strong>Includes seeded rows.</strong> ' +
+        num(a.synthetic) + " address(es) were written for testing. Clear the stores before launch.</div>";
+      f.appendChild(syn);
+    }
+
+    var kr = document.createElement("div");
+    kr.className = "kpis";
+    kr.appendChild(kpi("Addresses captured", num(a.total), undefined, "", true));
+    kr.appendChild(kpi("Converted", num(a.converted) + " · " + a.conversion_rate + "%"));
+    kr.appendChild(kpi("Of those we mailed", a.mailed_conversion_rate + "%",
+                       undefined, num(a.mailed_people) + " mailed"));
+    kr.appendChild(kpi("Mails sent", num(a.mails_sent),
+                       undefined, a.mails_per_person + " per person"));
+    kr.appendChild(kpi("Revenue from them", usd(a.revenue)));
+    kr.appendChild(kpi("Still in play", usd(a.pipeline)));
+    if (a.unsubscribed > 0) kr.appendChild(kpi("Opted out ⚠", num(a.unsubscribed)));
+    f.appendChild(kr);
+
+    var statuses = (a.statuses || []).filter(function (s) { return s.count > 0; });
+    var kinds = a.mailkinds || [];
+    var g = document.createElement("div");
+    g.className = "grid";
+    g.appendChild(card({
+      cls: "half", title: "Converted or not",
+      sub: "Converted means a paid order against that address. Offer live means a code of theirs still works.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: statuses.map(function (s) { return { label: ML_STATUS[s.status] || s.status, value: s.count }; }),
+          color: SERIES[0], alt: "Addresses by status"
+        });
+      },
+      table: {
+        head: ["Status", "People"], num: [1],
+        rows: statuses.map(function (s) { return [ML_STATUS[s.status] || s.status, num(s.count)]; })
+      }
+    }));
+    g.appendChild(card({
+      cls: "half", title: "Which mails went out",
+      sub: "One capture can reach four messages: the code, a warning inside the hour, a last chance after it dies, and the cart's come-back.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: kinds.map(function (r) { return { label: ML_MAIL[r.kind] || r.kind, value: r.count }; }),
+          color: SERIES[1], alt: "Mails by kind"
+        });
+      },
+      table: {
+        head: ["Mail", "Sent"], num: [1],
+        rows: kinds.map(function (r) { return [ML_MAIL[r.kind] || r.kind, num(r.count)]; })
+      }
+    }));
+    f.appendChild(g);
+
+    var sources = (a.sources || []).filter(function (s) { return s.count > 0; });
+    var countries = a.countries || [];
+    var g2 = document.createElement("div");
+    g2.className = "grid";
+    g2.appendChild(card({
+      cls: "half", title: "Where the address came from",
+      sub: "One person can appear in more than one, so these need not sum to the total.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: sources.map(function (r) { return { label: ML_SOURCE[r.source] || r.source, value: r.count }; }),
+          color: SERIES[2], alt: "Addresses by source"
+        });
+      },
+      table: {
+        head: ["Source", "People"], num: [1],
+        rows: sources.map(function (r) { return [ML_SOURCE[r.source] || r.source, num(r.count)]; })
+      }
+    }));
+    g2.appendChild(card({
+      cls: "half", title: "Where they are",
+      sub: "Resolved server-side, never from an IP.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: countries.slice(0, 10).map(function (c) {
+            return { label: (flag(c.code) + " " + countryName(c.code)).trim(), value: c.count };
+          }),
+          color: SERIES[3], alt: "Addresses by country"
+        });
+      },
+      table: {
+        head: ["Country", "People"], num: [1],
+        rows: countries.map(function (c) { return [countryName(c.code), num(c.count)]; })
+      }
+    }));
+    f.appendChild(g2);
+
+    var recent = a.recent || [];
+    var el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML =
+      '<div class="card-hd"><h3>Every address</h3><span class="spacer"></span>' +
+      '<button class="btn btn-sm" type="button" data-export-ml>Export CSV</button></div>' +
+      '<p class="card-sub">Most recent activity first' +
+      (a.total > recent.length ? ", first " + num(recent.length) + " of " + num(a.total) : "") +
+      ". <b>Mails</b> lists what was sent and when; <b>Did</b> is what they did about it.</p>";
+
+    if (!recent.length) {
+      el.insertAdjacentHTML("beforeend",
+        '<p class="empty">No addresses captured in this period.</p>');
+      f.appendChild(el); return f;
+    }
+
+    var head = ["Last seen", "Email", "From", "Order", "Value", "Mails", "Did", "Status"];
+    var html = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+      head.map(function (h, i) { return '<th class="' + (i === 4 ? "num" : "") + '">' + esc(h) + "</th>"; }).join("") +
+      "</tr></thead><tbody>";
+    recent.forEach(function (r) {
+      var srcs = (r.sources || []).map(function (s) {
+        return '<span class="chip">' + esc(ML_SOURCE[s] || s) + "</span>";
+      }).join(" ");
+      // The mail trail, in order, each with how long ago it went.
+      var trail = (r.mails || []).length
+        ? r.mails.map(function (m) {
+            return '<span class="chip" title="' + esc(m.note || "") + '">' +
+                   esc(ML_MAIL[m.kind] || m.kind) + " · " + esc(ago(m.at)) + "</span>";
+          }).join(" ")
+        : '<span class="dim">none</span>';
+      // What they did about it, strongest signal first.
+      var did = [];
+      if (r.converted) did.push("paid" + (r.order_id ? " " + esc(r.order_id) : ""));
+      if (r.applied) did.push("applied the code");
+      if (r.pick) did.push("opened card " + esc(r.pick));
+      if (r.optin) did.push("took the guides mail");
+      if (r.unsubscribed) did.push("opted out");
+      var offer = r.offer_live
+        ? '<span class="chip">' + Math.round(r.offer_pct * 100) + "% live</span>" : "";
+      html += "<tr>" +
+        '<td class="dim">' + esc(ago(r.last_seen)) + "</td>" +
+        "<td>" + esc(r.email) + (r.syn ? ' <span class="chip">seeded</span>' : "") + "</td>" +
+        "<td>" + srcs + "</td>" +
+        '<td class="wrap-cell">' + esc(r.summary || "—") +
+          (r.game ? '<span class="dim"> · ' + esc(r.game) + "</span>" : "") + "</td>" +
+        '<td class="num">' + (r.paid ? esc(usd(r.paid)) : (r.value ? esc(usd(r.value)) : '<span class="dim">—</span>')) + "</td>" +
+        "<td>" + trail + "</td>" +
+        '<td class="wrap-cell">' + (did.length ? did.join(", ") : '<span class="dim">nothing yet</span>') + "</td>" +
+        "<td>" + mlChip(r.status) + " " + offer + "</td>" +
+        "</tr>";
+    });
+    el.insertAdjacentHTML("beforeend", html + "</tbody></table></div>");
+
+    el.querySelector("[data-export-ml]").addEventListener("click", function () {
+      var cols = ["last_seen", "first_seen", "email", "sources", "status", "converted", "order_id",
+                  "paid_usd", "order", "game", "value_usd", "offer_usd", "offer_pct_live",
+                  "mails_sent", "mail_trail", "applied", "card_picked", "guides_optin",
+                  "opted_out", "country", "seeded"];
+      var iso = function (t) { return t ? new Date(t * 1000).toISOString() : ""; };
+      var lines = [cols.join(",")];
+      recent.forEach(function (r) {
+        lines.push([iso(r.last_seen), iso(r.first_seen), r.email, (r.sources || []).join(" + "),
+                    ML_STATUS[r.status] || r.status, r.converted ? "yes" : "no", r.order_id,
+                    r.paid, r.summary, r.game, r.value, r.offer_value,
+                    r.offer_live ? Math.round(r.offer_pct * 100) + "%" : "",
+                    r.mail_count,
+                    (r.mails || []).map(function (m) { return (ML_MAIL[m.kind] || m.kind) + "@" + iso(m.at); }).join(" | "),
+                    r.applied ? iso(r.applied) : "", r.pick, r.optin ? "yes" : "no",
+                    r.unsubscribed ? "yes" : "no", countryName(r.country), r.syn ? "yes" : "no"]
+          .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; }).join(","));
+      });
+      var link = document.createElement("a");
+      link.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+      link.download = "esb-mail-discounts-" + new Date().toISOString().slice(0, 10) + ".csv";
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+    });
+
+    f.appendChild(el);
+    return f;
+  }
+
   function panelAbandoned(d) {
     var rows = d.abandoned;
     var f = document.createDocumentFragment();
@@ -3215,6 +3467,7 @@
     journey: panelJourney, sessions: panelSessions, orders: panelOrders,
     carts: panelCarts,
     mystery: panelMystery,
+    maildiscounts: panelMailDiscounts,
     accounts: panelAccounts,
     guides: panelGuides, boosters: panelBoosters,
     acquisition: panelAcquisition, friction: panelFriction, abandoned: panelAbandoned,
@@ -3420,6 +3673,7 @@
       if (state.tab === "orders") loadOrders();
       if (state.tab === "carts") loadCarts();
       if (state.tab === "mystery") loadMystery();
+      if (state.tab === "maildiscounts") loadMailDiscounts();
     });
   });
 

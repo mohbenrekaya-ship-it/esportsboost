@@ -599,6 +599,19 @@ def process_sweep(raw, header_get):
     # anything already reading this response keeps working.
     import recovery
     out = recovery.sweep()
+
+    # ⚠ OFF BY DEFAULT, and deliberately. The cart recovery above has been live
+    # for a while and its one mail is understood; the follow-up is two MORE
+    # messages per capture, at a higher rate, and it inherits a cron that already
+    # runs every five minutes in production — so merging it in would have started
+    # mailing real addresses within minutes of the deploy that carried it, with
+    # nobody watching. An unattended mailer on the domain the order
+    # confirmations go out on is not something a deploy should switch on by
+    # itself. Set `BINGO_FOLLOWUP_ENABLED=1` when somebody is awake to watch the
+    # first run; everything else about the feature ships and is inert until then.
+    if os.environ.get("BINGO_FOLLOWUP_ENABLED", "").strip() != "1":
+        out["followup"] = {"skipped": "BINGO_FOLLOWUP_ENABLED is not set"}
+        return 200, out
     try:
         import followup
         out["followup"] = followup.sweep_all()

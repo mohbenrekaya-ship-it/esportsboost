@@ -362,6 +362,7 @@ a degraded mode, not the design.
    | `BINGO_PCT` | `0.30` | The discount, as a fraction. **This is a flat cost on every redeemed code — model it as 30%, not as an average.** |
    | `BINGO_TTL` | `3600` | How long a code works, in seconds. One hour. Change it and the modal's own copy follows (the band, the pill and the countdown all read this). |
    | `BINGO_MAX` | `20000` | Caps the stored list. |
+   | `BINGO_FOLLOWUP_ENABLED` | *unset* | **The follow-up mailer is OFF until this is `1`.** It rides the cart cron, which already runs every five minutes — so without this gate the deploy that carries it starts mailing real addresses within minutes, unattended. Set it when somebody is awake to watch the first run. |
    | `BINGO_WARN_DELAY` | `1800` | Seconds after the code is issued before the **halfway warning** goes out. It adds no discount — it only says the hour is running out. |
    | `BINGO_FOLLOWUP_PCT` | `0.35` | The **second** offer, on a card that lapsed unbought. Another flat cost — model a chased row at 35%, not 30%. |
    | `BINGO_FOLLOWUP_DELAY` | `1800` | Seconds after the hour lapses before the follow-up goes out. |

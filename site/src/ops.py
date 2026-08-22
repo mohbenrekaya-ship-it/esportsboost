@@ -34,6 +34,7 @@ import boosters
 import carts
 import guides
 import insights
+import maillist
 import mystery
 import orders
 
@@ -271,6 +272,14 @@ def process_ops(raw):
         # live discount, so it is fetched on demand like Accounts and Carts and
         # never bundled into a dashboard refresh.
         return 200, {"mystery": mystery.summary(days)}
+
+    if action == "maildiscounts":
+        # Every captured address in one view — a read-only JOIN across carts,
+        # mystery, guides, accounts and orders (see maillist.py). It owns no
+        # store of its own on purpose: a fifth copy of the site's emails would
+        # be its own liability and its own deletion path. PII, so it is fetched
+        # on demand like Accounts and Carts.
+        return 200, {"maildiscounts": maillist.summary(days)}
 
     if action == "orders":
         # The orders store — the receipts fulfilment writes (and the seeder

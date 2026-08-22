@@ -2356,6 +2356,31 @@ replaced in the same five minutes.
   sells it. Until the seam is built, every order it wins is a manual promise ops has to keep. See
   [Watch live](#watch-live--the-boosters-screen-share--watch_panel).
 
+## Mail discounts — one view over every captured address
+
+`src/maillist.py` + the `/ops` **Mail discounts** tab. One row per email address,
+answering three things per person: **converted or not**, **every mail we sent them**, and
+**what they did about it**.
+
+- **It owns no store and writes nothing.** It is a read-only JOIN over `carts` (abandoned
+  checkouts), `mystery` (cards, warnings, chases), `guides`, `accounts` and `orders`. A
+  fifth store duplicating those emails would be a second copy of the most sensitive data on
+  the site, immediately out of sync with the five originals and needing its own deletion
+  path. **Do not give this module a store.**
+- **`orders.by_email()` decides who converted**, not a burned token — that is what catches
+  somebody who was mailed and then bought at full price, which is the case a discount
+  programme most needs to see. A `recovered`/`redeemed` token counts too, since the webhook
+  attributed that payment to the offer.
+- **Two conversion rates, deliberately separate.** Over every captured address ("is
+  collecting emails worth it") and over the people actually mailed ("are the mails worth
+  it"). A lead nobody could contact belongs in the first and must never drag the second.
+- ⚠ **It reports `sent`, not `delivered` or `opened`.** There is no open- or click-tracking
+  on this site and adding one is a consent decision, not a feature. "Mailed 3" means three
+  messages left the server.
+- **The mail trail is the volume check.** One capture can now reach four messages — the
+  code, the warning, the last chance, and the cart's come-back — and this tab is the only
+  place that is visible per person. Watch it before turning `BINGO_FOLLOWUP_ENABLED` on.
+
 ## Analytics & the /ops console
 
 `app.js` has always pushed a clean funnel into `window.dataLayer` — nothing read it. The analytics
