@@ -2243,8 +2243,8 @@ has — somebody set two ranks, read a price, gave an address and then stopped �
 
 ```
 capture ──► MAIL 1  the code            30%, 1h    (mystery.send_code)
-   +30m ──► MAIL 2  halfway warning     30%, ~30m left — NO new offer
-   +90m ──► MAIL 3  the chase           35%, 24h   (mystery.revive: SAME token)
+   +30m ──► MAIL 2  the reminder        30%, 30m left — NO new offer
+   +60m ──► MAIL 3  the chase           35%, 24h   (mystery.revive: SAME token)
                           │
      all three ──► /checkout?bingo=<token> ──► the resolve carries the CONFIG
 ```
@@ -2280,6 +2280,16 @@ replaced in the same five minutes.
   row is frozen: its configuration is the record of what was bought. A **lapsed** one
   still tracks, because somebody who let the hour go and kept building is exactly who
   the chase is for.
+- ⚠ **A re-capture may only touch `CONFIG_FIELDS`, and this shipped broken once.**
+  `process_issue` used to rebuild the row from `clean_capture()` and copy back an
+  allowlist of nine lifecycle fields, which silently dropped every field added after
+  that list was written. A second capture on a chased row reset `stage` to `card`,
+  `warned` to 0 and `nomail` to 0 while keeping the 35% and its 24-hour clock — so the
+  card became chaseable twice, the reminder fired on a 24-hour row and mailed a real
+  inbox *"1425 minutes left … halfway through its hour"*, and **an unsubscribe undid
+  itself**. It now patches the EXISTING row with `CONFIG_FIELDS`, the same allowlist
+  `update_config()` uses, so there is one definition of what a capture may change.
+  Two regression tests hold it.
 - **Mail 2 adds nothing, and that is the design.** It does not raise the rate,
   extend the clock or change the stage — `mark_warned()` writes one flag. It argues
   the deadline the store already enforces, which is the one claim on this whole flow
@@ -2362,7 +2372,9 @@ replaced in the same five minutes.
   understates the programme by the difference on every one.
 - **Restart the server after touching these files** — `/api/bingo/unsubscribe` and `/api/cart/sweep`
   live in `serve.py`, no watcher. Env knobs: `BINGO_FOLLOWUP_PCT` (0.35), `BINGO_FOLLOWUP_DELAY`
-  (1800), `BINGO_FOLLOWUP_TTL` (86400), `BINGO_FOLLOWUP_MAX_AGE` (259200),
+  (**0** — the chase lands as the card dies, per the business's "30 minutes a
+  reminder, one hour the 35%"), `BINGO_FOLLOWUP_TTL` (86400),
+  `BINGO_FOLLOWUP_MAX_AGE` (259200),
   `BINGO_WARN_DELAY` (1800), `ESB_PLAY_HOURS_PER_DAY` (8), `ESB_PER_HOUR_MAX` (6).
 - **`site/tools/send_test_mail.py --sequence`** renders and sends all three against a
   sample card in a **throwaway store**, so no real row is touched and no live token is
@@ -2421,7 +2433,7 @@ public/assets/js/analytics.js  ──►  POST /api/collect  ──►  src/anal
 | `site/src/ops.py` | Password auth + two routes: the dashboard payload, and one session's full timeline on demand. |
 | `site/public/assets/js/ops.js`, `ops.css` | The console. Self-contained; shares nothing with the shop's stylesheets. |
 | `site/tools/seed_analytics.py` | Synthetic traffic for testing. |
-| `site/src/accounts.py` | The header sign-up list — a **separate** store, `POST /api/account` to write, `ops.py`'s `accounts` action to read. Holds name + email, never a password. |
+| `site/src/accounts.py` | The header sign-up list — a **separate** store, `POST /api/account` to write, `ops.py`'s `accounts` action to read. Holds name + email, never a password. The *moment* an account is made is in the analytics stream instead — see [the account flow](#the-account-flow-in-the-session-timeline). |
 | `site/src/boosters.py` | The roster store — another **separate** store (operator-write / public-read), `GET /api/boosters` to read, `ops.py`'s `boosters` action for the console. See [The roster store](#the-roster-store--boosters-in-the-backend). |
 | `site/tools/seed_boosters.py` | Fills the roster store from `data.py`'s `BOOSTERS` (tags rows `syn`). |
 | `site/src/mystery.py` | The mystery-discount store — a **separate** store again, `POST /api/bingo` to capture + issue, `GET /api/bingo?token=` to resolve, `ops.py`'s `mystery` action to read. Holds an email next to a live single-use discount. See [The mystery discount](#the-mystery-discount--mysterypy--the-modal-on-every-game-page). |
@@ -2524,6 +2536,53 @@ sworn never to.
 - **Restart the server after touching these files.** Like the payment and analytics routes, the
   `/api/account` and `accounts` routes live in `serve.py` / `ops.py` and only take effect on a
   process restart — there is no watcher.
+
+#### The account flow in the session timeline
+
+The Accounts tab answers *who* signed up; it could never answer *when, from where, or instead of
+what*. Six analytics events put the flow into the `/ops` session timeline beside everything else the
+visitor did, so a sign-up is readable against the order that was on screen at the time.
+
+| Event | Reads as | Fired by |
+| --- | --- | --- |
+| `auth_open` | Opened the account panel | `openAuth()` — on the **open**, not the submit |
+| `oauth_start` | Left for a sign-in provider | `oauthGo()`, before the redirect |
+| `sign_up` | Created an account | the form's 2xx, or `?auth=<p>&new=1` on the OAuth return |
+| `login` | Logged in | the form's 2xx, or `?auth=<p>` on the OAuth return |
+| `auth_error` | Account step refused | every non-ok status, with the server's own reason |
+| `logout` | Logged out | `signOut()` |
+
+- ⚠ **These record the STEP, never the person.** The analytics store's whole value is that it is
+  anonymous and therefore consent-banner-free (see the note at the top of `analytics.py`); the email
+  and the name are in the **accounts** store, which is a separate store for exactly this reason. The
+  bridge in `analytics.js` carries a fixed `META_KEYS` allowlist — `method`, `mode`, `reason`,
+  `transaction_id`, `promotion` — so a future caller passing `email` into `track()` cannot silently
+  persist it. Do not widen that list to anything identifying.
+- **`auth_open` fires on the open because the drop is the point.** Sign-ups alone are a number with
+  no denominator; open → refused → created is a funnel. `auth_error` carries the server's own status
+  (`exists` / `invalid` / `weak` / `email` / `network`), because an "email already registered" wall
+  and a wrong password are two completely different fixes and look identical in a raw count.
+- **The OAuth round trip happens off-page, so the outcome is carried back in the query.**
+  `oauth._mark_return()` appends `?auth=<provider>` and, when `accounts.append()` actually created a
+  row, `&new=1`; app.js emits one `sign_up` or `login` from it and **strips both markers** with
+  `stripQuery()`, so a refresh never counts the login twice. `_store_lead()` returning that boolean is
+  the only place a first Google sign-in is distinguishable from the fiftieth — the browser cannot
+  tell. An `oauth_start` with no `login`/`sign_up`/`auth_error` after it **is** the consent-screen
+  drop, and nothing else observes it.
+- **`session_start` carries `meta.account = "in"|"out"`.** A visitor who logged in last week emits no
+  login of their own, and reading them as a guest is the one way this count goes quietly wrong. It is
+  a boolean about the browser (`esb.session.v1` present), not an id.
+- **`insights.py` folds those into one `acct` per session** — `signed_up` > `logged_in` >
+  `signed_in`, `ACCT_RANK` — surfaced as a chip in the sessions table, a fact in the drill-down and
+  an `account_step` column in the CSV. The **"Signed up" KPI counts `signed_up` only**, deliberately
+  not "sessions with an account", which folds in everyone who was already logged in and reads as a
+  far bigger number than the panel produced.
+- **None of it touches the FUNNEL.** Checkout is guest-only, so the account flow sits *beside* the
+  purchase funnel rather than inside it; adding these names to `FUNNEL` would put a login on the path
+  to a purchase that never requires one.
+- `tools/seed_analytics.py` seeds the flow with a deliberately unflattering shape (most opens close
+  again), so the console can be checked without waiting for real traffic. Seeded rows carry `syn: 1`
+  like everything else.
 
 ### The roster store — boosters in the backend
 

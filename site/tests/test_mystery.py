@@ -591,6 +591,81 @@ def test_ops_counters_track_the_sequence():
     check(stages.count("followup") == 1, "and each row carries its own stage")
 
 
+def test_a_recapture_never_resets_the_offer_lifecycle():
+    """REGRESSION — this shipped and mailed a real inbox.
+
+    `process_issue` used to rebuild the row from `clean_capture()` on a
+    re-capture and copy back an allowlist of nine lifecycle fields. Every field
+    added after that list was written was silently dropped, so a second capture
+    reset `stage` to "card", `warned` to 0 and `nomail` to 0 while keeping the
+    chased `pct` and its 24-hour `expires`. Three consequences, worst last:
+    the card became chaseable a second time; the halfway warning fired on a
+    24-hour row and mailed "1425 minutes left … halfway through its hour"; and
+    **an unsubscribe undid itself.**"""
+    reset()
+    _st, p = _capture("recap@x.com")
+    tok = p["token"]
+    row = mystery.get(tok)
+    row["at"] = int(time.time()) - mystery.TOKEN_TTL - 60
+    row["expires"] = row["at"] + mystery.TOKEN_TTL
+    mystery.put(row)
+    mystery.revive(tok)
+    before = mystery.get(tok)
+
+    # the same browser captures again — a re-submitted modal, another game page
+    _capture("recap@x.com", **{"to": "Diamond IV"})
+    after = mystery.get(tok)
+
+    check(after["stage"] == "followup", "the chased stage survives a re-capture")
+    check(after["pct"] == before["pct"], "and so does the rate")
+    check(after["expires"] == before["expires"], "and the clock")
+    check(mystery.due_warning() == [],
+          "so no halfway warning can fire on a chased row")
+    check(mystery.due_followup() == [],
+          "and the card cannot be chased a second time")
+    check(after["to"] == "Diamond IV",
+          "while the configuration DOES still refresh — that is the point of it")
+
+
+def test_an_unsubscribe_survives_a_recapture():
+    """The most serious half of the same bug: an opt-out that quietly undoes
+    itself is worse than never having offered one."""
+    reset()
+    _st, p = _capture("optout@x.com")
+    mystery.unsubscribe(p["token"])
+    check(mystery.get(p["token"])["nomail"] == 1, "opted out")
+    _capture("optout@x.com")
+    check(mystery.get(p["token"])["nomail"] == 1,
+          "and still opted out after configuring again")
+    row = mystery.get(p["token"])
+    row["at"] = int(time.time()) - mystery.TOKEN_TTL - 60
+    row["expires"] = row["at"] + mystery.TOKEN_TTL
+    mystery.put(row)
+    check(mystery.due_followup() == [] and mystery.due_warning() == [],
+          "so neither sweep will ever pick them up again")
+
+
+def test_the_warning_never_asserts_a_fraction_of_an_hour():
+    """"Halfway through its hour" is only true while WARN_DELAY is exactly half
+    of TOKEN_TTL, and it is what turned a mis-routed row into nonsense. The copy
+    states the remaining time and nothing else."""
+    reset()
+    _st, p = _capture("frac@x.com")
+    row = mystery.get(p["token"])
+    row["at"] = int(time.time()) - mystery.WARN_DELAY
+    row["expires"] = row["at"] + mystery.TOKEN_TTL
+    mystery.put(row)
+    row = mystery.get(p["token"])
+    n, o = followup.price_pair(row, mystery.OFFER_PCT)
+    mins = followup._mins_left(row)
+    for blob in (followup._warn_text(row, n, o, "https://x.test", "usd", mins),
+                 followup._warn_html(row, n, o, "https://x.test", "usd", mins)):
+        low = blob.lower()
+        check("halfway" not in low, "the warning never claims 'halfway'")
+        check("its hour" not in low, "nor asserts the window is an hour")
+        check(str(mins) in blob, "it prints the real minutes remaining (%d)" % mins)
+
+
 def test_warning_and_chase_can_never_collide():
     """Mail 2 fires INSIDE the hour, mail 3 only once it is dead. If the two
     windows ever overlapped, one visitor would be told their discount is
@@ -601,7 +676,7 @@ def test_warning_and_chase_can_never_collide():
     at, exp = row["at"], row["expires"]
 
     seen = []
-    for mins in (0, 20, 31, 45, 59, 61, 91, 200):
+    for mins in (0, 20, 31, 45, 59, 61, 91, 200):   # WARN_DELAY=30m, TTL=60m
         t = at + mins * 60
         w = len(mystery.due_warning(now=t))
         c = len(mystery.due_followup(now=t))
@@ -609,8 +684,15 @@ def test_warning_and_chase_can_never_collide():
         check(not (w and c), "at +%dmin the two sweeps never both claim the row" % mins)
     check([m for m, w, _c in seen if w] == [31, 45, 59],
           "the warning fires only between WARN_DELAY and the deadline")
-    check([m for m, _w, c in seen if c] == [91, 200],
-          "and the chase only after the deadline plus FOLLOWUP_DELAY")
+    # FOLLOWUP_DELAY is 0 — the business's spec is "30 minutes a reminder, one
+    # hour the 35%", so the chase lands as the card dies rather than later.
+    due_at = [m for m, _w, c in seen if c]
+    first = 61 if mystery.FOLLOWUP_DELAY == 0 else 91
+    check(due_at and due_at[0] == first,
+          "the chase opens at +%dmin (FOLLOWUP_DELAY=%ds)"
+          % (first, mystery.FOLLOWUP_DELAY))
+    check(all(m > 60 for m in due_at),
+          "and never before the hour is actually up")
     check(mystery.due_warning(now=exp) == [],
           "a warning is never sent about a discount that has already gone")
 
@@ -921,6 +1003,9 @@ def main():
                test_config_beacon_cannot_move_the_offer,
                test_config_beacon_freezes_on_a_paid_row,
                test_a_lapsed_card_still_tracks_the_order,
+               test_a_recapture_never_resets_the_offer_lifecycle,
+               test_an_unsubscribe_survives_a_recapture,
+               test_the_warning_never_asserts_a_fraction_of_an_hour,
                test_warning_and_chase_can_never_collide,
                test_warning_is_once_and_changes_nothing,
                test_warning_skips_paid_and_opted_out, test_warning_copy,

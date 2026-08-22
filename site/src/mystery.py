@@ -96,12 +96,17 @@ OFFER_LABEL = "Mystery discount"
 # only the /ops Mystery tab against real traffic can. It is set by the business
 # (2026-08-22); see CLAUDE.md.
 FOLLOWUP_PCT = float(os.environ.get("BINGO_FOLLOWUP_PCT", "0.35") or 0.35)
-# How long after the first hour lapses the second mail goes out. Deliberately
-# short: the buyer configured an order today, and a "last chance" arriving on
-# Thursday about a Tuesday climb is a newsletter. 30 minutes past the deadline
-# is late enough that the first offer genuinely died and early enough that they
-# still remember the price.
-FOLLOWUP_DELAY = int(os.environ.get("BINGO_FOLLOWUP_DELAY", "1800") or 1800)
+# How long after the first hour lapses the second mail goes out. **Zero**, by
+# the business's own spec (2026-08-22): the sequence is "30 minutes → a
+# reminder, one hour → the 35%", so the chase lands as the card dies rather than
+# half an hour later. The sweep runs every five minutes, so in practice it
+# arrives 60–65 minutes after capture.
+#
+# It stays a knob rather than being inlined because the two windows are defined
+# against it: `due_warning()` requires the card still be inside its hour and
+# `due_followup()` requires `now >= expires + FOLLOWUP_DELAY`, so any
+# non-negative value keeps them disjoint and a negative one would not.
+FOLLOWUP_DELAY = max(0, int(os.environ.get("BINGO_FOLLOWUP_DELAY", "0") or 0))
 # The second window. Longer than the first hour — this one has to survive a
 # night's sleep, and the mail says so — but still a real deadline, enforced by
 # `redeemable()` exactly like the first.
@@ -857,12 +862,23 @@ def process_issue(raw, header_get, session_email=""):
             # Same card, same clock. Refresh the configuration so a later
             # checkout re-prices against what they are actually building, but
             # never the expiry — the hour started when the card was opened.
-            keep = {k: existing[k] for k in
-                    ("token", "at", "expires", "status", "pct", "mailed",
-                     "applied_at", "redeemed_at", "order_id") if k in existing}
-            row.update(keep)
-            put(row)
-            return 200, _payload(row, existing.get("mailed"))
+            #
+            # ⚠ Patch the EXISTING row with the config fields, never rebuild a
+            # fresh one and copy some fields back. It used to keep an allowlist
+            # of nine lifecycle fields, which silently dropped every field added
+            # after it was written: a re-capture reset `stage` to "card",
+            # `warned` to 0 and — worst — `nomail` to 0, so a chased card became
+            # chaseable again, a warning fired on a 24-hour row quoting "1425
+            # minutes… halfway through its hour", and an unsubscribe undid
+            # itself. `CONFIG_FIELDS` is the same allowlist `update_config()`
+            # uses, so there is ONE definition of what a capture may change and
+            # a new lifecycle field can never leak through it again.
+            fresh = {k: row[k] for k in CONFIG_FIELDS if k in row}
+            if not fresh.get("cur"):
+                fresh.pop("cur", None)      # never lose a known market to ""
+            existing.update(fresh)
+            put(existing)
+            return 200, _payload(existing, existing.get("mailed"))
         return 200, {"ok": False, "reason": "spent"}
 
     row["token"] = new_token()

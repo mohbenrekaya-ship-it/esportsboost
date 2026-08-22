@@ -365,7 +365,7 @@ a degraded mode, not the design.
    | `BINGO_FOLLOWUP_ENABLED` | *unset* | **The follow-up mailer is OFF until this is `1`.** It rides the cart cron, which already runs every five minutes — so without this gate the deploy that carries it starts mailing real addresses within minutes, unattended. Set it when somebody is awake to watch the first run. |
    | `BINGO_WARN_DELAY` | `1800` | Seconds after the code is issued before the **halfway warning** goes out. It adds no discount — it only says the hour is running out. |
    | `BINGO_FOLLOWUP_PCT` | `0.35` | The **second** offer, on a card that lapsed unbought. Another flat cost — model a chased row at 35%, not 30%. |
-   | `BINGO_FOLLOWUP_DELAY` | `1800` | Seconds after the hour lapses before the follow-up goes out. |
+   | `BINGO_FOLLOWUP_DELAY` | `0` | Seconds after the hour lapses before the chase goes out. Zero, so the sequence is 30 min → reminder, 60 min → 35%. |
    | `BINGO_FOLLOWUP_TTL` | `86400` | How long the revived code works. 24 hours. |
    | `BINGO_FOLLOWUP_MAX_AGE` | `259200` | Past this age a lapsed card is left alone entirely. 3 days. |
    | `ESB_PLAY_HOURS_PER_DAY` | `8` | Hours of play behind one ETA day. The follow-up divides the total by it to quote a per-hour figure — **set it at or below what the roster really does**, or the claim stops being true. |

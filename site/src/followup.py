@@ -331,7 +331,10 @@ Finish my order — %(newp)s</a></p>
 # The only message in the sequence that adds nothing. It does not raise the
 # rate, does not extend the clock and does not make a new argument — it says the
 # code is running out, which is the one claim on this whole flow that the store
-# itself enforces and that nobody can dispute. That is exactly why it is short:
+# itself enforces and that nobody can dispute. ⚠ It states the REMAINING TIME
+# and never "halfway through its hour": that phrasing is only true while
+# WARN_DELAY is exactly half of TOKEN_TTL, and it is what turned a mis-routed
+# row into a mail reading "1425 minutes left … halfway through its hour". That is exactly why it is short:
 # a mail with no new offer that still takes three screens to say so reads as
 # padding, and the reader has already seen the pitch half an hour ago.
 WARN_SUBJECT = "Your %d%% code ends in %d minutes"
@@ -345,7 +348,7 @@ def _mins_left(row, now=None):
 def _warn_text(row, now_q, off_q, origin, cur, mins):
     token = row.get("token", "")
     return (
-        "Quick one — your code is halfway through its hour.\n\n"
+        "Quick one — your code runs out in %d minutes.\n\n"
         "  %s  —  %d%% off, %d minutes left.\n\n"
         "  %s\n"
         "  %s instead of %s. Delivery %s.\n\n"
@@ -353,7 +356,7 @@ def _warn_text(row, now_q, off_q, origin, cur, mins):
         "When the %d minutes are up the code stops working and the price goes "
         "back to %s. Nothing else about the order changes.\n\n"
         "Not interested? Unsubscribe: %s\n"
-        % (token, int(round((row.get("pct") or mystery.OFFER_PCT) * 100)), mins,
+        % (mins, token, int(round((row.get("pct") or mystery.OFFER_PCT) * 100)), mins,
            now_q.get("summary") or row.get("game") or "your order",
            money(off_q["total"], cur), money(now_q["total"], cur),
            now_q.get("eta") or "", _link(origin, token), mins,
@@ -371,8 +374,8 @@ Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e8e3dd">
 margin:0 0 8px">eSports Boost</p>
   <h1 style="font-size:26px;line-height:1.25;margin:0 0 16px">%(mins)d minutes left on your code.</h1>
   <p style="font-size:15px;line-height:1.6;color:#b9b2aa;margin:0 0 24px">
-    Your <b style="color:#e8e3dd">%(pct)d%% off</b> is halfway through its hour. It is already
-    on the order below — you just have to finish it.</p>
+    Your <b style="color:#e8e3dd">%(pct)d%% off</b> is already on the order below — you just
+    have to finish it before the clock runs out.</p>
 
   <table style="width:100%%;border-collapse:collapse;background:#141210;border:1px solid \
 rgba(255,255,255,.10);border-radius:10px;margin:0 0 24px">
