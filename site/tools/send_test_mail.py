@@ -137,12 +137,13 @@ def send_sequence(to, which):
                 ok, err = mailer.send(
                     to, followup.WARN_SUBJECT % (int(round(row["pct"] * 100)), mins),
                     followup._warn_text(row, now_q, off_q, origin, cur, mins),
-                    html=followup._warn_html(row, now_q, off_q, origin, cur, mins))
+                    html=followup._warn_html(row, now_q, off_q, origin, cur, mins),
+                    kind="bingo_warn")
             else:
                 ok, err = mailer.send(
                     to, followup.SUBJECT % (int(round(row["pct"] * 100)), row["game"]),
                     followup._text(row, now_q, off_q, origin, cur),
-                    html=followup._html(row, now_q, off_q, origin, cur))
+                    html=followup._html(row, now_q, off_q, origin, cur), kind="bingo_chase")
         label = {"code": "1. the code (30%%, 1h)",
                  "warn": "2. halfway warning (30 min left)",
                  "chase": "3. the chase (35%%, 24h)"}[stage]
@@ -217,14 +218,14 @@ def main():
         origin = payments.site_origin()
         ok, err = mailer.send(to, "Your order is confirmed — ESB-TEST01 (test)",
                               payments._order_text(rows, origin),
-                              html=payments._order_html(rows, origin))
+                              html=payments._order_html(rows, origin), kind="test")
     else:
         ok, err = mailer.send(
             to, "eSports Boost — SMTP test",
             "If you are reading this, the site can send mail.\n\n"
             "Sent by site/tools/send_test_mail.py. The support form and the\n"
             "order confirmation both go through this same mailbox.\n",
-            reply_to=mailer.support_addr())
+            reply_to=mailer.support_addr(), kind="test")
 
     if ok:
         print("\nSent. If it is not in the inbox within a minute, check the spam\n"

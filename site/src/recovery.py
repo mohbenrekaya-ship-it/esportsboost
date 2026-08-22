@@ -195,7 +195,7 @@ def send_one(cart, origin=None, now=None):
     ok, err = mailer.send(
         email, SUBJECT % (cart.get("game") or "your boost"),
         _text(cart, now_q, off_q, origin),
-        html=_html(cart, now_q, off_q, origin))
+        html=_html(cart, now_q, off_q, origin), kind="cart_recovery")
     if not ok:
         sys.stderr.write("[recovery] %s -> %s failed: %s\n"
                          % (cart.get("token"), email, err))

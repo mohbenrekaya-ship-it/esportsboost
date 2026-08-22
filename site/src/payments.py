@@ -667,7 +667,8 @@ def _send_order_mail(record, md, obj):
     if mailer.valid(buyer):
         ok, err = mailer.send(
             buyer, "Your order is confirmed — %s" % order_id,
-            _order_text(rows, origin), html=_order_html(rows, origin))
+            _order_text(rows, origin), html=_order_html(rows, origin),
+            kind="order")
         if not ok:
             sys.stderr.write("[mail] confirmation for %s failed: %s\n" % (order_id, err))
 
@@ -680,7 +681,7 @@ def _send_order_mail(record, md, obj):
         "A payment cleared. The order is in the store and on the log.\n\n"
         + "\n".join("%-11s%s" % (k, v) for k, v in op_rows)
         + "\n\nReply to this mail to answer the customer.\n",
-        reply_to=buyer)
+        reply_to=buyer, kind="order_ops")
 
 
 def _cents_to_whole(v):

@@ -72,3 +72,9 @@ __pycache__/
 # Logo sources downloaded from the live site by tools/export_ad_logos.py.
 # Re-fetched on demand; the exported ad assets in site/assets-out/ are kept.
 site/tools/.assetcache/
+
+# The outbox: every message sent, with its full body next to the recipient's
+# address and live discount codes. The most sensitive store on the site — same
+# rule as carts.ndjson and mystery.ndjson. Production writes to Upstash.
+site/maillog.ndjson
+maillog.ndjson

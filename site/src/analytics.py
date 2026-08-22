@@ -54,6 +54,16 @@ ALLOWED_EVENTS = {
     "view_promotion",
     "add_to_cart", "begin_checkout", "add_payment_info", "purchase",
     "generate_lead", "checkout_error", "js_error", "scroll", "engage",
+    # The account flow, end to end: the panel opening, a departure for an OAuth
+    # provider, the two outcomes, the sign-out, and every refusal in between.
+    # Without these a session that creates an account looks exactly like one
+    # that browsed past the header — the sign-up shows up in the /ops Accounts
+    # list with no way back to what the visitor was doing when they made it.
+    # These record THAT an account step happened, never WHOSE: the email and the
+    # name live in the accounts store, which is a separate store for precisely
+    # that reason. Nothing below may ever carry either — see the note at the top
+    # of this file, and `meta` is capped and stringified like every other field.
+    "auth_open", "oauth_start", "sign_up", "login", "logout", "auth_error",
 }
 
 # Configurator fields mirrored from the order state in app.js. Anything else in

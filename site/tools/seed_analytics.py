@@ -168,10 +168,43 @@ def build_session(anon, sid, t0, quality, dev, dev_mult, co, src, returning):
         evs.append(rec)
         return rec
 
+    # A returning visitor may already be signed in — the case that emits no
+    # login of its own, and the one the account marker exists to catch.
+    already_in = returning and random.random() < 0.28
     if not returning:
-        ev("session_start", gap=(0, 1))
+        ev("session_start", meta={"account": "out"}, gap=(0, 1))
+    else:
+        ev("session_start", meta={"account": "in" if already_in else "out"}, gap=(0, 1))
     ev("page_view", gap=(0, 2))
     ev("scroll", meta={"pct": 25}, gap=(3, 25))
+
+    # The account panel. Checkout is guest-only, so this sits beside the funnel
+    # rather than inside it — a visitor opens it from the header at any point and
+    # most of them close it again. The shape is deliberately unflattering: the
+    # drop from open to created is the thing the /ops timeline is there to show.
+    if not already_in and random.random() < 0.16:
+        mode = "signup" if random.random() < 0.62 else "signin"
+        ev("auth_open", meta={"mode": mode}, gap=(5, 60))
+        roll = random.random()
+        if roll < 0.30:
+            pass                                       # opened it and closed it
+        elif roll < 0.44:
+            provider = random.choice(["google", "discord"])
+            ev("oauth_start", meta={"method": provider}, gap=(2, 12))
+            if random.random() < 0.72:
+                ev(("sign_up" if mode == "signup" else "login"),
+                   meta={"method": provider}, gap=(6, 40))
+        elif roll < 0.61:
+            reason = ("exists" if mode == "signup" else "invalid")
+            ev("auth_error", meta={"mode": mode, "reason": reason}, gap=(8, 50))
+            # Either wall ends the same way for the ones who get past it: the
+            # "already registered" tab-swap and the wrong-password retry both
+            # finish as a log in, never as a second account.
+            if random.random() < 0.45:
+                ev("login", meta={"method": "password"}, gap=(6, 45))
+        else:
+            ev(("sign_up" if mode == "signup" else "login"),
+               meta={"method": "password"}, gap=(10, 70))
 
     page = entry_page
     for _ in range(random.randint(0, 3)):

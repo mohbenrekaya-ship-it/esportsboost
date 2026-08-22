@@ -251,7 +251,7 @@ def process_ticket(raw, header_get):
 
     subject, text = compose(ticket, ctx)
     ok, err = mailer.send(mailer.support_addr(), subject, text,
-                          reply_to=ticket["email"])
+                          reply_to=ticket["email"], kind="support")
     _note(key)                        # successes count too — this is a rate cap
     if not ok:
         return 502, {"error": err or "send_failed"}

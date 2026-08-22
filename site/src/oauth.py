@@ -184,6 +184,20 @@ def _safe_return(return_to):
     return rt[:512]
 
 
+def _mark_return(path, provider, created):
+    """Tag the return path so the page that receives it can record what just
+    happened: `?auth=<provider>`, plus `&new=1` when the account was created.
+
+    app.js reads both, emits one `sign_up` or `login` into the analytics stream
+    and strips them from the URL, so a refresh never counts the login twice. The
+    values are ours, not the provider's — `provider` is already checked against
+    PROVIDERS, and `created` is a bool — so there is nothing here to escape into
+    an open redirect; `path` has been through `_safe_return()` above."""
+    sep = "&" if "?" in path else "?"
+    return "%s%sauth=%s%s" % (path, sep, urllib.parse.quote(provider),
+                              "&new=1" if created else "")
+
+
 def start(provider, base_url, return_to="/", now=None):
     """Begin sign-in. Returns (302_location, state_cookie_value) or (None, None)
     when the provider isn't configured (caller answers 503)."""
@@ -294,15 +308,21 @@ def callback(provider, query, state_cookie, base_url, header_get=None, now=None)
         # no lead to store and nothing to key a return visit on. Say so plainly.
         raise OAuthError("Your %s account didn't share an email address." % provider)
 
-    _store_lead(prof, provider, header_get, now)
-    return make_session(prof["name"], prof["email"], provider, now), _safe_return(st.get("rt"))
+    created = _store_lead(prof, provider, header_get, now)
+    back = _mark_return(_safe_return(st.get("rt")), provider, created)
+    return make_session(prof["name"], prof["email"], provider, now), back
 
 
 def _store_lead(prof, provider, header_get, now):
     """Upsert the verified name + email into the shared sign-up list. Same store
     the email facade writes to; `accounts.append` dedupes on email, so a repeat
     login never grows the list. Country is resolved server-side (edge header,
-    then Accept-Language locale) exactly as a session is — never from an IP."""
+    then Accept-Language locale) exactly as a session is — never from an IP.
+
+    Returns True when this was a NEW account rather than a recognised one. That
+    is the only place the distinction exists: the round trip happens off-page, so
+    the browser cannot tell a first Google sign-in from the fiftieth, and without
+    it every OAuth account creation would be counted as an ordinary login."""
     get = header_get or (lambda *_a, **_k: "")
     edge = str(get("x-vercel-ip-country") or "").strip()[:2].upper()
     lang = str(get("accept-language") or "").split(",")[0].strip()
@@ -317,10 +337,10 @@ def _store_lead(prof, provider, header_get, now):
         "mode": "oauth:" + provider,
     }
     try:
-        accounts.append([row])
+        return bool(accounts.append([row]))
     except Exception:
         # A lost lead must never turn a successful login into a 500.
-        pass
+        return False
 
 
 # ── HTTP glue shared by serve.py and the /api Vercel shells ─────────────────

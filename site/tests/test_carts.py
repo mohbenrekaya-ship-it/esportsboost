@@ -247,6 +247,55 @@ def test_sweep_requires_a_secret():
     os.environ.pop("CART_SWEEP_SECRET", None)
 
 
+def test_a_customer_who_bought_is_never_chased():
+    """REGRESSION — this mailed a real customer.
+
+    `recover()` burns a cart only when the Stripe webhook can match its token,
+    which needs the buyer to have arrived through the `?cart=` link. Anybody who
+    abandoned a cart and then simply came back and bought stayed `pending` for
+    ever, so the sweep chased a paying customer about "the order you left
+    behind" while their actual support thread went unanswered. The orders store
+    is the authority on who bought — not the cart's own status."""
+    reset()
+    import orders
+    orders_log = os.environ.get("ORDERS_LOG")
+    tmp = tempfile.NamedTemporaryFile(prefix="esb-orders-test-", suffix=".ndjson",
+                                      delete=False)
+    tmp.close()
+    os.environ["ORDERS_LOG"] = tmp.name
+    try:
+        orders.clear()
+        # two abandoned carts, aged past the delay
+        for email in ("bought@x.com", "stillbrowsing@x.com"):
+            carts.process_capture(_json(dict(CFG, email=email)), _h())
+        for row in carts.read():
+            row["at"] = int(time.time()) - carts.DELAY_SECS - 60
+            carts.put(row)
+        check(len(carts.due()) == 2, "both carts are due before anyone buys")
+
+        # one of them then places a real order, WITHOUT the recovery link
+        orders.append([orders.clean_order({
+            "order_id": "ESB-REAL1", "email": "bought@x.com", "amount": 91,
+            "currency": "usd", "game": "Rocket League", "status": "paid"})])
+        check(carts.has_ordered("bought@x.com"), "the orders store knows them")
+        check(not carts.has_ordered("stillbrowsing@x.com"), "and not the other")
+
+        due = carts.due()
+        emails = [c["email"] for c in due]
+        check(emails == ["stillbrowsing@x.com"],
+              "only the one who did NOT buy is chased")
+        row = [r for r in carts.read() if r["email"] == "bought@x.com"][0]
+        check(row["status"] == "recovered",
+              "and the customer's cart is retired, so no later sweep re-asks")
+        check(carts.due() == [c for c in carts.due()],
+              "the check is stable across repeated sweeps")
+    finally:
+        if orders_log is None:
+            os.environ.pop("ORDERS_LOG", None)
+        else:
+            os.environ["ORDERS_LOG"] = orders_log
+
+
 def test_followup_is_off_unless_switched_on():
     """The sweep drives TWO mailers now, and the second is off by default.
 
@@ -347,6 +396,7 @@ def main():
                test_token_expires, test_resolve_endpoint,
                test_recovery_never_stacks_and_never_worsens, test_due_respects_the_delay,
                test_sweep_requires_a_secret,
+               test_a_customer_who_bought_is_never_chased,
                test_followup_is_off_unless_switched_on,
                test_a_broken_followup_never_takes_the_cart_sweep_down, test_summary):
         print("\n" + fn.__name__)

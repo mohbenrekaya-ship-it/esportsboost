@@ -200,17 +200,41 @@ def build(to, subject, text, html=None, reply_to="", sender_name=""):
     return msg
 
 
-def send(to, subject, text, html=None, reply_to="", sender_name=""):
-    """Send one message. Returns `(ok, error)` and **never raises** — the two
-    callers both have something better to do with a failure than 500.
+def _log(to, subject, text, html, kind, ok, error):
+    """Record one send in the outbox. Best-effort and completely isolated: a
+    logging failure must never turn a delivered message into a reported error,
+    and must never stop the next one going out."""
+    try:
+        import maillog
+        maillog.record(to=to if isinstance(to, str) else ", ".join(to or []),
+                       subject=subject, text=text or "", html=html or "",
+                       kind=kind, ok=ok, error=error, sender=from_addr())
+    except Exception:                                          # noqa: BLE001
+        pass
+
+
+def send(to, subject, text, html=None, reply_to="", sender_name="", kind=""):
+    """Send one message. Returns `(ok, error)` and **never raises** — the
+    callers all have something better to do with a failure than 500.
 
     `to` may be one address or a list. `reply_to` is where a human reply should
     go (the visitor, on a support ticket); From is always our own mailbox.
+
+    **Every outcome is written to the outbox** (`maillog.py`) from inside this
+    function, which is the one SMTP seam on the site. That placement is the
+    whole guarantee: a message cannot be sent without being recorded, whoever
+    added the caller and whenever they added it. `kind` is a label for the
+    console — an unknown or missing one is recorded verbatim rather than
+    dropped, because an unlabelled message in the outbox still beats a missing
+    one. Failures are logged too: a refused or timed-out message is a thing that
+    happened, and its absence would read as "we never tried".
     """
     if not configured():
+        _log(to, subject, text, html, kind, False, "mail_not_configured")
         return False, "mail_not_configured"
     msg = build(to, subject, text, html, reply_to, sender_name)
     if msg is None:
+        _log(to, subject, text, html, kind, False, "no_recipient")
         return False, "no_recipient"
 
     ctx = ssl.create_default_context()
@@ -237,5 +261,8 @@ def send(to, subject, text, html=None, reply_to="", sender_name=""):
         # visitor's, and this line ends up in a hosting provider's log viewer.
         sys.stderr.write("[mail] send failed after %.1fs: %s: %s\n"
                          % (time.time() - started, type(e).__name__, e))
+        _log(to, subject, text, html, kind, False,
+             "%s: %s" % (type(e).__name__, e))
         return False, "send_failed"
+    _log(to, subject, text, html, kind, True, "")
     return True, ""

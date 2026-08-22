@@ -448,7 +448,7 @@ def send_warning(row, origin=None, now=None):
         email,
         WARN_SUBJECT % (int(round((row.get("pct") or mystery.OFFER_PCT) * 100)), mins),
         _warn_text(row, now_q, off_q, origin, cur, mins),
-        html=_warn_html(row, now_q, off_q, origin, cur, mins))
+        html=_warn_html(row, now_q, off_q, origin, cur, mins), kind="bingo_warn")
     if not ok:
         sys.stderr.write("[followup] warn %s -> %s failed: %s\n"
                          % (row.get("token"), email, err))
@@ -520,7 +520,7 @@ def send_one(row, origin=None, now=None):
         SUBJECT % (int(round(revived.get("pct", mystery.FOLLOWUP_PCT) * 100)),
                    row.get("game") or "boost"),
         _text(revived, now_q, off_q, origin, cur),
-        html=_html(revived, now_q, off_q, origin, cur))
+        html=_html(revived, now_q, off_q, origin, cur), kind="bingo_chase")
     if not ok:
         sys.stderr.write("[followup] %s -> %s failed: %s\n"
                          % (row.get("token"), email, err))

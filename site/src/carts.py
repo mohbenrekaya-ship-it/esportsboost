@@ -265,10 +265,38 @@ def mark(token, **fields):
     return row
 
 
+def has_ordered(email):
+    """Has this address ever placed a paid order?
+
+    ⚠ The reason this exists: `recover()` burns a cart only when the Stripe
+    webhook can match its token, which needs the buyer to have arrived through
+    the `?cart=` link in the recovery mail. **Anybody who abandoned a cart and
+    then simply came back and bought stays `pending` for ever** — so the sweep
+    chased a paying customer about "the order you left behind", while their real
+    support thread went unanswered. That happened to a real customer.
+
+    The orders store is the authority on who bought, not the cart's own status.
+    Never raises: if the lookup fails we would rather send the mail than lose
+    the sweep, and the caller retires the row on a positive answer only."""
+    email = _s(email, MAX_EMAIL).lower()
+    if not email:
+        return False
+    try:
+        import orders
+        return bool(orders.by_email(email))
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
 def due(now=None, delay=None, limit=200):
     """Carts that are ready for a recovery mail: still `pending`, captured at
-    least `delay` ago, and not older than the token's own lifetime (there is no
-    point mailing a discount that is already dead)."""
+    least `delay` ago, not older than the token's own lifetime (there is no
+    point mailing a discount that is already dead), and belonging to somebody
+    who has **not** since placed an order.
+
+    The orders check is last because it is the expensive one, and it retires the
+    row as it goes: a customer who bought is not "not yet due", they are done,
+    and leaving them `pending` would re-ask the question on every sweep."""
     now = _int(now or time.time())
     delay = DELAY_SECS if delay is None else delay
     out = []
@@ -279,6 +307,10 @@ def due(now=None, delay=None, limit=200):
         if now - at < delay:
             continue
         if now - at > TOKEN_TTL:
+            continue
+        if has_ordered(r.get("email")):
+            # Not a lead — a customer. Retire it so no later sweep asks again.
+            mark(r["token"], status="recovered", recovered_at=now)
             continue
         out.append(r)
         if len(out) >= limit:

@@ -238,7 +238,7 @@ def process_application(raw, header_get):
     ctx = {"co": geo.country(edge, tz, lang), "cosrc": geo.source(edge, tz, lang)}
 
     subject, text = compose(app, ctx)
-    ok, err = mailer.send(mailer.support_addr(), subject, text)
+    ok, err = mailer.send(mailer.support_addr(), subject, text, kind="application")
     _note(key)                        # successes count too — this is a rate cap
     if not ok:
         return 502, {"error": err or "send_failed"}

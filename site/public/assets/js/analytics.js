@@ -189,12 +189,24 @@
   // select_item / add_to_cart are configuration changes under other names —
   // the signature watcher below is the single, de-duplicated source for those,
   // so mirroring them here too would double-count every re-quote.
+  // The account flow rides the same bridge as the funnel: app.js pushes it to
+  // dataLayer at each step (see initHeader) and it arrives here by name. What
+  // crosses is the STEP and its outcome — mode, method, reason — never the email
+  // or the name the visitor typed. Those belong to the accounts store, which is
+  // a separate store precisely so this one stays anonymous.
   var BRIDGE = {
     view_item: "view_item", select_promotion: "select_promotion",
     view_promotion: "view_promotion",
     begin_checkout: "begin_checkout", add_payment_info: "add_payment_info",
-    purchase: "purchase", generate_lead: "generate_lead"
+    purchase: "purchase", generate_lead: "generate_lead",
+    auth_open: "auth_open", oauth_start: "oauth_start", sign_up: "sign_up",
+    login: "login", logout: "logout", auth_error: "auth_error"
   };
+
+  // Only these keys are carried, and each is stringified — a payload key that
+  // is not named here never reaches the store, which is what stops a future
+  // caller passing `email` into track() and having it silently persisted.
+  var META_KEYS = ["transaction_id", "method", "mode", "reason", "promotion"];
 
   function bridge(payload) {
     if (!payload || typeof payload !== "object") return;
@@ -203,8 +215,10 @@
     var extra = {};
     if (typeof payload.value === "number") extra.val = payload.value;
     var meta = {};
-    if (payload.transaction_id) meta.transaction_id = String(payload.transaction_id);
-    if (payload.method) meta.method = String(payload.method);
+    for (var k = 0; k < META_KEYS.length; k++) {
+      var key = META_KEYS[k];
+      if (payload[key]) meta[key] = String(payload[key]);
+    }
     if (Object.keys(meta).length) extra.meta = meta;
     emit(name, extra);
   }
@@ -274,7 +288,17 @@
   });
 
   /* ── lifecycle ───────────────────────────────────────────────────────── */
-  if (fresh) emit("session_start");
+  // Whether the visitor arrived already signed in. Without it a timeline that
+  // shows no login is ambiguous between a guest and somebody who logged in
+  // last week and never signed out — and reading the second as the first
+  // undercounts the account flow every time. It is a boolean about the browser,
+  // not about the person: no id, no email, nothing that survives a sign-out.
+  function signedIn() {
+    try { return localStorage.getItem("esb.session.v1") ? "in" : "out"; }
+    catch (e) { return ""; }
+  }
+
+  if (fresh) emit("session_start", { meta: { account: signedIn() } });
   emit("page_view");
 
   document.addEventListener("visibilitychange", function () {

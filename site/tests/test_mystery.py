@@ -675,23 +675,33 @@ def test_warning_and_chase_can_never_collide():
     row = mystery.get(p["token"])
     at, exp = row["at"], row["expires"]
 
+    # Probe around the real boundaries rather than hard-coded minutes, so the
+    # test still means something when the business re-tunes the schedule.
+    warn_at = mystery.WARN_DELAY // 60
+    dies_at = mystery.TOKEN_TTL // 60
+    chase_at = (mystery.TOKEN_TTL + mystery.FOLLOWUP_DELAY) // 60
+    probes = sorted({0, warn_at - 1, warn_at, warn_at + 1, dies_at - 1, dies_at,
+                     dies_at + 1, chase_at - 1, chase_at, chase_at + 1,
+                     chase_at + 60})
     seen = []
-    for mins in (0, 20, 31, 45, 59, 61, 91, 200):   # WARN_DELAY=30m, TTL=60m
+    for mins in probes:
         t = at + mins * 60
         w = len(mystery.due_warning(now=t))
         c = len(mystery.due_followup(now=t))
         seen.append((mins, w, c))
         check(not (w and c), "at +%dmin the two sweeps never both claim the row" % mins)
-    check([m for m, w, _c in seen if w] == [31, 45, 59],
-          "the warning fires only between WARN_DELAY and the deadline")
-    # FOLLOWUP_DELAY is 0 — the business's spec is "30 minutes a reminder, one
-    # hour the 35%", so the chase lands as the card dies rather than later.
+    check(len(probes) >= 8, "the probe covers every boundary in the schedule")
+    warned_at = [m for m, w, _c in seen if w]
+    check(warned_at and min(warned_at) == warn_at and max(warned_at) < dies_at,
+          "the warning fires only between WARN_DELAY (+%dm) and the deadline (+%dm)"
+          % (warn_at, dies_at))
+    # The business's spec: capture → +30m a reminder → the card dies at +60m →
+    # the 35% an hour after that. Derived from the constants, never typed.
     due_at = [m for m, _w, c in seen if c]
-    first = 61 if mystery.FOLLOWUP_DELAY == 0 else 91
-    check(due_at and due_at[0] == first,
-          "the chase opens at +%dmin (FOLLOWUP_DELAY=%ds)"
-          % (first, mystery.FOLLOWUP_DELAY))
-    check(all(m > 60 for m in due_at),
+    check(due_at and min(due_at) == chase_at,
+          "the chase opens at +%dmin (TTL %dm + FOLLOWUP_DELAY %dm)"
+          % (chase_at, dies_at, mystery.FOLLOWUP_DELAY // 60))
+    check(all(m >= dies_at for m in due_at),
           "and never before the hour is actually up")
     check(mystery.due_warning(now=exp) == [],
           "a warning is never sent about a discount that has already gone")

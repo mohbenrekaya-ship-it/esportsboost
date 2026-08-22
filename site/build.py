@@ -9058,6 +9058,7 @@ OPS_TABS = [
     ("guides", "Guides mails"),
     ("mystery", "Mystery"),
     ("maildiscounts", "Mail discounts"),
+    ("outbox", "Outbox"),
     ("boosters", "Boosters"),
     ("acquisition", "Acquisition"), ("friction", "Friction"), ("abandoned", "Abandoned"),
     ("live", "Stream"),

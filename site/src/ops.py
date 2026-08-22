@@ -35,6 +35,7 @@ import carts
 import guides
 import insights
 import maillist
+import maillog
 import mystery
 import orders
 
@@ -265,6 +266,16 @@ def process_ops(raw):
         # it holds emails (PII), so it is fetched on demand rather than bundled
         # into every dashboard refresh.
         return 200, {"guides": guides.summary(days)}
+
+    if action == "outbox":
+        # The outbox — every message the site actually sent, with its body.
+        # `maillog.py` writes it from inside `mailer.send()`, so nothing can
+        # send without appearing here. Fetched ON DEMAND and never bundled into
+        # a dashboard refresh: it is the most sensitive payload on the console,
+        # holding a recipient's address next to the full text of what was sent
+        # to them, live discount codes included.
+        kind = str(body.get("kind") or "").strip()[:32]
+        return 200, {"outbox": maillog.summary(days, kind=kind)}
 
     if action == "mystery":
         # The mystery-discount store — the emails the configurator modal

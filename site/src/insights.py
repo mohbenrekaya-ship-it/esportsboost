@@ -58,7 +58,18 @@ EVENT_LABELS = {
     "purchase": "Paid", "generate_lead": "Submitted a form",
     "checkout_error": "Checkout error", "js_error": "Script error",
     "scroll": "Scrolled", "engage": "Engaged",
+    # The account flow. These are steps, not identities — the email that was
+    # typed lives in the accounts store and never enters this one.
+    "auth_open": "Opened the account panel",
+    "oauth_start": "Left for a sign-in provider",
+    "sign_up": "Created an account", "login": "Logged in",
+    "logout": "Logged out", "auth_error": "Account step refused",
 }
+
+# What a session's `acct` marker can say, most significant first. A session is
+# labelled by the furthest thing that happened in it, so one that signs up and
+# then signs out still reads as a sign-up — that is the event worth finding.
+ACCT_RANK = ("signed_up", "logged_in", "signed_in")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -120,7 +131,7 @@ class Session(object):
     __slots__ = ("id", "anon", "start", "end", "events", "pages", "entry", "dev",
                  "co", "src", "med", "cmp", "ref", "reached", "configs",
                  "last_cfg", "buy_cfg", "value", "requotes", "returning", "lang",
-                 "tz", "cosrc")
+                 "tz", "cosrc", "acct")
 
     def __init__(self, sid, anon):
         self.id, self.anon = sid, anon
@@ -134,6 +145,7 @@ class Session(object):
         self.value = 0.0
         self.requotes = 0
         self.returning = False
+        self.acct = ""
 
     @property
     def paid(self):
@@ -168,6 +180,18 @@ def sessionize(events):
             s.reached.add(step_of[name])
         if name == "configure":
             s.requotes += 1
+        # The account marker, so the sessions table answers "did this visitor
+        # make an account?" without opening every timeline one at a time.
+        # `session_start`'s flag is what catches somebody who was ALREADY signed
+        # in — they emit no login, and reading that as a guest is the one way
+        # this count goes quietly wrong.
+        acct = ("signed_up" if name == "sign_up"
+                else "logged_in" if name == "login"
+                else "signed_in" if (name == "session_start"
+                                     and (ev.get("meta") or {}).get("account") == "in")
+                else "")
+        if acct and (not s.acct or ACCT_RANK.index(acct) < ACCT_RANK.index(s.acct)):
+            s.acct = acct
         for attr in ("dev", "co", "src", "med", "cmp", "ref", "lang", "tz", "cosrc"):
             if not getattr(s, attr) and ev.get(attr):
                 setattr(s, attr, ev[attr])
@@ -604,7 +628,7 @@ def _session_row(s):
         "tz": s.tz or "", "cosrc": s.cosrc or "",
         "entry": s.entry or "", "exit": visits[-1]["path"] if visits else "",
         "pages": len(visits), "events": len(s.events),
-        "returning": s.returning, "requotes": s.requotes,
+        "returning": s.returning, "requotes": s.requotes, "acct": s.acct,
         "paid": s.paid, "step": _furthest_step(s.reached),
         "value": _money(s.value or cfg.get("total") or 0),
         "game": cfg.get("game", ""), "summary": cfg.get("summary", ""),

@@ -96,17 +96,22 @@ OFFER_LABEL = "Mystery discount"
 # only the /ops Mystery tab against real traffic can. It is set by the business
 # (2026-08-22); see CLAUDE.md.
 FOLLOWUP_PCT = float(os.environ.get("BINGO_FOLLOWUP_PCT", "0.35") or 0.35)
-# How long after the first hour lapses the second mail goes out. **Zero**, by
-# the business's own spec (2026-08-22): the sequence is "30 minutes → a
-# reminder, one hour → the 35%", so the chase lands as the card dies rather than
-# half an hour later. The sweep runs every five minutes, so in practice it
-# arrives 60–65 minutes after capture.
+# How long after the first hour lapses the second mail goes out. **One hour**,
+# by the business's spec (2026-08-22): capture → +30 min a reminder → the card
+# dies at +60 min → the 35% lands an hour after that, at +120 min. Measured from
+# the EXPIRY, not from capture, so re-tuning `TOKEN_TTL` moves the chase with the
+# deadline it is chasing instead of silently overlapping it.
 #
-# It stays a knob rather than being inlined because the two windows are defined
-# against it: `due_warning()` requires the card still be inside its hour and
-# `due_followup()` requires `now >= expires + FOLLOWUP_DELAY`, so any
-# non-negative value keeps them disjoint and a negative one would not.
-FOLLOWUP_DELAY = max(0, int(os.environ.get("BINGO_FOLLOWUP_DELAY", "0") or 0))
+# The gap is deliberate. Offering a better rate in the same minute the first one
+# dies tells the buyer the countdown was theatre — which is the one thing
+# `TOKEN_TTL` exists to stop. An hour is long enough that the card really is
+# gone and short enough that they still remember the price.
+#
+# The two windows are defined against this: `due_warning()` requires the card
+# still be inside its hour and `due_followup()` requires
+# `now >= expires + FOLLOWUP_DELAY`, so any non-negative value keeps them
+# disjoint and a negative one would not.
+FOLLOWUP_DELAY = max(0, int(os.environ.get("BINGO_FOLLOWUP_DELAY", "3600") or 3600))
 # The second window. Longer than the first hour — this one has to survive a
 # night's sleep, and the mail says so — but still a real deadline, enforced by
 # `redeemable()` exactly like the first.
@@ -472,6 +477,14 @@ def due_followup(now=None, limit=200, delay=None):
             continue
         if now - _int(r.get("at")) > FOLLOWUP_MAX_AGE:
             continue
+        # Somebody who bought at full price is a customer, not a lead. The
+        # token is only burned when the webhook can match it, so a buyer who
+        # never used the code leaves this row `issued` for ever — see
+        # `carts.has_ordered()`, which exists for exactly this and cost a real
+        # customer a "you left this behind" mail about an order they had made.
+        if _has_ordered(r.get("email")):
+            mark(r["token"], nomail=1)
+            continue
         out.append(r)
         if len(out) >= limit:
             break
@@ -515,6 +528,16 @@ def update_config(token, body):
     return row
 
 
+def _has_ordered(email):
+    """Shared with `carts.has_ordered()` rather than reimplemented — one
+    definition of "this address is a customer, stop selling to them"."""
+    try:
+        import carts
+        return carts.has_ordered(email)
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
 def due_warning(now=None, limit=200, delay=None):
     """Cards halfway through their hour that have not been warned yet.
 
@@ -542,6 +565,9 @@ def due_warning(now=None, limit=200, delay=None):
             continue
         at, exp = _int(r.get("at")), _int(r.get("expires"))
         if now < at + delay or now >= exp:
+            continue
+        if _has_ordered(r.get("email")):
+            mark(r["token"], nomail=1)
             continue
         out.append(r)
         if len(out) >= limit:
@@ -766,7 +792,7 @@ def send_code(row):
         ok, err = mailer.send(
             row["email"], SUBJECT % int(round((row.get("pct") or OFFER_PCT) * 100)),
             _mail_text(row, origin, total, offer_total),
-            html=_mail_html(row, origin, total, offer_total))
+            html=_mail_html(row, origin, total, offer_total), kind="bingo_code")
         if not ok:
             import sys
             sys.stderr.write("[bingo] %s mail failed: %s\n" % (row.get("token"), err))

@@ -418,6 +418,13 @@ select.field { padding-right: 26px; }
 .ev-dot[data-e="checkout_error"], .ev-dot[data-e="js_error"] { background: var(--critical); }
 .ev-dot[data-e="begin_checkout"], .ev-dot[data-e="add_payment_info"] { background: var(--s2); }
 .ev-dot[data-e="scroll"], .ev-dot[data-e="page_view"] { background: var(--axis); }
+/* The account flow. The two successes take the series green rather than --good,
+   which stays the purchase colour — a sign-up is a good outcome but it is not
+   the outcome the funnel is measured on, and two identical greens in one
+   timeline stop the paid row being findable. A refusal is friction, not a
+   defect, so it is --warning and not the errors' --critical. */
+.ev-dot[data-e="sign_up"], .ev-dot[data-e="login"] { background: var(--s3); }
+.ev-dot[data-e="auth_error"] { background: var(--warning); }
 
 .ev-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; }
 .ev-body b { font-weight: 600; }

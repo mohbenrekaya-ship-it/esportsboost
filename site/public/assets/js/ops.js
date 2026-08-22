@@ -631,6 +631,9 @@
                 // Mail discounts — a read-only JOIN over the other stores
                 // (maillist.py), fetched on demand like every PII panel.
                 ml: null, mlLoading: false, mlError: null,
+                // The outbox — every message actually sent, with its body.
+                // On demand only: it is the most sensitive payload here.
+                ob: null, obLoading: false, obError: null, obKind: "", obOpen: null,
                 // Auto-refresh: poll the dashboard so the numbers stay live
                 // without a manual Refresh. Default on.
                 live: true };
@@ -709,6 +712,7 @@
           if (state.tab === "carts") loadCarts();
           if (state.tab === "mystery") loadMystery();
           if (state.tab === "maildiscounts") loadMailDiscounts();
+          if (state.tab === "outbox") loadOutbox();
           return;
         }
         toGate();
@@ -1336,6 +1340,11 @@
       rows.length ? (rows.reduce(function (n, r) { return n + r.events; }, 0) / rows.length).toFixed(1) : "0"));
     kr.appendChild(kpi("Converted", num(rows.filter(function (r) { return r.paid; }).length)));
     kr.appendChild(kpi("Returning", num(rows.filter(function (r) { return r.returning; }).length)));
+    // Sign-ups made IN these sessions — deliberately not "sessions with an
+    // account", which folds in everyone who was already logged in and reads as
+    // a far bigger number than the panel actually produced.
+    kr.appendChild(kpi("Signed up",
+      num(rows.filter(function (r) { return r.acct === "signed_up"; }).length)));
     f.appendChild(kr);
 
     var el = document.createElement("div");
@@ -1366,7 +1375,8 @@
         '<td class="dim">' + esc(ago(r.end)) + "</td>" +
         '<td><button class="link-btn" type="button" data-session="' + esc(r.id) + '">' +
           esc(r.id.slice(0, 10)) + "</button>" +
-          (r.returning ? '<span class="chip">returning</span>' : "") + "</td>" +
+          (r.returning ? '<span class="chip">returning</span>' : "") +
+          acctChip(r.acct) + "</td>" +
         "<td>" + esc(r.src) + '<span class="dim"> / ' + esc(r.med) + "</span>" +
           (r.cmp ? '<br><span class="dim">' + esc(r.cmp) + "</span>" : "") + "</td>" +
         "<td>" + esc(r.dev) + "</td>" +
@@ -1391,14 +1401,14 @@
       var cols = ["started", "ended", "session_id", "visitor_id", "source", "medium", "campaign",
                   "device", "country_code", "country", "country_source", "timezone", "language",
                   "entry", "exit", "pages", "seconds", "events", "requotes", "furthest_step",
-                  "paid", "value_usd", "returning"];
+                  "paid", "value_usd", "returning", "account_step"];
       var lines = [cols.join(",")];
       rows.forEach(function (r) {
         lines.push([new Date(r.start * 1000).toISOString(), new Date(r.end * 1000).toISOString(),
                     r.id, r.anon, r.src, r.med, r.cmp, r.dev, r.co, countryName(r.co),
                     r.cosrc, r.tz, r.lang, r.entry, r.exit,
                     r.pages, r.duration, r.events, r.requotes, r.step, r.paid ? "yes" : "no",
-                    r.value, r.returning ? "yes" : "no"]
+                    r.value, r.returning ? "yes" : "no", r.acct || "guest"]
           .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; })
           .join(","));
       });
@@ -1411,6 +1421,42 @@
 
     f.appendChild(el);
     return f;
+  }
+
+  /* The account flow, in words. The events carry a step and an outcome and
+     nothing else — no email, no name; the Accounts tab is where the person is.
+     `reason` on an email refusal is the server's own status code, and on an
+     OAuth one it is the sentence the provider round trip failed with, already
+     written for a human, so it passes straight through. */
+  var AUTH_MODE = { signin: "log in tab", signup: "sign up tab", oauth: "social sign-in" };
+  var AUTH_REASON = {
+    exists: "email already registered", invalid: "wrong email or password",
+    weak: "password too short", email: "invalid email address",
+    error: "server refused it", network: "couldn't reach the server"
+  };
+  function authNote(t) {
+    var m = t.meta || {}, bits = [];
+    if (t.e === "session_start" && m.account) {
+      bits.push(m.account === "in" ? "arrived already signed in" : "arrived as a guest");
+    }
+    if (m.mode) bits.push(AUTH_MODE[m.mode] || m.mode);
+    if (m.method) bits.push("via " + m.method);
+    if (m.reason) bits.push(AUTH_REASON[m.reason] || m.reason);
+    return bits;
+  }
+
+  /* The session-level marker: the furthest the account flow got in this visit.
+     "signed in" is the visitor who arrived with a session already — they emit
+     no login, and counting them as guests is what makes an account funnel read
+     lower than it is. */
+  var ACCT_CHIP = {
+    signed_up: { label: "signed up", cls: "chip good" },
+    logged_in: { label: "logged in", cls: "chip" },
+    signed_in: { label: "signed in", cls: "chip" }
+  };
+  function acctChip(acct) {
+    var c = ACCT_CHIP[acct];
+    return c ? '<span class="' + c.cls + '">' + c.label + "</span>" : "";
   }
 
   function fact(label, value) {
@@ -1463,6 +1509,7 @@
         fact("Timezone", s.tz) +
         fact("Language", s.lang) +
         fact("Visitor", s.anon.slice(0, 10) + (s.returning ? " · returning" : " · first visit")) +
+        fact("Account", (ACCT_CHIP[s.acct] || {}).label || "guest") +
         fact("Landed on", s.entry) +
         fact("Left from", s.exit) +
         fact("Re-quotes", String(s.requotes)) +
@@ -1513,6 +1560,7 @@
       if (t.meta && t.meta.pct) bits.push("scrolled " + t.meta.pct + "%");
       if (t.meta && t.meta.message) bits.push(t.meta.message);
       if (t.meta && t.meta.transaction_id) bits.push(t.meta.transaction_id);
+      bits = bits.concat(authNote(t));
       return '<li class="ev">' +
         '<span class="ev-t">+' + esc(dur(t.offset)) + "</span>" +
         '<span class="ev-dot" data-e="' + esc(t.e) + '" aria-hidden="true"></span>' +
@@ -2908,6 +2956,161 @@
     return '<span class="ostat ostat-' + cls + '">' + esc(ML_STATUS[s] || s) + "</span>";
   }
 
+  /* ── Outbox: what we actually sent ──────────────────────────────────────
+     Written by maillog.py from inside mailer.send(), the one SMTP seam on the
+     site, so a message cannot go out without appearing here — including the
+     ones that FAILED, because "we tried and the relay refused" and "we never
+     tried" are different facts and only one of them is a bug. */
+  function loadOutbox() {
+    if (state.obLoading) return;
+    state.obLoading = true;
+    state.obError = null;
+    api({ action: "outbox", token: state.token, days: state.days,
+          kind: state.obKind }).then(function (res) {
+      state.obLoading = false;
+      if (res.status === 200 && res.body.outbox) {
+        state.ob = res.body.outbox;
+      } else if (res.status === 400 || res.status === 404) {
+        state.obError = "This server doesn't serve the outbox yet — it is running an " +
+          "older build. Restart it after deploying.";
+      } else {
+        state.obError = "Couldn't load the outbox — the server returned " + res.status + ".";
+      }
+      if (state.tab === "outbox") render();
+    }).catch(function () {
+      state.obLoading = false;
+      state.obError = "Couldn't reach the server. Is it running?";
+      if (state.tab === "outbox") render();
+    });
+  }
+
+  function panelOutbox() {
+    var f = document.createDocumentFragment();
+    var a = state.ob;
+
+    if (state.obError && !a) {
+      var er = document.createElement("div");
+      er.className = "card";
+      er.innerHTML = '<p class="empty">' + esc(state.obError) + "</p>";
+      f.appendChild(er);
+      return f;
+    }
+    if (!a) {
+      loadOutbox();
+      var w = document.createElement("div");
+      w.className = "card";
+      w.innerHTML = '<p class="empty">Loading the outbox…</p>';
+      f.appendChild(w);
+      return f;
+    }
+
+    var intro = document.createElement("div");
+    intro.className = "banner";
+    intro.innerHTML = '<span class="ico">✉</span><div><strong>Everything the site has ' +
+      "actually sent.</strong> Written from inside <code>mailer.send()</code>, the one SMTP " +
+      "seam here, so no message can go out without landing in this list — order " +
+      "confirmations, support tickets, applications, cart recovery and all three mystery " +
+      "mails. <b>Failures are logged too</b>, so a refused or timed-out message shows as a " +
+      "failure rather than simply being absent. Click any row to read exactly what that " +
+      "person received. Keeps the last " + num(a.cap) + " messages.</div>";
+    f.appendChild(intro);
+
+    var kr = document.createElement("div");
+    kr.className = "kpis";
+    kr.appendChild(kpi("Messages sent", num(a.total), undefined, "", true));
+    kr.appendChild(kpi("People mailed", num(a.recipients)));
+    kr.appendChild(kpi("Failed", num(a.failed)));
+    f.appendChild(kr);
+
+    // Filter by kind — the question is almost always "what did the follow-up
+    // send", not "what went out in total".
+    var bar = document.createElement("div");
+    bar.className = "card";
+    var chips = '<div class="card-hd"><h3>By kind</h3></div><div class="chips">';
+    chips += '<button class="chip' + (state.obKind ? "" : " on") + '" data-ob-kind="">All · ' +
+      num(a.total) + "</button>";
+    (a.kinds || []).forEach(function (k) {
+      chips += '<button class="chip' + (state.obKind === k.kind ? " on" : "") +
+        '" data-ob-kind="' + esc(k.kind) + '">' + esc(k.label) + " · " + num(k.count) +
+        (k.failed ? " (" + num(k.failed) + " failed)" : "") + "</button>";
+    });
+    bar.innerHTML = chips + "</div>";
+    f.appendChild(bar);
+
+    var rows = a.recent || [];
+    var el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML = '<div class="card-hd"><h3>Messages</h3><span class="spacer"></span>' +
+      '<button class="btn btn-sm" type="button" data-export-outbox>Export CSV</button></div>' +
+      '<p class="card-sub">Newest first' +
+      (a.total > rows.length ? ", first " + num(rows.length) + " of " + num(a.total) : "") +
+      ". Times are UTC. Click a row to read the message.</p>";
+
+    if (!rows.length) {
+      el.insertAdjacentHTML("beforeend",
+        '<p class="empty">Nothing sent in this period.</p>');
+      f.appendChild(el);
+      return f;
+    }
+
+    var html = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+      ["When (UTC)", "Kind", "To", "Subject", "Result"]
+        .map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") +
+      "</tr></thead><tbody>";
+    rows.forEach(function (r, i) {
+      var when = new Date(r.at * 1000).toISOString().replace("T", " ").slice(0, 19);
+      html += '<tr data-ob-row="' + i + '" style="cursor:pointer">' +
+        '<td class="dim">' + esc(when) + "</td>" +
+        "<td>" + esc(r.label) + "</td>" +
+        "<td>" + esc(r.to) + "</td>" +
+        '<td class="wrap-cell">' + esc(r.subject) + "</td>" +
+        "<td>" + (r.ok ? '<span class="ostat ostat-issued">sent</span>'
+                       : '<span class="ostat ostat-expired">failed</span>' +
+                         (r.error ? ' <span class="dim">' + esc(r.error) + "</span>" : "")) +
+        "</td></tr>";
+      if (state.obOpen === i) {
+        html += '<tr><td colspan="5"><pre class="pre-wrap" style="white-space:pre-wrap;' +
+          'margin:0;padding:14px;background:rgba(255,255,255,.03);border-radius:8px;' +
+          'font-size:12.5px;line-height:1.6">' + esc(r.text || "(no text part)") +
+          "</pre></td></tr>";
+      }
+    });
+    el.insertAdjacentHTML("beforeend", html + "</tbody></table></div>");
+
+    el.querySelectorAll("[data-ob-row]").forEach(function (tr) {
+      tr.addEventListener("click", function () {
+        var i = +tr.getAttribute("data-ob-row");
+        state.obOpen = state.obOpen === i ? null : i;
+        render();
+      });
+    });
+    el.querySelector("[data-export-outbox]").addEventListener("click", function () {
+      var cols = ["sent_at_utc", "kind", "to", "from", "subject", "result", "error", "body"];
+      var lines = [cols.join(",")];
+      rows.forEach(function (r) {
+        lines.push([new Date(r.at * 1000).toISOString(), r.label, r.to, r.from,
+                    r.subject, r.ok ? "sent" : "failed", r.error, r.text]
+          .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; })
+          .join(","));
+      });
+      var link = document.createElement("a");
+      link.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+      link.download = "esb-outbox-" + new Date().toISOString().slice(0, 10) + ".csv";
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+    });
+    f.appendChild(el);
+
+    bar.querySelectorAll("[data-ob-kind]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state.obKind = b.getAttribute("data-ob-kind");
+        state.ob = null; state.obOpen = null;
+        loadOutbox(); render();
+      });
+    });
+    return f;
+  }
+
   function loadMailDiscounts() {
     if (state.mlLoading) return;
     state.mlLoading = true;
@@ -3472,6 +3675,7 @@
     carts: panelCarts,
     mystery: panelMystery,
     maildiscounts: panelMailDiscounts,
+    outbox: panelOutbox,
     accounts: panelAccounts,
     guides: panelGuides, boosters: panelBoosters,
     acquisition: panelAcquisition, friction: panelFriction, abandoned: panelAbandoned,

@@ -27,6 +27,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)                       # site/
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
+import tempfile as _tf
+os.environ["MAILLOG_LOG"] = _tf.NamedTemporaryFile(
+    prefix="esb-maillog-test-", suffix=".ndjson", delete=False).name
+
 import mailer             # noqa: E402
 import support            # noqa: E402
 
@@ -45,7 +49,100 @@ def check(cond, msg):
 SENT = []
 
 
-def _fake_send(to, subject, text, html=None, reply_to="", sender_name=""):
+def test_every_send_lands_in_the_outbox():
+    """The outbox is only trustworthy if it is impossible to bypass, so it is
+    written from inside `mailer.send()` rather than by each caller. This asserts
+    the placement: a success, a failure and an unconfigured mailbox all leave a
+    row, and the row carries the body that was actually sent."""
+    import maillog
+    maillog.clear()
+
+    # 1. unconfigured — the message never reaches a socket, but the attempt is
+    #    still a fact somebody will need to explain.
+    for k in ("SMTP_USER", "SMTP_PASSWORD"):
+        os.environ.pop(k, None)
+    ok, err = mailer.send("a@b.com", "Unconfigured", "body one", kind="test")
+    check(not ok and err == "mail_not_configured", "an unconfigured send fails")
+    rows = maillog.read()
+    check(len(rows) == 1 and rows[0]["ok"] == 0,
+          "and is still recorded, as a failure")
+    check(rows[0]["error"] == "mail_not_configured", "with the reason")
+
+    # 2. a real send, through a stubbed transport
+    maillog.clear()
+    os.environ["SMTP_USER"] = "info@esportsboost.com"
+    os.environ["SMTP_PASSWORD"] = "x"
+    import smtplib
+
+    class _Stub:
+        def __init__(self, *a, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def ehlo(self): pass
+        def has_extn(self, _n): return True
+        def starttls(self, **k): pass
+        def login(self, *a): pass
+        def send_message(self, m): pass
+    real_ssl = smtplib.SMTP_SSL
+    smtplib.SMTP_SSL = _Stub
+    try:
+        ok, err = mailer.send("buyer@example.com", "Your 30% code",
+                              "the plain text body", html="<b>the html</b>",
+                              kind="bingo_code")
+    finally:
+        smtplib.SMTP_SSL = real_ssl
+    check(ok, "a stubbed send succeeds")
+    rows = maillog.read()
+    check(len(rows) == 1, "exactly one row per message")
+    r = rows[0]
+    check(r["to"] == "buyer@example.com", "the recipient is recorded")
+    check(r["subject"] == "Your 30% code", "the subject is recorded")
+    check(r["kind"] == "bingo_code", "the kind is recorded")
+    check(r["text"] == "the plain text body", "the BODY is recorded verbatim")
+    check(r["html"] == "<b>the html</b>", "and the html part too")
+    check(r["ok"] == 1 and r["at"] > 0, "with the outcome and a timestamp")
+
+    s = maillog.summary(days=30)
+    check(s["total"] == 1 and s["recipients"] == 1, "the summary counts it")
+    check(s["kinds"][0]["label"] == "Mystery card — the code",
+          "and labels the kind for the console")
+    check(maillog.summary(days=30, kind="cart_recovery")["total"] == 0,
+          "and the kind filter actually filters")
+    maillog.clear()
+    for k in ("SMTP_USER", "SMTP_PASSWORD"):
+        os.environ.pop(k, None)
+
+
+def test_every_mail_caller_labels_its_kind():
+    """An unlabelled row is still logged, but the console cannot group it — and
+    the whole point of the tab is answering 'what did the follow-up send'. This
+    walks the real call sites rather than trusting a grep."""
+    import inspect
+    import apply, followup, mystery, payments, recovery, support     # noqa: E402
+    unlabelled = []
+    for mod in (apply, followup, mystery, payments, recovery, support):
+        src = inspect.getsource(mod)
+        for i, line in enumerate(src.split("\n")):
+            if "mailer.send(" not in line or "def " in line:
+                continue
+            # Prose writes it as `mailer.send()` with empty parens; a real call
+            # always has arguments. Comments are skipped outright.
+            if line.lstrip().startswith("#") or "mailer.send()" in line:
+                continue
+            window = "\n".join(src.split("\n")[i:i + 10])
+            if "kind=" not in window:
+                unlabelled.append("%s:%d" % (mod.__name__, i + 1))
+    check(not unlabelled, "every mailer.send() call passes a kind (%s)"
+          % (", ".join(unlabelled) or "all labelled"))
+
+    import maillog
+    known = set(maillog.KINDS)
+    for k in ("order", "order_ops", "support", "application", "cart_recovery",
+              "bingo_code", "bingo_warn", "bingo_chase"):
+        check(k in known, "the console knows the %r kind" % k)
+
+
+def _fake_send(to, subject, text, html=None, reply_to="", sender_name="", kind=""):
     SENT.append({"to": to, "subject": subject, "text": text,
                  "html": html, "reply_to": reply_to})
     return True, ""
@@ -233,7 +330,9 @@ def main():
                test_recipients_are_validated, test_topic_is_server_resolved,
                test_subject_carries_a_real_order_id_only, test_validation,
                test_honeypot_is_silent, test_sends_with_reply_to_and_rate_caps,
-               test_unconfigured_degrades, test_order_mail):
+               test_unconfigured_degrades, test_order_mail,
+               test_every_send_lands_in_the_outbox,
+               test_every_mail_caller_labels_its_kind):
         print("\n" + fn.__name__)
         fn()
     print("\n" + ("=" * 52))

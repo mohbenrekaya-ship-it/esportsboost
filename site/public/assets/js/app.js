@@ -2314,6 +2314,12 @@
       lockScroll(true);
       var first = panel.querySelector("[data-hd-tab]");
       if (first) first.focus();
+      // The top of the account funnel. Every later step (oauth_start, sign_up,
+      // login, auth_error) is measured against this, so it has to fire on the
+      // open and not on the submit — the people who open the panel and close it
+      // again are the ones worth knowing about. Nothing identifying crosses:
+      // the mode is "signin" or "signup" and that is all.
+      track("auth_open", { mode: mode });
     }
     function closeAuth() {
       if (!authOpen()) return;
@@ -2359,6 +2365,10 @@
     // configured keeps the honest facade message instead of a dead redirect.
     var OAUTH = {};                 // {google:bool, discord:bool}, filled by loadMe
     function oauthGo(provider) {
+      // Recorded before the redirect, because the round trip may never come
+      // back — a consent screen the visitor closes leaves no other trace, and
+      // an oauth_start with no matching login or auth_error IS that drop.
+      track("oauth_start", { method: provider });
       var rt = location.pathname + location.search + location.hash;
       location.href = "/api/auth/" + encodeURIComponent(provider)
         + "?return_to=" + encodeURIComponent(rt);
@@ -2442,9 +2452,15 @@
       postAccount(body).then(function (res) {
         if (submit) submit.disabled = false;
         if (res.status === "network") {
+          track("auth_error", { mode: mode, reason: "network" });
           showErr(hdT("Couldn't reach the server. Check your connection and try again."));
           return;
         }
+        // Every refusal is recorded with the reason the server gave, because the
+        // interesting question is never "how many signed up" but "how many tried
+        // and what stopped them" — an "exists" wall and a wrong password are two
+        // completely different fixes and they look identical in a raw count.
+        if (res.status !== "ok") track("auth_error", { mode: mode, reason: res.status });
         if (mode === "signup") {
           if (res.status === "exists") {
             // Carry the email into the log-in tab so they just add a password.
@@ -2462,6 +2478,10 @@
           showErr(hdT("That email and password don't match. Check them, "
             + "or create an account.")); return;
         }
+        // The two outcomes, named the way GA4 names them so a tag manager could
+        // read the same pushes later. `method` is how they authenticated, never
+        // who: the address is already on its way to the accounts store.
+        track(mode === "signup" ? "sign_up" : "login", { method: "password" });
         signIn({ name: (res.data && res.data.name) || email.split("@")[0], email: email });
         closeAuth();
       });
@@ -2511,6 +2531,7 @@
       }).catch(function () { return { status: "network", data: {} }; });
     }
     function signOut() {
+      track("logout", {});
       try { localStorage.removeItem(HD_SESSION); } catch (e) {}
       // Also drop the server session cookie, if there is one (OAuth logins). A
       // static preview has no such route — ignore the failure.
@@ -2568,19 +2589,37 @@
     }
     loadMe();
 
-    // A failed OAuth round trip returns to ?auth_error=<message>; surface it in
-    // the panel and strip it from the URL so a refresh doesn't re-open it.
+    // The OAuth round trip lands back here carrying its outcome in the query,
+    // and both halves are stripped again so a refresh neither re-opens the panel
+    // nor re-counts the login. A success returns to ?auth=<provider> (plus
+    // &new=1 when the callback created the account rather than recognising it);
+    // a failure returns to ?auth_error=<message>. The markers are the ONLY way
+    // this side can tell a fresh login from a cookie that was already there —
+    // the redirect happens off-page, so nothing else observes it.
+    function stripQuery(keys) {
+      try {
+        var q = new URLSearchParams(location.search);
+        keys.forEach(function (k) { q.delete(k); });
+        var rest = q.toString();
+        history.replaceState(null, "", location.pathname
+          + (rest ? "?" + rest : "") + location.hash);
+      } catch (e) {}
+    }
     (function () {
+      var ok = /[?&]auth=([a-z]+)/.exec(location.search);
+      if (ok) {
+        var fresh = /[?&]new=1(?:&|$)/.test(location.search);
+        track(fresh ? "sign_up" : "login", { method: ok[1] });
+        stripQuery(["auth", "new"]);
+        return;
+      }
       var m = /[?&]auth_error=([^&]*)/.exec(location.search);
       if (!m) return;
+      var why = decodeURIComponent(m[1].replace(/\+/g, " "));
+      track("auth_error", { mode: "oauth", reason: why.slice(0, 80) || "failed" });
       openAuth("signin");
-      showErr(decodeURIComponent(m[1].replace(/\+/g, " "))
-        || hdT("Sign-in didn't complete. Please try again."));
-      try {
-        var q = location.search.replace(/([?&])auth_error=[^&]*/, "$1")
-          .replace(/[?&]$/, "").replace(/^\?$/, "");
-        history.replaceState(null, "", location.pathname + q + location.hash);
-      } catch (e) {}
+      showErr(why || hdT("Sign-in didn't complete. Please try again."));
+      stripQuery(["auth_error"]);
     })();
 
     /* ── one surface at a time ─────────────────────────────────────────── */

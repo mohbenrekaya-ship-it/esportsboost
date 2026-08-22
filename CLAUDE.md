@@ -2386,6 +2386,32 @@ replaced in the same five minutes.
   sells it. Until the seam is built, every order it wins is a manual promise ops has to keep. See
   [Watch live](#watch-live--the-boosters-screen-share--watch_panel).
 
+## The outbox — `maillog.py`, proof of what was actually sent
+
+The site sends seven kinds of mail from six modules on a five-minute cron, and until
+this existed there was no way to answer *"what did we send that person, and when"*
+except asking them to forward it. That is an operational gap, not a reporting one: a
+customer wrote in asking why he was chased about an order he had not placed, and the
+only honest answer available was a shrug.
+
+- **It is written inside `mailer.send()`, and that placement is the whole guarantee.**
+  Not by each caller — by the one SMTP seam on the site. A message cannot go out
+  without being recorded, whoever adds the caller and whenever they add it.
+  `test_every_send_lands_in_the_outbox()` asserts the placement; a second test walks
+  the real call sites and fails if any `mailer.send()` forgets its `kind`.
+- **Failures are logged too.** "We tried and the relay refused" and "we never tried"
+  are different facts, and only one is a bug. An absent row would conflate them.
+- **The body is stored, capped not dropped** — the point is being able to read what
+  somebody actually received. Text and HTML both; `MAILLOG_MAX_TEXT` / `_MAX_HTML`.
+- **Append-only, so a LIST** (`LPUSH` + `LTRIM`), the `guides.py` shape — a sent
+  message is a historical fact and nothing may edit it. `MAILLOG_MAX` (2000) is the
+  retention cap; an outbox that grows for ever is a breach waiting for somewhere to
+  happen.
+- ⚠ **The most sensitive store on the site**: a recipient's address beside the full
+  text sent to them, live discount codes included. Fetched on demand in /ops, never
+  bundled into a refresh, and it needs the same lawful basis, privacy-policy line and
+  deletion path as carts / mystery / accounts before launch.
+
 ## Mail discounts — one view over every captured address
 
 `src/maillist.py` + the `/ops` **Mail discounts** tab. One row per email address,
@@ -2437,6 +2463,7 @@ public/assets/js/analytics.js  ──►  POST /api/collect  ──►  src/anal
 | `site/src/boosters.py` | The roster store — another **separate** store (operator-write / public-read), `GET /api/boosters` to read, `ops.py`'s `boosters` action for the console. See [The roster store](#the-roster-store--boosters-in-the-backend). |
 | `site/tools/seed_boosters.py` | Fills the roster store from `data.py`'s `BOOSTERS` (tags rows `syn`). |
 | `site/src/mystery.py` | The mystery-discount store — a **separate** store again, `POST /api/bingo` to capture + issue, `GET /api/bingo?token=` to resolve, `ops.py`'s `mystery` action to read. Holds an email next to a live single-use discount. See [The mystery discount](#the-mystery-discount--mysterypy--the-modal-on-every-game-page). |
+| `site/src/maillog.py` | **The outbox** — every message the site actually sent, with its body. Written from inside `mailer.send()`, the one SMTP seam, so nothing can send without appearing; failures are recorded too. `ops.py`'s `outbox` action → the /ops **Outbox** tab. Append-only (LIST), retention-capped, and the most sensitive store here: a recipient's address next to a live discount code. |
 | `site/src/followup.py` | The second mystery mail — revives a lapsed card to 35% and chases it once, on the same cron as the cart sweep. Composes its own message; shares only `mailer.py`'s transport. See [The follow-up](#the-follow-up--followuppy-one-second-mail-on-a-lapsed-card). |
 | `api/collect.py`, `api/account.py`, `api/boosters.py`, `api/support.py`, `api/bingo.py`, `api/bingo/unsubscribe.py`, `api/ops.py` | Vercel shells, mirroring the `serve.py` routes. |
 
