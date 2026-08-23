@@ -491,7 +491,7 @@ def due_followup(now=None, limit=200, delay=None):
 def update_config(token, body):
     """Re-point a live row at the order the visitor is building NOW.
 
-    The card is offered ~8 seconds after the target rank settles, and people
+    The card is offered ~6 seconds after the target rank settles, and people
     keep configuring afterwards — they add Priority, switch to Duo, move the
     server, extend the climb, apply a bundle. Without this the row freezes at
     the moment the address was typed and all three mails quote an order that was
