@@ -457,7 +457,7 @@
   }
 
   /* ── keep a live mystery card pointed at the CURRENT order ───────────────
-     The card is offered ~6s after the target rank settles, and people keep
+     The card is offered ~4s after the target rank settles, and people keep
      configuring afterwards. Without this the row freezes at the moment the
      address was typed, and all three mails quote an order the visitor moved on
      from two steps later — the wrong price against the wrong climb, and
@@ -3961,11 +3961,11 @@
   var MYD_KEY = "esb.bingo.v1";
   var MYD_SETTLE = 800;        // handoff: settled means settled, before any timer
   /* The business's own figure, measured from the visitor's LAST rank input —
-     "6 seconds after choosing the desired rank", literally. The settle window
+     "4 seconds after choosing the desired rank", literally. The settle window
      sits INSIDE it rather than being added to it, so this constant is the
      number that was asked for and not 800ms more than it; change it here and
      nowhere else. */
-  var MYD_AFTER_PICK = 6000;
+  var MYD_AFTER_PICK = 4000;
   var MYD_OPENING = 1400;      // the "drawing your code" beat
   var MYD_RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
   // Every control that moves a rank. `to`/`toTier` are the TARGET — "after

@@ -368,7 +368,7 @@ def test_followup_due_rules():
 
 
 def test_config_beacon_tracks_the_latest_order():
-    """The card is offered ~6s after the target rank settles and people keep
+    """The card is offered ~4s after the target rank settles and people keep
     configuring. A row frozen at capture makes every mail quote an order the
     visitor abandoned two steps later — the wrong price against the wrong climb."""
     reset()

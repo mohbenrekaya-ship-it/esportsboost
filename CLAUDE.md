@@ -2171,11 +2171,11 @@ target rank settles ──800ms──► 4s ──► modal ──email──►
   link, a bundle click or a game switch cannot fire it. A **target** control (`data-sel="to"`,
   `toTier`, `[data-subseg="to"]`) has to have been touched at least once — "after choosing his desired
   rank" — and then ~800ms of no rank input has to settle before it can fire. `MYD_AFTER_PICK` in
-  app.js is the whole wait **measured from the last rank input** (6 seconds), with the settle window
+  app.js is the whole wait **measured from the last rank input** (4 seconds), with the settle window
   INSIDE it rather than added to it — so the constant is the figure the business asked for and not
-  800ms more than it. The handoff drew 3s, this build shipped 4, then 8; the number
-  is a business call about how long a visitor is left alone with the price, so change it there and
-  nowhere else.
+  800ms more than it. The handoff drew 3s; this build has shipped 4, 8 and 6 before
+  landing back on 4. The number is a business call about how long a visitor is left
+  alone with the price, so change it there and nowhere else.
 - **Once per visitor, and a decline is genuinely free.** The flag is written when the card is *shown*.
   No exit-intent second attempt, no re-fire on the next page; the `passed` card's own reversal link is
   the only way back in. It also never opens over an order that already carries a discount (a typed
@@ -2266,7 +2266,7 @@ prevents is a visitor told their discount is running out and that it has been
 replaced in the same five minutes.
 
 - ⚠ **The row tracks the LIVE order, or none of this is worth sending.** The card is
-  offered ~6s after the target rank settles and people keep configuring afterwards —
+  offered ~4s after the target rank settles and people keep configuring afterwards —
   they add Priority, switch to Duo, move the server, extend the climb. A row frozen at
   capture makes all three mails quote an order the visitor abandoned two steps later,
   and `/checkout?bingo=` hydrate a basket they never wanted: not a slightly stale mail,
