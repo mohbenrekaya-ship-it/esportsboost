@@ -3,6 +3,8 @@
   "configurations": [
     {
       "name": "esportsboost",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["site/serve.py", "4321"],
       "url": "http://localhost:4321",
       "port": 4321
     },

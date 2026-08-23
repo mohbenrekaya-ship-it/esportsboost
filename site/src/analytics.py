@@ -54,6 +54,13 @@ ALLOWED_EVENTS = {
     "view_promotion",
     "add_to_cart", "begin_checkout", "add_payment_info", "purchase",
     "generate_lead", "checkout_error", "js_error", "scroll", "engage",
+    # Emitted once per page as the visitor leaves — pagehide, or the tab going
+    # hidden, whichever fires first. It is what gives a session a real duration:
+    # every other event on a landing page fires within milliseconds of load, so
+    # without it a two-minute read and an instant bounce both record 0s, which
+    # is the one distinction paid traffic has to be judged on. `meta.sec` is the
+    # dwell the page measured for itself.
+    "page_exit",
     # The account flow, end to end: the panel opening, a departure for an OAuth
     # provider, the two outcomes, the sign-out, and every refusal in between.
     # Without these a session that creates an account looks exactly like one

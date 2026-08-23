@@ -24,7 +24,7 @@ Definitions used throughout (stated once so the dashboard never has to guess):
     the difference between a rate and a rumour.
   * **Reached a funnel step** — the session emitted that event at least once.
     Steps are cumulative and monotonic by construction: reaching a later step
-    back-fills the earlier ones, so a lost `view_item` beacon can never make a
+    back-fills the earlier ones, so a lost `engage` beacon can never make a
     funnel stage show more sessions than the stage above it.
   * **A session's configuration** — the last configurator state seen in it. For
     a purchase, the configuration attached to the purchase event.
@@ -39,7 +39,16 @@ DAY = 86400
 # The funnel, in order. Each step lists the events that count as reaching it.
 FUNNEL = [
     ("session",   "Visited the site",     ("page_view", "session_start")),
-    ("view_item", "Opened a configurator", ("view_item",)),
+    # ⚠ NOT `view_item`, which is what this step used to read. app.js fires that
+    # at the end of init() on any page carrying [data-configurator] — the
+    # homepage Best Sellers band included — so it needs no interaction at all,
+    # and EVERY homepage load reported reaching this step, carrying the page's
+    # own default climb as the session value. The step measured whether the HTML
+    # rendered. `engage` is emitted by analytics.js on the first real touch of a
+    # configurator control, which is what this label has always claimed.
+    # Sessions recorded before that shipped have no `engage` event, so this step
+    # reads low for them unless they went on to configure (which back-fills it).
+    ("engage",    "Touched the configurator", ("engage",)),
     ("configure", "Configured an order",  ("configure", "add_to_cart", "select_promotion")),
     ("checkout",  "Started checkout",     ("begin_checkout",)),
     ("payment",   "Reached payment",      ("add_payment_info",)),
@@ -57,7 +66,8 @@ EVENT_LABELS = {
     "begin_checkout": "Started checkout", "add_payment_info": "Reached payment",
     "purchase": "Paid", "generate_lead": "Submitted a form",
     "checkout_error": "Checkout error", "js_error": "Script error",
-    "scroll": "Scrolled", "engage": "Engaged",
+    "scroll": "Scrolled", "engage": "Touched the configurator",
+    "page_exit": "Left the page",
     # The account flow. These are steps, not identities — the email that was
     # typed lives in the accounts store and never enters this one.
     "auth_open": "Opened the account panel",
@@ -580,11 +590,12 @@ def _mod_abandoned(sess, limit=60):
 def _page_visits(rows):
     """Consecutive page visits in a session, with time spent on each.
 
-    There is no "left the page" event — a browser that closes sends nothing —
-    so a visit lasts from its first event until the first event on the NEXT
-    page. The final visit can only be measured to the session's last event,
-    which is a floor, not the true dwell: it is flagged `partial` so the UI can
-    say "at least" rather than quietly under-reporting.
+    A visit lasts from its first event until the first event on the NEXT page.
+    The final one is closed by `page_exit`, which analytics.js emits on pagehide
+    and on the tab going hidden; where that never arrived the visit can only be
+    measured to the session's last event, which is a floor rather than the true
+    dwell, and is flagged `partial` so the UI says "at least" instead of quietly
+    under-reporting.
     """
     visits, cur = [], None
     for ev in rows:
@@ -598,8 +609,14 @@ def _page_visits(rows):
             cur = {"path": p, "start": t, "end": t, "events": 0}
         cur["end"] = max(cur["end"], t)
         cur["events"] += 1
+        if ev.get("e") == "page_exit":
+            cur["closed"] = True
     if cur:
-        cur["partial"] = True
+        # Measured, not a floor, when the page said so itself: `page_exit` is
+        # emitted on pagehide and on the tab going hidden. Only a visit that
+        # never sent one — a browser killed outright, a lost beacon — is still
+        # bounded by the session's last event and has to be read as "at least".
+        cur["partial"] = not cur.get("closed")
         visits.append(cur)
     for v in visits:
         v["seconds"] = max(0, v["end"] - v["start"])

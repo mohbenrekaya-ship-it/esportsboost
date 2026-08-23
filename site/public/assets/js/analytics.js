@@ -94,9 +94,50 @@
   }
 
   /* ── first touch: where this visitor originally came from ────────────── */
+  /* ⚠ Google Ads auto-tagging sends `gclid` and NOTHING else — never a utm_*
+     — and the click routes through googleadservices.com, which lands here with
+     an EMPTY referrer on mobile and in every in-app browser. Read through utm
+     and referrer alone, a paid click therefore fell straight through to the
+     literals below and was filed as `direct / none`: our own ad spend, in the
+     one bucket that also holds real direct traffic, from which no cost per
+     acquisition can be recovered. Hence the click ids.
+
+     The id itself is READ AND DISCARDED — never stored, never sent. A click id
+     is a unique per-click identifier the ad network can join back to a person,
+     and keeping one would end the anonymous-by-construction promise at the top
+     of this file, and with it the cookieless exemption that is why this site
+     ships no consent banner. What is kept is the CHANNEL: `google / cpc`. */
+  var PAID_CLICK = [
+    ["gclid",   "google", "cpc"],   // Google Ads, ordinary web traffic
+    ["gbraid",  "google", "cpc"],   // Google Ads, iOS web-to-app
+    ["wbraid",  "google", "cpc"],   // Google Ads, iOS app-to-web
+    ["msclkid", "bing",   "cpc"]    // Microsoft Ads
+  ];
+
+  function paidClick(q) {
+    for (var p = 0; p < PAID_CLICK.length; p++) {
+      if (q.get(PAID_CLICK[p][0])) {
+        return { src: PAID_CLICK[p][1], med: PAID_CLICK[p][2] };
+      }
+    }
+    return null;
+  }
+
   var touch = get(K_TOUCH);
-  if (!touch) {
+  (function () {
     var q = new URLSearchParams(location.search);
+    var paid = paidClick(q);
+    var tagged = !!(q.get("utm_source") || paid);
+
+    /* Re-stamped on every TAGGED arrival, not only on a first visit. It used to
+       be written once and kept for ever, so a browser that had ever seen the
+       site stayed `direct` through every ad click it made afterwards — which
+       drops exactly the returning visitors a remarketing campaign pays to bring
+       back, and would have hidden the fix above from anyone already here. An
+       UNTAGGED arrival still never overwrites a stored touch, so an ordinary
+       organic return keeps the source it first came in on. */
+    if (touch && !tagged) return;
+
     var ref = "";
     try {
       // Host only — never the full referring URL, which can carry a query.
@@ -105,14 +146,15 @@
         if (h && h !== location.hostname) ref = h.replace(/^www\./, "");
       }
     } catch (e) {}
+
     touch = {
-      src: q.get("utm_source") || ref || "direct",
-      med: q.get("utm_medium") || (ref ? "referral" : "none"),
+      src: q.get("utm_source") || (paid && paid.src) || ref || "direct",
+      med: q.get("utm_medium") || (paid && paid.med) || (ref ? "referral" : "none"),
       cmp: q.get("utm_campaign") || "",
       ref: ref
     };
     put(K_TOUCH, touch);
-  }
+  })();
 
   /* ── the configurator snapshot carried by every event ────────────────── */
   function snapshot() {
@@ -249,13 +291,36 @@
     }, 350);
   }
 
+  /* ── engage: the first real touch of a configurator control ────────── */
+  /* The funnel's second step used to be `view_item`, which app.js fires at the
+     end of init() on any page carrying [data-configurator] — the homepage
+     Best Sellers band included. It needs NO interaction, so every single
+     homepage load reported "opened a configurator", carrying the page's own
+     default climb as the session value. The step measured whether the HTML
+     rendered, and a bounce was indistinguishable from a buyer.
+
+     This is the honest version of that claim: the visitor touched a control.
+     Deliberately NOT the same thing as `configure`, which needs the quote to
+     actually change — tapping the tab you are already on is engagement, not a
+     re-quote. Once per session; `view_item` still fires for GA4 and Ads. */
+  var engaged = false;
+  function maybeEngage() {
+    if (engaged) return;
+    engaged = true;
+    emit("engage");
+  }
+
   var WATCH = "[data-sel],[data-service],[data-mode],[data-addon],[data-stepper]," +
               "[data-ladder],[data-promo-apply],[data-panel]";
   document.addEventListener("change", function (e) {
-    if (e.target && e.target.closest && e.target.closest(WATCH)) maybeConfigure();
+    if (e.target && e.target.closest && e.target.closest(WATCH)) {
+      maybeEngage(); maybeConfigure();
+    }
   }, true);
   document.addEventListener("click", function (e) {
-    if (e.target && e.target.closest && e.target.closest(WATCH)) maybeConfigure();
+    if (e.target && e.target.closest && e.target.closest(WATCH)) {
+      maybeEngage(); maybeConfigure();
+    }
   }, true);
 
   /* ── scroll depth ────────────────────────────────────────────────────── */
@@ -301,8 +366,30 @@
   if (fresh) emit("session_start", { meta: { account: signedIn() } });
   emit("page_view");
 
+  /* ── leaving — the one event that makes a duration real ──────────── */
+  /* A session's duration is the gap between its first and its last event, and
+     every event above fires within milliseconds of load. So a visitor who read
+     a landing page for two minutes and left without scrolling a quarter of the
+     way down recorded 0s — the same figure as an instant bounce, which is the
+     single distinction paid traffic has to be judged on. Nothing else can
+     supply it: there is no heartbeat and `scroll` only fires at 25% depth.
+
+     Once per page load, on whichever signal comes first: `pagehide` does not
+     fire at all on some mobile browsers, and `hidden` is what a phone actually
+     sends when the visitor switches away. Firing it early costs nothing — the
+     duration reads the LAST event, so anything done after coming back extends
+     it again. */
+  var left = false;
+  function leaving() {
+    if (!left) {
+      left = true;
+      emit("page_exit", { meta: { sec: Math.round((Date.now() - now) / 1000) } });
+    }
+    flush();
+  }
+
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "hidden") flush();
+    if (document.visibilityState === "hidden") leaving();
   });
-  window.addEventListener("pagehide", flush);
+  window.addEventListener("pagehide", leaving);
 })();
