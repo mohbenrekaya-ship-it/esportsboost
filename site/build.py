@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import sys
+from urllib.parse import quote as _urlq
 from datetime import datetime, timedelta
 from html import escape as esc
 
@@ -127,8 +128,20 @@ DEMO_HREF = "/demo.html"
 # facade session — see AUTH_PLACEHOLDER); the page says so.
 ORDERS_HREF = "/orders.html"
 
+# /accounts.html — the ready-made-account board. Named here rather than
+# written out five times: the nav, the header menu, the LoL teaser band, the
+# footer and page_accounts() itself all point at it, which is exactly how
+# DEMO_HREF came to exist.
+ACCOUNTS_HREF = "/accounts.html"
+
 NAV = [
     ("/games", "Games"),
+    # The fifth product. Top-level rather than a card inside the Games menu:
+    # it is bought instead of a boost, not as part of one, and a visitor who
+    # came for an account has no reason to open a menu about ladders. Dropped
+    # automatically when the catalogue is empty, the rule every other entry
+    # below follows.
+    (ACCOUNTS_HREF, "Accounts"),
     ("/#live", "Live"),
     ("/boosters", "Boosters"),
     ("/guarantee.html", "Safety"),
@@ -140,6 +153,8 @@ NAV = [
 ]
 # Only when HIDE_PLACEHOLDER_CLAIMS drops the pages behind them — never link
 # to a destination the build didn't produce.
+if not D.accounts_in_stock():
+    NAV.remove((ACCOUNTS_HREF, "Accounts"))
 if not D.LIVE_FEED:
     NAV.remove(("/#live", "Live"))
 if not D.BOOSTERS:
@@ -493,6 +508,9 @@ HD_BY_KEY = {k: (label, sec, cards, count) for k, label, sec, cards, count in HD
 # worse control than the link.
 HD_NAV = [
     ("games", "/games", "Games"),
+    # A single destination — no menu. Eight listings do not need a mega panel,
+    # and a menu holding one link is a worse control than the link.
+    (None, ACCOUNTS_HREF, "Accounts"),
     (None, "/#live", "Live"),
     ("boosters", "/boosters", "Boosters"),
     ("safety", "/guarantee.html", "Safety"),
@@ -1242,6 +1260,11 @@ def footer():
         '<li><a href="/games/%s.html">%s</a></li>' % (BY_NAME[n]["slug"], esc(n))
         for n in FOOT_GAMES if n in BY_NAME
     )
+    # The accounts board, under the titles it sells for. Dropped with the board
+    # itself when nothing is in stock — the same guard NAV makes, so the footer
+    # can never advertise a page the build did not produce.
+    accounts_link = ('<li><a href="%s">%s</a></li>' % (ACCOUNTS_HREF, esc("LoL accounts"))
+                     if D.accounts_in_stock() else "")
     support = "".join(
         '<li><a href="%s">%s%s</a></li>'
         % (h, _ico(ico, 15, "ico ft-link-ico", stroke=True) if ico else "",
@@ -1285,7 +1308,7 @@ def footer():
 
       <nav class="ft-col" aria-label="Games">
         <h2 class="ft-head">Games</h2>
-        <ul class="ft-list">{games}
+        <ul class="ft-list">{games}{accounts_link}
           <li><a class="ft-all" href="/games"><span>All <b>{len(D.GAMES)}</b> games</span>{_ico("arrow", 13, "ico", stroke=True)}</a></li>
         </ul>
       </nav>
@@ -6006,6 +6029,41 @@ def mystery_modal():
 </div>"""
 
 
+def gp_accounts_strip(g):
+    """The cross-sell to /accounts.html, on the one game that has a board.
+
+    Deliberately UNNUMBERED and after the FAQ. The six `.gp` bands are a numbered
+    argument for buying a boost, and dropping a seventh into it would renumber
+    five typed eyebrows and interrupt that run with an offer to buy something
+    else. It sits where a reader who has finished the case is deciding — and it
+    is a strip rather than a band because it is an alternative, not a pitch of
+    equal weight.
+
+    Returns "" for the other eight games and when nothing is in stock, so no page
+    can advertise a board that isn't there — the same guard NAV makes.
+    """
+    if g["name"] != D.ACCOUNT_GAME or not D.accounts_in_stock():
+        return ""
+    return f"""<section class="gp-sec gp-acc">
+      <div class="wrap gp-inner">
+        <div class="gp-acc-card">
+          <div class="gp-acc-l">
+            <span class="gp-acc-k">{_ico("user-dashed", 15, "ico", stroke=True)}<span>Accounts</span></span>
+            <h2 class="gp-acc-t">Or start on a second account.</h2>
+            <p class="gp-acc-b"><span>Ready-made {esc(g['short'])} accounts from</span>
+            <b>{ac_price_note()}</b> <span>— level 30 and ranked, on NA, EUW, EUNE and OCE,
+            with full email access and a</span> <b>{D.ACCOUNT_WARRANTY_DAYS}-day</b>
+            <span>replacement. A boost is still the better buy if you want to keep
+            your own name and skins.</span></p>
+          </div>
+          <a class="btn btn-outline gp-acc-cta" href="{ACCOUNTS_HREF}">
+            <span>Browse accounts</span>{_ico("arrow", 15, "ico", stroke=True)}
+          </a>
+        </div>
+      </div>
+    </section>"""
+
+
 def page_game(g):
     # money(), not usd(): this is the largest price on the page and the first
     # one a visitor reads, so it has to follow the currency switcher like every
@@ -6117,6 +6175,7 @@ def page_game(g):
 {gp_safety(g)}
 {gp_reviews(g, revs)}
 {gp_faq(g, faq)}
+{gp_accounts_strip(g)}
 </div>
 {cta_band(live=True, cta=("Continue your order", "/checkout.html"))}
 {mystery_modal()}"""
@@ -6130,6 +6189,350 @@ def page_game(g):
                   g["meta"], body, current="/games", jsonld=ld,
                   og_image=img("/assets/img/keyart-%s.svg" % g["slug"]), mobile_bar=True,
                   nav_outline=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  /accounts.html — ready-made League accounts
+#
+#  The fifth product, and the only one that is not a service: a flat-priced
+#  listing and a handover, sharing the checkout, the Stripe session and the
+#  orders store with the four boosting products and nothing else. It reads none
+#  of the rank engine — see pricing.quote()'s `service == "account"` branch.
+#
+#  Scoped on `.ac`, the ninth port after .hero-a / .co / .gg / .dsh / .rst /
+#  .tk / .hd / .gc: local tokens, product radii per element, nothing leaking.
+#
+#  Three things about this page are decisions, not layout:
+#
+#  · **The risk plate is above the fold of the second band, not in the FAQ.**
+#    Selling an account breaks a *specific* Riot clause — an account is licensed
+#    to one person and is not transferable — and the sanction is the account,
+#    not a suspension the buyer rides out. That is a materially different risk
+#    from the boosting one `SAFETY["disclaimer"]` states, and a buyer who only
+#    finds it in question one of an accordion has been told after the decision.
+#    It is `D.ACCOUNT_DISCLAIMER`, verbatim, in the same framed plate and the
+#    same caution amber `gp_safety()` uses. Do not soften it and do not move it
+#    below the grid.
+#
+#  · **No struck prices anywhere.** Every other product on this site shows a
+#    reduction because there is a real one behind it; an account has a real
+#    acquisition cost and no discount, so a "was" figure here would be the
+#    grossed-up reference price `quote()`'s discount rule exists to avoid.
+#
+#  · **Stock is a state, never a count.** data.py's ⚠ has the reasoning: nothing
+#    decrements it, so "3 left" would be false the moment two people buy on one
+#    build. In stock / Sold out is what the system can actually stand behind.
+#
+#  Every price is server-rendered through money(), so the board follows the
+#  currency switcher like the rest of the site and needs no client quote at all.
+#  initAccounts() only filters and re-links — the page is complete with no JS.
+# ══════════════════════════════════════════════════════════════════════════
+
+
+def ac_price_note():
+    """"from $27" — the cheapest listing that can actually be bought. Quoted off
+    the catalogue (`D.account_floor()` reads stock), never typed, so a sold-out
+    cheap listing can't leave the hero advertising a price nobody can pay."""
+    return money(D.account_floor())
+
+
+# The hero's three inline guarantees. `guarantee_row()`'s own set is the boost's
+# ("no account details", "regional VPN") and says nothing true about a handover,
+# so this product states its own three in the same shell — one component, one
+# row, different facts. Every one is checkable and two are read off data.py, so
+# a re-tuned warranty cannot leave a stale number in the hero.
+def ac_guarantees():
+    items = [
+        ("lock-key", "Full email access"),
+        ("shield-check", "%d-day replacement" % D.ACCOUNT_WARRANTY_DAYS),
+        ("clock", pricing.ACCOUNT_ETA),
+    ]
+    return '<div class="gtee-row">%s</div>' % "".join(
+        f'<span class="gtee">{_ico(ico, 16, "gtee-ico", stroke=True)}{esc(txt)}</span>'
+        for ico, txt in items)
+
+
+def ac_card(a):
+    """One listing. Every figure rides in its own `<b>` so the words around it
+    stay whole translatable nodes — the rule i18n.js's whole-text-node matching
+    imposes everywhere on this site."""
+    shards = "".join(
+        f'<span class="ac-shard">{esc(D.REGION_SHORT.get(r, r))}</span>'
+        for r in a["regions"])
+    # The shard list is the filter's only input, joined with "|": two of these
+    # names carry an ampersand and a space, and one day one will carry a comma.
+    regions_attr = "|".join(a["regions"])
+    first = a["regions"][0]
+    price = money(a["price"])
+
+    if a["stock"]:
+        pill = (f'<span class="ac-pill ac-pill-ok">'
+                f'{_ico("dot", 8, "ac-pill-ico")}<span>In stock</span></span>')
+        # A real link, so the card works with no JS, can be middle-clicked and
+        # is crawlable. initAccounts() rewrites the shard in the query when the
+        # region filter moves; checkout hydrates from it through
+        # accountFromQuery(), and the SERVER re-resolves the listing and the
+        # shard before it charges anything (pricing.account_pick).
+        href = "/checkout.html?account=%s&region=%s" % (
+            esc(_urlq(a["id"])), esc(_urlq(first)))
+        cta = (f'<a class="btn btn-primary ac-buy" data-ac-buy="{esc(a["id"])}" href="{href}">'
+               f'<span>Buy</span><span aria-hidden="true">·</span><span>{price}</span></a>')
+    else:
+        pill = (f'<span class="ac-pill ac-pill-out">'
+                f'{_ico("dot", 8, "ac-pill-ico")}<span>Sold out</span></span>')
+        # Not a disabled button: there is nothing to enable. A sold-out listing
+        # stays on the board because the price and the spec are still the honest
+        # answer to "what does a Diamond II cost here", and the one real action
+        # left is asking when it is back.
+        cta = (f'<a class="btn btn-outline ac-buy-out" href="/support.html">'
+               f'<span>Ask when it is back</span></a>')
+
+    return f"""<article class="ac-card{'' if a['stock'] else ' is-out'}" data-ac-card
+         data-ac-tier="{esc(a['tier'])}" data-ac-regions="{esc(regions_attr)}"
+         data-ac-price="{a['price']}">
+      <div class="ac-card-top">
+        <h3 class="ac-name">{esc(a['name'])}</h3>
+        {pill}
+      </div>
+      <span class="ac-band-rank">{esc(a['rank'])}</span>
+      <ul class="ac-facts">
+        <li><b>{a['level']}</b> <span>level</span></li>
+        <li><b>{a['be']:,}</b> <span>blue essence</span></li>
+        <li><b>{a['champs']}</b> <span>champions</span></li>
+      </ul>
+      <p class="ac-note">{esc(a['note'])}</p>
+      <div class="ac-shards" aria-label="Shards">{shards}</div>
+      <div class="ac-card-foot">
+        <span class="ac-price">{price}</span>
+        {cta}
+      </div>
+    </article>"""
+
+
+def ac_board():
+    """The board: toolbar, grid, and the footer that only exists under a filter.
+
+    All eight listings ship in the HTML in catalogue order — the page is
+    complete and correctly priced with no JS, and initAccounts() only hides.
+    """
+    tiers = "".join(
+        f'<button type="button" class="ac-chip{" is-on" if i == 0 else ""}" '
+        f'data-ac-tier="{esc(t)}" aria-pressed="{"true" if i == 0 else "false"}">'
+        f'<span>{esc(t)}</span></button>'
+        for i, t in enumerate(["all"] + list(D.ACCOUNT_TIERS)))
+    # The label on the All chip is a word, not the literal "all" the filter
+    # keys on, so it stays a translatable node.
+    tiers = tiers.replace('<span>all</span>', '<span>All ranks</span>', 1)
+
+    shards = "".join('<option value="%s">%s</option>' % (esc(r), esc(r))
+                     for r in D.account_regions())
+    cards = "".join(ac_card(a) for a in D.ACCOUNTS)
+    n = len(D.ACCOUNTS)
+    return f"""<section class="ac-band ac-board">
+  <div class="ac-glow" aria-hidden="true"></div>
+  <div class="wrap ac-inner">
+    <div class="ac-head">
+      <div class="ac-head-l">
+        <span class="ac-kicker">{esc(spell(n).capitalize())} listings</span>
+        <h2 class="ac-h2">Pick a rank and a shard.</h2>
+      </div>
+      <p class="ac-head-p"><span>Every account ships with full email access, on the shard you
+      pick, replaced inside</span> <b>{D.ACCOUNT_WARRANTY_DAYS}</b> <span>days if it is
+      recovered. The exact division inside a band is whatever is in stock that day.</span></p>
+    </div>
+
+    <div class="ac-toolbar">
+      <div class="ac-chips" role="group" aria-label="Rank">{tiers}</div>
+      <label class="ac-field">
+        <span class="ac-field-l">Shard</span>
+        <select class="ac-select" data-ac-regionsel aria-label="Shard">
+          <option value="">Any shard</option>
+          {shards}
+        </select>
+      </label>
+      <span class="ac-count"><b data-ac-shown>{n}</b> <span>of</span>
+        <b>{n}</b> <span>listings</span></span>
+    </div>
+
+    <div class="ac-grid" data-ac-grid>{cards}</div>
+
+    <!-- Required, not optional: rank × shard genuinely returns nothing today
+         (Emerald is not stocked on Oceania), and a grid that silently collapses
+         reads as a broken page. Both halves of the ask are named so the visitor
+         can see which one to loosen. -->
+    <div class="ac-empty" data-ac-empty hidden>
+      <span class="ac-empty-t">Nothing in stock on that combination.</span>
+      <p class="ac-empty-b"><span>We had no</span> <b data-ac-empty-tier></b>
+      <span>account for</span> <b data-ac-empty-region></b> <span>when this page was
+      built. Loosen one of the two, or ask us in Discord — stock moves daily.</span></p>
+      <div class="ac-empty-a">
+        <button type="button" class="btn btn-outline ac-empty-btn" data-ac-reset>
+          {_ico("undo", 13, "ico", stroke=True)}<span>Show everything</span>
+        </button>
+        <a class="btn btn-outline ac-empty-btn" href="/support.html#discord"><span>Ask in Discord</span></a>
+      </div>
+    </div>
+
+    <div class="ac-foot" data-ac-foot hidden>
+      <button type="button" class="ac-reset" data-ac-reset>
+        {_ico("undo", 13, "ico ac-reset-i", stroke=True)}<span>Show everything</span>
+      </button>
+    </div>
+  </div>
+</section>"""
+
+
+def ac_delivery():
+    """Band 01 — what actually arrives. One card per D.ACCOUNT_DELIVERY row, so
+    the page and the order mail describe one product."""
+    cards = "".join(f"""<article class="ac-del-card">
+        <span class="ac-tile">{_ico(icon, 19, "ico", stroke=stroke)}</span>
+        <h3 class="ac-del-t">{esc(title)}</h3>
+        <p class="ac-del-b">{esc(body)}</p>
+      </article>""" for icon, stroke, title, body in D.ACCOUNT_DELIVERY)
+    return f"""<section class="ac-band">
+  <div class="wrap ac-inner">
+    <div class="ac-head">
+      <div class="ac-head-l">
+        {sec_kicker("01", "What arrives")}
+        <h2 class="ac-h2">Credentials, and the mailbox behind them.</h2>
+      </div>
+      <p class="ac-head-p">{esc(D.ACCOUNT_ACCESS)}. Without that an account is a rental
+      somebody else can end, so we do not sell one we cannot hand over completely.</p>
+    </div>
+    <div class="ac-del-grid">{cards}</div>
+  </div>
+</section>"""
+
+
+def ac_risk():
+    """Band 02 — the admission, in the plate `gp_safety()` uses.
+
+    ⚠ VERBATIM AND NOT TO BE SOFTENED. This page sells a product whose failure
+    mode is losing the thing you bought, and the whole argument of the guarantee
+    page is that this site states the checkable thing. The alternative — burying
+    it in the FAQ — tells the buyer after the decision.
+    """
+    return f"""<section class="ac-band ac-risk">
+  <div class="wrap ac-inner">
+    <div class="ac-head">
+      <div class="ac-head-l">
+        {sec_kicker("02", "The risk")}
+        <h2 class="ac-h2">What Riot's rules actually say.</h2>
+      </div>
+      <p class="ac-head-p">The same standard as the rest of the site: we tell you what the
+      risk is, what we do about it, and where our warranty stops.</p>
+    </div>
+    <div class="ac-plate">
+      <span class="ac-plate-ico">{_ico("warn", 18, "ico", stroke=True)}</span>
+      <p class="ac-plate-b">{esc(D.ACCOUNT_DISCLAIMER)}</p>
+    </div>
+    <div class="ac-risk-links">
+      <a class="ac-link" href="/guarantee.html">{esc("Read the full guarantee")}
+        {_ico("arrow", 13, "ico", stroke=True)}</a>
+      <a class="ac-link" href="/legal/refunds.html"><span>Refund policy</span>
+        {_ico("arrow", 13, "ico", stroke=True)}</a>
+    </div>
+  </div>
+</section>"""
+
+
+def ac_faq_items():
+    """The FAQ, with every figure substituted rather than typed — the warranty
+    window is `D.ACCOUNT_WARRANTY_DAYS`, so re-tuning it cannot leave a stale
+    number in an answer. ⚠ The ids are a public contract: support links people
+    at `/accounts.html#faq-<id>`."""
+    fills = {"days": D.ACCOUNT_WARRANTY_DAYS}
+    return [(fid, q, a.format(**fills)) for fid, q, a in D.ACCOUNT_FAQ]
+
+
+def ac_faq(items):
+    return f"""<section class="ac-band ac-faq-band">
+  <div class="wrap ac-inner ac-faq-inner">
+    <div class="ac-faq-l">
+      {sec_kicker("03", "Questions")}
+      <h2 class="ac-h2">The ones that decide it.</h2>
+      <p class="ac-faq-p">Three of these argue against the sale. They are the reason the
+      other four are worth reading.</p>
+      <a class="ac-link" href="/support.html"><span>Ask us anything else</span>
+        {_ico("arrow", 13, "ico", stroke=True)}</a>
+    </div>
+    <div class="ac-faq-r">{sg_faq(items)}</div>
+  </div>
+</section>"""
+
+
+def page_accounts():
+    faq = ac_faq_items()
+    lol = BY_NAME[D.ACCOUNT_GAME]
+    live = D.accounts_in_stock()
+
+    # One Product with an AggregateOffer over the listings that can actually be
+    # bought. Deliberately no aggregateRating — the ratings on this site are
+    # placeholder, and `rating_ld()` is gated on TRUSTPILOT_URL for exactly that
+    # reason; a page selling accounts must not be the one that leaks invented
+    # review stars into a SERP.
+    product = {
+        "@context": "https://schema.org", "@type": "Product",
+        "name": "%s accounts" % D.ACCOUNT_GAME,
+        "description": "Ready-made %s accounts with full email access, delivered on the "
+                       "shard you pick." % D.ACCOUNT_GAME,
+        "brand": {"@type": "Brand", "name": D.BRAND},
+        "offers": {"@type": "AggregateOffer", "priceCurrency": "USD",
+                   "lowPrice": min((a["price"] for a in live), default=0),
+                   "highPrice": max((a["price"] for a in live), default=0),
+                   "offerCount": len(live),
+                   "availability": "https://schema.org/InStock"},
+    }
+    ld = [
+        product,
+        faq_ld([(q, a) for _fid, q, a in faq]),
+        {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
+            {"@type": "ListItem", "position": 1, "name": "Home", "item": D.SITE + "/"},
+            {"@type": "ListItem", "position": 2, "name": "Accounts",
+             "item": D.SITE + "/accounts"},
+        ]},
+    ]
+
+    body = f"""<div class="ac">
+  <section class="hero-a hero-a-lit ac-hero" id="top" style="--game-hue:{lol['hue']}">
+    <div class="fx hero-a-glow" aria-hidden="true"></div>
+    <div class="fx hero-a-hatch" aria-hidden="true"></div>
+    <div class="fx fx-grain" aria-hidden="true"></div>
+    <div class="wrap ac-hero-inner">
+      <div class="ac-hero-copy">
+        <nav class="crumbs crumbs-slash" aria-label="Breadcrumb">
+          <a href="/">Home</a> <span aria-hidden="true">/</span>
+          <span class="crumbs-here">Accounts</span>
+        </nav>
+        <h1 class="h-lg ac-h1">{esc(lol['name'])} accounts<br>
+          <span class="grad-text">from {ac_price_note()}.</span></h1>
+        <p class="lede">Level 30 and ranked, on NA, EUW, EUNE and OCE. Full email access on
+        every one, so you change the recovery mailbox and the password the moment it lands
+        and it is genuinely yours.</p>
+        {ac_guarantees()}
+      </div>
+    </div>
+  </section>
+
+  {ac_board()}
+  {ac_delivery()}
+  {ac_risk()}
+  {ac_faq(faq)}
+</div>
+
+{cta_band(title="Or climb on the account you already play.",
+          sub="A boost keeps your name, your skins and your match history. If you are choosing "
+              "between the two on price alone, that is usually the better purchase.",
+          cta=("Configure a %s boost" % lol['short'], "/games/%s.html" % lol['slug']),
+          readback=False)}"""
+
+    return layout(ACCOUNTS_HREF, "Buy a %s Account - %s" % (D.ACCOUNT_GAME, D.BRAND),
+                  "Ready-made League of Legends accounts from %s: level 30 and ranked, "
+                  "full email access, delivered on NA, EUW, EUNE or OCE within the hour."
+                  % usd(D.account_floor()),
+                  body, current=ACCOUNTS_HREF, jsonld=ld,
+                  extra_js=faq_accordion_js(), nav_outline=True)
 
 
 def page_how():
@@ -8184,6 +8587,14 @@ def page_checkout():
         # 200px away and hand them something they did not ask for.
         for a in D.ADDONS if a["pct"] == 0 and not D.addon_is_free_opt(a))
 
+    # The account order's equivalent: what the handover actually includes. Same
+    # strip, same green seal, different facts — read off D.ACCOUNT_DELIVERY so
+    # the summary cannot describe a product /accounts.html does not sell.
+    acct_incl = "".join(
+        f'<div class="co-incl">{_ico("seal", 15, "ico", evenodd=True)}'
+        f'<span><b>{esc(title)}</b> <span>{esc(body)}</span></span></div>'
+        for _icon, _stroke, title, body in D.ACCOUNT_DELIVERY)
+
     body = f"""<section class="co">
   <div class="co-fx co-glow" aria-hidden="true"></div>
   <div class="co-fx co-hatch" aria-hidden="true"></div>
@@ -8209,11 +8620,14 @@ def page_checkout():
                  inputmode="email" autocomplete="email" spellcheck="false"
                  data-prefill-email
                  placeholder="you@example.com" aria-describedby="k-email-note">
-          <p class="co-note" id="k-email-note" data-email-note>Used for your order link, and to
+          <p class="co-note" id="k-email-note" data-email-note><span
+          data-hide-service="account">Used for your order link, and to
           send you your cart if you don't finish. No marketing unless you tick the box at
-          the end.</p>
+          the end.</span><span data-when-service="account" hidden>This is where the login,
+          the password and the recovery mailbox are sent. Check it is one you can open —
+          no marketing unless you tick the box at the end.</span></p>
 
-          <div class="co-two">
+          <div class="co-two" data-hide-service="account">
             <div class="co-fieldset">
               <label class="co-lab" for="k-region">Server</label>
               <div class="co-field">
@@ -8233,7 +8647,9 @@ def page_checkout():
           </div>
 
           <div class="co-lab-row co-lab-row-sp">
-            <label class="co-lab" for="k-notes">Anything the booster should know</label>
+            <label class="co-lab" for="k-notes"><span data-hide-service="account">Anything the
+            booster should know</span><span data-when-service="account" hidden>Anything we
+            should know</span></label>
             <span class="co-opt-lab">Optional</span>
           </div>
           <textarea class="co-input co-textarea" id="k-notes"
@@ -8256,8 +8672,9 @@ def page_checkout():
 
           <label class="co-toggle">
             <input type="checkbox" id="k-optin">
-            <span class="co-toggle-t">Email me when my order is claimed and when it's done.
-            Nothing else.</span>
+            <span class="co-toggle-t"><span data-hide-service="account">Email me when my order is
+            claimed and when it's done. Nothing else.</span><span data-when-service="account"
+            hidden>Email me when the account is on its way. Nothing else.</span></span>
           </label>
 
           <p class="co-err" data-pay-error role="alert" hidden></p>
@@ -8267,9 +8684,15 @@ def page_checkout():
             {_ico("arrow", 16, "ico", stroke=True)}
           </button>
 
-          <p class="co-refund">{_ico("shield", 15, "ico")}<span>Refunded in full until a booster
+          <p class="co-refund" data-hide-service="account">{_ico("shield", 15, "ico")}<span>Refunded in full until a booster
           claims it</span><span aria-hidden="true">·</span><a href="/guarantee.html">Read the
           guarantee</a></p>
+          <!-- The account's own promise. "Until a booster claims it" describes
+               nothing here — no one claims an account — and a refund line that
+               does not apply is worse than none. -->
+          <p class="co-refund" data-when-service="account" hidden>{_ico("shield", 15, "ico")}<span>Replaced or
+          refunded for {D.ACCOUNT_WARRANTY_DAYS} days</span><span aria-hidden="true">·</span><a href="{ACCOUNTS_HREF}#faq-warranty">Read the
+          warranty</a></p>
 
           <!-- The live total detaches into the games-page sticky bar: the same
                `.mobile-bar` + `.mb-*` component the nine game pages carry, so the
@@ -8329,7 +8752,11 @@ def page_checkout():
               <span class="co-lab">Game</span><span class="co-val" data-sum="game">—</span>
             </div>
             <div class="co-line">
-              <span class="co-lab">Climb</span>
+              <!-- Both labels ship in the DOM with one hidden: i18n.js matches
+                   whole text nodes, so a word written in by JS arrives
+                   untranslated. Same rule as the mode-conditional add-ons. -->
+              <span class="co-lab"><span data-hide-service="account">Climb</span><span
+                    data-when-service="account" hidden>Account</span></span>
               <span class="co-val co-climb">
                 <span class="co-marks" data-when-service="division" hidden>
                   <span class="co-climb-r" data-tiername="from">—</span>
@@ -8342,7 +8769,10 @@ def page_checkout():
                 <span class="co-climb-t" data-when-service="units" data-sum="summary" hidden>—</span>
               </span>
             </div>
-            <div class="co-line">
+            <!-- An account order's summary already names its shard ("Gold ranked ·
+                 Europe West"), so a second row repeating it says the same fact
+                 twice in four lines. -->
+            <div class="co-line" data-hide-service="account">
               <span class="co-lab">Server</span><span class="co-val" data-sum="region">—</span>
             </div>
             <!-- Only when the buyer arrived from a roster Hire or a profile
@@ -8353,7 +8783,9 @@ def page_checkout():
               <span class="co-lab">Booster</span><span class="co-val" data-sum="booster">—</span>
             </div>
             <div class="co-line">
-              <span class="co-lab">Boost</span><span class="co-val" data-sum="base">—</span>
+              <span class="co-lab"><span data-hide-service="account">Boost</span><span
+                    data-when-service="account" hidden>Price</span></span>
+              <span class="co-val" data-sum="base">—</span>
             </div>
             <div data-addon-lines></div>
             <div class="co-line co-line-off" data-when-discount hidden>
@@ -8362,11 +8794,18 @@ def page_checkout():
             </div>
           </div>
 
-          {incl}
+          <!-- Add-ons are a boost's, not an account's: pricing.quote() returns
+               before the add-on block on `service == "account"`, so every row
+               here would offer an option the server refuses to charge for. The
+               inclusions strip goes with it — it states what a boost includes. -->
+          <div data-when-service="account" hidden>{acct_incl}</div>
+          <div data-hide-service="account">
+            {incl}
 
-          <div class="co-up">
-            <span class="co-lab">Last chance to add</span>
-            {addons_block(money=True, paid_only=True)}
+            <div class="co-up">
+              <span class="co-lab">Last chance to add</span>
+              {addons_block(money=True, paid_only=True)}
+            </div>
           </div>
 
           <div class="co-div co-div-push"></div>
@@ -8387,10 +8826,19 @@ def page_checkout():
             </div>
           </div>
 
-          <div class="co-chips">
+          <div class="co-chips" data-hide-service="account">
             <span class="co-tchip">{_ico("shield", 12, "ico")}<span>Money-back until claimed</span></span>
             <span class="co-tchip">{_ico("globe", 12, "ico")}<span>Regional VPN</span></span>
             <span class="co-tchip">{_ico("eye-off", 12, "ico", stroke=True)}<span>Offline appearance</span></span>
+          </div>
+          <!-- An account's three, stated in the same shell. "Regional VPN" and
+               "offline appearance" describe a booster playing, which is nobody
+               here; the warranty window is read off data.py so it cannot drift
+               from the page that sold it. -->
+          <div class="co-chips" data-when-service="account" hidden>
+            <span class="co-tchip">{_ico("lock-key", 12, "ico", stroke=True)}<span>Full email access</span></span>
+            <span class="co-tchip">{_ico("shield-check", 12, "ico", stroke=True)}<span>{D.ACCOUNT_WARRANTY_DAYS}-day replacement</span></span>
+            <span class="co-tchip">{_ico("clock", 12, "ico", stroke=True)}<span>{esc(pricing.ACCOUNT_ETA)}</span></span>
           </div>
         </div>
       </aside>
@@ -8581,6 +9029,13 @@ def page_checkout():
       bundle: (s.bundle === null || s.bundle === undefined) ? null : s.bundle,
       unranked: !!s.unranked,
       coach: s.coach, pack: s.pack,
+      // The account listing. On `service: "account"` it IS the price — drop it
+      // and the server re-quote refuses the order outright rather than
+      // mis-charging it, which is the safe half of this failure, but the buyer
+      // sees "no longer available" on a listing that is in stock. The server
+      // still re-resolves it against the catalogue and its stock flag; this is
+      // only what the page asked to buy.
+      account: s.account || '',
       // The exact total shown on this page (whole USD, before currency display).
       // The server recomputes the price and refuses the charge if it disagrees,
       // so Stripe always shows what the customer saw here. Not trusted as the
@@ -9395,6 +9850,24 @@ def client_data():
         },
         "addons": D.ADDONS,
         "promos": D.PROMOS,
+        # Accounts — the flat-priced listings. The client needs the price (to
+        # re-quote the order checkout charges), the shard list (to clamp the
+        # same way pricing.account_pick() does) and the name (the checkout
+        # summary prints it). `stock` ships too, so the refusal is the same on
+        # both sides: nothing decrements stock, so a listing that is gone can
+        # only be stopped by the flag, and the flag has to be readable here or
+        # the page would let somebody start a checkout the server then refuses.
+        # Sold-out listings are shipped rather than dropped — the card renders
+        # its own state, and a client holding a cached data.js must be able to
+        # tell "gone" from "never existed".
+        "accounts": {a["id"]: {"name": a["name"], "price": a["price"],
+                               "stock": bool(a["stock"]), "regions": a["regions"]}
+                     for a in D.ACCOUNTS},
+        "accountGame": D.ACCOUNT_GAME,
+        # The delivery promise, from pricing.py so the mirror cannot drift —
+        # app.js translates it as a whole node, the server ships it in English
+        # to the orders store and the confirmation mail.
+        "accountEta": pricing.ACCOUNT_ETA,
         # Coaching — the booking product. Its price never touches the rank
         # engine, so the client carries the coach rates and pack discounts
         # directly and quote() reads them for service == "coaching".
@@ -9580,6 +10053,7 @@ def main():
     pages = [
         ("/index.html", page_home()),
         ("/games/index.html", page_games_index()),
+        (ACCOUNTS_HREF, page_accounts()),
         ("/how-it-works.html", page_how()),
         ("/guarantee.html", page_guarantee()),
         ("/support.html", page_support()),

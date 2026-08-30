@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A static-site generator for the `esportsboost.com` redesign, written in **plain Python 3 with no
 dependencies** (no Node on this machine, no package manager, no lockfile). `python3 site/build.py`
-generates every page of `site/dist/` from `site/src/data.py` — 24 pages of shop plus one profile per
-booster (88 today, so 114 in total).
+generates every page of `site/dist/` from `site/src/data.py` — 25 pages of shop plus one profile per
+booster (88 today, so 115 in total).
 
 Not a git repository. The README is in French; the site copy and the design handoffs are in English.
 
@@ -34,14 +34,15 @@ like production. It also hosts the **Stripe payment API** the checkout page call
 [Payments](#payments-stripe) below. With no `STRIPE_SECRET_KEY` set it stays a plain static preview.
 
 Verification is: the four test files pass — `python3 site/tests/test_pricing.py` (the pricing engine,
-the bundle rules, the JS/Python mirror, the currency charge and the checkout payload), `python3
+the bundle rules, the JS/Python mirror, the currency charge, the checkout payload and the
+accounts product — its flat price, its sold-out refusal and what its order records), `python3
 site/tests/test_mail.py` (header injection, the honeypot, the rate cap and the two order mails),
 `python3 site/tests/test_carts.py` (abandoned-checkout capture and the recovery token) and `python3
 site/tests/test_mystery.py` (the mystery-discount token, its hour, one-card-per-inbox, the copy
 rule that keeps the flat deck honest, and the follow-up: revive-not-reissue, one chase ever, and the
 per-hour claim that drops itself when it stops arguing for the order, the halfway
 warning's window, the config beacon's allowlist and the figures the mails are
-built from) — the build succeeds (prints `built 114 pages + 207 images …
+built from) — the build succeeds (prints `built 115 pages + 207 images …
 (+ /ops console)`), then load the affected pages and check the browser console. There is no linter
 or formatter.
 
@@ -220,6 +221,7 @@ reuse these rather than inventing new hooks:
 | `data-rst-*` | The roster board. `data-rst-row` carries `data-game` / `data-free` / `data-win` — the filter reads only these, so a server-rendered board keeps working. `data-rst-game\|avail\|sort` are the three controls, `data-rst-body\|shown\|fgame\|ffree\|more\|reset\|empty*` the things `initRoster()` rewrites |
 | `data-bp-*` | A profile's completed orders: `data-bp-row` (+ `data-mode`), `data-bp-filter`, `data-bp-body\|shown\|total\|more` |
 | `data-gc-*` | The catalogue grid on `/games/`. `data-gc-card` carries `data-gc-riot\|valve\|coaching` (the filter reads only these, so a filter is one attribute) plus `data-gc-order\|price\|name` (the three sorts). `data-gc-filter\|sort\|sortsel` are the controls — the segment and the native select write one state and `initCatalog()` re-marks both — and `data-gc-grid\|foot\|shown\|reset\|sortlabel\|dots\|dot` are what it rewrites |
+| `data-ac-*` | The accounts board (`/accounts.html`). `data-ac-card` carries `data-ac-tier` / `data-ac-regions` (shard names joined with `\|`, because two of them hold an ampersand and a space) — the filter reads only these, so a board served from a listing store later keeps working. `data-ac-tier` doubles as the rank chips and `data-ac-regionsel` is the shard select; `data-ac-grid\|shown\|foot\|reset\|empty{,-tier,-region}` are what `initAccounts()` rewrites, and `data-ac-buy` is the card's CTA — a real link into checkout whose shard the filter rewrites |
 | `data-rv-stars` / `data-rv-game` | The two facts the reviews page filters and sorts a card on, emitted by `review_card(filterable=True)`. The whole feed reads only these, so a server-paged feed keeps working |
 | `data-rvp-*` | The reviews feed's controls: `data-rvp-game\|rating\|sort` (three radio groups) and `data-rvp-dist` (the distribution rows, `aria-pressed` toggles). Both rating controls write one state — `initReviews()` re-marks both whenever either fires. `data-rvp-grid\|shown\|total\|crumb\|clear\|empty\|more\|more-label` are what it rewrites; `data-rvp-worst` is the hero's "Read the worst first" |
 | `data-when-booster` / `data-out="booster"` / `data-sum="booster"` / `data-booster-clear` | The named booster. Rows that `hidden` themselves when none is set; it is an order attribute, never a price input — `quote()` must not read it |
@@ -1055,6 +1057,112 @@ trust · 04 FAQ · close.
 
 Retired with the old page: `game_cards()` (the flat tile grid) and `guarantee_cards()` (the plain
 `cards-3` copy of `D.GUARANTEES` — `promise_cards()` is the one shell now).
+
+## Accounts (`/accounts.html`) — the fifth product, and the only one that is not a service
+
+`page_accounts()` is a net-new page (no handoff), scoped on `.ac` as the ninth port after
+`.hero-a` / `.co` / `.gg` / `.dsh` / `.rst` / `.tk` / `.hd` / `.gc`. It borrows `.gc`'s palette
+deliberately — the games catalogue and this board are the same object, a filtered grid of things you
+can buy, and they must not look like two products from two shops. Reached from the top nav, the
+footer's Games column and an unnumbered cross-sell strip at the foot of the League game page
+(`gp_accounts_strip()`); `ACCOUNTS_HREF` is the one place the URL is written, the way `DEMO_HREF` is.
+
+A ready-made League account is a **flat price and a handover**. It reads none of the rank engine:
+`pricing.quote()`'s `service == "account"` branch returns the listing's own `price` and nothing else
+— no ladder, no queue, no add-ons, no bundle, no sitewide sale — the same early-return shape the
+coaching branch has, mirrored in `app.js`. `pricing.account_pick()` is the ONE resolver and
+`build.py`, `quote()` and `payments.build_session()` all read the catalogue through it.
+
+- ⚠ **The risk on this product is different in kind from boosting, and the page says so above the
+  fold of its second band.** Boosting breaks a game's terms; selling an account breaks a *specific*
+  clause — an account is licensed to one person and is not transferable — and the sanction is the
+  account itself, not a suspension the buyer rides out. Somebody who pays for a Diamond account and
+  loses it has lost the thing they bought. `D.ACCOUNT_DISCLAIMER` is that admission, in the framed
+  caution-amber plate `gp_safety()` uses for the boosting one. **Verbatim, not to be softened, and
+  not to be moved into the FAQ** — an accordion tells the buyer after the decision.
+- **Three FAQ answers argue against the sale and stay**: the ToS answer, "you do not pick the exact
+  division", and the one that sends a buyer to a boost when a boost is the better purchase. Same
+  standard as the guarantee page's three. ⚠ The ids are a public contract (`/accounts.html#faq-<id>`)
+  — checkout's own warranty line deep-links `#faq-warranty`.
+- ⚠ **Stock is hand-set and NOTHING decrements it.** There is no listing store: `stock=False` is an
+  operator flag in `data.py`, edited and rebuilt. So the board prints **In stock / Sold out and never
+  a count** — "3 left" would be false the moment two people buy on one build. The only place a
+  sold-out listing can be stopped is `account_pick()`, on the server, at the moment somebody tries to
+  pay for it; `app.js`'s branch makes the same refusal for the UI. **The next thing to build here is
+  a real listing store** — an eighth store sibling of analytics / accounts / boosters / orders /
+  carts / mystery / guides, operator-write and public-read, exactly the shape `boosters.py` has.
+  Until it exists fulfilment is manual: the webhook records the listing id and an operator hands over
+  one set of credentials from stock.
+- ⚠ **The prices are a business call**, like the `BUNDLES` figures: whole USD, hand-set, and
+  deliberately carrying **no struck "was" price**. A reference price nobody was ever charged is what
+  `quote()`'s discount rule exists to avoid. If accounts should go on sale, the honest fix is a real
+  percentage applied on both sides of the mirror, never a bigger number printed beside them.
+- **The page is not in the sitemap and carries `noindex`**, because `_indexable()` is the launch
+  footprint (`/`, `/games`, `/games/<slug>`) and nothing else. Widen it for this page the day the
+  prices and the stock are the operator's own rather than plausible defaults — one entry, same
+  decision the docstring already describes.
+- **Every price is server-rendered through `money()`**, so the board follows the currency switcher
+  with no client quote at all; `initAccounts()` only filters and re-links. All eight listings ship in
+  the HTML, so the board is complete, priced and buyable with no JS and legible to a crawler — the
+  same trade the games catalogue, the roster board and the reviews feed make.
+- **The card's CTA is a real link**, `/checkout.html?account=<id>&region=<shard>`, so it can be
+  middle-clicked and crawled. `initAccounts()` rewrites the shard into the href when the region
+  filter moves; `accountFromQuery()` in app.js hydrates checkout from it through `esbHydrate()` (and
+  strips both markers, so a refresh cannot re-hydrate over an order the buyer changed). The query is
+  untrusted and never believed — both `quote()`s refuse an unknown or sold-out id, and the **server**
+  re-resolves the listing and the shard before it charges anything.
+- **The empty state is required, not optional.** Rank × shard genuinely returns nothing today
+  (Emerald is not stocked on Oceania), and it names both halves of the ask so the visitor can see
+  which to loosen. The board's own reset hides itself while the empty state is up — two
+  "Show everything" buttons 40px apart read as a rendering fault.
+- **The shard is clamped, never trusted**, on both sides: a body naming a region a listing does not
+  ship on falls back to that listing's own first, so fulfilment is never handed an instruction
+  nobody can carry out.
+- ⚠ **Two rules from the GAME hero's ≤1000px reflow reach into `.ac-hero`**, because it is `.hero-a`
+  too: `.hero-a .crumbs { order: 1 }` (which pushed this hero's breadcrumb to the bottom of a column
+  that has nothing to sort against — every sibling defaults to `order: 0`) and the ≤760px rule that
+  drops the "Home" crumb. Both are reset in `.ac`'s own scope. Same class of trap the home hero
+  avoided by not naming its column `.hero-copy`.
+- **i18n**: every figure rides in its own `<b>` as everywhere else, and both languages are complete.
+  Listing **names** and rank bands are data and stay in English with every other rank on the site —
+  but the name is translated through a `{}` pattern (`"{} ranked"` → "Gold classé"), whose capture
+  takes the single exact dictionary lookup that turns "Iron to Silver" into "Iron à Silver". Shard
+  names are data, like the Server control's, and stay as written. ⚠ The blue-essence figure is a
+  bare `<b>40,000</b>`: the site has no locale-aware number formatter, so its thousands separator
+  does not follow the French rule the way a figure inside a translated sentence does.
+
+### What an account order carries through checkout, Stripe and the orders store
+
+Checkout is one static page for all five products, so the account variants ride in the DOM behind
+`data-when-service="account"` / `data-hide-service="account"` and app.js picks one — the
+whole-text-node rule, same as the mode-conditional add-ons. What changes, and why each one is not
+cosmetic:
+
+- **The Server select and Preferred hours are hidden.** The shard is fixed by the listing and
+  `quote()` clamps it, so an editable Server control there is a control that *appears* to work and
+  does not — pick Oceania on a Europe-only listing and it silently snaps back. Nobody plays an
+  account, so a play window is a field with no meaning.
+- **The inclusions strip and the whole upsell block are hidden**, and the account's own four
+  delivery facts (`D.ACCOUNT_DELIVERY`) take their place. `quote()` returns before the add-on block,
+  so every row in that upsell would offer an option the server refuses to charge for — and the void
+  it left was ~280px, because `.co-div-push`'s `margin-top:auto` keeps both cards on one baseline.
+- **The Climb row is "Account", the Boost row is "Price"**, the boost trust chips swap for the
+  account's three, the email note says the credentials go to that address, and the refund line under
+  the CTA is the warranty rather than "refunded until a booster claims it" — nobody claims an
+  account.
+- ⚠ **`payments.build_session()` blanks `metadata[from]`, `[to]`, `[mode]` and `[addons]` on this
+  service.** The checkout body ships whatever the shared per-game record was holding, so an account
+  order otherwise reached fulfilment stamped with a climb and a paid add-on nobody bought. (The same
+  guard covers **coaching**, which had the add-on half of that bug from the day it shipped.)
+- **`metadata[account]` + `[account_name]` are what fulfilment acts on**, and `order_row()` writes
+  both into the orders store. Unlike a boost there is no amount to infer the product from once two
+  listings share a price. The /ops drill-down renders them under "The account", drops the Queue row
+  and labels the product Account. `orders._climb_summary()` returns the listing's name.
+- **Stripe's own line item says `<Game> account`, not `<Game> boost`** — that page is the last thing
+  between the summary and the card.
+- **The checkout payload must carry `account`.** Drop it and the server re-quote refuses the order
+  (the safe half of the failure) but the buyer is told an in-stock listing is unavailable — the same
+  class of bug as the dropped `bundle` that `test_pricing.py` was written for.
 
 ## The sticky mobile checkout bar (`.mobile-bar`)
 
@@ -1910,6 +2018,16 @@ it says the checkable thing.
 plays exactly one title**, and that **there is no cross-title bundle**. The first is an intake rule
 ops has to hold; the second is structural — if sales ever wants a cross-title discount, that answer
 has to change before the offer ships.
+
+**The accounts board is hand-set, not placeholder — and that is a different hazard.** `D.ACCOUNTS`
+is not invented the way `BOOSTERS` and `REVIEW_DIST` are; it is a price list somebody has to own. Two
+things on it are operator commitments with nothing behind them in code: **`stock` is a flag no
+process decrements** (see the ⚠ in `data.py` — the honest fix is a listing store, and until then a
+second buyer of the last Gold account is a manual refund), and **`ACCOUNT_WARRANTY_DAYS` is a
+replacement promise** with the same standing as `SAFETY`'s measure notes and `GUARANTEE`'s refund
+windows — falsifiable by a single bad order. The prices shipped today are plausible market figures,
+not the business's: confirm every one before this page takes traffic, and widen `_indexable()` only
+once they are real.
 
 The **mystery-discount store** is the newest of these and the most sensitive: `mystery.ndjson` /
 `esb:bingo` holds a real email next to a token that is worth 30% of a real order for an hour. It is

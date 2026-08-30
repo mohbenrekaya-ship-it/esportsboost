@@ -2248,7 +2248,8 @@
     return '<span class="ostat ostat-' + esc(s) + '">' + esc(STATUS_LABEL[s] || s) + "</span>";
   }
   var SERVICE_LABEL = {
-    division: "Rank boost", wins: "Net wins", placements: "Placements", coaching: "Coaching"
+    division: "Rank boost", wins: "Net wins", placements: "Placements", coaching: "Coaching",
+    account: "Account"
   };
 
   function loadOrders() {
@@ -2479,12 +2480,15 @@
     // The boost — everything about what was ordered.
     var boost = document.createElement("div");
     boost.className = "card";
-    boost.innerHTML = '<div class="card-hd"><h3>The boost</h3></div>';
+    boost.innerHTML = '<div class="card-hd"><h3>'
+      + (o.service === "account" ? "The account" : "The boost") + '</h3></div>';
     var bf = [
       ["Game", o.game],
-      ["Product", SERVICE_LABEL[o.service] || o.service],
-      ["Queue", o.mode]
+      ["Product", SERVICE_LABEL[o.service] || o.service]
     ];
+    // An account has no queue. clean_order() defaults the column to "Piloted",
+    // which on this product would state a fact about nobody playing anything.
+    if (o.service !== "account") bf.push(["Queue", o.mode]);
     if (o.service === "division") {
       bf.push(["From rank", o.from_rank]);
       bf.push(["To rank", o.to_rank]);
@@ -2494,6 +2498,11 @@
     } else if (o.service === "coaching") {
       bf.push(["Coach", o.coach || "—"]);
       bf.push(["Hours", String(o.hours || "—")]);
+    } else if (o.service === "account") {
+      // The listing id is what fulfilment acts on; the name is what makes the
+      // row readable if the listing is later retired from data.py.
+      bf.push(["Listing", o.account_name || "—"]);
+      bf.push(["Listing id", o.account || "—"]);
     }
     bf.push(["Region", o.region || "—"]);
     bf.push(["Rank system", o.rankUnit]);
@@ -3412,6 +3421,7 @@
       ["When", "Value", "Game", "Order", "Mode", "Region", "Add-ons", "Left at", "Re-quotes", "Source", "Device"],
       rows.map(function (r) {
         var order = r.service === "division" ? (r.from + " → " + r.to)
+                  : r.service === "account" ? "account"
                   : (r.service === "wins" ? "net wins from " + r.from
                                           : "placements from " + r.from);
         return [ago(r.at), usd(r.value), r.game, order, r.mode, r.region || "—",

@@ -8503,6 +8503,340 @@ html.myd-open .mobile-bar { display: none; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   ACCOUNTS — /accounts.html (`.ac`)
+
+   The ninth scoped port after .hero-a / .co / .gg / .dsh / .rst / .tk / .hd /
+   .gc: local tokens declared on `.ac`, product radii per element, nothing
+   leaking past the scope. The palette is `.gc`'s, deliberately — the games
+   catalogue and this board are the same object (a filtered grid of things you
+   can buy) and the two should not look like two products from two shops.
+
+   The hero is `.hero-a hero-a-lit`, so `.btn-primary`, `.grad-text` and the
+   `--h-*` text colours resolve to the handoff ember for free, exactly as the
+   home hero and the closing band do. Only what differs is declared here.
+
+   Breakpoints follow the site's 1200/1000/760, not a handoff's — 1200 takes the
+   grid to two columns, 1000 stacks the head and the FAQ, 760 is one column with
+   44px controls.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.ac {
+  --ember: #ff5a1f;
+  --ember-lit: #ff8a3d;
+  --ember-grad: linear-gradient(94deg, #ffb03a, #ff5a1f);
+  --ink: #201004;
+  --g-text: #f2efec;
+  --g-body: #b6afa9;
+  --g-body-2: #c9c2bb;
+  --g-muted: #8d8781;
+  --g-faint: #6f6862;
+  --g-tint: #ffb887;
+  --g-good: #8fd6a4;
+  --g-caution: #c9955f;          /* the risk plate's glyph — never the accent */
+  --g-line: rgba(255, 255, 255, .055);
+  --g-line-2: rgba(255, 255, 255, .07);
+  --g-line-3: rgba(255, 255, 255, .09);
+  --g-line-4: rgba(255, 255, 255, .10);
+  --g-line-6: rgba(255, 255, 255, .16);
+  --g-card: linear-gradient(180deg, #1b1816, #131110);
+  position: relative; isolation: isolate;
+  background: #0b0a09; color: var(--g-text);
+}
+/* Rows toggled with `hidden` (the empty state, the filtered footer) carry a
+   `display` value, which otherwise beats the UA's [hidden]. Same guard as
+   `.gc` / `.sg` / `.co`. */
+.ac [hidden] { display: none; }
+
+.ac-band { position: relative; z-index: 1; padding-block: 52px 56px; border-top: 1px solid var(--g-line-2); }
+.ac-inner { position: relative; z-index: 1; }
+.ac-glow {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(900px 480px at 78% 0%, rgba(255, 90, 31, .15), transparent 64%);
+}
+
+/* ── hero ─────────────────────────────────────────────────────────────── */
+.ac-hero { border-top: 0; }
+.ac-hero-inner { padding-block: 62px 58px; }
+.ac-hero-copy { display: flex; flex-direction: column; align-items: flex-start; max-width: 720px; }
+.ac-h1 { font-size: clamp(38px, 5.4vw, 68px); }
+.ac-hero-copy .lede { max-width: 56ch; }
+.ac-hero-copy .gtee-row { margin-top: 22px; }
+/* ⚠ Two rules from the GAME hero's ≤1000px reflow reach in here, because this
+   section is `.hero-a` too. That reflow exists to lift the order card above the
+   proof column, and it sorts with `order:` — but this hero is one column with
+   no configurator, so `.hero-a .crumbs { order: 1 }` has nothing to sort
+   against and simply pushed the breadcrumb to the BOTTOM of the column (every
+   sibling defaults to 0). The second drops the "Home" crumb at ≤760, which is
+   right on a game page (the phone crumb is Games / <game>) and leaves a
+   one-item breadcrumb here. Both are reset in this scope. Same class of trap
+   the home hero avoided by not naming its column `.hero-copy` — see CLAUDE.md. */
+.ac .ac-hero .ac-hero-copy > * { order: 0; }
+.ac .ac-hero .crumbs > a:first-child,
+.ac .ac-hero .crumbs > a:first-child + span { display: inline; }
+
+/* ── shared type ──────────────────────────────────────────────────────── */
+.ac-kicker {
+  font: 600 10.5px/1 var(--display); letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ember-lit);
+}
+.ac .sec-kicker { gap: 14px; }
+.ac .sec-kicker-n {
+  font-family: var(--body); font-weight: 600; font-size: 15px; line-height: 1;
+  letter-spacing: .02em; color: var(--ember);
+}
+.ac .sec-kicker-n::after { height: 14px; margin-left: 14px; background: var(--g-line-6); }
+.ac .sec-kicker-l {
+  font-family: var(--body); font-weight: 600; font-size: 10.5px; line-height: 1;
+  letter-spacing: .16em; color: var(--g-muted);
+}
+.ac-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 48px; }
+.ac-head-l { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.ac-h2 {
+  margin: 12px 0 0; font: 700 clamp(24px, 2.5vw, 34px)/1.14 var(--display);
+  letter-spacing: -.015em; color: var(--g-text);
+}
+.ac-head-p {
+  margin: 0; padding-bottom: 6px; font-size: 14.5px; line-height: 1.6;
+  color: var(--g-body); max-width: 46ch; text-wrap: pretty;
+}
+.ac-head-p b { color: var(--g-text); font-weight: 600; }
+.ac-link {
+  display: inline-flex; align-items: center; gap: 7px; margin-top: 16px;
+  font: 600 13px/1 var(--body); color: var(--g-tint); text-decoration: none;
+}
+.ac-link:hover { color: #ffd0b0; }
+.ac-link .ico { flex: none; }
+
+/* ── the toolbar ──────────────────────────────────────────────────────── */
+.ac-toolbar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px;
+  margin-top: 24px; padding-bottom: 18px; border-bottom: 1px solid var(--g-line-2);
+}
+.ac-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.ac-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px;
+  border: 1px solid var(--g-line-4); border-radius: 999px; background: transparent;
+  font: 600 12.5px/1 var(--body); color: var(--g-body); cursor: pointer;
+  transition: color .16s, border-color .16s, background .16s;
+}
+.ac-chip:hover { color: var(--g-text); border-color: var(--g-line-6); }
+.ac-chip.is-on {
+  color: var(--ink); border-color: transparent; background: var(--ember-grad);
+}
+/* The shard control is a native select: nine ladders name these five ways and a
+   segmented control cannot hold "EU Nordic & East" at any width worth having. */
+.ac-field {
+  display: inline-flex; align-items: stretch; gap: 0; min-width: 0;
+  border: 1px solid var(--g-line-4); border-radius: 8px; overflow: hidden;
+}
+.ac-field-l {
+  display: inline-flex; align-items: center; padding: 0 10px;
+  font: 600 10.5px/1 var(--body); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--g-muted); background: rgba(255, 255, 255, .03);
+  border-right: 1px solid var(--g-line-2);
+}
+.ac-select {
+  appearance: none; border: 0; background: transparent; color: var(--g-text);
+  /* 16px, not a smaller aesthetic size: mobile Safari zooms the viewport on any
+     focused control under it and does not zoom back out. The MOBILE PASS block
+     enforces the same threshold on every other field on the site. */
+  font: 600 16px/1 var(--body); padding: 9px 12px; cursor: pointer; min-width: 0;
+}
+.ac-select option { background: #16130f; color: var(--g-text); }
+.ac-count {
+  margin-left: auto; font: 500 12.5px/1 var(--body); color: var(--g-muted);
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.ac-count b { color: var(--g-text); font-weight: 600; }
+
+/* ── the grid ─────────────────────────────────────────────────────────── */
+.ac-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+.ac-card {
+  display: flex; flex-direction: column; min-width: 0; padding: 16px 16px 14px;
+  border: 1px solid var(--g-line-3); border-radius: 12px; background: var(--g-card);
+  transition: border-color .16s, transform .16s;
+}
+.ac-card:hover { border-color: var(--g-line-6); }
+/* A sold-out listing stays legible — it is still the honest answer to "what
+   does a Diamond II cost here" — but must never read as the buyable ones do. */
+.ac-card.is-out { opacity: .62; }
+.ac-card.is-out:hover { border-color: var(--g-line-3); }
+.ac-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ac-name {
+  margin: 0; font: 700 16.5px/1.2 var(--display); letter-spacing: -.01em; color: var(--g-text);
+  min-width: 0;
+}
+.ac-pill {
+  flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px;
+  border-radius: 999px; font: 600 10px/1 var(--body); letter-spacing: .06em;
+  text-transform: uppercase; white-space: nowrap;
+}
+.ac-pill-ok { color: var(--g-good); background: rgba(143, 214, 164, .10); }
+.ac-pill-out { color: var(--g-muted); background: rgba(255, 255, 255, .05); }
+.ac-pill-ico { flex: none; }
+.ac-band-rank {
+  margin-top: 4px; font: 500 12.5px/1.3 var(--mono); letter-spacing: .01em; color: var(--g-tint);
+}
+.ac-facts {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 12px 0 0; padding: 0; list-style: none;
+}
+.ac-facts li {
+  display: inline-flex; align-items: baseline; gap: 4px;
+  font: 500 12px/1.3 var(--body); color: var(--g-muted);
+}
+.ac-facts b { font: 600 13px/1 var(--body); color: var(--g-body-2); }
+.ac-note {
+  margin: 12px 0 0; font-size: 13px; line-height: 1.55; color: var(--g-body); text-wrap: pretty;
+}
+.ac-shards { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
+.ac-shard {
+  padding: 3px 7px; border: 1px solid var(--g-line-3); border-radius: 5px;
+  font: 600 10px/1.4 var(--mono); letter-spacing: .04em; color: var(--g-muted);
+}
+/* margin-top:auto keeps the price row on one baseline across cards with notes
+   of unequal length — the same pin `.sg-proof` uses. */
+.ac-card-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: auto; padding-top: 14px;
+}
+.ac-price { font: 700 21px/1 var(--display); letter-spacing: -.02em; color: var(--g-text); }
+/* Sentence case, not `.btn`'s uppercase + .14em tracking: this board is the
+   `.gc` register, and a shouted "BUY · €62" inside a 390px card is a different
+   design from the one the rest of the page is in. Same override `.ob-cta`,
+   `.gc-ask` and `.hero-h-cta` make, and for the same reason. */
+.ac .btn { text-transform: none; letter-spacing: 0; font-family: var(--body); }
+.ac .btn-primary.ac-buy {
+  gap: 6px; height: 38px; padding: 0 14px; border-radius: 8px;
+  font-weight: 600; font-size: 13px; white-space: nowrap;
+}
+.ac .btn-outline.ac-buy-out {
+  height: 34px; padding: 0 12px; border-radius: 8px; font-weight: 600;
+  font-size: 12px; white-space: nowrap;
+  /* Quieter than the live cards' ember: this is the fallback action on a
+     listing nobody can buy, not a second offer competing with seven real ones. */
+  border-color: var(--g-line-6); color: var(--g-body);
+}
+.ac .btn-outline.ac-buy-out:hover { background: rgba(255, 255, 255, .05); color: var(--g-text); }
+.ac .btn-outline.ac-empty-btn {
+  height: 40px; padding: 0 16px; border-radius: 8px; font-weight: 600; font-size: 13px;
+}
+
+/* ── the empty state, and the filtered footer ─────────────────────────── */
+.ac-empty {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 8px; margin-top: 20px; padding: 40px 24px;
+  border: 1px dashed var(--g-line-4); border-radius: 12px;
+}
+.ac-empty-t { font: 700 17px/1.2 var(--display); color: var(--g-text); }
+.ac-empty-b { margin: 0; max-width: 52ch; font-size: 13.5px; line-height: 1.6; color: var(--g-body); }
+.ac-empty-b b { color: var(--g-tint); font-weight: 600; }
+.ac-empty-a { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+.ac-foot { display: flex; justify-content: center; margin-top: 18px; }
+.ac-reset {
+  display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px;
+  border: 1px solid var(--g-line-4); border-radius: 999px; background: transparent;
+  font: 600 12.5px/1 var(--body); color: var(--g-body); cursor: pointer;
+}
+.ac-reset:hover { color: var(--g-text); border-color: var(--g-line-6); }
+
+/* ── 01 what arrives ──────────────────────────────────────────────────── */
+.ac-del-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 24px; }
+.ac-del-card {
+  display: flex; flex-direction: column; min-width: 0; padding: 18px 16px;
+  border: 1px solid var(--g-line-3); border-radius: 12px; background: var(--g-card);
+}
+.ac-tile {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 9px; color: var(--g-tint);
+  background: rgba(255, 90, 31, .10); border: 1px solid rgba(255, 90, 31, .18);
+}
+.ac-del-t { margin: 14px 0 0; font: 700 15px/1.25 var(--display); color: var(--g-text); }
+.ac-del-b { margin: 8px 0 0; font-size: 13px; line-height: 1.55; color: var(--g-body); text-wrap: pretty; }
+
+/* ── 02 the risk ──────────────────────────────────────────────────────── */
+/* A framed plate, not fine print, and the glyph is caution amber rather than the
+   accent: this is the one paragraph on the page that argues against the sale,
+   and a page that buries it has told the buyer after the decision. Same
+   treatment `gp_safety()` gives the boosting ToS admission. */
+.ac-plate {
+  display: flex; gap: 14px; margin-top: 24px; padding: 20px 22px;
+  border: 1px solid rgba(201, 149, 95, .28); border-radius: 12px;
+  background: linear-gradient(180deg, rgba(201, 149, 95, .07), rgba(201, 149, 95, .03));
+}
+.ac-plate-ico { flex: none; color: var(--g-caution); line-height: 0; padding-top: 1px; }
+.ac-plate-b {
+  margin: 0; font-size: 14.5px; line-height: 1.62; color: var(--g-body-2);
+  max-width: 78ch; text-wrap: pretty;
+}
+.ac-risk-links { display: flex; flex-wrap: wrap; gap: 22px; }
+
+/* ── 03 the FAQ ───────────────────────────────────────────────────────── */
+.ac-faq-inner { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 48px; }
+.ac-faq-l { position: sticky; top: 96px; align-self: start; display: flex; flex-direction: column; align-items: flex-start; }
+.ac-faq-p { margin: 12px 0 0; font-size: 14px; line-height: 1.6; color: var(--g-body); max-width: 36ch; }
+.ac-faq-r { min-width: 0; }
+
+/* ── the game page's cross-sell strip (`.gp-acc`) ─────────────────────── */
+/* Lives with the `.gp` bands, so it inherits their tokens. An outline CTA, not
+   a filled one: the page's filled button is the configurator's, and a second
+   ember block here would make two primary actions out of one. */
+.gp-acc-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 32px;
+  padding: 22px 24px; border: 1px solid var(--gp-line-3, rgba(255, 255, 255, .09));
+  border-radius: 12px; background: linear-gradient(180deg, #1b1816, #131110);
+}
+.gp-acc-l { min-width: 0; }
+.gp-acc-k {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: 600 10.5px/1 var(--body); letter-spacing: .16em; text-transform: uppercase;
+  color: #ffb887;
+}
+.gp-acc-t { margin: 10px 0 0; font: 700 21px/1.2 var(--display); letter-spacing: -.015em; }
+.gp-acc-b { margin: 8px 0 0; font-size: 13.5px; line-height: 1.6; max-width: 68ch; text-wrap: pretty; }
+.gp-acc-b b { font-weight: 600; }
+.gp-acc .btn.gp-acc-cta {
+  flex: none; gap: 8px; height: 44px; padding: 0 20px; border-radius: 9px;
+  font-family: var(--body); font-weight: 600; font-size: 13.5px;
+  text-transform: none; letter-spacing: 0;
+}
+
+/* ── breakpoints ──────────────────────────────────────────────────────── */
+@media (max-width: 1200px) {
+  .ac-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ac-del-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ac-faq-inner { gap: 32px; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); }
+}
+@media (max-width: 1000px) {
+  .ac-head { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .ac-head-p { padding-bottom: 0; max-width: none; }
+  .ac-faq-inner { grid-template-columns: minmax(0, 1fr); gap: 26px; }
+  .ac-faq-l { position: static; }
+  .gp-acc-card { flex-direction: column; align-items: flex-start; gap: 18px; }
+}
+@media (max-width: 760px) {
+  .ac-band { padding-block: 40px 44px; }
+  .ac-hero-inner { padding-block: 40px 34px; }
+  .ac-grid, .ac-del-grid { grid-template-columns: minmax(0, 1fr); }
+  .ac-toolbar { gap: 10px; }
+  /* The count is the least useful thing at this width and pushes the shard
+     control onto a third row; the grid below it already answers "how many". */
+  .ac-count { margin-left: 0; }
+  .ac-field { width: 100%; }
+  .ac-select { flex: 1; }
+  /* 44px on every control the thumb has to hit. These own their row, so the
+     height is set directly rather than through the invisible `::after` the
+     MOBILE PASS block uses — that technique is for controls that cannot grow
+     without moving the layout around them. The select is already 16px, the
+     threshold below which mobile Safari zooms the viewport and does not zoom
+     back out. */
+  .ac-chip { min-height: 44px; padding-inline: 14px; }
+  .ac-select { padding-block: 13px; }
+  .ac-field-l { padding-inline: 12px; }
+  .ac .btn-primary.ac-buy, .ac .btn-outline.ac-buy-out { height: 44px; }
+  .ac-risk-links { gap: 14px; flex-direction: column; }
+  .gp-acc-cta { width: 100%; justify-content: center; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    MOBILE PASS — defects found walking every page at 375px and 320px
    ══════════════════════════════════════════════════════════════════════════
    This block is last in the file on purpose: each rule below is a correction

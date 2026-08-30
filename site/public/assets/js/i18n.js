@@ -1765,7 +1765,139 @@
       "Log in or create an account": "Se connecter ou créer un compte",
       "Copy discount code {} — {} off": "Copier le code promo {} — {} de réduction",
       "Copy discount code {}": "Copier le code promo {}",
-      "Checking that code…": "Vérification du code…"
+      "Checking that code…": "Vérification du code…",
+
+      /* ── /accounts.html — the ready-made-account board, its cross-sell
+         strip on the League page, and the checkout's account variants.
+         Listing NAMES and rank bands are data and stay in English with every
+         other rank on the site; every sentence around them is translated. */
+      "Accounts": "Comptes",
+      "{} accounts": "Comptes {}",
+      "Level 30 and ranked, on NA, EUW, EUNE and OCE. Full email access on every one, so you change the recovery mailbox and the password the moment it lands and it is genuinely yours.":
+        "Niveau 30 et classés, sur NA, EUW, EUNE et OCE. Accès complet à l’e-mail sur chacun : tu changes la boîte de récupération et le mot de passe dès la livraison, et le compte est vraiment à toi.",
+      "Full email access": "Accès complet à l’e-mail",
+      "{}-day replacement": "Remplacement sous {} jours",
+      "Within the hour": "Sous une heure",
+      "Eight": "Huit",
+      "{} listings": "{} annonces",
+      "listings": "annonces",
+      "Pick a rank and a shard.": "Choisis un rang et un serveur.",
+      "Every account ships with full email access, on the shard you pick, replaced inside":
+        "Chaque compte est livré avec l’accès complet à l’e-mail, sur le serveur que tu choisis, et remplacé sous",
+      "days if it is recovered. The exact division inside a band is whatever is in stock that day.":
+        "jours s’il est récupéré. La division exacte dans une fourchette dépend du stock du jour.",
+      "All ranks": "Tous les rangs",
+      "Shard": "Serveur",
+      "Any shard": "Tous les serveurs",
+      "In stock": "En stock",
+      "Sold out": "Épuisé",
+      "level": "niveau",
+      "blue essence": "essence bleue",
+      "champions": "champions",
+      "Buy": "Acheter",
+      "Ask when it is back": "Demander quand il revient",
+      "A clean level-30 with the essence to build a pool from scratch. No ranked games played, so placements are yours.":
+        "Un niveau 30 propre, avec de quoi se construire un pool de zéro. Aucune partie classée jouée : les placements sont à toi.",
+      "The same account with roughly double the essence — enough for a full role's worth of champions on day one.":
+        "Le même compte avec environ deux fois plus d’essence — de quoi couvrir un rôle entier dès le premier jour.",
+      "Placed and played. The exact division inside the band depends on what is in stock the day you order.":
+        "Placé et joué. La division exacte dans la fourchette dépend du stock le jour de ta commande.",
+      "Last season's Gold, honour level 2 or above, no restrictions on the account.":
+        "Gold la saison dernière, honneur niveau 2 minimum, aucune restriction sur le compte.",
+      "Platinum with a played match history — it does not read as a fresh account to anybody in your games.":
+        "Platine avec un historique de parties réel — personne dans tes games ne le lira comme un compte neuf.",
+      "Emerald on a full champion pool. The smallest stock on the page, so the shard list is short.":
+        "Émeraude avec un pool de champions complet. Le plus petit stock de la page, d’où la liste de serveurs réduite.",
+      "Diamond, hand-played, with the match history behind it. Ships with the honour level intact.":
+        "Diamant, joué à la main, avec l’historique qui va avec. Livré avec le niveau d’honneur intact.",
+      "The top of what we sell as a fixed listing. Anything above Diamond I is quoted per account in Discord.":
+        "Le haut de ce que nous vendons à prix fixe. Au-dessus de Diamant I, chaque compte est chiffré sur Discord.",
+      "Nothing in stock on that combination.": "Rien en stock sur cette combinaison.",
+      "We had no": "Nous n’avions aucun compte",
+      "account for": "pour",
+      "when this page was built. Loosen one of the two, or ask us in Discord — stock moves daily.":
+        "au moment où cette page a été générée. Élargis l’un des deux, ou demande-nous sur Discord : le stock bouge tous les jours.",
+      "Show everything": "Tout afficher",
+      "What arrives": "Ce que tu reçois",
+      "Credentials, and the mailbox behind them.":
+        "Les identifiants, et la boîte mail derrière.",
+      "Full email access — you change the email and the password on delivery. Without that an account is a rental somebody else can end, so we do not sell one we cannot hand over completely.":
+        "Accès complet à l’e-mail : tu changes l’adresse et le mot de passe à la livraison. Sans ça, un compte n’est qu’une location que quelqu’un d’autre peut arrêter — nous n’en vendons donc aucun que nous ne pouvons pas céder entièrement.",
+      "Credentials by email": "Identifiants par e-mail",
+      "Login, password and the recovery mailbox, sent to the address you check out with.":
+        "Identifiant, mot de passe et boîte de récupération, envoyés à l’adresse utilisée au paiement.",
+      "Usually within the hour": "En général sous une heure",
+      "Manually handed over and checked before it is sent. Not an automated drop.":
+        "Remis à la main et vérifié avant l’envoi. Ce n’est pas une livraison automatique.",
+      "Replaced inside {} days": "Remplacé sous {} jours",
+      "If it is recovered or banned in the warranty window you get another of the same rank, or the money back.":
+        "S’il est récupéré ou banni pendant la garantie, tu en reçois un autre du même rang, ou tu es remboursé.",
+      "Never resold": "Jamais revendu",
+      "A listing leaves this page the moment it is sold. One buyer per account.":
+        "Une annonce quitte cette page dès qu’elle est vendue. Un seul acheteur par compte.",
+      "The risk": "Le risque",
+      "What Riot's rules actually say.": "Ce que disent vraiment les règles de Riot.",
+      "The same standard as the rest of the site: we tell you what the risk is, what we do about it, and where our warranty stops.":
+        "La même règle que sur le reste du site : nous disons quel est le risque, ce que nous faisons contre, et où s’arrête notre garantie.",
+      "Riot licenses an account to one person and does not permit it to be sold or transferred. If they act on that, the sanction is the account itself, not a suspension you sit out. We hand over full email access so the account is genuinely yours to secure, and we replace it inside the warranty window — but we will not tell you the risk is zero, because it isn't.":
+        "Riot concède un compte à une seule personne et n’autorise ni sa vente ni son transfert. S’ils agissent, la sanction porte sur le compte lui-même, pas sur une suspension que l’on attend. Nous cédons l’accès complet à l’e-mail pour que le compte soit vraiment à vous et sécurisable, et nous le remplaçons pendant la garantie — mais nous ne vous dirons pas que le risque est nul, parce qu’il ne l’est pas.",
+      "Read the full guarantee": "Lire toute la garantie",
+      "Questions": "Questions",
+      "The ones that decide it.": "Celles qui font la décision.",
+      "Three of these argue against the sale. They are the reason the other four are worth reading.":
+        "Trois d’entre elles jouent contre la vente. C’est pour ça que les quatre autres valent la lecture.",
+      "Ask us anything else": "Pose-nous n’importe quelle autre question",
+      "Is buying an account against Riot's rules?":
+        "Acheter un compte, est-ce contraire aux règles de Riot ?",
+      "Yes. An account is licensed to one person and Riot does not permit it to be sold or transferred. If they act on it, the account goes — that is a different outcome from a boosting suspension, and it is the reason the warranty below exists. Anyone telling you this is risk-free is selling you something.":
+        "Oui. Un compte est concédé à une seule personne et Riot n’autorise ni sa vente ni son transfert. S’ils agissent, le compte disparaît — ce n’est pas la même issue qu’une suspension pour boost, et c’est la raison d’être de la garantie ci-dessous. Quiconque te dit que c’est sans risque a quelque chose à te vendre.",
+      "Do I actually own it, or can you take it back?":
+        "Est-ce qu’il est vraiment à moi, ou pouvez-vous le reprendre ?",
+      "Every listing ships with full email access. You change the recovery mailbox and the password on delivery and we no longer hold anything that reaches it. We do not sell accounts we cannot hand over completely — an account without its email is a rental somebody else can end.":
+        "Chaque annonce est livrée avec l’accès complet à l’e-mail. Tu changes la boîte de récupération et le mot de passe à la livraison, et nous ne détenons plus rien qui y donne accès. Nous ne vendons aucun compte que nous ne pouvons pas céder entièrement — un compte sans son e-mail est une location que quelqu’un d’autre peut arrêter.",
+      "What happens if it is banned or recovered?":
+        "Que se passe-t-il s’il est banni ou récupéré ?",
+      "Inside {} days of delivery you get another account of the same rank, or the money back, your choice. After that window we cannot tell a recovery from a chargeback, so the warranty ends — that is the honest limit of it, and it is why the window is stated rather than implied.":
+        "Dans les {} jours suivant la livraison, tu reçois un autre compte du même rang, ou tu es remboursé, au choix. Passé ce délai, nous ne pouvons plus distinguer une récupération d’une rétrofacturation, donc la garantie s’arrête — c’est sa limite honnête, et c’est pour ça que le délai est écrit plutôt que sous-entendu.",
+      "Can I pick the exact division?": "Puis-je choisir la division exacte ?",
+      "No. A listing names a band — Gold IV to Gold I — and you get what is in stock the day you order, inside that band. We do not know which one it will be when you buy, so we do not print a division we might not have.":
+        "Non. Une annonce donne une fourchette — Gold IV à Gold I — et tu obtiens ce qui est en stock le jour de ta commande, dans cette fourchette. Nous ne savons pas laquelle ce sera au moment de l’achat, donc nous n’affichons pas une division que nous n’aurons peut-être pas.",
+      "How fast is delivery?": "En combien de temps est-il livré ?",
+      "Usually inside the hour, in the working day. Each handover is done by a person who checks the account first, so it is not instant and we do not claim it is — an automated drop is how buyers end up with an account somebody already logged into.":
+        "En général sous une heure, en journée. Chaque remise est faite par une personne qui vérifie le compte avant, donc ce n’est pas instantané et nous ne le prétendons pas — c’est la livraison automatique qui fait atterrir les acheteurs sur un compte où quelqu’un s’est déjà connecté.",
+      "Should I buy an account or a boost?": "Dois-je acheter un compte ou un boost ?",
+      "If you want to keep your own name, your skins and your match history, buy the boost — it is the same rank on the account you already play. An account makes sense when you want a second one to queue on, or a clean shard to start on. If you are choosing between them on price alone, the boost is usually the better purchase.":
+        "Si tu veux garder ton pseudo, tes skins et ton historique, prends le boost — c’est le même rang sur le compte que tu joues déjà. Un compte a du sens si tu en veux un deuxième pour queue, ou un serveur vierge pour repartir. Si tu hésites uniquement sur le prix, le boost est en général le meilleur achat.",
+      "Can I play it from another country?": "Puis-je y jouer depuis un autre pays ?",
+      "The shard is fixed — an EUW account stays on EUW — but nothing stops you playing it from anywhere. Riot does not sell shard transfers between the regions on this page, so pick the one your friends are on.":
+        "Le serveur est fixe — un compte EUW reste sur EUW — mais rien ne t’empêche d’y jouer d’où tu veux. Riot ne vend pas de transfert entre les serveurs de cette page, alors prends celui de tes potes.",
+      "Or climb on the account you already play.": "Ou monte sur le compte que tu joues déjà.",
+      "A boost keeps your name, your skins and your match history. If you are choosing between the two on price alone, that is usually the better purchase.":
+        "Un boost garde ton pseudo, tes skins et ton historique. Si tu hésites uniquement sur le prix, c’est en général le meilleur achat.",
+      "Configure a {} boost": "Configurer un boost {}",
+      "Or start on a second account.": "Ou pars sur un deuxième compte.",
+      "Ready-made {} accounts from": "Comptes {} prêts à jouer à partir de",
+      "— level 30 and ranked, on NA, EUW, EUNE and OCE, with full email access and a":
+        "— niveau 30 et classés, sur NA, EUW, EUNE et OCE, avec accès complet à l’e-mail et un",
+      "replacement. A boost is still the better buy if you want to keep your own name and skins.":
+        "de remplacement. Un boost reste le meilleur achat si tu veux garder ton pseudo et tes skins.",
+      "Browse accounts": "Voir les comptes",
+      "Account": "Compte",
+      "Price": "Prix",
+      "This is where the login, the password and the recovery mailbox are sent. Check it is one you can open — no marketing unless you tick the box at the end.":
+        "C’est là que sont envoyés l’identifiant, le mot de passe et la boîte de récupération. Vérifie que tu peux l’ouvrir — aucune pub sauf si tu coches la case à la fin.",
+      "Anything we should know": "Quelque chose à nous signaler",
+      "Replaced or refunded for {} days": "Remplacé ou remboursé pendant {} jours",
+      "Read the warranty": "Lire la garantie de remplacement",
+      "Email me when the account is on its way. Nothing else.":
+        "Préviens-moi par e-mail quand le compte part. Rien d’autre.",
+      /* The listing NAME, as a pattern: the rank it captures is data and passes
+         through verbatim (a capture gets one exact dictionary lookup on the way
+         out, which is what turns "Iron to Silver" into its own entry below).
+         Only this page emits these, so the short literal is unambiguous. */
+      "{} ranked": "{} classé",
+      "Level 30 · {} BE": "Niveau 30 · {} BE",
+      "Iron to Silver": "Iron à Silver"
     },
 
     de: {
@@ -3233,7 +3365,140 @@
       "Log in or create an account": "Anmelden oder Konto erstellen",
       "Copy discount code {} — {} off": "Rabattcode {} kopieren — {} Rabatt",
       "Copy discount code {}": "Rabattcode {} kopieren",
-      "Checking that code…": "Code wird geprüft…"
+      "Checking that code…": "Code wird geprüft…",
+
+      /* ── /accounts.html — the ready-made-account board, its cross-sell
+         strip on the League page, and the checkout's account variants.
+         Listing NAMES and rank bands are data and stay in English with every
+         other rank on the site; every sentence around them is translated. */
+      "Accounts": "Accounts",
+      "{} accounts": "{}-Accounts",
+      "Level 30 and ranked, on NA, EUW, EUNE and OCE. Full email access on every one, so you change the recovery mailbox and the password the moment it lands and it is genuinely yours.":
+        "Level 30 und ranked, auf NA, EUW, EUNE und OCE. Bei jedem voller E-Mail-Zugang — du änderst Wiederherstellungs-Postfach und Passwort direkt bei der Lieferung, und der Account gehört wirklich dir.",
+      "Full email access": "Voller E-Mail-Zugang",
+      "{}-day replacement": "Ersatz innerhalb von {} Tagen",
+      "Within the hour": "Innerhalb einer Stunde",
+      "Eight": "Acht",
+      "{} listings": "{} Angebote",
+      "listings": "Angebote",
+      "Pick a rank and a shard.": "Wähl einen Rang und einen Server.",
+      "Every account ships with full email access, on the shard you pick, replaced inside":
+        "Jeder Account kommt mit vollem E-Mail-Zugang, auf dem Server deiner Wahl, und wird innerhalb von",
+      "days if it is recovered. The exact division inside a band is whatever is in stock that day.":
+        "Tagen ersetzt, falls er zurückgeholt wird. Welche Division genau es innerhalb einer Spanne wird, hängt vom Lagerbestand des Tages ab.",
+      "All ranks": "Alle Ränge",
+      "Shard": "Server",
+      "Any shard": "Alle Server",
+      "In stock": "Auf Lager",
+      "Sold out": "Ausverkauft",
+      "level": "Level",
+      "blue essence": "blaue Essenz",
+      "champions": "Champions",
+      "Buy": "Kaufen",
+      "Ask when it is back": "Fragen, wann er zurück ist",
+      "A clean level-30 with the essence to build a pool from scratch. No ranked games played, so placements are yours.":
+        "Ein sauberer Level-30 mit genug Essenz, um dir einen Pool von Grund auf zu bauen. Keine Ranked-Spiele gespielt — die Platzierungen gehören dir.",
+      "The same account with roughly double the essence — enough for a full role's worth of champions on day one.":
+        "Derselbe Account mit ungefähr doppelter Essenz — genug für eine komplette Rolle ab Tag eins.",
+      "Placed and played. The exact division inside the band depends on what is in stock the day you order.":
+        "Platziert und gespielt. Welche Division genau es in der Spanne wird, hängt vom Lagerbestand am Bestelltag ab.",
+      "Last season's Gold, honour level 2 or above, no restrictions on the account.":
+        "Gold in der letzten Season, Ehre Stufe 2 oder höher, keine Einschränkungen auf dem Account.",
+      "Platinum with a played match history — it does not read as a fresh account to anybody in your games.":
+        "Platin mit echter Match-History — für niemanden in deinen Spielen sieht das nach einem frischen Account aus.",
+      "Emerald on a full champion pool. The smallest stock on the page, so the shard list is short.":
+        "Smaragd mit vollem Champion-Pool. Der kleinste Bestand auf der Seite — deshalb die kurze Server-Liste.",
+      "Diamond, hand-played, with the match history behind it. Ships with the honour level intact.":
+        "Diamant, von Hand gespielt, mit der passenden Match-History. Wird mit intaktem Ehre-Level geliefert.",
+      "The top of what we sell as a fixed listing. Anything above Diamond I is quoted per account in Discord.":
+        "Das Obere von dem, was wir zum Festpreis verkaufen. Über Diamant I wird jeder Account einzeln auf Discord angeboten.",
+      "Nothing in stock on that combination.": "Nichts auf Lager für diese Kombination.",
+      "We had no": "Wir hatten keinen",
+      "account for": "Account für",
+      "when this page was built. Loosen one of the two, or ask us in Discord — stock moves daily.":
+        "als diese Seite gebaut wurde. Lockere eines von beiden, oder frag uns auf Discord — der Bestand ändert sich täglich.",
+      "Show everything": "Alles anzeigen",
+      "What arrives": "Was ankommt",
+      "Credentials, and the mailbox behind them.":
+        "Die Zugangsdaten — und das Postfach dahinter.",
+      "Full email access — you change the email and the password on delivery. Without that an account is a rental somebody else can end, so we do not sell one we cannot hand over completely.":
+        "Voller E-Mail-Zugang — du änderst Adresse und Passwort bei der Lieferung. Ohne das ist ein Account nur eine Miete, die jemand anderes beenden kann, also verkaufen wir keinen, den wir nicht vollständig übergeben können.",
+      "Credentials by email": "Zugangsdaten per E-Mail",
+      "Login, password and the recovery mailbox, sent to the address you check out with.":
+        "Login, Passwort und Wiederherstellungs-Postfach, an die Adresse aus dem Checkout.",
+      "Usually within the hour": "Normalerweise innerhalb einer Stunde",
+      "Manually handed over and checked before it is sent. Not an automated drop.":
+        "Von Hand übergeben und vor dem Versand geprüft. Keine automatische Auslieferung.",
+      "Replaced inside {} days": "Ersetzt innerhalb von {} Tagen",
+      "If it is recovered or banned in the warranty window you get another of the same rank, or the money back.":
+        "Wird er im Garantiezeitraum zurückgeholt oder gebannt, bekommst du einen anderen im selben Rang — oder dein Geld zurück.",
+      "Never resold": "Nie doppelt verkauft",
+      "A listing leaves this page the moment it is sold. One buyer per account.":
+        "Ein Angebot verschwindet von dieser Seite, sobald es verkauft ist. Ein Käufer pro Account.",
+      "The risk": "Das Risiko",
+      "What Riot's rules actually say.": "Was Riots Regeln wirklich sagen.",
+      "The same standard as the rest of the site: we tell you what the risk is, what we do about it, and where our warranty stops.":
+        "Derselbe Maßstab wie auf dem Rest der Seite: Wir sagen, worin das Risiko besteht, was wir dagegen tun und wo unsere Garantie endet.",
+      "Riot licenses an account to one person and does not permit it to be sold or transferred. If they act on that, the sanction is the account itself, not a suspension you sit out. We hand over full email access so the account is genuinely yours to secure, and we replace it inside the warranty window — but we will not tell you the risk is zero, because it isn't.":
+        "Riot lizenziert einen Account an eine Person und erlaubt weder Verkauf noch Übertragung. Wenn Riot einschreitet, trifft es den Account selbst, nicht eine Sperre, die man aussitzt. Wir übergeben vollen E-Mail-Zugang, damit der Account wirklich Ihnen gehört und von Ihnen abgesichert werden kann, und wir ersetzen ihn innerhalb der Garantie — aber wir werden Ihnen nicht sagen, das Risiko sei null, denn das ist es nicht.",
+      "Read the full guarantee": "Die ganze Garantie lesen",
+      "Questions": "Fragen",
+      "The ones that decide it.": "Die, die es entscheiden.",
+      "Three of these argue against the sale. They are the reason the other four are worth reading.":
+        "Drei davon sprechen gegen den Kauf. Genau deshalb lohnt es sich, die anderen vier zu lesen.",
+      "Ask us anything else": "Frag uns alles andere",
+      "Is buying an account against Riot's rules?":
+        "Verstößt der Kauf eines Accounts gegen Riots Regeln?",
+      "Yes. An account is licensed to one person and Riot does not permit it to be sold or transferred. If they act on it, the account goes — that is a different outcome from a boosting suspension, and it is the reason the warranty below exists. Anyone telling you this is risk-free is selling you something.":
+        "Ja. Ein Account ist an eine Person lizenziert, und Riot erlaubt weder Verkauf noch Übertragung. Wenn Riot einschreitet, ist der Account weg — das ist ein anderes Ergebnis als eine Sperre wegen Boosting, und genau dafür gibt es die Garantie unten. Wer dir sagt, das sei risikofrei, will dir etwas verkaufen.",
+      "Do I actually own it, or can you take it back?":
+        "Gehört er wirklich mir, oder könnt ihr ihn zurückholen?",
+      "Every listing ships with full email access. You change the recovery mailbox and the password on delivery and we no longer hold anything that reaches it. We do not sell accounts we cannot hand over completely — an account without its email is a rental somebody else can end.":
+        "Jedes Angebot kommt mit vollem E-Mail-Zugang. Du änderst bei der Lieferung Postfach und Passwort, und wir halten danach nichts mehr, was dorthin führt. Wir verkaufen keine Accounts, die wir nicht vollständig übergeben können — ein Account ohne seine E-Mail ist eine Miete, die jemand anderes beenden kann.",
+      "What happens if it is banned or recovered?":
+        "Was passiert, wenn er gebannt oder zurückgeholt wird?",
+      "Inside {} days of delivery you get another account of the same rank, or the money back, your choice. After that window we cannot tell a recovery from a chargeback, so the warranty ends — that is the honest limit of it, and it is why the window is stated rather than implied.":
+        "Innerhalb von {} Tagen nach der Lieferung bekommst du einen anderen Account im selben Rang oder dein Geld zurück, ganz wie du willst. Danach können wir eine Rückholung nicht mehr von einer Rückbuchung unterscheiden, also endet die Garantie — das ist ihre ehrliche Grenze, und deshalb steht die Frist da, statt angedeutet zu werden.",
+      "Can I pick the exact division?": "Kann ich die genaue Division aussuchen?",
+      "No. A listing names a band — Gold IV to Gold I — and you get what is in stock the day you order, inside that band. We do not know which one it will be when you buy, so we do not print a division we might not have.":
+        "Nein. Ein Angebot nennt eine Spanne — Gold IV bis Gold I — und du bekommst, was am Bestelltag innerhalb dieser Spanne auf Lager ist. Wir wissen beim Kauf nicht, welche es wird, also drucken wir keine Division ab, die wir vielleicht nicht haben.",
+      "How fast is delivery?": "Wie schnell ist die Lieferung?",
+      "Usually inside the hour, in the working day. Each handover is done by a person who checks the account first, so it is not instant and we do not claim it is — an automated drop is how buyers end up with an account somebody already logged into.":
+        "Meist innerhalb einer Stunde, im Tagesgeschäft. Jede Übergabe macht ein Mensch, der den Account vorher prüft — sofort ist das also nicht, und wir behaupten es auch nicht. Genau die automatische Auslieferung ist der Grund, warum Käufer auf Accounts landen, in die sich schon jemand eingeloggt hat.",
+      "Should I buy an account or a boost?": "Account oder Boost — was soll ich kaufen?",
+      "If you want to keep your own name, your skins and your match history, buy the boost — it is the same rank on the account you already play. An account makes sense when you want a second one to queue on, or a clean shard to start on. If you are choosing between them on price alone, the boost is usually the better purchase.":
+        "Wenn du deinen Namen, deine Skins und deine Match-History behalten willst, nimm den Boost — das ist derselbe Rang auf dem Account, den du ohnehin spielst. Ein Account lohnt sich, wenn du einen zweiten zum Queuen willst oder einen sauberen Server für den Neustart. Wenn du nur nach dem Preis entscheidest, ist der Boost meistens der bessere Kauf.",
+      "Can I play it from another country?": "Kann ich ihn aus einem anderen Land spielen?",
+      "The shard is fixed — an EUW account stays on EUW — but nothing stops you playing it from anywhere. Riot does not sell shard transfers between the regions on this page, so pick the one your friends are on.":
+        "Der Server steht fest — ein EUW-Account bleibt auf EUW — aber du kannst ihn von überall spielen. Riot verkauft zwischen den Servern auf dieser Seite keine Transfers, also nimm den, auf dem deine Freunde sind.",
+      "Or climb on the account you already play.":
+        "Oder steig auf dem Account auf, den du schon spielst.",
+      "A boost keeps your name, your skins and your match history. If you are choosing between the two on price alone, that is usually the better purchase.":
+        "Ein Boost behält deinen Namen, deine Skins und deine Match-History. Wenn du nur nach dem Preis entscheidest, ist das meistens der bessere Kauf.",
+      "Configure a {} boost": "{}-Boost konfigurieren",
+      "Or start on a second account.": "Oder starte auf einem zweiten Account.",
+      "Ready-made {} accounts from": "Fertige {}-Accounts ab",
+      "— level 30 and ranked, on NA, EUW, EUNE and OCE, with full email access and a":
+        "— Level 30 und ranked, auf NA, EUW, EUNE und OCE, mit vollem E-Mail-Zugang und",
+      "replacement. A boost is still the better buy if you want to keep your own name and skins.":
+        "Ersatz. Ein Boost bleibt der bessere Kauf, wenn du deinen Namen und deine Skins behalten willst.",
+      "Browse accounts": "Accounts ansehen",
+      "Account": "Account",
+      "Price": "Preis",
+      "This is where the login, the password and the recovery mailbox are sent. Check it is one you can open — no marketing unless you tick the box at the end.":
+        "Hierhin gehen Login, Passwort und Wiederherstellungs-Postfach. Prüf, dass du sie öffnen kannst — keine Werbung, außer du setzt das Häkchen am Ende.",
+      "Anything we should know": "Etwas, das wir wissen sollten",
+      "Replaced or refunded for {} days": "{} Tage lang Ersatz oder Erstattung",
+      "Read the warranty": "Ersatzgarantie lesen",
+      "Email me when the account is on its way. Nothing else.":
+        "Mail mir, wenn der Account unterwegs ist. Sonst nichts.",
+      /* The listing NAME, as a pattern: the rank it captures is data and passes
+         through verbatim (a capture gets one exact dictionary lookup on the way
+         out, which is what turns "Iron to Silver" into its own entry below).
+         Only this page emits these, so the short literal is unambiguous. */
+      "{} ranked": "{} ranked",
+      "Level 30 · {} BE": "Level 30 · {} BE",
+      "Iron to Silver": "Iron bis Silver"
     }
   };
 

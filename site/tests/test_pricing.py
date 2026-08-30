@@ -813,6 +813,198 @@ def test_order_row_records_what_was_bought():
           "the play window and the pack length are two separate metadata keys")
 
 
+# ── accounts: the flat-priced product, and the two places it can be wrong ──
+def test_account_pricing():
+    """The account branch charges the listing's own figure and nothing else.
+
+    Two failures this locks out, and they are the only two that matter on a
+    product with no formula: charging for a listing that is **sold out** (stock
+    is hand-set in data.py and nothing decrements it, so `account_pick()` is the
+    only gate there is), and letting the boost machinery leak into the price —
+    a queue, an add-on or the sitewide sale moving a figure the card printed as
+    flat."""
+    print("\n[accounts] the listing's price, and nothing else, is the charge")
+    live = D.accounts_in_stock()
+    check(bool(live), "the catalogue has something in stock")
+
+    for a in live:
+        q = pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
+                           "account": a["id"], "region": a["regions"][0]})
+        if q["invalid"] or q["total"] != a["price"]:
+            check(False, "%s quotes its own price (got %r)" % (a["id"], q["total"]))
+            break
+    else:
+        check(True, "all %d listings quote their own hand-set price" % len(live))
+
+    a = live[0]
+    base = {"game": D.ACCOUNT_GAME, "service": "account", "account": a["id"],
+            "region": a["regions"][0]}
+    # Nothing the boost engine owns may move it. Duo, every add-on at once, the
+    # sitewide code and a bundle index are all thrown at one listing.
+    noisy = dict(base, mode="Duo queue", addons=[x["id"] for x in D.ADDONS],
+                 promo=next(iter(D.PROMOS), ""), bundle=0, wins=5, placements=5,
+                 unranked=True, coach=3, pack=2)
+    qn = pricing.quote(noisy)
+    check(qn["total"] == a["price"] and qn["discount"] == 0 and qn["addons"] == 0,
+          "queue, add-ons, promo and bundle cannot move an account's price "
+          "(%r vs %r)" % (qn["total"], a["price"]))
+    # …and a forged server-side offer cannot either. `recovery_pct` is the field
+    # process_checkout() strips, but quote() must not honour it here even if one
+    # arrives: an account carries no discount at all.
+    qf = pricing.quote(dict(base, recovery_pct=0.99, offer_label="x"))
+    check(qf["total"] == a["price"],
+          "a recovery/mystery percentage cannot discount an account (got %r)" % qf["total"])
+
+    # Sold out and unknown both refuse, and both have to.
+    out = [x for x in D.ACCOUNTS if not x["stock"]]
+    if out:
+        qo = pricing.quote(dict(base, account=out[0]["id"]))
+        check(qo["invalid"] and qo["total"] == 0,
+              "a sold-out listing refuses the charge (%s)" % out[0]["id"])
+    else:
+        print("  --  no sold-out listing in the catalogue to check")
+    check(pricing.quote(dict(base, account="no-such-listing"))["invalid"],
+          "an unknown listing id refuses the charge")
+    check(pricing.quote(dict(base, account=""))["invalid"],
+          "an account order naming no listing refuses rather than picking one")
+
+    # The shard is clamped to the listing's own list, never trusted from the body.
+    narrow = next((x for x in live if len(x["regions"]) < len(LOL["regions"])), None)
+    if narrow:
+        missing = next(r for r in LOL["regions"] if r not in narrow["regions"])
+        qs = pricing.quote(dict(base, account=narrow["id"], region=missing))
+        _acc, shard = pricing.account_pick(dict(base, account=narrow["id"], region=missing))
+        check(shard == narrow["regions"][0] and shard in qs["summary"],
+              "a shard the listing does not ship on is clamped to its own first "
+              "(got %r)" % shard)
+
+    # `days` is 0, and the ETA is the delivery promise rather than a day count.
+    q0 = pricing.quote(base)
+    check(q0["days"] == 0 and q0["eta"] == pricing.ACCOUNT_ETA,
+          "an account has no day count and quotes the delivery promise")
+    check(not pricing.per_hour_worth_saying(q0["total"], q0["days"]),
+          "the follow-up mail's per-hour claim is dropped on a product nobody plays")
+
+
+def test_account_client_mirror():
+    """data.js must carry every listing the server prices, at the same figure and
+    with the same stock flag — app.js re-quotes an account order on the checkout
+    page, and `build_session()` refuses a total the page did not show. A listing
+    that is cheaper in one of the two is a checkout that always fails."""
+    print("\n[accounts] the client mirror agrees with pricing.py")
+    d = _client_data()
+    client = d.get("accounts") or {}
+    check(set(client) == {a["id"] for a in D.ACCOUNTS},
+          "data.js ships every listing (%d vs %d)" % (len(client), len(D.ACCOUNTS)))
+    bad = [a["id"] for a in D.ACCOUNTS
+           if client.get(a["id"], {}).get("price") != a["price"]
+           or client.get(a["id"], {}).get("stock") is not bool(a["stock"])
+           or client.get(a["id"], {}).get("regions") != a["regions"]]
+    check(not bad, "price, stock and shards match on every listing (%r)" % bad)
+    check(d.get("accountEta") == pricing.ACCOUNT_ETA,
+          "the delivery promise is shipped from pricing.py, not typed twice")
+    check(d.get("accountGame") == D.ACCOUNT_GAME, "the client knows which game these are")
+
+    # The client's own quote is the one the CTA's price is checked against.
+    js = os.path.join(ROOT, "public", "assets", "js", "app.js")
+    src = open(js, encoding="utf-8").read()
+    check('s.service === "account"' in src, "app.js has the account branch")
+    check("!acc || !acc.stock" in src,
+          "app.js refuses a sold-out listing, the same gate account_pick() is")
+
+
+def test_account_order_survives_to_the_store():
+    """WHICH listing was sold has to reach the orders store, because that row is
+    the only thing an operator can look up — and unlike a boost there is no
+    amount to infer it from once two listings share a price.
+
+    It also asserts the two things an account order must NOT carry: a climb
+    (the checkout body ships whatever ranks the shared per-game record held) and
+    add-ons (quote() returns before the add-on block, so nothing there is
+    charged). Both reached fulfilment before this was fixed, describing an order
+    nobody placed."""
+    print("\n[accounts] the sold listing survives to the orders store")
+    import orders                                     # noqa: E402 — same lazy import
+    a = D.accounts_in_stock()[0]
+    # Deliberately dirty: the ranks, queue and add-ons a shared record leaves
+    # behind on a visitor who configured a boost before buying an account.
+    st = {"game": D.ACCOUNT_GAME, "service": "account", "account": a["id"],
+          "region": a["regions"][0], "from": LOL["ladder"][0], "to": LOL["ladder"][6],
+          "mode": "Duo queue", "addons": ["priority", "stream"], "currency": "usd"}
+    params, oid, q = payments.build_session(st, "http://localhost:4321")
+    md = {k[9:-1]: v for k, v in params.items() if k.startswith("metadata[")}
+    row = payments.order_row(md, {"client_reference_id": oid,
+                                  "amount_total": q["total"] * 100,
+                                  "customer_details": {"email": "buyer@example.com"}})
+    stored = orders.clean_order(row)
+    check(stored is not None, "the row survives orders.clean_order()")
+    check(stored["service"] == "account", "it is stored as an account order")
+    check(stored.get("account") == a["id"],
+          "the listing id is stored (got %r)" % stored.get("account"))
+    check(stored.get("account_name") == a["name"],
+          "the listing's name is stored beside it (got %r)" % stored.get("account_name"))
+    check(stored["region"] == a["regions"][0], "the shard is stored")
+    check(not stored.get("addons"),
+          "no add-on is recorded on a product that charges for none (got %r)"
+          % (stored.get("addons"),))
+    check(not md.get("from") and not md.get("to"),
+          "no climb reaches fulfilment on an account (%r → %r)" % (md.get("from"), md.get("to")))
+    check(orders._climb_summary(stored) == a["name"],
+          "the operator's one-line summary names the listing (got %r)"
+          % orders._climb_summary(stored))
+    # The Stripe page must not call it a boost — that screen is the last thing
+    # between the summary and the card.
+    check(params["line_items[0][price_data][product_data][name]"]
+          == "%s account" % D.ACCOUNT_GAME,
+          "Stripe's own line item says account, not boost")
+
+    # And what the buyer is charged is the listing's price, in their currency.
+    for cur in pricing.CHARGE_RATES:
+        p2, _oid, q2 = payments.build_session(dict(st, currency=cur), "http://x")
+        check(int(p2["line_items[0][price_data][unit_amount]"])
+              == display_cents(a["price"], cur)
+              and p2["line_items[0][price_data][currency]"] == cur,
+              "%s: the card is charged the price the board showed" % cur.upper())
+
+
+def test_account_checkout_payload():
+    """The built checkout page has to forward the listing id. Without it the
+    server re-quote refuses the order (the safe half), but the buyer is told a
+    listing that is in stock is unavailable — which is the same class of bug as
+    the dropped `bundle` this file was written for."""
+    print("\n[accounts] built checkout.html forwards the listing")
+    p = os.path.join(ROOT, "dist", "checkout.html")
+    if not os.path.exists(p):
+        check(False, "dist/checkout.html present (run build.py first)")
+        return
+    html = open(p, encoding="utf-8").read()
+    check("account: s.account" in html, "the payload includes `account`")
+
+    board = os.path.join(ROOT, "dist", "accounts.html")
+    if not os.path.exists(board):
+        check(False, "dist/accounts.html present (run build.py first)")
+        return
+    b = open(board, encoding="utf-8").read()
+    # Every in-stock listing is server-rendered with a real link, so the board
+    # is complete and buyable with no JS and legible to a crawler.
+    for a in D.accounts_in_stock():
+        if 'data-ac-buy="%s"' % a["id"] not in b:
+            check(False, "%s is missing its Buy link on the board" % a["id"])
+            break
+    else:
+        check(True, "all %d in-stock listings ship a real Buy link"
+              % len(D.accounts_in_stock()))
+    check('data-ac-buy="%s"' % (([x for x in D.ACCOUNTS if not x["stock"]] or [{"id": "\x00"}])[0]["id"])
+          not in b, "a sold-out listing ships no Buy link")
+    # The admission has to be ON the page, not only in the FAQ's JSON-LD.
+    check(esc_disclaimer() in b, "the ToS admission is rendered on the board")
+
+
+def esc_disclaimer():
+    from html import escape
+    return escape(D.ACCOUNT_DISCLAIMER)
+
+
 def main():
     for fn in (test_shown_equals_charged, test_iron_to_gold_regression,
                test_addon_modes, test_free_optional_addons,
@@ -824,7 +1016,10 @@ def main():
                test_server_defaults,
                test_eta_schedule_mirror, test_eta_is_never_a_bare_long_figure,
                test_checkout_payload_sends_state,
-               test_order_row_records_what_was_bought):
+               test_order_row_records_what_was_bought,
+               test_account_pricing, test_account_client_mirror,
+               test_account_order_survives_to_the_store,
+               test_account_checkout_payload):
         fn()
     print("\n" + ("=" * 52))
     if _fails:

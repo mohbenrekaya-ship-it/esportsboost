@@ -23,6 +23,26 @@ ADDON = {a["id"]: a for a in D.ADDONS}
 # charge amount.
 UNIT_MIN, UNIT_MAX = 1, 5
 
+# ── accounts, the one product that is not a service ────────────────────────
+# A ready-made account is a flat price and a handover, so it reads none of the
+# machinery below: no ladder, no queue, no add-ons, no sitewide sale. The two
+# constants here are its whole product surface.
+#
+# The ETA is the delivery promise for the handover, mirrored literally in
+# app.js's quote() and translated as a whole node in i18n.js. "Within the hour"
+# rather than "instant" on purpose — every account is checked by a person before
+# it is sent, data.py's ACCOUNT_DELIVERY says exactly that, and an ETA promising
+# faster than the page describes is the one figure the buyer times us against.
+ACCOUNT_ETA = "Within the hour"
+
+# `days` on an account order. Zero, and it has to be: the ETA is not a number of
+# days, and every reader of `days` treats it as one — the demo card's "N days
+# left", the follow-up mail's per-hour figure (play_hours() returns 0 below 1, so
+# per_hour_worth_saying() drops the whole block rather than dividing by a
+# delivery that involves no play), and the booster profiles' histories. A 1 here
+# would put "1 day left" on an order delivered in an hour.
+ACCOUNT_DAYS = 0
+
 # Duo queue multiplier. Named so the order card can label the option with the
 # real percentage instead of a hand-typed one that drifts. Mirrored literally in
 # app.js — change one, change the other.
@@ -302,6 +322,31 @@ def quote(state):
     duo = DUO_MULT if mode == "Duo queue" else 1.0
     service = state.get("service", "division")
 
+    if service == "account":
+        # A ready-made account: the price is the listing's flat figure and that
+        # is the entire formula. Deliberately no promo, no add-ons, no duo and
+        # no bundle — the same shape the coaching branch has, and for a stronger
+        # reason: an account has a real acquisition cost behind it, so a
+        # percentage off it is margin rather than a discount on labour. If
+        # accounts should ever go on sale it is a rate applied here and in
+        # app.js, never a struck reference price on the card.
+        #
+        # There is no `was`/strikethrough for the same reason quote() takes the
+        # sitewide sale off the boost alone: a reference price nobody was ever
+        # charged is not a saving. Mirrored in app.js.
+        acc, region = account_pick(state)
+        if not acc:
+            return _invalid("That account is no longer available")
+        total = int(acc["price"])
+        return dict(
+            invalid=False, total=total, total_cents=total * 100,
+            subtotal=total, discount=0,
+            promo_code="", promo_label="", promo_pct=0, promo_ends="",
+            base=total, addons=0, days=ACCOUNT_DAYS,
+            summary="%s · %s" % (acc["name"], region),
+            eta=ACCOUNT_ETA,
+        )
+
     if service == "coaching":
         # Booking product: price is rate × hours × (1 − pack discount) and
         # nothing else — no rank, no duo, no add-ons, no sitewide promo. The
@@ -488,6 +533,30 @@ def unit_count(state):
     Duplicating the clamp is how a receipt comes to disagree with the charge."""
     key = "wins" if state.get("service") == "wins" else "placements"
     return _clamp(state.get(key, 1))
+
+
+def account_pick(state):
+    """(listing, shard) for an account order, or (None, "") when it cannot be
+    sold.
+
+    The ONE resolver — build.py, quote() and payments.build_session() all read
+    the catalogue through it, so the row written into the orders store names the
+    listing that was charged for and never what the body asked for.
+
+    An unknown id and a sold-out listing both resolve to nothing, because both
+    have to refuse the charge: stock is hand-set in data.py and nothing
+    decrements it (see the ⚠ there), so the only place a sold-out listing can be
+    stopped is here, on the server, at the moment somebody tries to pay for it.
+    The shard is clamped into the listing's own list rather than trusted — a
+    body naming a region this account does not ship on would otherwise reach
+    fulfilment as an instruction nobody can carry out."""
+    acc = D.account(state.get("account"))
+    if not acc or not acc.get("stock"):
+        return None, ""
+    region = str(state.get("region") or "").strip()
+    if region not in acc["regions"]:
+        region = acc["regions"][0]
+    return acc, region
 
 
 def coach_pick(state):

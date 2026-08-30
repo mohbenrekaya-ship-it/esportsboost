@@ -655,6 +655,234 @@ COACH_FOCUS = ["Laning", "Macro & rotations", "Champion pool", "VOD review"]
 # calendar replaces this list.
 COACH_SLOTS = ["Tonight, 20:00", "Tomorrow, 18:00", "Saturday, 15:00", "Sunday, 12:00"]
 
+# ── Accounts — the fifth product, and the only one that is not a service ───
+# A ready-made League account, delivered as credentials. It shares the shop, the
+# checkout and the orders store with the four boosting products and nothing else:
+# it does not touch the rank engine, the queue, the add-ons or the sitewide sale.
+# Its price is the flat figure in `price` and that is the whole formula, computed
+# identically in pricing.py (`service == "account"`) and app.js.
+#
+# ⚠ THE RISK ON THIS PRODUCT IS DIFFERENT IN KIND FROM BOOSTING, AND THE PAGE
+# HAS TO SAY SO. Boosting breaks Riot's terms; buying and selling an account
+# breaks a *specific* clause — an account is licensed to one person and is not
+# transferable — and the sanction is the account, not a suspension the buyer
+# rides out. Somebody who pays for a Diamond account and loses it has lost the
+# thing itself. ACCOUNT_DISCLAIMER is written to that, in the register
+# SAFETY["disclaimer"] set, and it is not to be softened: the whole argument of
+# the guarantee page is that this site states the checkable thing.
+#
+# ⚠ STOCK IS HAND-SET AND NOTHING DECREMENTS IT. There is no inventory store —
+# `stock=False` is an operator flag, edited here and rebuilt. So the page says
+# "In stock" / "Sold out" and deliberately never prints a COUNT: a number would
+# be false the moment two people buy the same listing on one build, and this
+# codebase's standing rule is that a figure on the page is one the system can
+# actually stand behind. A real listing store is the next thing to build (an
+# eighth store sibling of analytics/accounts/boosters/orders/carts/mystery/
+# guides, operator-write and public-read, exactly the shape boosters.py has).
+# Until it exists, fulfilment is manual: the webhook records the listing id and
+# an operator hands over one set of credentials from stock.
+#
+# ⚠ THE PRICES ARE A BUSINESS CALL, like the BUNDLES figures. They are whole USD,
+# hand-set, and deliberately carry NO struck "was" price: a reference price
+# nobody was ever charged is exactly what quote()'s discount rule exists to avoid
+# (see the comment on the sitewide sale in pricing.py). If accounts should go on
+# sale, the honest way is a real percentage off these figures, applied on both
+# sides of the mirror — not a bigger number printed beside them.
+ACCOUNT_GAME = "League of Legends"
+
+# Every listing ships with full email access. That is the one fact that decides
+# whether a bought account can be kept: without it the seller can recover the
+# account at any time, which is how most account-shop disputes start. If a batch
+# ever arrives without it, it does not go on this page — it is not the same
+# product and cannot carry the same warranty.
+ACCOUNT_ACCESS = "Full email access — you change the email and the password on delivery"
+
+# ⚠ AN OPS COMMITMENT, not a description. Every day of this is a day somebody has
+# to answer a replacement request. Same standing as SAFETY's measure notes and
+# GUARANTEE's refund windows: falsifiable by a single bad order. Confirm with ops
+# before launch, and if it cannot be held, cut the number rather than soften it.
+ACCOUNT_WARRANTY_DAYS = 7
+
+# The ToS admission. Verbatim, and not to be softened — see the block comment.
+ACCOUNT_DISCLAIMER = (
+    "Riot licenses an account to one person and does not permit it to be sold or "
+    "transferred. If they act on that, the sanction is the account itself, not a "
+    "suspension you sit out. We hand over full email access so the account is "
+    "genuinely yours to secure, and we replace it inside the warranty window — but "
+    "we will not tell you the risk is zero, because it isn't."
+)
+
+# What actually arrives, stated once and rendered on the page and in the order
+# mail, so the two cannot describe two different products.
+ACCOUNT_DELIVERY = [
+    ("envelope", False, "Credentials by email",
+     "Login, password and the recovery mailbox, sent to the address you check out with."),
+    ("clock", True, "Usually within the hour",
+     "Manually handed over and checked before it is sent. Not an automated drop."),
+    ("shield-check", True, "Replaced inside %d days" % ACCOUNT_WARRANTY_DAYS,
+     "If it is recovered or banned in the warranty window you get another of the same "
+     "rank, or the money back."),
+    ("eye-off", True, "Never resold",
+     "A listing leaves this page the moment it is sold. One buyer per account."),
+]
+
+# One entry per listing. `tier` is the filter key and must be one of
+# ACCOUNT_TIERS; `regions` must be a subset of the League ladder's own region
+# list, so an account can never advertise a shard the site does not sell on.
+# Both are asserted at import, below.
+#
+# `be` is blue essence, `champs` the champions owned. They are the two figures an
+# account buyer actually reads, which is why they are fields rather than prose.
+ACCOUNTS = [
+    dict(id="lol-unranked-40k", name="Level 30 · 40,000 BE", tier="Unranked",
+         rank="Unranked", level=30, be=40000, champs=0, price=27, stock=True,
+         regions=["North America", "Europe West", "EU Nordic & East", "Oceania"],
+         note="A clean level-30 with the essence to build a pool from scratch. "
+              "No ranked games played, so placements are yours."),
+    dict(id="lol-unranked-80k", name="Level 30 · 80,000 BE", tier="Unranked",
+         rank="Unranked", level=30, be=80000, champs=0, price=44, stock=True,
+         regions=["North America", "Europe West", "EU Nordic & East"],
+         note="The same account with roughly double the essence — enough for a "
+              "full role's worth of champions on day one."),
+    dict(id="lol-iron-silver", name="Iron to Silver ranked", tier="Iron–Silver",
+         rank="Silver IV–Iron IV", level=30, be=22000, champs=28, price=39, stock=True,
+         regions=["North America", "Europe West", "EU Nordic & East", "Oceania"],
+         note="Placed and played. The exact division inside the band depends on "
+              "what is in stock the day you order."),
+    dict(id="lol-gold", name="Gold ranked", tier="Gold",
+         rank="Gold IV–Gold I", level=30, be=26000, champs=34, price=62, stock=True,
+         regions=["North America", "Europe West", "EU Nordic & East", "Oceania"],
+         note="Last season's Gold, honour level 2 or above, no restrictions on "
+              "the account."),
+    dict(id="lol-platinum", name="Platinum ranked", tier="Platinum",
+         rank="Platinum IV–Platinum I", level=30, be=31000, champs=41, price=89, stock=True,
+         regions=["North America", "Europe West", "EU Nordic & East"],
+         note="Platinum with a played match history — it does not read as a "
+              "fresh account to anybody in your games."),
+    dict(id="lol-emerald", name="Emerald ranked", tier="Emerald",
+         rank="Emerald IV–Emerald I", level=30, be=35000, champs=52, price=139, stock=True,
+         regions=["North America", "Europe West"],
+         note="Emerald on a full champion pool. The smallest stock on the page, "
+              "so the shard list is short."),
+    dict(id="lol-diamond", name="Diamond ranked", tier="Diamond",
+         rank="Diamond IV–Diamond III", level=30, be=44000, champs=68, price=219, stock=True,
+         regions=["North America", "Europe West"],
+         note="Diamond, hand-played, with the match history behind it. Ships "
+              "with the honour level intact."),
+    # Left in with stock=False on purpose: the sold-out state is a real state
+    # this page has to render, and a card that only ever appears when it is
+    # gone is a state nobody checks. See the ⚠ on stock above.
+    dict(id="lol-diamond-high", name="Diamond II ranked", tier="Diamond",
+         rank="Diamond II–Diamond I", level=30, be=51000, champs=74, price=289, stock=False,
+         regions=["North America", "Europe West"],
+         note="The top of what we sell as a fixed listing. Anything above "
+              "Diamond I is quoted per account in Discord."),
+]
+
+# Filter chips, in ladder order. Derived from the listings rather than typed, so
+# a tier with nothing in it never renders a chip that returns an empty grid —
+# the rule the games catalogue's four chips already follow.
+ACCOUNT_TIER_ORDER = ["Unranked", "Iron–Silver", "Gold", "Platinum", "Emerald", "Diamond"]
+ACCOUNT_TIERS = [t for t in ACCOUNT_TIER_ORDER
+                 if any(a["tier"] == t for a in ACCOUNTS)]
+
+_ACCOUNT_BY_ID = {a["id"]: a for a in ACCOUNTS}
+
+
+def account(aid):
+    """One listing by id, or None. The one lookup — pricing.py, payments.py and
+    build.py all read the catalogue through it."""
+    return _ACCOUNT_BY_ID.get(str(aid or "").strip())
+
+
+def accounts_in_stock():
+    return [a for a in ACCOUNTS if a["stock"]]
+
+
+def account_regions():
+    """Every shard any in-stock listing ships on, in the ladder's own order."""
+    lol = next((g for g in GAMES if g["name"] == ACCOUNT_GAME), None)
+    order = list(lol["regions"]) if lol else []
+    have = {r for a in accounts_in_stock() for r in a["regions"]}
+    return [r for r in order if r in have]
+
+
+def account_floor():
+    """The cheapest listing that can actually be bought — what the page and the
+    nav quote as "from $NN". Reads stock, so a sold-out cheap listing can never
+    advertise a price nobody can pay."""
+    live = accounts_in_stock()
+    return min((a["price"] for a in live), default=0)
+
+
+def account_ships_to(a, region):
+    """Whether a listing covers a shard. An empty region means "no preference"
+    and matches everything — the page's own All chip."""
+    return not region or region in a["regions"]
+
+
+# The catalogue has to describe something the shop actually sells, so both the
+# game and every shard are checked against the ladder at import — the same rule
+# WR_FLOOR follows. A listing naming a shard League is not sold on would render
+# a region chip that quotes a server no booster covers.
+assert any(g["name"] == ACCOUNT_GAME for g in GAMES), \
+    "ACCOUNT_GAME must name a game in GAMES"
+_ACC_REGIONS = set(next(g for g in GAMES if g["name"] == ACCOUNT_GAME)["regions"])
+for _a in ACCOUNTS:
+    assert _a["tier"] in ACCOUNT_TIER_ORDER, "unknown account tier: %s" % _a["tier"]
+    assert _a["regions"], "account %s ships nowhere" % _a["id"]
+    assert set(_a["regions"]) <= _ACC_REGIONS, \
+        "account %s names a shard %s is not sold on" % (_a["id"], ACCOUNT_GAME)
+    assert int(_a["price"]) == _a["price"] and _a["price"] > 0, \
+        "account %s needs a whole-dollar price" % _a["id"]
+assert len(_ACCOUNT_BY_ID) == len(ACCOUNTS), "duplicate account id"
+
+
+# The accounts FAQ. ⚠ THE IDS ARE A PUBLIC CONTRACT, like GUARANTEE["faq"]'s:
+# support links people at `/accounts.html#faq-<id>`, so renaming one breaks the
+# links in old tickets.
+#
+# Three of these contradict the sale on purpose, and they are why the page is
+# credible: the ToS answer, the "you do not pick the division" answer, and the
+# one that sends a buyer to a boost instead when a boost is the better purchase.
+# Removing them is the single easiest way to make this page worthless.
+ACCOUNT_FAQ = [
+    ("tos", "Is buying an account against Riot's rules?",
+     "Yes. An account is licensed to one person and Riot does not permit it to be sold or "
+     "transferred. If they act on it, the account goes — that is a different outcome from "
+     "a boosting suspension, and it is the reason the warranty below exists. Anyone "
+     "telling you this is risk-free is selling you something."),
+    ("access", "Do I actually own it, or can you take it back?",
+     "Every listing ships with full email access. You change the recovery mailbox and the "
+     "password on delivery and we no longer hold anything that reaches it. We do not sell "
+     "accounts we cannot hand over completely — an account without its email is a rental "
+     "somebody else can end."),
+    ("warranty", "What happens if it is banned or recovered?",
+     "Inside {days} days of delivery you get another account of the same rank, or the money "
+     "back, your choice. After that window we cannot tell a recovery from a chargeback, so "
+     "the warranty ends — that is the honest limit of it, and it is why the window is "
+     "stated rather than implied."),
+    ("division", "Can I pick the exact division?",
+     "No. A listing names a band — Gold IV to Gold I — and you get what is in stock the day "
+     "you order, inside that band. We do not know which one it will be when you buy, so we "
+     "do not print a division we might not have."),
+    ("speed", "How fast is delivery?",
+     "Usually inside the hour, in the working day. Each handover is done by a person who "
+     "checks the account first, so it is not instant and we do not claim it is — an "
+     "automated drop is how buyers end up with an account somebody already logged into."),
+    # The answer that argues against the sale. It stays.
+    ("or-boost", "Should I buy an account or a boost?",
+     "If you want to keep your own name, your skins and your match history, buy the boost — "
+     "it is the same rank on the account you already play. An account makes sense when you "
+     "want a second one to queue on, or a clean shard to start on. If you are choosing "
+     "between them on price alone, the boost is usually the better purchase."),
+    ("region", "Can I play it from another country?",
+     "The shard is fixed — an EUW account stays on EUW — but nothing stops you playing it "
+     "from anywhere. Riot does not sell shard transfers between the regions on this page, "
+     "so pick the one your friends are on."),
+]
+
+
 # ── Bundles — one-click popular climbs ─────────────────────────────────────
 # Each entry is a (from-tier, to-tier) pair naming a common two-tier jump.
 # Clicking a card configures that exact climb (from-tier IV → to-tier IV) on the

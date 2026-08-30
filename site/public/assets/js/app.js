@@ -170,6 +170,13 @@
     // topics to work on; `slot` is the first-session time. Priced only off coach
     // rate × pack, so these never enter the rank engine.
     coach: 0, pack: 1, focus: [0], slot: (D.coachSlots && D.coachSlots[0]) || "",
+    // The account listing an order names (an id in D.accounts), set only by the
+    // accounts page's Buy button. It is the WHOLE product on service ===
+    // "account": no rank, no queue, no add-ons, no sale — see quote(). Empty on
+    // every other service, and quote() refuses to price an account order that
+    // does not name a live listing rather than falling back to one, because a
+    // fallback here would charge for an account nobody chose.
+    account: "",
     // A named booster, arriving from a roster Hire or a profile CTA. It is an
     // order attribute, never a price input: pricing.py charges no fee for it,
     // so quote() must not read it. If naming a booster ever costs money it
@@ -315,6 +322,11 @@
       // both the mode split and the picks add-on going free.
       s.addons = addonsFor(s.addons, s.mode);
       if (!s.slot) s.slot = (D.coachSlots && D.coachSlots[0]) || "";
+      /* A listing that has been re-priced out of the catalogue, or sold out
+         since the order was stored. Cleared rather than substituted: quote()
+         then refuses the order instead of quietly charging for a different
+         account, which is the one failure this product must not have. */
+      if (s.account && !(D.accounts || {})[s.account]) s.account = "";
       // Grid caps at five now; migrate a stored 6–20 from the old stepper.
       s.wins = Math.max(1, Math.min(5, s.wins | 0));
       s.placements = Math.max(1, Math.min(5, s.placements | 0));
@@ -743,6 +755,45 @@
     var factor = D.factors[s.game] || 1;
     var duo = s.mode === "Duo queue" ? 1.55 : 1;
     var base = 0, days = 0, summary = "", invalid = false;
+
+    /* Accounts — the one product that is not a service. The price is the
+       listing's flat figure and that is the entire formula: no ladder, no duo,
+       no add-ons and no sitewide sale, for the reason pricing.py's branch
+       states (an account has a real acquisition cost behind it, so a percentage
+       off it is margin, not a discount on labour). There is deliberately no
+       `wasPrice` — a reference price nobody was ever charged is not a saving.
+       Mirrors pricing.py's `service == "account"` branch. */
+    if (s.service === "account") {
+      var accs = D.accounts || {};
+      var acc = accs[s.account];
+      /* Unknown or sold out both refuse, and both have to: stock is hand-set in
+         data.py and nothing decrements it, so this and pricing.account_pick()
+         are the only two places a listing that is gone can be stopped. The
+         client's refusal is only the UI — the server makes the same call. */
+      if (!acc || !acc.stock) {
+        return {
+          invalid: true, price: "—", eta: "—", total: 0,
+          summary: T("That account is no longer available"),
+          base: 0, addons: 0, days: 0,
+          subtotal: 0, discount: 0, wasPrice: "", discountPrice: "",
+          promoCode: "", promoLabel: "", promoEnds: ""
+        };
+      }
+      // The shard is clamped into the listing's own list, never trusted —
+      // mirrors account_pick(). A region carried over from a boost on a shard
+      // this listing does not ship on would otherwise reach checkout.
+      var aReg = (acc.regions || []).indexOf(s.region) >= 0
+        ? s.region : (acc.regions || [])[0] || "";
+      var aTotal = acc.price;
+      return {
+        invalid: false, total: aTotal, base: aTotal, addons: 0,
+        subtotal: aTotal, discount: 0,
+        price: usd(aTotal), wasPrice: "", discountPrice: "",
+        promoCode: "", promoLabel: "", promoEnds: "",
+        summary: acc.name + " · " + aReg,
+        days: 0, eta: T(D.accountEta || "Within the hour")
+      };
+    }
 
     /* Coaching — the booking product. Priced off the coach's rate and the hour
        pack only; the rank engine, duo, add-ons and the sitewide promo never
@@ -1391,6 +1442,10 @@
            buyer started. Both cards now draw the pair as mark + [data-tiername]
            and take the mode from [data-out="mode"], so the row is markup and
            the unit services read [data-sum="summary"] directly. */
+        /* The listing's own name, for the Account row. `summary` carries the
+           shard too, which is what the row actually prints — this is here so a
+           surface that wants the name alone does not have to split a string. */
+        account: ((D.accounts || {})[state.account] || {}).name || "",
         addonlist: (state.addons || []).map(function (id) {
           var a = addonById(id);
           return a ? T(addonLabel(a)) : id;
@@ -1416,7 +1471,12 @@
        nothing the visitor bought, and re-quoting their ranks as a boost to fill
        it would invent a price they were never shown. */
     if (FCB) {
-      var back = HYDRATED && !q.invalid && state.service !== "coaching";
+      /* Neither booking nor account is read back. "Your climb starts at €62"
+         over a card whose Climb row names a Gold account describes nothing that
+         was bought, and re-quoting the stored ranks as a boost to fill it would
+         invent a price the visitor was never shown. */
+      var back = HYDRATED && !q.invalid
+        && state.service !== "coaching" && state.service !== "account";
       each("[data-fc-when]", function (el) {
         el.hidden = (el.getAttribute("data-fc-when") === "order") !== back;
       });
@@ -2066,6 +2126,11 @@
     initProfile();
     initReviews();
     initCatalog();
+    initAccounts();
+    // Hydrates its own paint (esbHydrate calls render), so it does not have to
+    // beat the render() above — but it must run before the first user input, or
+    // an edit on checkout would be made against the wrong order.
+    accountFromQuery();
     initGuides();
     // The mystery discount. `mydBoot()` runs on EVERY page — a token applied on
     // a game page has to be in the price at checkout too, and checkout has no
@@ -3240,6 +3305,188 @@
      newest-row styling keys off :first-child, so a live feed only has to
      insert the row. */
   var feedTimer = null;
+
+  /* ── the accounts board (/accounts.html) ────────────────────────────────
+     Ready-made League accounts: a flat-priced listing, a shard, and a handover.
+     It is the fifth product and the only one that is not a service, so it gets
+     none of the configurator — there is nothing to configure. The page is a
+     filtered grid and each card's CTA is a real link into checkout.
+
+     Everything is SERVER-RENDERED, including every price, and this only hides
+     and re-links: the page is correct with no JS, legible to a crawler, and the
+     prices follow the currency switcher through the ordinary .money spans.
+     Same trade the games catalogue, the roster board and the reviews feed make.
+
+     `data-ac-*` is the whole contract — see CLAUDE.md. The filter reads only
+     `data-ac-tier` / `data-ac-regions` off each row, so a board served from a
+     listing store later keeps working unchanged. */
+  function initAccounts() {
+    var grid = document.querySelector("[data-ac-grid]");
+    if (!grid) return;
+    var cards = [].slice.call(grid.querySelectorAll("[data-ac-card]"));
+    if (!cards.length) return;
+    var shown = [].slice.call(document.querySelectorAll("[data-ac-shown]"));
+    var empty = document.querySelector("[data-ac-empty]");
+    var foot = document.querySelector("[data-ac-foot]");
+    var emptyTier = document.querySelector("[data-ac-empty-tier]");
+    var emptyRegion = document.querySelector("[data-ac-empty-region]");
+    // "" is "any shard" — the region control's own All. The tier chips carry
+    // "all" for the same reason; both are reset targets, never a fourth state.
+    var st = { tier: "all", region: "" };
+
+    function shardsOf(el) {
+      // "|" rather than "," — two shard names on this ladder carry an
+      // ampersand and a space ("EU Nordic & East") and one day one will carry
+      // a comma. The separator has to be a character a region name cannot hold.
+      return (el.getAttribute("data-ac-regions") || "").split("|");
+    }
+
+    function matches(el) {
+      if (st.tier !== "all" && el.getAttribute("data-ac-tier") !== st.tier) return false;
+      return !st.region || shardsOf(el).indexOf(st.region) >= 0;
+    }
+
+    /* The shard a listing would actually be BOUGHT on: the filtered one when it
+       ships there, else its own first. Mirrors pricing.account_pick()'s clamp
+       and quote()'s, so the href, the price on the card and the amount the
+       server charges cannot name three different shards. */
+    function shardFor(el) {
+      var list = shardsOf(el);
+      return list.indexOf(st.region) >= 0 ? st.region : (list[0] || "");
+    }
+
+    function draw() {
+      var hits = 0;
+      cards.forEach(function (el) {
+        var on = matches(el);
+        el.hidden = !on;
+        if (!on) return;
+        hits++;
+        // The CTA is a real link, so the shard has to ride in it: a visitor who
+        // filtered to EUW and then middle-clicked Buy must not land on a
+        // checkout quoting North America.
+        var a = el.querySelector("[data-ac-buy]");
+        if (a && a.tagName === "A") {
+          a.href = "/checkout.html?account=" + encodeURIComponent(a.getAttribute("data-ac-buy"))
+            + "&region=" + encodeURIComponent(shardFor(el));
+        }
+      });
+      shown.forEach(function (el) { el.textContent = hits; });
+      /* The empty state is required, not optional: tier × shard genuinely
+         returns nothing (Emerald is not stocked on Oceania today), and a grid
+         that silently collapses reads as a broken page. It names both halves of
+         what was asked for, so the visitor can see which one to loosen. */
+      if (empty) {
+        empty.hidden = hits > 0;
+        if (emptyTier) emptyTier.textContent = st.tier === "all" ? "" : st.tier;
+        if (emptyRegion) emptyRegion.textContent = st.region || "";
+      }
+      /* The footer's reset and the empty state's are the same control, so only
+         one of them is ever on screen — two "Show everything" buttons 40px
+         apart read as a rendering fault, not as a choice. */
+      if (foot) foot.hidden = (st.tier === "all" && !st.region) || !hits;
+    }
+
+    function mark(attr, value) {
+      each("[data-" + attr + "]", function (btn) {
+        var on = btn.getAttribute("data-" + attr) === value;
+        btn.classList.toggle("is-on", on);
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
+
+    function set(key, value) {
+      st[key] = value;
+      if (key === "tier") mark("ac-tier", value);
+      if (key === "region") {
+        var sel = document.querySelector("[data-ac-regionsel]");
+        if (sel && sel.value !== value) sel.value = value;
+      }
+      draw();
+    }
+
+    each("[data-ac-tier]", function (btn) {
+      btn.addEventListener("click", function () { set("tier", btn.getAttribute("data-ac-tier")); });
+    });
+    each("[data-ac-regionsel]", function (sel) {
+      sel.addEventListener("change", function () { set("region", sel.value); });
+    });
+    var reset = document.querySelector("[data-ac-reset]");
+    if (reset) reset.addEventListener("click", function () {
+      set("region", "");
+      var all = document.querySelector('[data-ac-tier="all"]');
+      if (all) all.click(); else set("tier", "all");
+      grid.scrollIntoView({ block: "start" });
+    });
+
+    /* Buy. The link already carries the order in its query and checkout
+       hydrates from it, so this only does the two things a plain navigation
+       cannot: commit the snapshot (so the flow is identical to every other
+       [data-continue] on the site) and fire begin_checkout BEFORE the
+       navigation, which is the CRO audit's own requirement. */
+    each("[data-ac-buy]", function (a) {
+      a.addEventListener("click", function (e) {
+        var id = a.getAttribute("data-ac-buy");
+        var card = a.closest ? a.closest("[data-ac-card]") : null;
+        var acc = (D.accounts || {})[id];
+        if (!acc || !acc.stock) { e.preventDefault(); return; }
+        var order = accountOrder(id, card ? shardFor(card) : "");
+        var q = quote(order);
+        if (q.invalid) { e.preventDefault(); return; }
+        try { localStorage.setItem(CHECKOUT_KEY, JSON.stringify(order)); } catch (e2) {}
+        track("begin_checkout", {
+          currency: "USD", value: q.total,
+          items: [{ item_id: id, item_name: acc.name, item_category: "account",
+                    item_variant: order.region, price: q.total, quantity: 1 }]
+        });
+      });
+    });
+
+    draw();
+  }
+
+  /* One order object for an account listing, built from DEFAULT so every field
+     the checkout re-quote reads is present. The ranks it inherits are inert —
+     quote() returns before the ladder on this service, and build_session()
+     blanks metadata[from]/[to] so a climb nobody bought cannot reach the board. */
+  function accountOrder(id, region) {
+    var acc = (D.accounts || {})[id] || {};
+    var list = acc.regions || [];
+    return Object.assign({}, DEFAULT, {
+      game: D.accountGame || DEFAULT.game,
+      service: "account", account: id,
+      region: list.indexOf(region) >= 0 ? region : (list[0] || ""),
+      // An account carries none of these, and a stale one riding in from the
+      // shared record would show on the checkout summary as something bought.
+      addons: [], promo: "", bundle: null, booster: "",
+      savedAt: Date.now()
+    });
+  }
+
+  /* Checkout arriving from an account card: ?account=<id>&region=<shard>.
+     The query is untrusted and is never believed — it names a listing, and
+     quote() (here) and pricing.account_pick() (on the server, which computes
+     the actual charge) both refuse an id that is unknown or sold out. It is
+     read on checkout only; the markers are stripped so a refresh cannot
+     re-hydrate over an order the buyer has since changed. */
+  function accountFromQuery() {
+    if (CFG) return;                       // never on a page that configures
+    var m = /[?&]account=([^&]+)/.exec(location.search);
+    if (!m) return;
+    var id = decodeURIComponent(m[1]);
+    if (!(D.accounts || {})[id]) return;
+    var r = /[?&]region=([^&]*)/.exec(location.search);
+    var order = accountOrder(id, r ? decodeURIComponent(r[1].replace(/\+/g, " ")) : "");
+    if (quote(order).invalid) return;
+    if (window.esbHydrate) window.esbHydrate(order);
+    try {
+      var q = new URLSearchParams(location.search);
+      q.delete("account"); q.delete("region");
+      var rest = q.toString();
+      history.replaceState(null, "", location.pathname
+        + (rest ? "?" + rest : "") + location.hash);
+    } catch (e) {}
+  }
 
   function initFeed() {
     // Re-entrant: initBoosters() re-renders the feed from /api/boosters and calls

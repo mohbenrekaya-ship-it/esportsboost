@@ -88,7 +88,7 @@ def clean_order(row):
         return None
 
     service = _s(row.get("service"), 16) or "division"
-    if service not in ("division", "wins", "placements", "coaching"):
+    if service not in ("division", "wins", "placements", "coaching", "account"):
         service = "division"
 
     status = _s(row.get("status"), 16) or "paid"
@@ -135,6 +135,13 @@ def clean_order(row):
     elif service == "coaching":
         out["coach"] = _s(row.get("coach"), 40)
         out["hours"] = max(1, _int(row.get("hours"), 1))
+    elif service == "account":
+        # WHICH listing was sold. The id is what fulfilment acts on; the name is
+        # kept beside it because a listing can be re-priced or retired from
+        # data.py and a row that can no longer resolve its own id would then
+        # describe nothing at all. A receipt is a record, not a live lookup.
+        out["account"] = _s(row.get("account"), 40)
+        out["account_name"] = _s(row.get("account_name"), 60)
 
     if row.get("syn") in (1, True):
         out["syn"] = 1
@@ -339,6 +346,11 @@ def _climb_summary(row):
     """One human line for the order's product — the same shape the checkout and
     the closing band draw, so an operator reads it the way the buyer saw it."""
     svc = row.get("service")
+    if svc == "account":
+        # The listing's own name, which is the whole product — there is no climb
+        # and no unit count to summarise. Falls back to the id for a row written
+        # before the name was stored.
+        return row.get("account_name") or row.get("account") or "Account"
     if svc == "coaching":
         h = _int(row.get("hours"), 1)
         return "%d hour%s coaching%s" % (h, "" if h == 1 else "s",
@@ -373,6 +385,9 @@ def _order_state(row):
         st["from"], st["placements"] = row.get("from_rank"), _int(row.get("units"), 1)
         if row.get("unranked"):
             st["unranked"] = True
+    elif svc == "account":
+        st["account"] = row.get("account")
+        st["region"] = row.get("region")
     elif svc == "coaching":
         st["coach"] = 0
         # map stored coach name/hours back to indices for the quote
@@ -504,6 +519,11 @@ def detail(order_id):
         "unranked": 1 if row.get("unranked") else 0,
         "coach": row.get("coach", ""),
         "hours": _int(row.get("hours")) or None,
+        # WHICH listing was sold. The drill-down is where an operator finds out
+        # what to hand over, and unlike a boost there is no climb and no amount
+        # to infer it from — two listings can share a price.
+        "account": row.get("account", ""),
+        "account_name": row.get("account_name", ""),
         "mode": row.get("mode", ""),
         "region": row.get("region", ""),
         "country": row.get("country", ""),

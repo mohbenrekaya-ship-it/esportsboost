@@ -134,7 +134,10 @@ def build_session(order, base_url):
     named = str(order.get("booster") or "").strip()
     booster = named if any(b["handle"] == named for b in D.BOOSTERS) else ""
     order_id = new_order_id()
-    name = "%s boost" % game
+    # What Stripe prints on its own page. An account is not a boost and must
+    # not be described as one there: it is the one screen between the summary
+    # and the card, and it is the last chance to say what is being bought.
+    name = "%s account" % game if service == "account" else "%s boost" % game
     # What the customer sees on the Stripe page: the climb (from → to) and the
     # mode (Solo/Duo) from q["summary"], plus the named booster when they chose
     # one. Region, promo and the rest still ride in metadata for fulfilment.
@@ -169,9 +172,14 @@ def build_session(order, base_url):
         # whose summary has no arrow, so those orders reached the board with no
         # starting rank on them. The parse survives in order_row() as the
         # fallback for a Session created before these keys existed.
-        "metadata[from]": str(order.get("from") or "")[:60],
-        "metadata[to]": str(order.get("to") or "")[:60],
-        "metadata[mode]": str(order.get("mode") or "")[:20],
+        # Blank on a product with no climb. The checkout body carries whatever
+        # ranks the shared per-game record was holding, and an account order
+        # would otherwise reach fulfilment stamped with a climb nobody bought —
+        # clean_order() drops them for that service, but the raw Stripe metadata
+        # is read by a human too.
+        "metadata[from]": "" if service == "account" else str(order.get("from") or "")[:60],
+        "metadata[to]": "" if service == "account" else str(order.get("to") or "")[:60],
+        "metadata[mode]": "" if service == "account" else str(order.get("mode") or "")[:20],
         "metadata[region]": region,
         "metadata[booster]": booster,
         "metadata[hours]": (order.get("hours") or "")[:490],
@@ -182,7 +190,13 @@ def build_session(order, base_url):
         # moves no money and would otherwise reach the board with nothing
         # recording that it was asked for. It is an obligation on whoever
         # claims the order, so it has to travel with the order.
-        "metadata[addons]": ",".join(
+        # …and only on a product that HAS add-ons. quote() returns before the
+        # add-on block on coaching and accounts, so nothing there is charged for
+        # — while the body still carries whatever the shared record was holding,
+        # which is how a booking or an account reached the board listing a paid
+        # option that never moved a cent. The rule this file already states from
+        # the other side: the row must name what was charged, no more than that.
+        "metadata[addons]": "" if service in ("coaching", "account") else ",".join(
             a for a in (order.get("addons") or [])
             # Filtered by queue with the same call quote() makes, so the
             # metadata can never name the other queue's option — fulfilment
@@ -208,6 +222,15 @@ def build_session(order, base_url):
         params["metadata[units]"] = str(pricing.unit_count(order))
         if service == "placements" and order.get("unranked"):
             params["metadata[unranked]"] = "1"
+    elif service == "account":
+        # The listing id, resolved through pricing's own lookup — the same call
+        # quote() made to price it, so the row can only ever name the account
+        # that was charged for. `region` above is the CLAMPED shard for the same
+        # reason: fulfilment hands over one set of credentials on one shard.
+        acc, shard = pricing.account_pick(order)
+        params["metadata[account]"] = (acc or {}).get("id", "")
+        params["metadata[account_name]"] = (acc or {}).get("name", "")[:60]
+        params["metadata[region]"] = shard
     elif service == "coaching":
         coach, pack = pricing.coach_pick(order)
         params["metadata[coach]"] = coach["name"][:60]
@@ -486,6 +509,13 @@ def order_row(md, obj):
     elif service == "coaching":
         row["coach"] = md.get("coach", "")
         row["hours"] = md.get("coach_hours")
+    elif service == "account":
+        # WHICH listing. Without it the row says "an account, $62" and the
+        # operator has to guess which one to hand over — the same class of gap
+        # the missing unit count left, and worse here, because there is no
+        # amount to infer it from once two listings share a price.
+        row["account"] = md.get("account", "")
+        row["account_name"] = md.get("account_name", "")
     return row
 
 
