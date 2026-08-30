@@ -291,7 +291,11 @@ def test_copy_claims_no_odds():
     top of the advertised deck must equal what is actually paid."""
     sys.path.insert(0, ROOT)
     import build                                     # noqa: E402
-    html = build.mystery_modal()
+    # _myd_markup(), not mystery_modal(): the card is switched OFF on the live
+    # site (build.MYSTERY_MODAL_ENABLED), so mystery_modal() returns "" and
+    # every check below would pass vacuously. The copy rules have to hold for
+    # the markup that ships the moment somebody flips it back on.
+    html = build._myd_markup()
     lowered = html.lower()
     for phrase in ("1 in 3", "chance", "you got lucky", "was the best one",
                    "odds", "randomly", "lucky", "first order"):
@@ -310,6 +314,27 @@ def test_copy_claims_no_odds():
           "the deck tops out at exactly what is paid (%d%%)" % top)
     check(len(set(build.MYD_DECK)) == 3, "and names three distinct values")
     check(("%d%%" % top) in lowered, "which the copy actually prints")
+
+
+def test_the_switch_is_what_decides_whether_a_game_page_carries_the_card():
+    """MYSTERY_MODAL_ENABLED is the only thing between the markup and the page.
+
+    A card that is off must leave NO root behind: initMystery() finds its root
+    with a bare `[data-myd]` query, so a modal emitted-but-hidden would still
+    arm the whole flow. And a card that is on must actually mount one — the
+    switch is meant to be flipped back, and a broken re-enable is silent."""
+    sys.path.insert(0, ROOT)
+    import build                                     # noqa: E402
+
+    real = build.MYSTERY_MODAL_ENABLED
+    try:
+        build.MYSTERY_MODAL_ENABLED = False
+        check(build.mystery_modal() == "", "off emits nothing at all")
+
+        build.MYSTERY_MODAL_ENABLED = True
+        check("data-myd" in build.mystery_modal(), "on mounts the root app.js looks for")
+    finally:
+        build.MYSTERY_MODAL_ENABLED = real
 
 
 # ── the follow-up: one second mail, at a better rate ───────────────────────
@@ -948,8 +973,15 @@ def test_followup_currency():
 
 
 def test_per_hour_claim_is_dropped_when_it_argues_against_the_order():
-    """A long climb prices at $7–24/hour even at 35% off. The block ships only
-    while the figure helps — the same mechanism gc_faq_items() uses."""
+    """The dearest climbs price at $6–19/hour even at 35% off. The block ships
+    only while the figure helps — the same mechanism gc_faq_items() uses.
+
+    ⚠ The long fixture is the FULL ladder (Iron IV → Master), not Iron IV →
+    Diamond IV: the 21% price cut took the latter to $5.58/hour, under the
+    ceiling, so it stopped exercising the drop at all. A figure in a test goes
+    stale on a re-price exactly the way a figure in the dictionary does — if
+    this fails after another one, check whether the fixture still clears
+    PER_HOUR_MAX before changing anything else."""
     reset()
     short = _lapsed("short@x.com", **{"from": "Gold IV", "to": "Platinum II"})
     _n, off = followup.price_pair(short)
@@ -959,7 +991,7 @@ def test_per_hour_claim_is_dropped_when_it_argues_against_the_order():
           "and only because the figure is under the ceiling")
 
     reset()
-    long_ = _lapsed("long@x.com", **{"from": "Iron IV", "to": "Diamond IV"})
+    long_ = _lapsed("long@x.com", **{"from": "Iron IV", "to": "Master"})
     _n2, off2 = followup.price_pair(long_)
     h2, r2 = followup.hourly(off2, "usd")
     check(pricing.per_hour(off2["total"], off2["days"])[1] > pricing.PER_HOUR_MAX,
@@ -1088,7 +1120,9 @@ def main():
                test_process_checkout_strips_the_forged_fields,
                test_token_is_single_use, test_token_expires, test_resolve_endpoint,
                test_never_stacks_and_never_worsens, test_price_pair_is_recomputed_not_stored,
-               test_copy_claims_no_odds, test_summary):
+               test_copy_claims_no_odds,
+               test_the_switch_is_what_decides_whether_a_game_page_carries_the_card,
+               test_summary):
         print("\n" + fn.__name__)
         fn()
     for path in (_TMP.name, _TMPG.name):

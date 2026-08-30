@@ -1044,7 +1044,7 @@ trust · 04 FAQ · close.
   it used to be a fraction, and `gc_faq_items()` was left reading it as one, so the page published
   "bundle climbs at **1500% to 30500%** off" as copy *and* asserted it verbatim in the FAQPage
   JSON-LD. The reduction comes from `pricing.bundle_pct()`, the same call the strip's own `−N%` pill
-  makes, so the answer and the nine game pages state one number (19–38% today).
+  makes, so the answer and the nine game pages state one number (19–37% today).
 - **Breakpoints follow the site's 1200/1000/760**, not the handoff's 1280/1024/768: 1200 takes the
   services to two columns and narrows the rail; 1000 is two card columns, the head stacked and the
   FAQ column unsticky; 760 is the whole phone pattern (one card per row, chip rail, native sort,
@@ -2217,6 +2217,17 @@ checkout email typed ─┴─► POST /api/cart ─► carts store ─┤
 
 ## The mystery discount — `mystery.py` + the modal on every game page
 
+⚠ **THE MODAL IS SWITCHED OFF.** `MYSTERY_MODAL_ENABLED` in build.py is `False`, so
+`mystery_modal()` returns nothing, no game page mounts `[data-myd]`, and `initMystery()` finds no
+root and returns. No new cards are issued. **Everything else in this section still describes live
+code** and is deliberately untouched: `mydBoot()` still runs on every page and `/api/bingo?token=`
+still resolves, so a code already in somebody's inbox works for the hour it was sold with — killing
+the offer must not strand a discount already promised. The store, the mail sequence
+(`BINGO_FOLLOWUP_ENABLED`, its own switch) and the /ops Mystery tab are unchanged; with nothing new
+captured the rows drain on their own past `BINGO_FOLLOWUP_MAX_AGE`. Flipping the flag back is the
+whole re-enable — `_myd_markup()` is split out from `mystery_modal()` so
+`test_copy_claims_no_odds` keeps holding the copy honest while the card is dark.
+
 `design_handoff_mystery_discount`. Eight seconds after a visitor settles their **target rank** on a
 game page, a modal offers a sealed "mystery discount"; an email buys the right to open it; the reveal
 shows a 30% code and applying it hands them back to their order with the total already discounted. It
@@ -2459,9 +2470,9 @@ replaced in the same five minutes.
 - ⚠ **The per-hour claim is dropped when it does not argue for the order.** `pricing.play_hours()` is
   `days × PLAY_HOURS_PER_DAY`, **bounded by the ETA** rather than computed beside it — the ETA is the
   promise on the page and a missed one costs a 15% credit, so an hours figure implying more play than
-  it allows would contradict the guarantee page. A long climb still prices at $7–24/hour even at 35%,
+  it allows would contradict the guarantee page. The dearest climbs still price at $6–19/hour even at 35%,
   and `per_hour_worth_saying()` (`PER_HOUR_MAX`, $6) drops the whole block rather than printing a
-  figure that argues against the sale. 92% of catalogue climbs come in under it. Same mechanism as
+  figure that argues against the sale. 94% of catalogue climbs come in under it. Same mechanism as
   `gc_faq_items()`'s "the larger of the two" clause: the claim ships only while it is true.
   **`PLAY_HOURS_PER_DAY` is an ops commitment, not a measurement** — the mail divides by it, so a
   value set too high understates the rate and the claim stops being true. Confirm 8 with ops the way

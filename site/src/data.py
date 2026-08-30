@@ -99,8 +99,8 @@ def company_registration():
     return "Registered in %s, company number %s" % (c["registry"], c["number"])
 
 
-PER_DIVISION = 29.9  # per-win / per-placement base; belongs in server-side pricing config
-PER_STEP = 8.05      # per single division rung on the ladder (see subdivide() below)
+PER_DIVISION = 23.62  # per-win / per-placement base; belongs in server-side pricing config
+PER_STEP = 6.36       # per single division rung on the ladder (see subdivide() below)
 
 
 class Ladder(list):
@@ -168,18 +168,18 @@ GAMES = [
                           "Diamond", "Master"],
                          ["IV", "III", "II", "I"],
                          apex=("Master",)),
-        prices={"Iron": 6.9, "Bronze": 9.2, "Silver": 10.35, "Gold": 13.8,
-                "Platinum": 21.85, "Emerald": 34.5, "Diamond": 55.2, "Master": 69},
+        prices={"Iron": 5.45, "Bronze": 7.27, "Silver": 8.18, "Gold": 10.9,
+                "Platinum": 17.26, "Emerald": 27.26, "Diamond": 43.61, "Master": 54.51},
         # Per-tier price of one net win (flat within a tier), keyed on the rank
         # the player is currently at. Present → the wins service prices off this
         # table instead of the shared per/climb formula, the same way `prices`
         # overrides the division formula. Mirrored in app.js as winPrices.
-        win_prices={"Iron": 3.45, "Bronze": 3.45, "Silver": 4.6, "Gold": 5.75,
-                    "Platinum": 9.2, "Emerald": 14.95, "Diamond": 23, "Master": 46},
+        win_prices={"Iron": 2.73, "Bronze": 2.73, "Silver": 3.63, "Gold": 4.54,
+                    "Platinum": 7.27, "Emerald": 11.81, "Diamond": 18.17, "Master": 36.34},
         # Per-tier price of one placement game, same shape as win_prices. Unranked
         # has no rank to read, so it prices at the ladder floor (Iron → 3).
-        placement_prices={"Iron": 3.45, "Bronze": 3.45, "Silver": 4.6, "Gold": 5.75,
-                          "Platinum": 9.2, "Emerald": 14.95, "Diamond": 23, "Master": 46},
+        placement_prices={"Iron": 2.73, "Bronze": 2.73, "Silver": 3.63, "Gold": 4.54,
+                          "Platinum": 7.27, "Emerald": 11.81, "Diamond": 18.17, "Master": 36.34},
         services="Elo boost · placements · net wins · duo · coaching",
         regions=["North America", "Europe West", "EU Nordic & East", "Oceania"],
         blurb="Solo/duo and flex, across NA and EU. Your booster plays your account inside your "
@@ -201,14 +201,14 @@ GAMES = [
         ladder=subdivide(["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond",
                           "Ascendant", "Immortal"],
                          ["1", "2", "3"], apex=("Immortal",)),
-        prices={"Iron": 4.6, "Bronze": 4.6, "Silver": 5.75, "Gold": 8.05,
-                "Platinum": 10.35, "Diamond": 20.7, "Ascendant": 40.25, "Immortal": 115},
+        prices={"Iron": 3.63, "Bronze": 3.63, "Silver": 4.54, "Gold": 6.36,
+                "Platinum": 8.18, "Diamond": 16.35, "Ascendant": 31.8, "Immortal": 90.85},
         # Per-tier price of one net win (flat within a tier), same shape as LoL's.
-        win_prices={"Iron": 3.45, "Bronze": 3.45, "Silver": 4.6, "Gold": 5.75,
-                    "Platinum": 6.9, "Diamond": 11.5, "Ascendant": 17.25, "Immortal": 25.3},
+        win_prices={"Iron": 2.73, "Bronze": 2.73, "Silver": 3.63, "Gold": 4.54,
+                    "Platinum": 5.45, "Diamond": 9.09, "Ascendant": 13.63, "Immortal": 19.99},
         # Placements share the win table; unranked prices at the floor (Iron → 3).
-        placement_prices={"Iron": 3.45, "Bronze": 3.45, "Silver": 4.6, "Gold": 5.75,
-                          "Platinum": 6.9, "Diamond": 11.5, "Ascendant": 17.25, "Immortal": 25.3},
+        placement_prices={"Iron": 2.73, "Bronze": 2.73, "Silver": 3.63, "Gold": 4.54,
+                          "Platinum": 5.45, "Diamond": 9.09, "Ascendant": 13.63, "Immortal": 19.99},
         services="Rank boost · placements · unrated wins · duo · coaching",
         regions=["North America", "Europe", "Asia", "Latin America"],
         # Same shape as League's: what is covered, then what actually happens to
@@ -942,50 +942,50 @@ BUNDLES = {
     # expensive order and a three-tier one would land on Master. None targets
     # Master (LP/leaderboard-gated — the top-rank rule above).
     "League of Legends": [
-        ("Iron", "Gold", 77),         # 3 tiers · full $113 · cheapest normal $78
-        ("Bronze", "Platinum", 99),   # 3 tiers · full $146 · cheapest normal $100
-        ("Silver", "Emerald", 149),   # 3 tiers · full $208 · cheapest normal $150
-        ("Platinum", "Diamond", 163),  # 2 tiers · full $259 · cheapest normal $164
-        ("Bronze", "Diamond", 316),   # 5 tiers · full $405 · cheapest normal $320
-        ("Iron", "Diamond", 351),     # 6 tiers · full $435 · cheapest normal $352
+        ("Iron", "Gold", 61),         # 3 tiers · full $89  · cheapest normal $62
+        ("Bronze", "Platinum", 79),   # 3 tiers · full $115 · cheapest normal $80
+        ("Silver", "Emerald", 118),   # 3 tiers · full $164 · cheapest normal $119
+        ("Platinum", "Diamond", 129),  # 2 tiers · full $204 · cheapest normal $130
+        ("Bronze", "Diamond", 249),   # 5 tiers · full $320 · cheapest normal $253
+        ("Iron", "Diamond", 277),     # 6 tiers · full $343 · cheapest normal $278
     ],
     "Valorant": [
-        ("Iron", "Silver", 23), ("Bronze", "Gold", 26), ("Silver", "Platinum", 33),
-        ("Gold", "Platinum", 18), ("Platinum", "Diamond", 28), ("Diamond", "Ascendant", 53),
+        ("Iron", "Silver", 18), ("Bronze", "Gold", 21), ("Silver", "Platinum", 26),
+        ("Gold", "Platinum", 14), ("Platinum", "Diamond", 22), ("Diamond", "Ascendant", 42),
     ],
     "Teamfight Tactics": [
-        ("Iron", "Silver", 43), ("Bronze", "Gold", 44), ("Silver", "Platinum", 48),
-        ("Gold", "Platinum", 26), ("Platinum", "Emerald", 30), ("Emerald", "Diamond", 31),
+        ("Iron", "Silver", 34), ("Bronze", "Gold", 35), ("Silver", "Platinum", 38),
+        ("Gold", "Platinum", 21), ("Platinum", "Emerald", 24), ("Emerald", "Diamond", 24),
     ],
     "Marvel Rivals": [
-        ("Bronze", "Gold", 38), ("Silver", "Platinum", 37), ("Gold", "Diamond", 40),
-        ("Platinum", "Diamond", 22), ("Diamond", "Grandmaster", 23),
-        ("Grandmaster", "Celestial", 24),
+        ("Bronze", "Gold", 30), ("Silver", "Platinum", 29), ("Gold", "Diamond", 32),
+        ("Platinum", "Diamond", 17), ("Diamond", "Grandmaster", 18),
+        ("Grandmaster", "Celestial", 19),
     ],
     "Overwatch 2": [
-        ("Bronze", "Gold", 59), ("Silver", "Platinum", 64), ("Gold", "Diamond", 74),
-        ("Platinum", "Diamond", 41), ("Diamond", "Master", 45),
-        ("Master", "Grandmaster", 49),
+        ("Bronze", "Gold", 47), ("Silver", "Platinum", 51), ("Gold", "Diamond", 58),
+        ("Platinum", "Diamond", 32), ("Diamond", "Master", 36),
+        ("Master", "Grandmaster", 39),
     ],
     "Rocket League": [
-        ("Bronze", "Gold", 37), ("Silver", "Platinum", 38), ("Gold", "Diamond", 43),
-        ("Platinum", "Diamond", 23), ("Diamond", "Champion", 25),
-        ("Champion", "Grand Champ", 26),
+        ("Bronze", "Gold", 29), ("Silver", "Platinum", 30), ("Gold", "Diamond", 34),
+        ("Platinum", "Diamond", 18), ("Diamond", "Champion", 20),
+        ("Champion", "Grand Champ", 21),
     ],
     "Dota 2": [
-        ("Herald", "Crusader", 82), ("Guardian", "Archon", 89), ("Crusader", "Legend", 102),
-        ("Archon", "Legend", 57), ("Legend", "Ancient", 63), ("Ancient", "Divine", 68),
+        ("Herald", "Crusader", 65), ("Guardian", "Archon", 70), ("Crusader", "Legend", 81),
+        ("Archon", "Legend", 45), ("Legend", "Ancient", 50), ("Ancient", "Divine", 54),
     ],
     "Apex Legends": [
-        ("Rookie", "Silver", 57), ("Bronze", "Gold", 61), ("Silver", "Platinum", 67),
-        ("Gold", "Platinum", 37), ("Platinum", "Diamond", 40), ("Diamond", "Master", 43),
+        ("Rookie", "Silver", 45), ("Bronze", "Gold", 48), ("Silver", "Platinum", 53),
+        ("Gold", "Platinum", 29), ("Platinum", "Diamond", 32), ("Diamond", "Master", 34),
     ],
     # Flat rating ladder — every rung is its own tier, so a bundle names two exact
     # CS Rating checkpoints rather than "any division of". bundle_strip() reads the
     # divmap and drops the "from any division" line for exactly this case.
     "Counter-Strike 2": [
-        ("5k", "13k", 18), ("10k", "15k", 18), ("13k", "17k", 17),
-        ("15k", "19k", 17), ("17k", "21k", 18), ("19k", "25k", 18),
+        ("5k", "13k", 14), ("10k", "15k", 14), ("13k", "17k", 13),
+        ("15k", "19k", 13), ("17k", "21k", 14), ("19k", "25k", 14),
     ],
 }
 

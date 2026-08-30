@@ -5828,6 +5828,22 @@ def gp_close():
 # JS would arrive untranslated, the same rule the auth tabs and the
 # mode-conditional add-ons follow. Figures and the card letter ride in their own
 # nodes so the sentences around them stay whole translatable text nodes.
+# ⚠ OFF. The card is not offered on the live site: mystery_modal() returns
+# nothing, so no game page mounts `[data-myd]` and initMystery() finds no root
+# and returns. Flip to True to put it back — it is one switch and no other code
+# changed. What deliberately STAYS LIVE while it is off:
+#
+#   * mydBoot() still runs on every page, and /api/bingo?token= still resolves.
+#     A code already in somebody's inbox keeps working for the hour it was sold
+#     with; killing the modal must not strand a discount we already promised.
+#   * The store, the mail sequence and the /ops Mystery tab are untouched. No new
+#     cards are issued, so the rows drain on their own — nothing is left to warn
+#     or chase once the oldest live card passes BINGO_FOLLOWUP_MAX_AGE.
+#
+# So this switch stops the OFFER, not the honouring of one. Turning the mails off
+# as well is BINGO_FOLLOWUP_ENABLED in the environment, which is a separate call.
+MYSTERY_MODAL_ENABLED = False
+
 MYD_CARDS = ("A", "B", "C")
 MYD_DEFAULT_PICK = "C"      # pre-selected so the CTA is never dead on arrival
 
@@ -5871,6 +5887,18 @@ def mystery_modal():
     rendered `hidden` here can never be revealed by a selector in site.css, at
     any specificity. Four of the five ship hidden so the page is correct before
     a line of JS runs.
+    """
+    return _myd_markup() if MYSTERY_MODAL_ENABLED else ""
+
+
+def _myd_markup():
+    """The card itself, built whether or not it is switched on.
+
+    Split from mystery_modal() so the copy rules survive the switch:
+    test_mystery.py's test_copy_claims_no_odds asserts against THIS, so the
+    "no odds, no luck, the deck tops out at what is paid" guarantees keep being
+    enforced while MYSTERY_MODAL_ENABLED is False. A card that is off is a card
+    somebody will turn back on, and the copy has to still be honest when they do.
     """
     pct = int(round(mystery.OFFER_PCT * 100))
     mins = max(1, mystery.TOKEN_TTL // 60)
