@@ -1177,11 +1177,23 @@ resolver and `build.py`, `quote()` and `payments.build_session()` all read the c
   is that the price tracks the hours behind the account. `test_account_prices_climb_with_rank()`
   checks it and is **non-fatal by design** — the prices are a business call and a deliberate
   inversion is theirs to make — but it prints a PENDING line on every run until it is resolved.
-- ⚠ **The prices are a business call**, like the `BUNDLES` figures. `was` is the ONE struck figure
-  this product carries and it is only defensible while it names a price the listing was **actually
-  sold at** — nothing derives it. It rides in `quote()`'s `subtotal`/`discount` so the card, the
-  checkout receipt row and the order mail state one reduction and `subtotal − discount = total`
-  holds exactly. If a listing has never been dearer, delete its `was` rather than inventing one.
+- ⚠ **The prices are a business call — and they were SET IN EUROS.** `price` is the USD base the
+  engine needs, but the figure the business chose is the euro in the comment beside it
+  (`price = eur / CHARGE_RATES["eur"]`), and every one round-trips to its exact euro at today's rate.
+  That is why the dollar figures are 27.07 and 206.41 rather than something round. **The comment is
+  the source of truth**: if a rate moves, re-derive every `price` from its euro rather than letting
+  the euro drift off `.90`, which is the price a European buyer actually reads.
+- ⚠ **`was` is the ONE struck figure this product may carry, and no listing carries one today.** It
+  is only defensible while it names a price the listing was **actually sold at** — nothing derives
+  it. It rides in `quote()`'s `subtotal`/`discount` so the card, the checkout receipt row and the
+  order mail state one reduction and `subtotal − discount = total` holds exactly. The invented one
+  came off with the euro re-price, along with the "On offer" badge it drove; it goes back only with
+  a real prior price behind it.
+- ⚠ **Iron is dearer than Bronze, Silver and Gold, and that is not a mistake.** An account only
+  reaches Iron by deliberately losing a long run of games, where Bronze and Silver are where an
+  unattended account settles — so it is *harder* to source and priced on the hours behind it like
+  everything else. The ladder is simply not monotonic at the bottom.
+  `test_account_prices_climb_with_rank()` excepts Iron by name and reports anything else.
 - **Tier colour is `D.account_tier_color()`, which is `tier_color()`.** The site has ONE rank colour
   table and an account's Gold mark is the same Gold the live feed, the rank plates and the checkout
   climb line draw. `ACCOUNT_UNRANKED_COLOR` is the only value this page owns, because Unranked is not

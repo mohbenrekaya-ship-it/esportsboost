@@ -694,13 +694,23 @@ COACH_SLOTS = ["Tonight, 20:00", "Tomorrow, 18:00", "Saturday, 15:00", "Sunday, 
 # and fulfilment is manual: the webhook records the listing id and an operator
 # hands over one set of credentials from stock.
 #
-# ⚠ THE PRICES ARE A BUSINESS CALL, like the BUNDLES figures. `price` is what a
-# buyer on EUW pays; every other shard adds its own `delta`. `was` is the ONE
-# struck figure this product carries and it is only defensible while it names a
-# price this listing was actually sold at — it is not a percentage of anything
-# and nothing derives it. If a listing has never been dearer, delete its `was`
-# rather than inventing one: a reference price nobody was charged is exactly
-# what quote()'s discount rule exists to avoid.
+# ⚠ THE PRICES ARE A BUSINESS CALL, like the BUNDLES figures — and ⚠ THEY WERE
+# SET IN EUROS. `price` is the USD base every currency is derived from, which is
+# what the rest of the engine needs, but the figure the business chose is the
+# EUR one in the comment beside it: `price = eur / CHARGE_RATES["eur"]`, and
+# each one round-trips back to its exact euro at today's rate. That is why the
+# dollar figures are 27.07 and 206.41 rather than something round.
+#
+# ⚠ THE COMMENT IS THE SOURCE OF TRUTH, not the dollar figure. If a rate ever
+# moves, re-derive every `price` from the euro beside it — do not leave the USD
+# and let the euro drift off .90, which is the price a European buyer actually
+# reads. Re-pricing means changing the euro in the comment and the number it
+# derives, together.
+#
+# `was` is the ONE struck figure this product may carry and it is only
+# defensible while it names a price the listing was actually sold at — nothing
+# derives it. No listing carries one today: the invented one came off with this
+# re-price, and it goes back only with a real prior price behind it.
 ACCOUNT_GAME = "League of Legends"
 
 # ⚠ FULL EMAIL ACCESS IS THE PAGE'S CENTRAL CLAIM and it is stated in four
@@ -812,47 +822,61 @@ ACCOUNT_DELIVERY = [
 # sheet before this page takes traffic.
 ACCOUNTS = [
     dict(id="lol-unranked-basic", name="Unranked · Basic", tier="Unranked",
-         shape="ring1", price=29.90, level=30, be=0, stock=31,
+         shape="ring1", price=27.07,  # EUR 24.90
+         level=30, be=0, stock=31,
          badge="", season=False,
          note="Placements not played",),
     dict(id="lol-unranked-premium", name="Unranked · Premium", tier="Unranked",
-         shape="ring2", price=39.90, level=45, be=0, stock=19,
+         shape="ring2", price=37.93,  # EUR 34.90
+         level=45, be=0, stock=19,
          badge="Best seller", season=False,
          note="Placements not played",),
     dict(id="lol-unranked-luxury", name="Unranked · Luxury", tier="Unranked",
-         shape="ring3", price=89.90, level=52, be=0, stock=9,
+         shape="ring3", price=86.85,  # EUR 79.90
+         level=52, be=0, stock=9,
          badge="", season=False,
          note="Placements not played",),
     dict(id="lol-iron", name="Iron", tier="Iron",
-         shape="diamond", price=64.90, level=45, be=0, stock=14,
+         shape="diamond", price=54.24,  # EUR 49.90
+         level=45, be=0, stock=14,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-bronze", name="Bronze", tier="Bronze",
-         shape="triangle", price=39.90, level=55, be=0, stock=12,
+         shape="triangle", price=43.37,  # EUR 39.90
+         level=55, be=0, stock=12,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-silver", name="Silver", tier="Silver",
-         shape="pentagon", price=42.90, level=65, be=0, stock=11,
+         shape="pentagon", price=46.63,  # EUR 42.90
+         level=65, be=0, stock=11,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-gold", name="Gold", tier="Gold",
-         shape="hexagon", price=59.90, level=85, be=0, stock=8,
+         shape="hexagon", price=48.80,  # EUR 44.90
+         level=85, be=0, stock=8,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-platinum", name="Platinum", tier="Platinum",
-         shape="octagon", price=89.90, was=109.90, level=105, be=0,
-         stock=5, badge="On offer", season=True,
+         shape="octagon", price=65.11,  # EUR 59.90
+         level=105, be=0,
+         stock=5, badge="", season=True,
          note="Previous season rewards",),
+    # ⚠ NOT in the business's price list — the only listing still carrying a
+    # figure nobody chose. €74.90 sits in the Platinum→Diamond gap so the ladder
+    # stays ordered; replace it with the real number.
     dict(id="lol-emerald", name="Emerald", tier="Emerald",
-         shape="kite", price=139.90, level=130, be=0, stock=7,
+         shape="kite", price=81.41,  # EUR 74.90
+         level=130, be=0, stock=7,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-diamond", name="Diamond", tier="Diamond",
-         shape="facet", price=199.90, level=150, be=0, stock=6,
+         shape="facet", price=97.72,  # EUR 89.90
+         level=150, be=0, stock=6,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-master", name="Master", tier="Master",
-         shape="star", price=289.90, level=185, be=0, stock=2,
+         shape="star", price=206.41,  # EUR 189.90
+         level=185, be=0, stock=2,
          badge="Low stock", season=True,
          note="Previous season rewards",),
 ]
@@ -1041,7 +1065,15 @@ assert set(ACCOUNT_REGIONS) <= _ACC_REGIONS, \
 assert len(_ACCOUNT_BY_ID) == len(ACCOUNTS), "duplicate account id"
 assert {s["region"] for s in ACCOUNT_SERVERS} == set(ACCOUNT_REGIONS), \
     "duplicate account shard"
+_ACCOUNT_FIELDS = {"id", "name", "tier", "shape", "price", "level", "be",
+                   "stock", "badge", "season", "note"}
 for _a in ACCOUNTS:
+    # Every field, on every listing. A missing one does not raise on its own —
+    # `stock` reads through .get() and silently becomes 0, so the listing goes
+    # sold out on all four shards and the board quietly shrinks. A stray
+    # trailing comment ate three fields once; this is what catches the next one.
+    assert _ACCOUNT_FIELDS <= set(_a), \
+        "account %s is missing %s" % (_a.get("id"), sorted(_ACCOUNT_FIELDS - set(_a)))
     assert _a["tier"] == "Unranked" or _a["tier"] in TIER_COLORS, \
         "account %s names a tier with no colour" % _a["id"]
     assert float(_a["price"]) > 0, "account %s needs a price" % _a["id"]
