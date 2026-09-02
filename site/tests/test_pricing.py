@@ -844,46 +844,46 @@ def test_account_pricing():
 
     bad = []
     for a in D.ACCOUNTS:
-        for sv in D.ACCOUNT_SERVERS:
-            r = sv["region"]
-            if not D.account_stock(a, r):
-                continue
-            q = pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
-                               "account": a["id"], "region": r})
-            want = round(a["price"] + sv["delta"], 2)
-            if q["invalid"] or q["total"] != want:
-                bad.append("%s/%s %r != %r" % (a["id"], r, q["total"], want))
-            # subtotal − discount == total, exactly, on the one listing that
-            # carries a struck price and on the ten that do not.
-            if round(q["subtotal"] - q["discount"], 2) != q["total"]:
-                bad.append("%s/%s does not add up" % (a["id"], r))
-    check(not bad, "every listing quotes its own price on every shard (%r)" % bad[:3])
+        for cur in sorted(D.ACCOUNT_CURRENCIES):
+            for sv in D.ACCOUNT_SERVERS:
+                r = sv["region"]
+                if not D.account_stock(a, r):
+                    continue
+                q = pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
+                                   "account": a["id"], "region": r,
+                                   "currency": cur})
+                want = a["price"][cur]
+                if q["invalid"] or q["total"] != want:
+                    bad.append("%s/%s/%s %r != %r" % (a["id"], r, cur, q["total"], want))
+                # subtotal − discount == total, exactly.
+                if round(q["subtotal"] - q["discount"], 2) != q["total"]:
+                    bad.append("%s/%s/%s does not add up" % (a["id"], r, cur))
+    check(not bad, "every listing quotes its own row on every shard and currency "
+                   "(%r)" % bad[:3])
 
-    # Whatever the deltas are, all four shards must agree with the table — the
-    # failure to catch is a card quoting one shard's price under another's name.
-    # Today every delta is zero (one price list on all four shards), so this
-    # reduces to "every shard quotes the same figure"; put a shard back on its
-    # own price and the same check follows the table instead.
+    # ⚠ A shard changes STOCK, never price — there is no per-shard price and no
+    # `delta` field. The failure to catch is a card quoting one shard under
+    # another's name.
     ref = D.ACCOUNT_REGIONS[0]
-    moved = [s["region"] for s in D.ACCOUNT_SERVERS if s["delta"]]
-    a0 = D.ACCOUNTS[0]
-    if moved:
-        check(all(D.account_price(a0, s["region"]) == round(a0["price"] + s["delta"], 2)
-                  for s in D.ACCOUNT_SERVERS),
-              "each shard's delta is applied to its own price (%r)" % moved)
-    else:
-        # Per LISTING, not across the board — two listings may legitimately
-        # share a price (Bronze and Unranked · Loaded are both $39.90 today).
-        check(all(len({D.account_price(a, s["region"]) for s in D.ACCOUNT_SERVERS}) == 1
-                  for a in D.ACCOUNTS),
-              "one price list, identical on all four shards")
+    check(not any("delta" in s for s in D.ACCOUNT_SERVERS),
+          "no shard carries a price delta")
+    check(all(len({pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
+                                  "account": a["id"], "region": s["region"],
+                                  "currency": "eur"})["total"]
+                   for s in D.ACCOUNT_SERVERS}) == 1 for a in D.ACCOUNTS),
+          "one price list, identical on all four shards")
+    # ⚠ And the currency IS an input: at least one listing must differ between
+    # markets, or the per-currency table is doing nothing and somebody has
+    # quietly re-derived it from a rate.
+    check(any(len(set(a["price"].values())) > 1 for a in D.ACCOUNTS),
+          "the price table really is per market")
 
     a = D.accounts_in_stock()[0]
     base = {"game": D.ACCOUNT_GAME, "service": "account", "account": a["id"],
             "region": ref}
     # Nothing the boost engine owns may move it. Duo, every add-on at once, the
     # sitewide code and a bundle index are all thrown at one listing.
-    flat = D.account_price(a, ref)
+    flat = D.account_price(a)
     noisy = dict(base, mode="Duo queue", addons=[x["id"] for x in D.ADDONS],
                  promo=next(iter(D.PROMOS), ""), bundle=0, wins=5, placements=5,
                  unranked=True, coach=3, pack=2)
@@ -917,7 +917,7 @@ def test_account_pricing():
         if any(r not in D.ACCOUNT_REGIONS for r in LOL["regions"] + ["Korea"]) else "Korea"
     _acc, shard = pricing.account_pick(dict(base, region=missing))
     qs = pricing.quote(dict(base, region=missing))
-    check(shard == ref and qs["total"] == D.account_price(a, ref),
+    check(shard == ref and qs["total"] == D.account_price(a),
           "an unsold shard clamps to the reference shard (got %r)" % shard)
 
     # `days` is 0, and the ETA is the delivery promise rather than a day count.
@@ -957,11 +957,15 @@ def test_account_prices_climb_with_rank():
     ranked = sorted((a for a in D.ACCOUNTS if D.account_kind(a) == "ranked"),
                     key=lambda a: order.get(a["tier"], 0))
     ALLOWED = {"Iron"}          # see the ⚠ above — dearer to source, not a slip
+    # Every market, not just the base: the rows are hand-set per currency, so an
+    # inversion can exist in euros and not in dollars.
     bad = []
-    for lo, hi in zip(ranked, ranked[1:]):
-        if hi["price"] < lo["price"] and lo["tier"] not in ALLOWED:
-            bad.append("%s $%.2f is under %s $%.2f"
-                       % (hi["tier"], hi["price"], lo["tier"], lo["price"]))
+    for cur in sorted(D.ACCOUNT_CURRENCIES):
+        for lo, hi in zip(ranked, ranked[1:]):
+            if hi["price"][cur] < lo["price"][cur] and lo["tier"] not in ALLOWED:
+                bad.append("%s: %s %.2f is under %s %.2f"
+                           % (cur.upper(), hi["tier"], hi["price"][cur],
+                              lo["tier"], lo["price"][cur]))
     if bad:
         for b in bad:
             print("  PENDING  %s — a higher rank costs less than a lower one" % b)
@@ -973,9 +977,10 @@ def test_account_prices_climb_with_rank():
     # as a progression (level 30 → loaded → skinned) and the cards sit in that
     # order on the same rail.
     un = [a for a in D.ACCOUNTS if D.account_kind(a) == "unranked"]
-    check(all(b["price"] >= a["price"] for a, b in zip(un, un[1:])),
-          "the three unranked listings climb in catalogue order (%s)"
-          % ", ".join("%.2f" % a["price"] for a in un))
+    check(all(b["price"][c] >= a["price"][c]
+              for c in D.ACCOUNT_CURRENCIES for a, b in zip(un, un[1:])),
+          "the three unranked listings climb in catalogue order, in every "
+          "currency (%s)" % ", ".join("%.2f" % a["price"]["usd"] for a in un))
 
 
 def test_account_shown_equals_charged_to_the_cent():
@@ -993,27 +998,27 @@ def test_account_shown_equals_charged_to_the_cent():
             r = sv["region"]
             if not D.account_stock(a, r):
                 continue
-            q = pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
-                               "account": a["id"], "region": r})
-            if not q.get("cents") or not q.get("fixed"):
-                bad.append("%s/%s does not declare cents+fixed" % (a["id"], r))
-                continue
             for cur in pricing.CHARGE_RATES:
+                # Quoted IN that currency: the buyer's currency is a price
+                # input on this product, so a quote taken in dollars and then
+                # charged in euros would bill the wrong row.
+                q = pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
+                                   "account": a["id"], "region": r,
+                                   "currency": cur})
+                if not q.get("cents") or not q.get("fixed"):
+                    bad.append("%s/%s/%s does not declare cents+fixed"
+                               % (a["id"], r, cur))
+                    continue
                 _c, amount = pricing.charge_for(q["total"], cur, cents=True,
                                                 fixed=True)
                 want = account_display_cents(q["total"], cur)
                 if amount != want:
                     bad.append("%s/%s %s: %r != %r" % (a["id"], r, cur, amount, want))
-    check(not bad, "the card is charged the price it shows (%r)" % bad[:3])
-    # ⚠ And the SAME figure in all three: this is the business rule that a UK
-    # buyer pays £24.90 where a French one pays €24.90, not the FX equivalent.
-    a0 = D.ACCOUNTS[0]
-    q0 = pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
-                        "account": a0["id"], "region": D.ACCOUNT_REGIONS[0]})
-    amounts = {pricing.charge_for(q0["total"], c, cents=True, fixed=True)[1]
-               for c in pricing.CHARGE_RATES}
-    check(len(amounts) == 1 and amounts.pop() == int(round(a0["price"] * 100)),
-          "one price list: the same minor units in every currency")
+                # …and it is the listing's own row for that market, to the cent.
+                if amount != int(round(a["price"][cur] * 100)):
+                    bad.append("%s/%s %s: charged %r, table says %r"
+                               % (a["id"], r, cur, amount, a["price"][cur]))
+    check(not bad, "every market is charged its own row, to the cent (%r)" % bad[:3])
     # And the whole-unit path is untouched for everything else: a boost total is
     # an integer, so both paths must still agree there.
     q = pricing.quote({"game": "League of Legends", "service": "division",
@@ -1075,19 +1080,27 @@ def test_account_client_mirror():
           "data.js ships every listing (%d vs %d)" % (len(client), len(D.ACCOUNTS)))
     bad = [a["id"] for a in D.ACCOUNTS
            if client.get(a["id"], {}).get("price") != a["price"]
-           or client.get(a["id"], {}).get("was", 0) != a.get("was", 0)
+           or client.get(a["id"], {}).get("was") != (a.get("was") or 0)
            or client.get(a["id"], {}).get("stock") != a["stock"]
            or client.get(a["id"], {}).get("kind") != D.account_kind(a)]
-    check(not bad, "price, `was`, stock and filter key match on every listing (%r)" % bad)
+    check(not bad, "the whole price table, `was`, stock and filter key match on "
+                   "every listing (%r)" % bad)
+    # ⚠ The client must ship EVERY market's row: it picks the buyer's currency
+    # itself, and a missing row silently falls back to dollars with a euro sign.
+    check(all(set(client[a["id"]]["price"]) == D.ACCOUNT_CURRENCIES
+              for a in D.ACCOUNTS),
+          "every currency's row ships to the client")
+    check(d.get("accountBaseCur") == D.ACCOUNT_BASE_CUR,
+          "the fallback row is named, not guessed")
 
     svs = d.get("accountServers") or []
     check([s["region"] for s in svs] == D.ACCOUNT_REGIONS,
           "the shard table ships in the shop's own order")
     check(all(s["share"] == D.ACCOUNT_SERVERS[i]["share"]
-              and s["delta"] == D.ACCOUNT_SERVERS[i]["delta"]
               and s["code"] == D.account_code(s["region"])
+              and "delta" not in s
               for i, s in enumerate(svs)),
-          "every share, delta and code matches the server's")
+          "every share and code matches the server's, and no shard prices")
     check(d.get("accountEta") == pricing.ACCOUNT_ETA,
           "the delivery promise is shipped from pricing.py, not typed twice")
     check(d.get("accountOfferLabel") == pricing.ACCOUNT_OFFER_LABEL,
@@ -1104,6 +1117,7 @@ def test_account_client_mirror():
           "app.js refuses a listing sold out ON THAT SHARD — the same gate "
           "account_pick() is")
     for fn in ("function accountPrice", "function accountWas",
+               "function accountRow", "function accountCur",
                "function accountStock", "function accountUnitsOn"):
         check(fn in src, "app.js mirrors %s()" % fn.split()[-1])
     check("cents: true" in src, "app.js's account quote declares cents")

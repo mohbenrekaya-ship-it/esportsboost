@@ -387,8 +387,13 @@ def quote(state):
         acc, region = account_pick(state)
         if not acc:
             return _invalid("That account is no longer available")
-        total = D.account_price(acc, region)
-        was = D.account_was(acc, region)
+        # ⚠ The buyer's currency is a PRICE INPUT on this product: the listing
+        # carries one row per market and `account_price()` picks one, it never
+        # converts. An unknown currency falls back to the dollar row rather than
+        # to whichever is first.
+        cur = state.get("currency")
+        total = D.account_price(acc, cur)
+        was = D.account_was(acc, cur)
         subtotal = was if was > total else total
         discount = round(subtotal - total, 2)
         return dict(

@@ -103,18 +103,29 @@ def build_session(order, base_url):
         raise StripeError(q["summary"])
 
     # Charge exactly what the checkout page showed the customer. The browser
-    # sends the total it displayed (`client_total`, in whole USD before currency
-    # conversion); we recompute the price authoritatively above and REFUSE the
-    # charge if the two disagree — so Stripe can never show an amount the buyer
-    # didn't see, and a tampered client figure can't move the price either. The
-    # amount charged is always the server's `q["total"]`; the client number is
-    # only ever compared, never trusted as the price.
+    # sends the total it displayed (`client_total`); we recompute the price
+    # authoritatively above and REFUSE the charge if the two disagree — so
+    # Stripe can never show an amount the buyer didn't see, and a tampered
+    # client figure can't move the price either. The amount charged is always
+    # the server's `q["total"]`; the client number is only ever compared, never
+    # trusted as the price.
+    #
+    # ⚠ COMPARED IN MINOR UNITS, not as integers. On every boosting product the
+    # total is a whole number and `int(shown) != q["total"]` was fine; accounts
+    # are priced to the cent, so that test read 24 against 24.9 and refused
+    # EVERY account checkout with "the price updated since you configured this
+    # order" — the one message that is guaranteed not to help, because the
+    # client was right. Rounding both sides to cents covers both products.
+    #
+    # ⚠ It is also the buyer's OWN currency on an account, not USD: that
+    # product carries a price table per market and both sides quote the row,
+    # not a conversion of it. On a boost both sides are still USD.
     shown = order.get("client_total")
     if isinstance(shown, (int, float)) and not isinstance(shown, bool):
-        if int(shown) != q["total"]:
+        if round(float(shown) * 100) != round(float(q["total"]) * 100):
             sys.stderr.write(
                 "[checkout] price mismatch: shown=%s server=%s order=%s\n"
-                % (int(shown), q["total"], q["summary"]))
+                % (shown, q["total"], q["summary"]))
             raise StripeError(
                 "The price updated since you configured this order. "
                 "Please refresh the page and try again.")

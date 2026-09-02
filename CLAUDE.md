@@ -1163,14 +1163,12 @@ resolver and `build.py`, `quote()` and `payments.build_session()` all read the c
   service, and `app.js`'s `render()` formats every figure in the checkout breakdown at the quote's own
   precision for the same reason. `test_account_shown_equals_charged_to_the_cent()` walks every listing
   × shard × currency.
-- **The shard CAN be a price input, and today is not.** `ACCOUNT_SERVERS` carries a `share` (supply
-  relative to EUW) and a `delta` (what it adds to every listing's price). ⚠ **Every delta is zero —
-  the business's call: one price list, the same on all four shards.** The field and the whole price
-  path stay, because `account_price()` and its app.js mirror both add it and the checkout re-quote
-  reads the shard for exactly that reason, so putting a shard back on its own price is one number in
-  data.py and nothing else. What the shard still changes is STOCK (through `share`, which the server
-  counts and the "Low stock" badge are drawn from) and the region lock, which is the real reason
-  step 1 exists. `region` names the shard in the League ladder's own words, asserted at import, and
+- **A shard changes STOCK, never price.** `ACCOUNT_SERVERS` carries only `share` (supply relative to
+  EUW), which the server-card counts and the "Low stock" badge are drawn from — that and the region
+  lock are the whole reason step 1 exists. ⚠ There was a `delta` field and it came off with the
+  per-currency table, because the two cannot coexist without answering "a delta in *which*
+  currency?". If a shard ever needs its own price it goes in as another row of the listing's `price`
+  table, not as a number added to whichever currency was picked. `region` names the shard in the League ladder's own words, asserted at import, and
   the code the cards print is `REGION_SHORT`'s — never a second table.
 - ⚠ **A higher rank must not cost less than a lower one.** This is the board's version of
   `test_bundle_rules()`'s "a bigger climb must never cost less than a smaller one it contains", and

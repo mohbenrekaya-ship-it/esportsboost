@@ -694,21 +694,25 @@ COACH_SLOTS = ["Tonight, 20:00", "Tomorrow, 18:00", "Saturday, 15:00", "Sunday, 
 # and fulfilment is manual: the webhook records the listing id and an operator
 # hands over one set of credentials from stock.
 #
-# ⚠ THE PRICES ARE A BUSINESS CALL, like the BUNDLES figures — and ⚠ `price` IS
-# NOT IN ANY ONE CURRENCY. It is the figure a buyer pays whichever currency they
-# are quoted in: €24.90 in the EU, £24.90 in the UK, $24.90 everywhere else.
-# Same digits, three symbols, no FX in between.
+# ⚠ THE PRICES ARE A BUSINESS CALL, and ⚠ `price` IS A TABLE, ONE ENTRY PER
+# CURRENCY — not one figure converted. The business sets each market by hand:
+# $199.90 and €89.90 are both the Diamond listing, and the ratio between them
+# runs from 0.45 to 1.00 across the eleven, so there is no rate that produces
+# one from the other and none is applied.
 #
-# That is the business's call and it is unique to this product. Every boosting
-# product is priced in USD and converted at `CHARGE_RATES`, so a €72 boost and a
-# £62 boost are the same money; two account listings at "24.90" are NOT, and a
-# UK buyer pays about 26% more than a French one for the same account. It is a
-# margin decision per market, deliberately taken.
+# This is unique to this product. Every boosting product is priced in USD and
+# converted at `CHARGE_RATES`, so a €72 boost and a £62 boost are the same
+# money. Two accounts at "39.90" are NOT — that is the point of the table.
 #
-# `quote()` marks this with `fixed=True`, which is what stops `charge_for()` and
-# every money formatter multiplying by a rate — see the ⚠ on `charge_for()`. If
-# accounts ever go back to one price converted, drop that flag and the whole FX
-# path is already underneath it.
+# GBP deliberately mirrors EUR: the business's rule is "the UK in pounds,
+# keeping the same values", so a British buyer sees £49.90 where a French one
+# sees €49.90. Change one and decide about the other.
+#
+# `quote()` picks the row for the buyer's currency and marks the result
+# `fixed=True`, which is what stops `charge_for()` and every money formatter
+# multiplying it by a rate — see the ⚠ on `charge_for()`. Every code in
+# `CHARGE_RATES` must have an entry, asserted at import: a currency the switcher
+# offers with no row here would be charged the dollar figure.
 #
 # `was` is the ONE struck figure this product may carry and it is only
 # defensible while it names a price the listing was actually sold at — nothing
@@ -763,11 +767,23 @@ ACCOUNT_DISCLAIMER = (
 # "Low stock" badge are drawn from — and the region lock, which is the real
 # reason step 1 exists at all.
 ACCOUNT_SERVERS = [
-    dict(region="Europe West", share=1.00, delta=0),
-    dict(region="North America", share=0.72, delta=0),
-    dict(region="EU Nordic & East", share=0.38, delta=0),
-    dict(region="Oceania", share=0.16, delta=0),
+    dict(region="Europe West", share=1.00),
+    dict(region="North America", share=0.72),
+    dict(region="EU Nordic & East", share=0.38),
+    dict(region="Oceania", share=0.16),
 ]
+
+# ⚠ The currencies the price table must cover, and it MUST equal
+# `pricing.CHARGE_RATES`. It is written out here rather than imported because
+# pricing.py imports this module, not the other way round — so the two are held
+# together by `test_fx_rate_mirror()` instead, which fails if either moves. A
+# code in CHARGE_RATES with no row here is a market charged the dollar figure
+# with the wrong symbol in front of it.
+ACCOUNT_CURRENCIES = {"usd", "eur", "gbp"}
+
+# The row an unknown or missing currency falls back to. Never a conversion —
+# there is no rate between the rows.
+ACCOUNT_BASE_CUR = "usd"
 
 ACCOUNT_REGIONS = [s["region"] for s in ACCOUNT_SERVERS]
 _ACCOUNT_SERVER_BY_REGION = {s["region"]: s for s in ACCOUNT_SERVERS}
@@ -830,42 +846,42 @@ ACCOUNT_DELIVERY = [
 # sheet before this page takes traffic.
 ACCOUNTS = [
     dict(id="lol-unranked-basic", name="Unranked · Basic", tier="Unranked",
-         shape="ring1", price=24.90,
+         shape="ring1", price=dict(usd=29.90, eur=24.90, gbp=24.90),
          level=30, champs=20, be=0, stock=31,
          badge="", season=False,
          note="Placements not played",),
     dict(id="lol-unranked-premium", name="Unranked · Premium", tier="Unranked",
-         shape="ring2", price=34.90,
+         shape="ring2", price=dict(usd=39.90, eur=34.90, gbp=34.90),
          level=45, champs=50, be=0, stock=19,
          badge="Best seller", season=False,
          note="Placements not played",),
     dict(id="lol-unranked-luxury", name="Unranked · Luxury", tier="Unranked",
-         shape="ring3", price=79.90,
+         shape="ring3", price=dict(usd=89.90, eur=79.90, gbp=79.90),
          level=52, champs=80, be=0, stock=9,
          badge="", season=False,
          note="Placements not played",),
     dict(id="lol-iron", name="Iron", tier="Iron",
-         shape="diamond", price=49.90,
+         shape="diamond", price=dict(usd=64.90, eur=49.90, gbp=49.90),
          level=45, be=0, stock=14,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-bronze", name="Bronze", tier="Bronze",
-         shape="triangle", price=39.90,
+         shape="triangle", price=dict(usd=39.90, eur=39.90, gbp=39.90),
          level=55, be=0, stock=12,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-silver", name="Silver", tier="Silver",
-         shape="pentagon", price=42.90,
+         shape="pentagon", price=dict(usd=42.90, eur=42.90, gbp=42.90),
          level=65, be=0, stock=11,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-gold", name="Gold", tier="Gold",
-         shape="hexagon", price=44.90,
+         shape="hexagon", price=dict(usd=59.90, eur=44.90, gbp=44.90),
          level=85, be=0, stock=8,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-platinum", name="Platinum", tier="Platinum",
-         shape="octagon", price=59.90,
+         shape="octagon", price=dict(usd=89.90, eur=59.90, gbp=59.90),
          level=105, be=0,
          stock=5, badge="", season=True,
          note="Previous season rewards",),
@@ -873,17 +889,17 @@ ACCOUNTS = [
     # figure nobody chose. €74.90 sits in the Platinum→Diamond gap so the ladder
     # stays ordered; replace it with the real number.
     dict(id="lol-emerald", name="Emerald", tier="Emerald",
-         shape="kite", price=74.90,
+         shape="kite", price=dict(usd=129.90, eur=74.90, gbp=74.90),
          level=130, be=0, stock=7,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-diamond", name="Diamond", tier="Diamond",
-         shape="facet", price=89.90,
+         shape="facet", price=dict(usd=199.90, eur=89.90, gbp=89.90),
          level=150, be=0, stock=6,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-master", name="Master", tier="Master",
-         shape="star", price=189.90,
+         shape="star", price=dict(usd=289.90, eur=189.90, gbp=189.90),
          level=185, be=0, stock=2,
          badge="Low stock", season=True,
          note="Previous season rewards",),
@@ -903,7 +919,11 @@ ACCOUNT_KINDS = [
 _ACCOUNT_BY_ID = {a["id"]: a for a in ACCOUNTS}
 
 
-_CHEAPEST_ID = min(ACCOUNTS, key=lambda a: a["price"])["id"] if ACCOUNTS else ""
+# Cheapest on the BASE row. The rows are hand-set per market and their order is
+# not guaranteed to match, so the badge is resolved against one of them rather
+# than flickering between currencies — see the ⚠ below the assert block.
+_CHEAPEST_ID = (min(ACCOUNTS, key=lambda a: a["price"][ACCOUNT_BASE_CUR])["id"]
+                if ACCOUNTS else "")
 
 
 def account_badge(a):
@@ -1033,38 +1053,44 @@ def accounts_in_stock(region=""):
     return [a for a in ACCOUNTS if account_ships_to(a, region)]
 
 
-def account_price(a, region=""):
-    """What this listing costs on this shard: its own figure plus the shard's
-    delta. Mirrored by pricing.account_price() — which is what the server
-    actually charges — and by app.js. An unknown region prices at EUW, the
-    reference shard, rather than refusing: the refusal belongs in account_pick()
-    where it can name the reason."""
-    sv = account_server(region)
-    return round(float(a["price"]) + (sv["delta"] if sv else 0), 2)
+def account_cur(currency=""):
+    """The price table's key for a currency code, falling back to the base.
+
+    ⚠ The fallback is what keeps an unknown or missing currency on the DOLLAR
+    row rather than on whatever happens to be first. It is never a conversion:
+    there is no rate between these rows."""
+    cur = str(currency or "").strip().lower()
+    return cur if cur in ACCOUNT_CURRENCIES else ACCOUNT_BASE_CUR
 
 
-def account_was(a, region=""):
-    """The struck figure, or 0. Carries the shard delta so the reduction stays
-    the same money on every shard."""
-    if not a.get("was"):
-        return 0.0
-    sv = account_server(region)
-    return round(float(a["was"]) + (sv["delta"] if sv else 0), 2)
+def account_price(a, currency=""):
+    """What this listing costs in one currency — a row of its own table, never
+    a conversion. Mirrored by pricing.account_price() (which is what the server
+    actually charges) and by `accountPrice()` in app.js.
+
+    The shard is not an input: the price list is the same on all four."""
+    return float(a["price"][account_cur(currency)])
 
 
-def account_floor():
-    """The cheapest account anyone can actually buy, on any shard — what the
+def account_was(a, currency=""):
+    """The struck figure, or 0. Per currency like the price it strikes."""
+    was = a.get("was")
+    return float(was[account_cur(currency)]) if was else 0.0
+
+
+def account_floor(currency=""):
+    """The cheapest account anyone can actually buy, in one currency — what the
     hero and the nav quote as "from $NN". Reads stock, so a sold-out cheap
     listing can never advertise a price nobody can pay."""
-    live = [(a, s["region"]) for a in ACCOUNTS for s in ACCOUNT_SERVERS
-            if account_stock(a, s["region"])]
-    return min((account_price(a, r) for a, r in live), default=0)
+    live = [a for a in ACCOUNTS
+            if any(account_stock(a, s["region"]) for s in ACCOUNT_SERVERS)]
+    return min((account_price(a, currency) for a in live), default=0)
 
 
-def account_shard_floor(region):
+def account_shard_floor(region, currency=""):
     """The same, on one shard — the "from $NN" on a server card."""
     live = [a for a in ACCOUNTS if account_stock(a, region)]
-    return min((account_price(a, region) for a in live), default=0)
+    return min((account_price(a, currency) for a in live), default=0)
 
 
 def account_tier_color(a):
@@ -1101,8 +1127,15 @@ for _a in ACCOUNTS:
         "account %s is missing %s" % (_a.get("id"), sorted(_ACCOUNT_FIELDS - set(_a)))
     assert _a["tier"] == "Unranked" or _a["tier"] in TIER_COLORS, \
         "account %s names a tier with no colour" % _a["id"]
-    assert float(_a["price"]) > 0, "account %s needs a price" % _a["id"]
-    assert not _a.get("was") or _a["was"] > _a["price"], \
+    # Every currency the switcher offers needs a row, or that market is charged
+    # the dollar figure with a euro sign in front of it.
+    assert set(_a["price"]) == ACCOUNT_CURRENCIES, \
+        "account %s prices %s, needs exactly %s" % (
+            _a["id"], sorted(_a["price"]), sorted(ACCOUNT_CURRENCIES))
+    assert all(float(v) > 0 for v in _a["price"].values()), \
+        "account %s needs a price in every currency" % _a["id"]
+    assert not _a.get("was") or all(
+        _a["was"][c] > _a["price"][c] for c in ACCOUNT_CURRENCIES), \
         "account %s has a struck price under what it charges" % _a["id"]
     assert _a["note"], "account %s has no caution row" % _a["id"]
     # A ranked listing must not carry a champion count: it has no row to show it

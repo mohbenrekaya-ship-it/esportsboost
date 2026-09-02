@@ -3945,10 +3945,18 @@
     Array.prototype.forEach.call(document.querySelectorAll(".money[data-usd]"), function (el) {
       var n = parseFloat(el.getAttribute("data-usd"));
       if (isNaN(n)) return;
+      /* ⚠ A `data-<code>` row wins over the rate. The accounts price is a table
+         with one hand-set figure per market (see data.py), so switching
+         currency there is a LOOKUP, not a conversion — while every boosting
+         price on the same page still converts from data-usd. A row is used
+         as-is, which is what `fixed` means below. */
+      var own = el.getAttribute("data-" + locale.currency.toLowerCase());
+      var fixedRow = own !== null && own !== "" && !isNaN(parseFloat(own));
+      if (fixedRow) n = parseFloat(own);
       // A two-size price is re-split rather than flattened: writing textContent
       // over it would destroy the two spans and print the whole figure at the
       // small size. See esbMoneyParts().
-      var fixed = el.hasAttribute("data-fixed");
+      var fixed = fixedRow || el.hasAttribute("data-fixed");
       var main = el.querySelector("[data-money-main]");
       if (main) {
         var parts = window.esbMoneyParts(n, fixed);

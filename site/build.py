@@ -102,6 +102,38 @@ def money(n, cents=False, fixed=False):
     return '<span class="money" data-usd="%s"%s>%s</span>' % (raw, flag, usd(n, cents))
 
 
+def money_multi(prices, cents=True):
+    """A price with ONE FIGURE PER CURRENCY in the DOM — the accounts rule.
+
+    `prices` is the listing's own table (`{"usd": 29.90, "eur": 24.90, …}`).
+    Each row ships as `data-<code>`, and i18n.js's reformatStaticMoney() picks
+    the active currency's row instead of multiplying the dollar by a rate. That
+    is what makes a currency switch a *lookup* here while it stays a conversion
+    on every boosting price on the same page.
+
+    `data-usd` doubles as the no-JS default and the fallback for a currency with
+    no row — which cannot happen while data.py asserts the table covers
+    CHARGE_RATES, and is why that assert exists."""
+    base = float(prices[D.ACCOUNT_BASE_CUR])
+    attrs = "".join(' data-%s="%.2f"' % (c, float(v)) for c, v in sorted(prices.items())
+                    if c != D.ACCOUNT_BASE_CUR)
+    return ('<span class="money" data-usd="%.2f"%s%s>%s</span>'
+            % (base, ' data-cents="1"' if cents else "", attrs, usd(base, cents)))
+
+
+def money_parts_multi(prices):
+    """The two-size price — dollars big, cents small — with the same
+    per-currency rows `money_multi()` ships."""
+    base = float(prices[D.ACCOUNT_BASE_CUR])
+    whole = int(base)
+    attrs = "".join(' data-%s="%.2f"' % (c, float(v)) for c, v in sorted(prices.items())
+                    if c != D.ACCOUNT_BASE_CUR)
+    return ('<span class="money ac-money" data-usd="%.2f" data-cents="1"%s>'
+            '<span class="ac-money-m" data-money-main>%s</span>'
+            '<span class="ac-money-c" data-money-cents>%s</span></span>'
+            % (base, attrs, usd(whole), (".%02d" % round((base - whole) * 100))))
+
+
 def money_parts(n, fixed=False):
     """A cents price split for the two-size treatment the account cards use —
     the dollars big, the cents small. Server-side this is always USD; the client
@@ -6340,7 +6372,7 @@ def ac_price_note():
     shard. Quoted off the catalogue (`D.account_floor()` reads stock), never
     typed, so a sold-out cheap listing can't leave the hero advertising a price
     nobody can pay."""
-    return money(D.account_floor(), cents=True, fixed=True)
+    return money_multi({c: D.account_floor(c) for c in D.ACCOUNT_CURRENCIES})
 
 
 # ── The rank marks ────────────────────────────────────────────────────────
@@ -6455,7 +6487,7 @@ def ac_server_card(sv):
         <span>in stock</span></span>
       <span class="ac-sv-foot">
         <span class="ac-sv-from"><span class="ac-sv-froml">From</span>
-          {money(D.account_shard_floor(region), cents=True, fixed=True)}</span>
+          {money_multi({c: D.account_shard_floor(region, c) for c in D.ACCOUNT_CURRENCIES})}</span>
         <span class="ac-sv-go" aria-hidden="true">{_ico("arrow", 13, "ico", stroke=True)}</span>
       </span>
     </button>"""
@@ -6496,8 +6528,8 @@ def ac_tier_card(a, region):
     crawled; the query is untrusted and the server re-resolves both the listing
     and the shard before it charges anything (`pricing.account_pick`)."""
     units = D.account_stock(a, region)
-    price = D.account_price(a, region)
-    was = D.account_was(a, region)
+    price = D.account_price(a)
+    was = D.account_was(a)
     # `account_badge()` is the one reader — "Cheapest" is computed there, so a
     # re-price can never leave the claim on a card that is not.
     label = D.account_badge(a)
@@ -6511,7 +6543,7 @@ def ac_tier_card(a, region):
     badge = (f'<span class="ac-badge{" is-low" if low_badge else ""}">{esc(label)}</span>'
              if label else "")
     struck = (f'<span class="ac-was" data-ac-was{"" if was > price else " hidden"}>'
-              f'{money(was or price, cents=True, fixed=True)}</span>')
+              f'{money_multi(a["was"] if a.get("was") else a["price"])}</span>')
 
     # Four spec rows, two green ticks and one amber caution — the mix is the
     # point. See the ⚠ in the section header.
@@ -6584,7 +6616,7 @@ def ac_tier_card(a, region):
       <ul class="ac-fts">{rows}</ul>
       <div class="ac-card-foot">
         {struck}
-        <span class="ac-price" data-ac-price>{money_parts(price, fixed=True)}</span>
+        <span class="ac-price" data-ac-price>{money_parts_multi(a["price"])}</span>
         {stock}
         <div class="ac-card-cta">{ctas}</div>
       </div>
@@ -6853,8 +6885,8 @@ def page_accounts():
     faq = ac_faq_items()
     lol = BY_NAME[D.ACCOUNT_GAME]
     ref = D.ACCOUNT_REGIONS[0]              # the reference shard, EUW
-    live = [(a, s["region"]) for a in D.ACCOUNTS for s in D.ACCOUNT_SERVERS
-            if D.account_stock(a, s["region"])]
+    live = [a for a in D.ACCOUNTS
+            if any(D.account_stock(a, s["region"]) for s in D.ACCOUNT_SERVERS)]
 
     # One Product with an AggregateOffer over what can actually be bought.
     # Deliberately no aggregateRating — the ratings on this site are placeholder
@@ -6868,10 +6900,11 @@ def page_accounts():
                        "server you pick." % D.ACCOUNT_GAME,
         "brand": {"@type": "Brand", "name": D.BRAND},
         "offers": {"@type": "AggregateOffer", "priceCurrency": "USD",
-                   "lowPrice": "%.2f" % min((D.account_price(a, r) for a, r in live),
-                                            default=0),
-                   "highPrice": "%.2f" % max((D.account_price(a, r) for a, r in live),
-                                             default=0),
+                   # The dollar row. Schema.org needs one currency and this is
+                   # the base; the other markets are their own rows, not a
+                   # conversion of this one, so there is no rate to express.
+                   "lowPrice": "%.2f" % min((D.account_price(a) for a in live), default=0),
+                   "highPrice": "%.2f" % max((D.account_price(a) for a in live), default=0),
                    "offerCount": len(live),
                    "availability": "https://schema.org/InStock"},
     }
@@ -6922,7 +6955,8 @@ def page_accounts():
     return layout(ACCOUNTS_HREF, "Buy %s Accounts - %s" % (D.ACCOUNT_GAME, D.BRAND),
                   "Ready-made League of Legends accounts from %s: unranked smurfs to "
                   "Master, full email access on every one, %s on EUW, NA, EUNE or OCE."
-                  % (usd(D.account_floor(), cents=True), pricing.ACCOUNT_ETA.lower()),
+                  % (usd(D.account_floor("usd"), cents=True),
+                     pricing.ACCOUNT_ETA.lower()),
                   body, current=ACCOUNTS_HREF, jsonld=ld,
                   extra_js=faq_accordion_js(), nav_outline=True)
 
@@ -10253,15 +10287,20 @@ def client_data():
         # `accountStock()` in app.js. Shipping a pre-computed per-shard table
         # here would be the second authored figure data.py's ⚠ warns about, and
         # it would go stale against the server the first time a share moved.
+        # `price` and `was` ship as the whole per-currency TABLE, not a figure:
+        # the client picks the buyer's row exactly as pricing.py does, because
+        # there is no rate between them to derive one from another.
         "accounts": {a["id"]: {"name": a["name"], "price": a["price"],
-                               "was": a.get("was", 0), "stock": a["stock"],
+                               "was": a.get("was") or 0, "stock": a["stock"],
                                "tier": a["tier"], "kind": D.account_kind(a)}
                      for a in D.ACCOUNTS},
         # The shards, in the order the picker draws them. `code` is
-        # REGION_SHORT's — the client never derives a second one.
+        # REGION_SHORT's — the client never derives a second one. There is no
+        # `delta`: a shard changes stock, never price.
         "accountServers": [{"region": s["region"], "code": D.account_code(s["region"]),
-                            "share": s["share"], "delta": s["delta"]}
+                            "share": s["share"]}
                            for s in D.ACCOUNT_SERVERS],
+        "accountBaseCur": D.ACCOUNT_BASE_CUR,
         "accountOfferLabel": pricing.ACCOUNT_OFFER_LABEL,
         # The filter's description line, keyed by filter. app.js writes it into
         # one node rather than shipping three — it is a whole text node either

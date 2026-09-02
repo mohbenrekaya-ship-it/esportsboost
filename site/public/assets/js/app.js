@@ -760,13 +760,22 @@
     for (var i = 0; i < list.length; i++) if (list[i].region === region) return list[i];
     return null;
   }
-  function accountPrice(acc, sv) {
-    return Math.round((acc.price + (sv ? sv.delta : 0)) * 100) / 100;
+  /* ⚠ The buyer's currency is a PRICE INPUT here: a listing carries one row
+     per market and this picks one, it never converts. Mirrors
+     `D.account_price()`; an unknown currency falls back to the base row rather
+     than to whichever key happens to be first. The shard is NOT an input — a
+     shard changes stock, not price. */
+  function accountCur() {
+    var base = D.accountBaseCur || "usd";
+    return ((window.ESB_LOCALE || {}).currency || base).toLowerCase();
   }
-  function accountWas(acc, sv) {
-    if (!acc.was) return 0;
-    return Math.round((acc.was + (sv ? sv.delta : 0)) * 100) / 100;
+  function accountRow(table) {
+    if (!table) return 0;
+    var base = D.accountBaseCur || "usd", v = table[accountCur()];
+    return typeof v === "number" ? v : (table[base] || 0);
   }
+  function accountPrice(acc) { return accountRow(acc && acc.price); }
+  function accountWas(acc) { return acc && acc.was ? accountRow(acc.was) : 0; }
   /* Units of one listing on one shard. A sold-out listing stays at zero on
      every shard — Math.max(1, …) must not resurrect it, which is the one way
      this rounding goes wrong. */
@@ -817,8 +826,8 @@
           promoCode: "", promoLabel: "", promoEnds: ""
         };
       }
-      var aTotal = accountPrice(acc, aSv);
-      var aWas = accountWas(acc, aSv);
+      var aTotal = accountPrice(acc);
+      var aWas = accountWas(acc);
       var aSub = aWas > aTotal ? aWas : aTotal;
       var aOff = Math.round((aSub - aTotal) * 100) / 100;
       return {
@@ -3434,26 +3443,13 @@
       var acc = (D.accounts || {})[el.getAttribute("data-ac-id")];
       if (!acc || !sv) return;
       var units = accountStock(acc, sv);
-      var price = accountPrice(acc, sv);
-      var was = accountWas(acc, sv);
       var state = !units ? "out" : (units <= AC_SCARCE ? "low" : "ok");
 
-      var priceEl = el.querySelector("[data-ac-price] .ac-money");
-      if (priceEl) {
-        var parts = window.esbMoneyParts
-          ? window.esbMoneyParts(price, true)
-          : { main: usd(price, true, true), cents: "" };
-        priceEl.setAttribute("data-usd", price.toFixed(2));
-        setText(priceEl.querySelector("[data-money-main]"), parts.main);
-        setText(priceEl.querySelector("[data-money-cents]"), parts.cents);
-      }
-      var wasEl = el.querySelector("[data-ac-was]");
-      if (wasEl) {
-        wasEl.hidden = !(was > price);
-        var wm = wasEl.querySelector(".money") || wasEl;
-        wm.setAttribute("data-usd", (was || price).toFixed(2));
-        setText(wm, usd(was || price, true, true));
-      }
+      /* ⚠ The money is NOT rewritten here. A shard changes stock, not price,
+         and a currency switch is handled by i18n.js's reformatStaticMoney(),
+         which picks the listing's own `data-<code>` row off the span. Writing
+         a figure here would be a second place the price is decided, and the
+         two would disagree the first time one of them was changed. */
       setText(el.querySelector("[data-ac-code]"), sv.code);
       setText(el.querySelector("[data-ac-shard-name]"), sv.region);
       each("[data-ac-units]", el, function (b) { b.textContent = units; });
