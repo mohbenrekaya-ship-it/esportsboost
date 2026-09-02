@@ -45,16 +45,16 @@ UNIT_MIN, UNIT_MAX = 1, 5
 # this word is the thing to change — not the copy around it.
 #
 # It is the WHOLE phrase, not a bare adjective, so every surface prints it
-# untouched ("Instant delivery", "Instant delivery, from paying to playing",
+# untouched ("Instant Delivery", "Instant Delivery, from paying to playing",
 # "31 in stock · instant delivery") and nothing appends a word to it. Do not
 # shorten it back to "Instant" and rebuild the noun at each call site — that is
-# how a constant ends up as "Instant delivery delivery" on one surface and
+# how a constant ends up as "Instant Delivery delivery" on one surface and
 # untranslated on another.
 #
 # The scarce state is the deliberate exception and stays: a listing under
 # AC_SCARCE says "verified in 12 h" and its CTA says Reserve, because that unit
 # is NOT delivered instantly and the card must not claim it is.
-ACCOUNT_ETA = "Instant delivery"
+ACCOUNT_ETA = "Instant Delivery"
 
 # The label on the discount row when a listing carries a struck `was` price.
 # Not a promo code — nothing is typed and nothing is redeemed; it names the one

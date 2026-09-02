@@ -801,7 +801,7 @@ ACCOUNT_DELIVERY = [
     ("envelope", False, "Credentials by email",
      "Login, password and the original inbox with its recovery details, sent to "
      "the address you check out with."),
-    ("clock", True, "Instant delivery",
+    ("clock", True, "Instant Delivery",
      "Sent the moment the payment clears, with no queue and nobody to wait "
      "for."),
     ("shield-check", True, "Replaced for %d months" % ACCOUNT_WARRANTY_MONTHS,
@@ -1164,7 +1164,7 @@ ACCOUNT_STEPS = [
     ("01", "Minute 0", "Pay for the account you picked",
      "No account needed on our side. Card or wallet, and the price on the card "
      "is the price."),
-    ("02", "Instant delivery", "Credentials arrive by email",
+    ("02", "Instant Delivery", "Credentials arrive by email",
      "Login, password, and the original inbox with its recovery details. Sent "
      "to the address you paid with."),
     ("03", "First 10 min", "Change the email and the password",

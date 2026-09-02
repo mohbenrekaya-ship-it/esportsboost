@@ -850,7 +850,7 @@
         promoCode: "", promoLabel: aOff ? T(D.accountOfferLabel || "Offer price") : "",
         promoEnds: "",
         summary: acc.name + " · " + aSv.code,
-        days: 0, eta: T(D.accountEta || "Instant delivery")
+        days: 0, eta: T(D.accountEta || "Instant Delivery")
       };
     }
 

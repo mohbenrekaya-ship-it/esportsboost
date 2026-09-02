@@ -6313,7 +6313,7 @@ def page_game(g):
 #  · **One delivery promise, and it is `pricing.ACCOUNT_ETA`.** It appears in
 #    the hero, the handover heading, step 02, every in-stock tier card, the
 #    reviews band and the close. Six reads, one constant — composed with a
-#    following word at each ("Instant delivery", "in stock · instant") so the
+#    following word at each ("Instant Delivery", "in stock · instant") so the
 #    one word still reads as English wherever it lands. ⚠ The scarce state is
 #    the deliberate exception: under AC_SCARCE a card says "verified in 12 h"
 #    and its CTA says Reserve, because that unit is NOT instant.
@@ -6552,7 +6552,7 @@ def ac_tier_card(a, region):
     # BE/Skins", and a figure-carrier split would impose English word order on
     # both. A listing WITH an essence figure keeps the split, because there the
     # number is the thing that moves.
-    be_row = ("<span>Random BE/skins</span>" if D.account_be_random(a)
+    be_row = ("<span>Random BE/Skins</span>" if D.account_be_random(a)
               else f'<b>{esc(_ac_be(a["be"]))}</b> <span>blue essence</span>')
     # The third row is the MMR band on a ranked listing and the level plus the
     # champion pool on an unranked one — an account with unplayed placements has
@@ -6564,8 +6564,8 @@ def ac_tier_card(a, region):
     spec_row = "<span>%s</span>" % esc(spec[0].format(*spec[1:]))
     feats = [
         ("globe", "spec", '<span data-ac-shard-name>%s</span>' % esc(region)),
-        ("wallet", "spec", be_row),
-        ("trophy", "spec", spec_row),
+        ("package", "spec", be_row),
+        ("users", "spec", spec_row),
         ("check", "ok", "<span>%s</span>" % esc("Full email access")),
         ("check", "ok", "<span>%s</span>" % esc("Hand-levelled, never botted")),
         ("warn", "caution", "<span>%s</span>" % esc(a["note"])),
@@ -6631,7 +6631,7 @@ def ac_filter_bar():
     control, large underlined tabs, then this. The lesson that stuck was that
     step 2 had four stacked control rows and the fix was consolidating to two,
     not restyling the filters harder. Do not add a third row here."""
-    icons = {"all": "grid", "unranked": "rocket", "ranked": "chart-up"}
+    icons = {"all": "list", "unranked": "bolt", "ranked": "trophy"}
     btns = ""
     for i, (key, label, _meta) in enumerate(D.ACCOUNT_KINDS):
         on = i == 0
