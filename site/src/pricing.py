@@ -23,6 +23,52 @@ ADDON = {a["id"]: a for a in D.ADDONS}
 # charge amount.
 UNIT_MIN, UNIT_MAX = 1, 5
 
+# ── accounts, the one product that is not a service ────────────────────────
+# A ready-made account is a flat price and a handover, so it reads none of the
+# machinery below: no ladder, no queue, no add-ons, no sitewide sale. The two
+# constants here are its whole product surface.
+#
+# The ETA is the delivery promise for the handover, mirrored literally in
+# app.js's quote() and translated as a whole node in i18n.js. It is the one
+# figure the buyer times us against, and data.py's ACCOUNT_DELIVERY and the
+# order mail's own "what happens next" both have to describe the same handover.
+# ⚠ AN OPS COMMITMENT, not a description, and the strongest one this product
+# makes. It appears on six surfaces — the hero, the handover heading, step 02,
+# every in-stock tier card, the reviews band and the close — plus the checkout
+# chip and the order mail's Estimated row, and it is ONE word read from here so
+# a re-tune cannot leave a stale promise on one of them.
+#
+# "Instant" means the credentials are sent by machine the moment the payment
+# clears. It leaves no room at all: a buyer who waits ten minutes has been told
+# something untrue by every surface above, and there is no reading of "instant"
+# that covers a person checking the account first. If the handover is manual,
+# this word is the thing to change — not the copy around it.
+#
+# It is the WHOLE phrase, not a bare adjective, so every surface prints it
+# untouched ("Instant delivery", "Instant delivery, from paying to playing",
+# "31 in stock · instant delivery") and nothing appends a word to it. Do not
+# shorten it back to "Instant" and rebuild the noun at each call site — that is
+# how a constant ends up as "Instant delivery delivery" on one surface and
+# untranslated on another.
+#
+# The scarce state is the deliberate exception and stays: a listing under
+# AC_SCARCE says "verified in 12 h" and its CTA says Reserve, because that unit
+# is NOT delivered instantly and the card must not claim it is.
+ACCOUNT_ETA = "Instant delivery"
+
+# The label on the discount row when a listing carries a struck `was` price.
+# Not a promo code — nothing is typed and nothing is redeemed; it names the one
+# reduction this product carries, so the receipt says what the money is.
+ACCOUNT_OFFER_LABEL = "Offer price"
+
+# `days` on an account order. Zero, and it has to be: the ETA is not a number of
+# days, and every reader of `days` treats it as one — the demo card's "N days
+# left", the follow-up mail's per-hour figure (play_hours() returns 0 below 1, so
+# per_hour_worth_saying() drops the whole block rather than dividing by a
+# delivery that involves no play), and the booster profiles' histories. A 1 here
+# would put "1 day left" on an order delivered in an hour.
+ACCOUNT_DAYS = 0
+
 # Duo queue multiplier. Named so the order card can label the option with the
 # real percentage instead of a hand-typed one that drifts. Mirrored literally in
 # app.js — change one, change the other.
@@ -130,18 +176,28 @@ def per_hour_worth_saying(total, days, ceiling=None):
 CHARGE_RATES = {"usd": 1.0, "eur": 0.92, "gbp": 0.79, "cad": 1.37}
 
 
-def charge_for(total_usd, currency):
+def charge_for(total_usd, currency, cents=False):
     """(currency_code, integer minor units) for the Stripe line item.
 
-    The button shows the total as `esbMoney(total)` — a WHOLE currency unit (no
-    decimals), i.e. `round(total_usd * rate)`. We charge that exact figure so
-    Stripe never quotes a different number than the customer clicked. Unknown
-    currencies fall back to USD (the base the quote is already in)."""
+    On every boosting product the button shows the total as `esbMoney(total)` —
+    a WHOLE currency unit, no decimals — i.e. `round(total_usd * rate)`, and we
+    charge that exact figure so Stripe never quotes a different number than the
+    customer clicked.
+
+    ⚠ Accounts are the one product priced in cents ($14.99), so they are shown
+    and charged to the cent instead — `cents` comes off the quote itself
+    (`q["cents"]`), never from the caller's own guess about the service. Round
+    to a whole unit there and the buyer clicks $14.99 and is charged $15, which
+    is the same class of defect the whole-unit rule exists to prevent.
+
+    Unknown currencies fall back to USD (the base the quote is already in)."""
     cur = str(currency or "usd").strip().lower()
     if cur not in CHARGE_RATES:
         cur = "usd"
-    whole_units = _jsround(total_usd * CHARGE_RATES[cur])
-    return cur, whole_units * 100
+    amount = total_usd * CHARGE_RATES[cur]
+    if cents:
+        return cur, _jsround(amount * 100)
+    return cur, _jsround(amount) * 100
 
 
 def _jsround(x):
@@ -301,6 +357,47 @@ def quote(state):
     mode = state.get("mode", "Piloted")
     duo = DUO_MULT if mode == "Duo queue" else 1.0
     service = state.get("service", "division")
+
+    if service == "account":
+        # A ready-made account: the price is the listing's own figure plus the
+        # shard's delta, and that is the entire formula. Deliberately no promo,
+        # no add-ons, no duo and no bundle — the same shape the coaching branch
+        # has, and for a stronger reason: an account has a real acquisition cost
+        # behind it, so a percentage off it is margin rather than a discount on
+        # labour. If accounts go on sale it is a rate applied here and in
+        # app.js, never a struck reference price typed onto the card.
+        #
+        # The one struck figure this product carries is a listing's own `was`,
+        # which is a price it was actually sold at rather than a percentage of
+        # anything (see the ⚠ in data.py). It rides in `subtotal`/`discount` so
+        # the card's struck price, the checkout receipt row and the order mail
+        # all read the same money through the machinery every other product
+        # uses, and `boost − discount = total` still holds exactly.
+        #
+        # ⚠ THIS IS THE ONE PRODUCT PRICED IN CENTS. `cents` is what tells the
+        # charge to bill 1499 rather than rounding to a whole unit the way every
+        # boost total does — see charge_for(). Drop it and the buyer clicks
+        # $14.99 and pays $15.
+        acc, region = account_pick(state)
+        if not acc:
+            return _invalid("That account is no longer available")
+        total = D.account_price(acc, region)
+        was = D.account_was(acc, region)
+        subtotal = was if was > total else total
+        discount = round(subtotal - total, 2)
+        return dict(
+            invalid=False, total=total, total_cents=int(round(total * 100)),
+            cents=True,
+            subtotal=subtotal, discount=discount,
+            promo_code="", promo_label=ACCOUNT_OFFER_LABEL if discount else "",
+            promo_pct=0, promo_ends="",
+            base=subtotal, addons=0, days=ACCOUNT_DAYS,
+            # The shard is named in the shop's own code (EUW / NA / EUNE / OCE),
+            # which is what the card, the checkout summary and the credentials
+            # mail all print. REGION_SHORT's, never a second table.
+            summary="%s · %s" % (acc["name"], D.account_code(region)),
+            eta=ACCOUNT_ETA,
+        )
 
     if service == "coaching":
         # Booking product: price is rate × hours × (1 − pack discount) and
@@ -488,6 +585,41 @@ def unit_count(state):
     Duplicating the clamp is how a receipt comes to disagree with the charge."""
     key = "wins" if state.get("service") == "wins" else "placements"
     return _clamp(state.get(key, 1))
+
+
+def account_pick(state):
+    """(listing, shard) for an account order, or (None, "") when it cannot be
+    sold.
+
+    The ONE resolver — build.py, quote() and payments.build_session() all read
+    the catalogue through it, so the row written into the orders store names the
+    listing that was charged for and never what the body asked for.
+
+    An unknown id and a sold-out listing both resolve to nothing, because both
+    have to refuse the charge: stock is hand-set in data.py and nothing
+    decrements it (see the ⚠ there), so the only place a sold-out listing can be
+    stopped is here, on the server, at the moment somebody tries to pay for it.
+    The shard is clamped into the listing's own list rather than trusted — a
+    body naming a region this account does not ship on would otherwise reach
+    fulfilment as an instruction nobody can carry out."""
+    acc = D.account(state.get("account"))
+    if not acc:
+        return None, ""
+    region = str(state.get("region") or "").strip()
+    # The shard is clamped into the shop's own list rather than trusted: a body
+    # naming a region this shop does not sell on would otherwise reach
+    # fulfilment as an instruction nobody can carry out — and, since the shard
+    # now carries a price delta, would be charged at the wrong shard's price.
+    # An unknown region falls back to the reference shard.
+    if region not in D.ACCOUNT_REGIONS:
+        region = D.ACCOUNT_REGIONS[0]
+    # Sold out refuses, and has to: stock is hand-set in data.py and nothing
+    # decrements it (see the ⚠ there), so this is the only place a listing that
+    # is gone can be stopped — on the server, at the moment somebody tries to
+    # pay for it. It is checked PER SHARD, because stock is a per-shard figure.
+    if not D.account_stock(acc, region):
+        return None, ""
+    return acc, region
 
 
 def coach_pick(state):

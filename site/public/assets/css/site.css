@@ -8503,6 +8503,468 @@ html.myd-open .mobile-bar { display: none; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   ACCOUNTS SHOP — /accounts.html (`.ac`)   design_handoff_accounts_shop
+
+   The tenth scoped port after .hero-a / .co / .gg / .dsh / .rst / .tk / .hd /
+   .gc: local tokens declared on `.ac`, product radii per element, nothing
+   leaking past the scope. The palette is `.gc`'s, deliberately — the games
+   catalogue and this board are the same object (a filtered grid of things you
+   can buy) and the two should not look like two products from two shops.
+
+   The hero and the close are `.hero-a hero-a-lit`, so `.btn-primary`,
+   `.grad-text` and the `--h-*` text colours resolve to the handoff ember for
+   free, exactly as the home hero and the closing band do.
+
+   Three things here are load-bearing:
+
+   · **Bands alternate tonally rather than relying on hairlines.** `.ac-lift`
+     sits on a lifted #15120f → #100e0c gradient and the others step back down.
+     That alternation is the fix for the page reading as flat black — the
+     handoff calls it out. Keep it, and keep it on 01 and 02 only.
+
+   · **The carousel is sized off `--ac-per`, which CSS owns.** JS reads it back
+     with getComputedStyle to compute the page count, so the number of cards per
+     page follows the layout instead of a second constant that drifts from it.
+     The track translates by whole pages: one page = the rail's width + one gap,
+     which is why the transform is `calc(var(--ac-p) * (-100% - var(--ac-gap)))`
+     — 100% of a flex track resolves against the RAIL, not the content.
+
+   · **Below 760px the carousel becomes a swipe rail with snap points.** A paged
+     carousel with arrows is wrong on touch; `--ac-per` goes fractional so the
+     next card peeks, the arrows and dots hide, and paging is inert.
+
+   Breakpoints follow the site's 1200/1000/760, not the handoff's (it draws
+   1440 only and asks for the rest to be confirmed with the designer): 1200
+   takes the carousel to three per page and the server cards to 2×2, 1000 is
+   two per page with the heads stacked, 760 is the phone pattern.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.ac {
+  --ember: #ff5a1f;
+  --ember-lit: #ff8a3d;
+  --ember-grad: linear-gradient(94deg, #ffb03a, #ff5a1f);
+  --ink: #201004;
+  --g-text: #f2efec;
+  --g-body: #b6afa9;
+  --g-body-2: #c9c2bb;
+  --g-note: #a9a29b;
+  --g-muted: #8d8781;
+  --g-faint: #7b746d;
+  --g-dim: #6f6862;
+  --g-tint: #ffb887;
+  --g-good: #8fd6a4;
+  --g-caution: #c9955f;          /* the ToS plate's glyph — never the accent */
+  --g-line: rgba(255, 255, 255, .055);
+  --g-line-2: rgba(255, 255, 255, .08);
+  --g-line-3: rgba(255, 255, 255, .11);
+  --g-line-4: rgba(255, 255, 255, .13);
+  --g-line-6: rgba(255, 255, 255, .16);
+  --g-plate: rgba(255, 255, 255, .035);
+  --g-card: linear-gradient(180deg, #221d19, #171412);
+  --g-feat: linear-gradient(180deg, rgba(255, 90, 31, .07), rgba(19, 17, 16, 0) 46%),
+            linear-gradient(180deg, #221d19, #171412);
+  --ac-gap: 10px;
+  --ac-per: 4;
+  position: relative; isolation: isolate;
+  background: #100e0c; color: var(--g-text);
+}
+/* Rows toggled with `hidden` (the two steps, the struck price, the dots) carry
+   a `display` value, which otherwise beats the UA's [hidden]. Same guard as
+   `.gc` / `.sg` / `.co`. */
+.ac [hidden] { display: none !important; }
+
+.ac-band { position: relative; z-index: 1; padding-block: 52px 56px; border-top: 1px solid var(--g-line-2); }
+.ac-lift { background: linear-gradient(180deg, #15120f, #100e0c); }
+.ac-inner { position: relative; z-index: 1; }
+.ac-glow {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(680px 400px at 88% 40%, rgba(255, 90, 31, .10), transparent 66%);
+}
+.ac .ico { flex: none; }
+
+/* ── hero — the ONE centred band on the page ──────────────────────────── */
+.ac-hero { border-top: 0; }
+.ac-hero-inner { padding-block: 56px 60px; }
+.ac-hero-copy { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.ac-hero-k {
+  font: 600 10.5px/1 var(--display); letter-spacing: .16em;
+  text-transform: uppercase; color: var(--ember-lit);
+}
+.ac-h1 {
+  margin: 16px 0 0; font-family: var(--display); font-weight: 600;
+  font-size: clamp(34px, 4.6vw, 56px); line-height: 1.02; letter-spacing: -.032em;
+}
+.ac-hero-p { margin: 16px 0 0; font-size: 19px; line-height: 1.5; color: var(--g-body); }
+.ac-assure {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 10px 26px; margin-top: 22px; font-size: 13.5px; color: var(--g-body);
+}
+.ac-as { display: flex; align-items: center; gap: 8px; }
+.ac-as b { font-weight: 600; color: var(--g-text); }
+.ac-as .ico { color: var(--ember-lit); }
+
+/* ── the two steps ────────────────────────────────────────────────────── */
+.ac-step { position: relative; z-index: 1; }
+.ac-step-1 { margin-top: 44px; }
+.ac-step-2 { margin-top: 38px; scroll-margin-top: 96px; }
+.ac-step-head { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.ac-step-head.is-left { align-items: flex-start; text-align: left; }
+.ac-step-k {
+  display: flex; align-items: center; gap: 9px;
+  font: 600 9.5px/1 var(--display); letter-spacing: .18em;
+  text-transform: uppercase; color: var(--g-tint);
+}
+.ac-dash { width: 18px; height: 1px; background: linear-gradient(90deg, rgba(255, 90, 31, 0), var(--ember)); }
+.ac-step-h {
+  margin: 13px 0 0; font-family: var(--display); font-weight: 600;
+  font-size: clamp(24px, 2.6vw, 30px); line-height: 1.08; letter-spacing: -.028em;
+  display: flex; flex-wrap: wrap; gap: .32em; justify-content: center;
+}
+.ac-step-head.is-left .ac-step-h { justify-content: flex-start; }
+.ac-step-p {
+  margin: 12px 0 0; font-size: 14.5px; line-height: 1.6; color: var(--g-body);
+  max-width: 58ch; text-wrap: pretty;
+}
+
+/* ── step 1 · the server cards ────────────────────────────────────────── */
+.ac-sv-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--ac-gap); margin-top: 28px; }
+.ac-sv {
+  position: relative; display: flex; flex-direction: column; padding: 18px;
+  border-radius: 14px; cursor: pointer; overflow: hidden; text-align: left;
+  background: var(--g-card); border: 1px solid var(--g-line-4);
+  color: inherit; font: inherit;
+  transition: border-color .16s ease, transform .16s ease;
+}
+.ac-sv:hover { border-color: rgba(255, 90, 31, .4); transform: translateY(-2px); }
+.ac-sv.is-lead { background: var(--g-feat); border-color: rgba(255, 90, 31, .32); box-shadow: 0 18px 44px rgba(0, 0, 0, .42); }
+.ac-sv-edge { display: none; }
+.ac-sv.is-lead .ac-sv-edge {
+  display: block; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--ember-grad);
+}
+.ac-sv-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ac-sv-code {
+  display: flex; align-items: center; justify-content: center; height: 38px; padding: 0 14px;
+  border-radius: 10px; font: 700 17px/1 var(--display); letter-spacing: -.01em;
+  color: var(--g-tint); background: rgba(255, 90, 31, .09); border: 1px solid rgba(255, 90, 31, .26);
+}
+.ac-sv-badge, .ac-badge {
+  flex: none; font: 600 8.5px/1 var(--display); letter-spacing: .13em; text-transform: uppercase;
+  border-radius: 999px; padding: 6px 8px; white-space: nowrap;
+  color: var(--g-tint); background: rgba(255, 90, 31, .10); border: 1px solid rgba(255, 90, 31, .28);
+}
+.ac-sv-badge.is-low, .ac-badge.is-low {
+  color: var(--g-caution); background: rgba(201, 149, 95, .10); border-color: rgba(201, 149, 95, .28);
+}
+.ac-sv-name { display: block; margin-top: 16px; font-size: 16px; font-weight: 600; letter-spacing: -.015em; }
+.ac-sv-stock { display: flex; align-items: center; gap: 7px; margin-top: 9px; font-size: 12.5px; color: var(--g-muted); }
+.ac-sv-stock b { font-weight: 600; color: var(--g-body-2); }
+.ac-sv-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--g-line-2);
+}
+.ac-sv-from { display: flex; align-items: baseline; gap: 7px; font-size: 19px; font-weight: 600; letter-spacing: -.025em; color: var(--g-tint); }
+.ac-sv-froml { font: 600 9px/1 var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--g-faint); }
+.ac-sv-go {
+  width: 30px; height: 30px; flex: none; display: flex; align-items: center; justify-content: center;
+  border-radius: 999px; border: 1px solid rgba(255, 90, 31, .4); color: var(--g-tint);
+}
+
+/* ── step 2 · the chosen-server bar ───────────────────────────────────── */
+.ac-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  padding: 14px 16px; border-radius: 12px;
+  background: rgba(255, 255, 255, .025); border: 1px solid var(--g-line-4);
+}
+.ac-bar-l { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.ac-bar-tick {
+  display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: none;
+  border-radius: 999px; background: rgba(70, 190, 110, .10);
+  border: 1px solid rgba(70, 190, 110, .32); color: var(--g-good);
+}
+.ac-bar-txt { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.ac-bar-k { font: 600 8.5px/1 var(--display); letter-spacing: .16em; text-transform: uppercase; color: var(--g-faint); }
+.ac-bar-n { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.ac-bar-n i { font-style: normal; color: var(--g-dim); }
+.ac-bar-r { display: flex; align-items: center; gap: 12px; flex: none; }
+.ac-bar-stock { font-size: 12.5px; color: var(--g-muted); }
+.ac-bar-stock b { font-weight: 600; color: var(--g-body-2); }
+.ac-change {
+  display: flex; align-items: center; gap: 9px; height: 38px; padding: 0 14px; border-radius: 9px;
+  background: transparent; border: 1px solid rgba(255, 255, 255, .14); color: var(--g-body-2);
+  font: 600 12.5px/1 var(--display); cursor: pointer;
+  transition: border-color .16s ease, color .16s ease, background .16s ease;
+}
+.ac-change:hover { border-color: rgba(255, 90, 31, .5); color: #ffd0b0; background: rgba(255, 90, 31, .08); }
+
+.ac-step-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-top: 36px; }
+.ac-arrows { display: flex; align-items: center; gap: 8px; flex: none; padding-bottom: 4px; }
+.ac-arrow {
+  width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; cursor: pointer; background: rgba(255, 255, 255, .03);
+  border: 1px solid rgba(255, 255, 255, .12); color: #e7e2dd;
+}
+/* Dim at the ends rather than disappearing — a control that vanishes moves the
+   row it sits in and tells the reader nothing about why. */
+.ac-arrow[disabled] { opacity: .34; cursor: default; color: var(--g-faint); }
+
+/* ── step 2 · the filter bar ──────────────────────────────────────────── */
+.ac-filbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  margin-top: 26px; padding-bottom: 16px; border-bottom: 1px solid rgba(255, 255, 255, .09);
+}
+.ac-fils { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ac-fil {
+  display: flex; align-items: center; gap: 12px; height: 54px; padding: 0 20px;
+  border-radius: 12px; cursor: pointer; background: var(--g-plate);
+  border: 1px solid rgba(255, 255, 255, .12); color: var(--g-note);
+  font: inherit; white-space: nowrap;
+  transition: border-color .16s ease, background .16s ease, color .16s ease;
+}
+.ac-fil-i { font-size: 21px; color: var(--g-faint); transition: color .16s ease; }
+.ac-fil-l { font: 600 15.5px/1 var(--display); letter-spacing: -.01em; }
+.ac-fil-n {
+  display: flex; align-items: center; justify-content: center; flex: none;
+  min-width: 24px; height: 22px; padding: 0 7px; border-radius: 999px;
+  font: 600 11px/1 var(--display); letter-spacing: .04em;
+  color: var(--g-faint); background: rgba(255, 255, 255, .05);
+}
+.ac-fil.is-on { background: rgba(255, 90, 31, .10); border-color: rgba(255, 90, 31, .46); color: var(--g-text); }
+.ac-fil.is-on .ac-fil-i { color: var(--ember-lit); }
+.ac-fil.is-on .ac-fil-n { color: var(--g-tint); background: rgba(255, 90, 31, .14); }
+.ac-filmeta { display: flex; align-items: center; gap: 12px; flex: none; font-size: 12.5px; color: var(--g-muted); }
+.ac-filmeta b { font-weight: 600; color: var(--g-body-2); }
+.ac-filsep { width: 1px; height: 12px; background: rgba(255, 255, 255, .14); }
+
+/* ── step 2 · the carousel ────────────────────────────────────────────── */
+.ac-rail { position: relative; margin-top: 14px; overflow: hidden; }
+.ac-track {
+  display: flex; gap: var(--ac-gap); align-items: stretch;
+  transform: translateX(calc(var(--ac-p, 0) * (-100% - var(--ac-gap))));
+  transition: transform .34s cubic-bezier(.22, .61, .36, 1);
+}
+.ac-card {
+  position: relative; display: flex; flex-direction: column;
+  flex: 0 0 calc((100% - (var(--ac-per) - 1) * var(--ac-gap)) / var(--ac-per));
+  box-sizing: border-box; padding: 18px; border-radius: 14px; overflow: hidden;
+  background: var(--g-card); border: 1px solid var(--g-line-4);
+}
+.ac-card.is-feat { background: var(--g-feat); border-color: rgba(255, 90, 31, .32); box-shadow: 0 18px 44px rgba(0, 0, 0, .42); }
+.ac-card-edge { display: none; }
+.ac-card.is-feat .ac-card-edge {
+  display: block; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--ember-grad);
+}
+.ac-card.is-out { opacity: .72; }
+.ac-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ac-emblem {
+  width: 46px; height: 46px; flex: none; display: flex; align-items: center; justify-content: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tier) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tier) 30%, transparent);
+}
+.ac-card-name { display: flex; align-items: baseline; gap: 8px; margin-top: 18px; min-width: 0; }
+.ac-name {
+  margin: 0; font: 600 18px/1 var(--display); letter-spacing: -.02em; color: var(--g-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ac-card-code { font: 600 11px/1 var(--display); letter-spacing: .11em; text-transform: uppercase; color: var(--g-faint); }
+.ac-fts { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
+.ac-ft { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--g-body); }
+.ac-ft-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-ft b { font-weight: 600; color: var(--g-body-2); }
+.ac-ft.is-spec .ico { color: var(--ember-lit); }
+.ac-ft.is-ok .ico { color: var(--g-good); }
+/* The one amber row. Six identical green ticks read as marketing; this line is
+   what makes the other five credible — see the handoff's own note. */
+.ac-ft.is-caution .ico { color: var(--g-caution); }
+.ac-card-foot { display: flex; flex-direction: column; align-items: center; margin-top: auto; padding-top: 22px; }
+.ac-was { display: block; margin-bottom: 6px; font: 400 13.5px/1 var(--body); color: #7e7872; text-decoration: line-through; }
+.ac-price { display: block; }
+.ac-money { display: flex; align-items: baseline; justify-content: center; gap: 1px; }
+.ac-money-m { font-size: 30px; font-weight: 600; letter-spacing: -.03em; line-height: 1; color: var(--g-text); }
+.ac-money-c { font-size: 17px; font-weight: 600; letter-spacing: -.01em; color: var(--g-note); }
+.ac-stock {
+  display: flex; align-items: center; gap: 7px; margin-top: 10px;
+  font: 600 10.5px/1 var(--display); letter-spacing: .06em; color: var(--g-good);
+}
+.ac-stock.is-low { color: var(--g-note); }
+.ac-stock.is-out { color: var(--g-caution); }
+/* All three states ride in the DOM (the whole-text-node i18n rule) and CSS
+   picks one off the state class — see ac_tier_card()'s ⚠. */
+.ac-sv-one { display: none; align-items: center; gap: 7px; }
+.ac-stock.is-ok [data-ac-sv="ok"],
+.ac-stock.is-low [data-ac-sv="low"],
+.ac-stock.is-out [data-ac-sv="out"] { display: flex; }
+.ac-card-cta { display: flex; gap: 7px; width: 100%; margin-top: 15px; }
+.ac-cta {
+  flex: 1; height: 44px; border-radius: 10px;
+  font: 700 12px/1 var(--display); letter-spacing: .1em; text-transform: uppercase;
+}
+.ac-cta.btn-primary { box-shadow: 0 8px 20px rgba(255, 90, 31, .26); }
+.ac-cta-reserve {
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 90, 31, .10); color: var(--g-tint); border: 1px solid rgba(255, 90, 31, .4);
+}
+.ac-cta-reserve:hover { background: rgba(255, 90, 31, .16); }
+
+/* Dots express state with WIDTH plus two gradient backgrounds. Both states
+   carry a gradient on purpose: transitioning the `background` shorthand between
+   a colour and a linear-gradient is non-interpolable, and the de-activated dot
+   gets stuck wide and transparent. */
+.ac-dots { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 18px; }
+.ac-dot {
+  width: 7px; height: 7px; border: 0; padding: 0; border-radius: 999px; cursor: pointer;
+  background: linear-gradient(94deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .16));
+  transition: width .22s ease, background .22s ease;
+}
+.ac-dot.is-on { width: 24px; background: var(--ember-grad); }
+.ac-nojs { margin: 16px 0 0; font-size: 12.5px; color: var(--g-muted); text-align: center; }
+.ac-nojs b { font-weight: 600; color: var(--g-body-2); }
+
+/* ── band heads, shared ───────────────────────────────────────────────── */
+.ac-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); gap: 40px; align-items: end; }
+.ac-head-l { display: flex; flex-direction: column; align-items: flex-start; }
+.ac-h2 {
+  margin: 16px 0 0; font-family: var(--display); font-weight: 600;
+  font-size: clamp(26px, 3vw, 36px); line-height: 1.04; letter-spacing: -.03em; max-width: 20ch;
+}
+.ac-head-p, .ac-band-p { margin: 0; font-size: 16px; line-height: 1.65; color: var(--g-body); max-width: 56ch; text-wrap: pretty; }
+.ac-band-p { margin-top: 18px; }
+.ac-link { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--ember-lit); }
+.ac-link:hover { color: #ffa76a; }
+
+/* ── 01 handover ──────────────────────────────────────────────────────── */
+.ac-hand { display: grid; grid-template-columns: minmax(0, 1fr) 480px; gap: 56px; align-items: start; }
+.ac-hand-l { display: flex; flex-direction: column; align-items: flex-start; }
+.ac-hand-l .ac-h2 { max-width: 17ch; font-size: clamp(28px, 3.3vw, 40px); line-height: 1.05; }
+.ac-hsteps { display: flex; flex-direction: column; width: 100%; max-width: 520px; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--g-line-4); }
+.ac-step-row-i { display: flex; align-items: flex-start; gap: 14px; padding: 15px 0; border-bottom: 1px solid var(--g-line); }
+.ac-step-row-i:last-child { border-bottom: 0; }
+.ac-hs-n { font: 600 12px/1 var(--display); letter-spacing: .1em; color: var(--ember); min-width: 24px; flex: none; padding-top: 4px; }
+.ac-hs-t { display: flex; flex-direction: column; gap: 7px; flex: 1; min-width: 0; }
+.ac-hs-h { font-size: 15.5px; font-weight: 600; letter-spacing: -.01em; }
+.ac-hs-b { font-size: 13.5px; line-height: 1.6; color: var(--g-body); text-wrap: pretty; }
+.ac-hs-time {
+  flex: none; font: 600 9.5px/1 var(--display); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--g-muted); background: rgba(255, 255, 255, .04); border: 1px solid var(--g-line-3);
+  border-radius: 999px; padding: 6px 9px; white-space: nowrap; margin-top: 2px;
+}
+.ac-hand-r { display: flex; flex-direction: column; gap: 10px; }
+.ac-panel {
+  background: var(--g-card); border: 1px solid var(--g-line-4); border-radius: 14px;
+  box-shadow: 0 26px 64px rgba(0, 0, 0, .55); padding: 18px;
+}
+.ac-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 15px; border-bottom: 1px solid var(--g-line-2); }
+.ac-panel-t { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.ac-panel-k { font: 600 9.5px/1 var(--display); letter-spacing: .13em; text-transform: uppercase; color: var(--g-faint); }
+.ac-incs { list-style: none; margin: 0; padding: 0; }
+.ac-inc { display: flex; align-items: flex-start; gap: 12px; padding: 14px 0; border-bottom: 1px solid rgba(255, 255, 255, .06); }
+.ac-inc:last-child { border-bottom: 0; padding-bottom: 0; }
+.ac-inc-i { color: var(--ember-lit); display: flex; padding-top: 1px; }
+.ac-inc-t { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.ac-inc-t b { font-size: 14px; font-weight: 600; }
+.ac-inc-t span { font-size: 13px; line-height: 1.55; color: var(--g-body); text-wrap: pretty; }
+/* The ToS plate — the same treatment `gp_safety()` gives the boosting
+   admission, and never the accent. */
+.ac-plate {
+  display: flex; gap: 13px; padding: 16px; border-radius: 12px;
+  background: rgba(201, 149, 95, .07); border: 1px solid rgba(201, 149, 95, .22);
+}
+.ac-plate-ico { flex: none; color: var(--g-caution); display: flex; padding-top: 1px; }
+.ac-plate-b { margin: 0; font-size: 13.5px; line-height: 1.65; color: var(--g-body-2); text-wrap: pretty; }
+
+/* ── 02 why ours ──────────────────────────────────────────────────────── */
+.ac-trusts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ac-gap); margin-top: 30px; }
+.ac-trust { display: flex; flex-direction: column; padding: 20px; border-radius: 14px; background: var(--g-card); border: 1px solid var(--g-line-4); }
+.ac-trust-head { display: flex; align-items: center; gap: 12px; }
+.ac-tile {
+  width: 38px; height: 38px; flex: none; display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; background: rgba(255, 90, 31, .09); border: 1px solid rgba(255, 90, 31, .26);
+  color: var(--ember-lit);
+}
+.ac-trust-k { font: 600 9.5px/1 var(--display); letter-spacing: .16em; text-transform: uppercase; color: var(--g-tint); }
+.ac-trust-t { margin: 16px 0 0; font-family: var(--display); font-weight: 600; font-size: 19px; letter-spacing: -.02em; }
+.ac-trust-b { margin: 11px 0 0; font-size: 14px; line-height: 1.62; color: var(--g-body); text-wrap: pretty; }
+/* Pinned, so the three proof lines sit on one baseline across cards with
+   unequal bodies — the same rule `promise_cards()` follows. */
+.ac-proof {
+  display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 18px;
+  font: 600 11.5px/1 var(--display); letter-spacing: .04em; color: var(--g-good);
+}
+
+/* ── 03 buyers ────────────────────────────────────────────────────────── */
+.ac-rate { display: flex; align-items: center; gap: 16px; }
+.ac-rate-n { font-family: var(--display); font-weight: 600; font-size: 34px; letter-spacing: -.03em; line-height: 1; }
+.ac-rate-t { display: flex; flex-direction: column; gap: 8px; }
+.ac-rate-l { font-size: 13px; color: var(--g-muted); }
+.ac-rate-l b { font-weight: 600; color: var(--g-body-2); }
+.ac-rvs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ac-gap); margin-top: 30px; }
+.ac-rv-tag {
+  align-self: flex-start; margin-top: 12px;
+  font: 600 9.5px/1 var(--display); letter-spacing: .11em; text-transform: uppercase;
+  color: var(--g-note); background: rgba(255, 255, 255, .04); border: 1px solid var(--g-line-3);
+  border-radius: 999px; padding: 6px 9px; white-space: nowrap;
+}
+.ac-rv-note { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 22px 0 0; font-size: 12.5px; color: var(--g-muted); }
+.ac-rv-note .ico { color: var(--g-good); }
+
+/* ── 04 FAQ ───────────────────────────────────────────────────────────── */
+.ac-faq-inner { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 56px; align-items: start; }
+.ac-faq-l { position: sticky; top: 96px; display: flex; flex-direction: column; align-items: flex-start; }
+.ac-faq-p { margin: 16px 0 20px; font-size: 15px; line-height: 1.62; color: var(--g-body); }
+
+/* ── the close ────────────────────────────────────────────────────────── */
+.ac-close { border-top: 1px solid var(--g-line-2); }
+.ac-close-in { padding-block: 62px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.ac-close-h { margin: 0; font-family: var(--display); font-weight: 600; font-size: clamp(28px, 3.6vw, 44px); line-height: 1.04; letter-spacing: -.03em; max-width: 18ch; }
+.ac-close-p { margin: 18px 0 0; font-size: 16px; line-height: 1.6; color: var(--g-body); max-width: 54ch; }
+.ac-close-a { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px 22px; margin-top: 26px; }
+.ac-close-cta { height: 48px; padding-inline: 26px; font: 700 12.5px/1 var(--display); letter-spacing: .1em; text-transform: uppercase; }
+
+/* ── 1200 · three per page, servers 2×2 ───────────────────────────────── */
+@media (max-width: 1200px) {
+  .ac { --ac-per: 3; }
+  .ac-sv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ac-hand { grid-template-columns: minmax(0, 1fr) 400px; gap: 40px; }
+  .ac-head { grid-template-columns: minmax(0, 1fr) minmax(0, 360px); gap: 32px; }
+}
+
+/* ── 1000 · two per page, heads stacked ───────────────────────────────── */
+@media (max-width: 1000px) {
+  .ac { --ac-per: 2; }
+  .ac-hero-inner { padding-block: 44px 46px; }
+  .ac-head, .ac-hand, .ac-faq-inner { grid-template-columns: minmax(0, 1fr); gap: 26px; }
+  .ac-head { align-items: start; }
+  .ac-faq-l { position: static; }
+  .ac-trusts, .ac-rvs { grid-template-columns: minmax(0, 1fr); }
+  .ac-hand-l .ac-h2 { max-width: none; }
+  .ac-filbar { flex-wrap: wrap; gap: 14px; }
+  .ac-filmeta { flex: 1 0 100%; }
+}
+
+/* ── 760 · the phone. The carousel becomes a swipe rail ───────────────── */
+@media (max-width: 760px) {
+  /* A paged carousel with arrows is wrong on touch. `--ac-per` goes fractional
+     so the next card peeks and says the row moves; paging is inert (JS reads
+     `--ac-per` back and stops computing pages under 1), and both controls go. */
+  .ac { --ac-per: 1.12; }
+  .ac-rail { overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); }
+  .ac-rail::-webkit-scrollbar { display: none; }
+  .ac-rail { scrollbar-width: none; }
+  .ac-track { transform: none; transition: none; }
+  .ac-card { scroll-snap-align: start; }
+  .ac-arrows, .ac-dots { display: none; }
+  .ac-step-row { margin-top: 28px; }
+  .ac-bar { flex-direction: column; align-items: stretch; gap: 14px; }
+  .ac-bar-r { justify-content: space-between; }
+  .ac-change { height: 44px; }
+  .ac-sv-grid { grid-template-columns: minmax(0, 1fr); }
+  .ac-fils { overflow-x: auto; scrollbar-width: none; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); }
+  .ac-fils::-webkit-scrollbar { display: none; }
+  .ac-fil { height: 54px; padding: 0 16px; }
+  .ac-assure { gap: 8px 18px; font-size: 12.5px; }
+  .ac-close-cta, .ac-cta { height: 46px; }
+}
+/* ══════════════════════════════════════════════════════════════════════════
    MOBILE PASS — defects found walking every page at 375px and 320px
    ══════════════════════════════════════════════════════════════════════════
    This block is last in the file on purpose: each rule below is a correction

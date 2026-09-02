@@ -170,6 +170,13 @@
     // topics to work on; `slot` is the first-session time. Priced only off coach
     // rate × pack, so these never enter the rank engine.
     coach: 0, pack: 1, focus: [0], slot: (D.coachSlots && D.coachSlots[0]) || "",
+    // The account listing an order names (an id in D.accounts), set only by the
+    // accounts page's Buy button. It is the WHOLE product on service ===
+    // "account": no rank, no queue, no add-ons, no sale — see quote(). Empty on
+    // every other service, and quote() refuses to price an account order that
+    // does not name a live listing rather than falling back to one, because a
+    // fallback here would charge for an account nobody chose.
+    account: "",
     // A named booster, arriving from a roster Hire or a profile CTA. It is an
     // order attribute, never a price input: pricing.py charges no fee for it,
     // so quote() must not read it. If naming a booster ever costs money it
@@ -315,6 +322,11 @@
       // both the mode split and the picks add-on going free.
       s.addons = addonsFor(s.addons, s.mode);
       if (!s.slot) s.slot = (D.coachSlots && D.coachSlots[0]) || "";
+      /* A listing that has been re-priced out of the catalogue, or sold out
+         since the order was stored. Cleared rather than substituted: quote()
+         then refuses the order instead of quietly charging for a different
+         account, which is the one failure this product must not have. */
+      if (s.account && !(D.accounts || {})[s.account]) s.account = "";
       // Grid caps at five now; migrate a stored 6–20 from the old stepper.
       s.wins = Math.max(1, Math.min(5, s.wins | 0));
       s.placements = Math.max(1, Math.min(5, s.placements | 0));
@@ -738,11 +750,97 @@
     return days + "–" + (days + span) + " " + T("days");
   }
 
+  /* ── accounts: the three derivations, mirroring data.py ────────────────
+     One shard table, one price rule, one stock rule. Everything the accounts
+     page prints — the promo bar's total, each server card, the server bar and
+     each tier card — reduces to these, which is what stops four figures on one
+     screen contradicting each other. Change one, change data.py's twin. */
+  function accountServer(region) {
+    var list = D.accountServers || [];
+    for (var i = 0; i < list.length; i++) if (list[i].region === region) return list[i];
+    return null;
+  }
+  function accountPrice(acc, sv) {
+    return Math.round((acc.price + (sv ? sv.delta : 0)) * 100) / 100;
+  }
+  function accountWas(acc, sv) {
+    if (!acc.was) return 0;
+    return Math.round((acc.was + (sv ? sv.delta : 0)) * 100) / 100;
+  }
+  /* Units of one listing on one shard. A sold-out listing stays at zero on
+     every shard — Math.max(1, …) must not resurrect it, which is the one way
+     this rounding goes wrong. */
+  function accountStock(acc, sv) {
+    var base = acc && acc.stock ? acc.stock : 0;
+    if (base <= 0 || !sv) return 0;
+    return Math.max(1, Math.round(base * sv.share));
+  }
+  function accountUnitsOn(sv) {
+    var accs = D.accounts || {}, t = 0;
+    for (var k in accs) if (Object.prototype.hasOwnProperty.call(accs, k)) {
+      t += accountStock(accs[k], sv);
+    }
+    return t;
+  }
+
   function quote(s) {
     var per = D.perDivision;
     var factor = D.factors[s.game] || 1;
     var duo = s.mode === "Duo queue" ? 1.55 : 1;
     var base = 0, days = 0, summary = "", invalid = false;
+
+    /* Accounts — the one product that is not a service. The price is the
+       listing's flat figure and that is the entire formula: no ladder, no duo,
+       no add-ons and no sitewide sale, for the reason pricing.py's branch
+       states (an account has a real acquisition cost behind it, so a percentage
+       off it is margin, not a discount on labour). There is deliberately no
+       `wasPrice` — a reference price nobody was ever charged is not a saving.
+       Mirrors pricing.py's `service == "account"` branch. */
+    if (s.service === "account") {
+      var acc = (D.accounts || {})[s.account];
+      // The shard is clamped into the shop's own list, never trusted — mirrors
+      // account_pick(). A region carried over from a boost on a shard this shop
+      // does not sell on would otherwise reach checkout, and since the shard
+      // carries a price delta it would be quoted at the wrong shard's price.
+      var aSv = accountServer(s.region) || (D.accountServers || [])[0];
+      /* Unknown or sold out both refuse, and both have to: stock is hand-set in
+         data.py and nothing decrements it, so this and pricing.account_pick()
+         are the only two places a listing that is gone can be stopped. Stock is
+         a PER-SHARD figure, so the test is per shard too. The client's refusal
+         is only the UI — the server makes the same call. */
+      if (!acc || !aSv || !accountStock(acc, aSv)) {
+        return {
+          invalid: true, price: "—", eta: "—", total: 0,
+          summary: T("That account is no longer available"),
+          base: 0, addons: 0, days: 0,
+          subtotal: 0, discount: 0, wasPrice: "", discountPrice: "",
+          promoCode: "", promoLabel: "", promoEnds: ""
+        };
+      }
+      var aTotal = accountPrice(acc, aSv);
+      var aWas = accountWas(acc, aSv);
+      var aSub = aWas > aTotal ? aWas : aTotal;
+      var aOff = Math.round((aSub - aTotal) * 100) / 100;
+      return {
+        invalid: false, total: aTotal, base: aSub, addons: 0,
+        subtotal: aSub, discount: aOff,
+        // Accounts are the one product priced to the cent, so every figure they
+        // render carries the cents flag — a total shown as $15 against a card
+        // reading $14.99 is the same defect charge_for()'s cents path prevents.
+        // ⚠ `cents` is what tells render() and the checkout summary to print
+        // this product to the cent. Without it the summary rounds $77.99 to
+        // $78 while Stripe charges 7799 — the buyer reads one number and pays
+        // another. Mirrors the same flag on pricing.py's account branch.
+        cents: true,
+        price: usd(aTotal, true),
+        wasPrice: aOff ? usd(aSub, true) : "",
+        discountPrice: aOff ? "−" + usd(aOff, true) : "",
+        promoCode: "", promoLabel: aOff ? T(D.accountOfferLabel || "Offer price") : "",
+        promoEnds: "",
+        summary: acc.name + " · " + aSv.code,
+        days: 0, eta: T(D.accountEta || "Instant delivery")
+      };
+    }
 
     /* Coaching — the booking product. Priced off the coach's rate and the hour
        pack only; the rank engine, duo, add-ons and the sitewide promo never
@@ -950,7 +1048,7 @@
         free: D.boostersFree, total: q.price, booster: state.booster,
         was: q.wasPrice, discount: q.discountPrice,
         promoCode: q.promoCode, promoLabel: q.promoLabel, promoEnds: q.promoEnds,
-        saveLine: q.discount ? T("You save") + " " + usd(q.discount)
+        saveLine: q.discount ? T("You save") + " " + usd(q.discount, !!q.cents)
                              + (q.promoEnds ? " · " + T("sale ends") + " " + q.promoEnds : "")
                              : "",
         // Same saving, named by the code that produced it — the order card says
@@ -958,7 +1056,7 @@
         // itself rather than printing the internal "BUNDLE" code.
         saveWith: q.discount
           ? (q.promoCode === "BUNDLE"
-              ? T("You save") + " " + usd(q.discount) + " · " + T("bundle price")
+              ? T("You save") + " " + usd(q.discount, !!q.cents) + " · " + T("bundle price")
               // A server-issued offer token names ITSELF rather than printing
               // its own 16 characters into a sentence — same treatment BUNDLE
               // gets, and for the same reason: the string is an internal
@@ -966,15 +1064,15 @@
               // shows where it is useful (the modal's copy chip, the email, and
               // checkout's own discount row, which is a receipt).
               : /^(BINGO|BACK)-/.test(q.promoCode || "")
-                ? T("You save") + " " + usd(q.discount) + " · " + T(q.promoLabel)
-              : T("You save") + " " + usd(q.discount)
+                ? T("You save") + " " + usd(q.discount, !!q.cents) + " · " + T(q.promoLabel)
+              : T("You save") + " " + usd(q.discount, !!q.cents)
                 + (q.promoCode ? " " + T("with") + " " + q.promoCode : ""))
           : "",
         // The saving as a bare amount, for the sticky bar's "Save $16" pill.
         // `discount` above is the signed receipt figure ("−$16"); a pill that
         // opens with a minus reads as a charge, and the word has to stay its
         // own text node to be translatable.
-        saveAmt: q.discount ? usd(q.discount) : "",
+        saveAmt: q.discount ? usd(q.discount, !!q.cents) : "",
         summaryUpper: q.summary.toUpperCase(),
         // Per-game price for the unit tabs — one win / one placement at the
         // current rank and mode, quoted live so it tracks the rank picker.
@@ -1376,9 +1474,14 @@
     // checkout breakdown
     each("[data-sum]", function (el) {
       var k = el.getAttribute("data-sum");
+      // Every figure in the breakdown is printed at the QUOTE's precision, not
+      // at a fixed one: accounts are quoted to the cent and every boosting
+      // product to the whole unit, and a summary that rounds one of them
+      // disagrees with what Stripe is asked to charge.
+      var m = function (v) { return usd(v, !!q.cents); };
       var map = {
-        base: usd(q.base), addons: q.addons ? "+ " + usd(q.addons) : "—",
-        total: usd(q.total), eta: q.eta, summary: q.summary,
+        base: m(q.base), addons: q.addons ? "+ " + m(q.addons) : "—",
+        total: m(q.total), eta: q.eta, summary: q.summary,
         game: state.game, region: state.region, mode: T(state.mode),
         booster: state.booster, was: q.wasPrice, discount: q.discountPrice,
         discountLabel: q.promoLabel
@@ -1391,6 +1494,10 @@
            buyer started. Both cards now draw the pair as mark + [data-tiername]
            and take the mode from [data-out="mode"], so the row is markup and
            the unit services read [data-sum="summary"] directly. */
+        /* The listing's own name, for the Account row. `summary` carries the
+           shard too, which is what the row actually prints — this is here so a
+           surface that wants the name alone does not have to split a string. */
+        account: ((D.accounts || {})[state.account] || {}).name || "",
         addonlist: (state.addons || []).map(function (id) {
           var a = addonById(id);
           return a ? T(addonLabel(a)) : id;
@@ -1416,7 +1523,12 @@
        nothing the visitor bought, and re-quoting their ranks as a boost to fill
        it would invent a price they were never shown. */
     if (FCB) {
-      var back = HYDRATED && !q.invalid && state.service !== "coaching";
+      /* Neither booking nor account is read back. "Your climb starts at €62"
+         over a card whose Climb row names a Gold account describes nothing that
+         was bought, and re-quoting the stored ranks as a boost to fill it would
+         invent a price the visitor was never shown. */
+      var back = HYDRATED && !q.invalid
+        && state.service !== "coaching" && state.service !== "account";
       each("[data-fc-when]", function (el) {
         el.hidden = (el.getAttribute("data-fc-when") === "order") !== back;
       });
@@ -2066,6 +2178,11 @@
     initProfile();
     initReviews();
     initCatalog();
+    initAccounts();
+    // Hydrates its own paint (esbHydrate calls render), so it does not have to
+    // beat the render() above — but it must run before the first user input, or
+    // an edit on checkout would be made against the wrong order.
+    accountFromQuery();
     initGuides();
     // The mystery discount. `mydBoot()` runs on EVERY page — a token applied on
     // a game page has to be in the price at checkout too, and checkout has no
@@ -3240,6 +3357,292 @@
      newest-row styling keys off :first-child, so a live feed only has to
      insert the row. */
   var feedTimer = null;
+
+  /* ── the accounts shop (/accounts.html) ─────────────────────────────────
+     design_handoff_accounts_shop. A TWO-STEP purchase: pick a server, then pick
+     a tier. That order is the design, not a preference — an account is
+     region-locked and cannot be transferred after sale, so the one irreversible
+     choice is made first, on a screen with nothing else on it.
+
+     Everything is SERVER-RENDERED, including all eleven cards and every price,
+     and BOTH steps ship visible: with no JS the page is a complete, priced,
+     buyable shop on the reference shard and a crawler reads the whole
+     catalogue. This function is the enhancement — it gates step 2 behind the
+     server choice and re-prices every card in place from the client mirror,
+     which is the same derivation the server used (accountPrice / accountStock,
+     mirroring data.py).
+
+     ⚠ THE PAGE CHANGE IS THE THING TO VERIFY BY LOOKING AT THE CARDS, never by
+     reading the label. A label that updates over a track that did not move is
+     how seven of eleven tiers were unreachable through two of the handoff's own
+     reviews.
+
+     `data-ac-*` is the whole contract — see CLAUDE.md. */
+  var AC_SCARCE = 3;                     // mirrors AC_SCARCE in build.py
+
+  function initAccounts() {
+    var shop = document.querySelector("[data-ac-shop]");
+    if (!shop) return;
+    var step1 = shop.querySelector('[data-ac-step="server"]');
+    var step2 = shop.querySelector('[data-ac-step="tiers"]');
+    var trackEl = shop.querySelector("[data-ac-track]");
+    if (!step1 || !step2 || !trackEl) return;
+    var cards = [].slice.call(trackEl.querySelectorAll("[data-ac-card]"));
+    if (!cards.length) return;
+
+    var dotsBox = shop.querySelector("[data-ac-dots]");
+    var prev = shop.querySelector("[data-ac-prev]");
+    var next = shop.querySelector("[data-ac-next]");
+    var nojs = shop.querySelector("[data-ac-nojs]");
+    var st = { server: null, kind: "all", page: 0 };
+
+    // The no-JS line is the one thing that is wrong the moment JS runs: with
+    // scripting the shard is chosen, not assumed.
+    if (nojs && nojs.parentNode) nojs.parentNode.removeChild(nojs);
+
+    /* Cards per page is CSS's, read back rather than written down twice, so the
+       page count follows the layout. Under 2 the rail is a swipe rail (the
+       phone) and paging is inert. */
+    function perPage() {
+      var v = parseFloat(getComputedStyle(shop).getPropertyValue("--ac-per"));
+      return isNaN(v) || v < 1 ? 4 : v;
+    }
+    function paged() { return perPage() >= 2; }
+
+    function visible() {
+      return cards.filter(function (c) {
+        return st.kind === "all" || c.getAttribute("data-ac-kind") === st.kind;
+      });
+    }
+    function pages(n) {
+      var per = perPage();
+      return paged() ? Math.max(1, Math.ceil(n / Math.floor(per))) : 1;
+    }
+
+    function setText(el, v) { if (el) el.textContent = v; }
+    function each(sel, root, fn) {
+      [].slice.call((root || shop).querySelectorAll(sel)).forEach(fn);
+    }
+
+    /* One card, re-priced and re-stocked for the chosen shard. Every figure
+       here comes from the same two mirrors the checkout re-quote uses, so a
+       card can never advertise a price or an availability the server refuses. */
+    function paintCard(el, sv) {
+      var acc = (D.accounts || {})[el.getAttribute("data-ac-id")];
+      if (!acc || !sv) return;
+      var units = accountStock(acc, sv);
+      var price = accountPrice(acc, sv);
+      var was = accountWas(acc, sv);
+      var state = !units ? "out" : (units <= AC_SCARCE ? "low" : "ok");
+
+      var priceEl = el.querySelector("[data-ac-price] .ac-money");
+      if (priceEl) {
+        var parts = window.esbMoneyParts
+          ? window.esbMoneyParts(price)
+          : { main: usd(price, true), cents: "" };
+        priceEl.setAttribute("data-usd", price.toFixed(2));
+        setText(priceEl.querySelector("[data-money-main]"), parts.main);
+        setText(priceEl.querySelector("[data-money-cents]"), parts.cents);
+      }
+      var wasEl = el.querySelector("[data-ac-was]");
+      if (wasEl) {
+        wasEl.hidden = !(was > price);
+        var wm = wasEl.querySelector(".money") || wasEl;
+        wm.setAttribute("data-usd", (was || price).toFixed(2));
+        setText(wm, usd(was || price, true));
+      }
+      setText(el.querySelector("[data-ac-code]"), sv.code);
+      setText(el.querySelector("[data-ac-shard-name]"), sv.region);
+      each("[data-ac-units]", el, function (b) { b.textContent = units; });
+
+      var stock = el.querySelector("[data-ac-stock]");
+      if (stock) stock.className = "ac-stock is-" + state;
+      el.classList.toggle("is-out", state === "out");
+
+      // The CTA is a real link, so the shard rides in it: a visitor who picked
+      // EUNE and middle-clicked Buy must not land on a checkout quoting EUW.
+      var href = "/checkout.html?account=" + encodeURIComponent(acc.id || el.getAttribute("data-ac-id"))
+        + "&region=" + encodeURIComponent(sv.region);
+      each("[data-ac-cta]", el, function (a) {
+        var kind = a.getAttribute("data-ac-cta");
+        a.hidden = kind !== state;
+        if (kind !== "out") a.href = href;
+      });
+    }
+
+    function paint() {
+      var sv = st.server ? accountServer(st.server) : null;
+      var chosen = !!sv;
+      step1.hidden = chosen;
+      step2.hidden = !chosen;
+      if (!chosen) return;
+
+      each("[data-ac-server-name]", null, function (n) { n.textContent = sv.region; });
+      each("[data-ac-server-code]", null, function (n) { n.textContent = sv.code; });
+      setText(shop.querySelector("[data-ac-server-stock]"), accountUnitsOn(sv));
+
+      cards.forEach(function (c) {
+        c.hidden = !(st.kind === "all" || c.getAttribute("data-ac-kind") === st.kind);
+        if (!c.hidden) paintCard(c, sv);
+      });
+
+      var shown = visible().length;
+      var total = pages(shown);
+      if (st.page > total - 1) st.page = total - 1;
+      if (st.page < 0) st.page = 0;
+      trackEl.style.setProperty("--ac-p", paged() ? st.page : 0);
+
+      each("[data-ac-kind]", null, function (b) {
+        var on = b.getAttribute("data-ac-kind") === st.kind;
+        b.classList.toggle("is-on", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+      // Through T(): the two metas the server never renders would otherwise
+      // arrive in English on the French and German pages.
+      var meta = (D.accountKinds || {})[st.kind];
+      setText(shop.querySelector("[data-ac-kindmeta]"), meta ? T(meta) : "");
+
+      /* "Showing 1–4 of 11 tiers". Every figure rides in its own <b> so the
+         words around it stay whole translatable nodes. */
+      var per = paged() ? Math.floor(perPage()) : shown;
+      var from = shown ? st.page * per + 1 : 0;
+      var to = Math.min(shown, from + per - 1);
+      var label = shop.querySelector("[data-ac-pagelabel]");
+      if (label) {
+        var bs = label.querySelectorAll("b");
+        if (bs.length === 3) {
+          bs[0].textContent = from; bs[1].textContent = to; bs[2].textContent = shown;
+        }
+      }
+
+      if (prev) prev.disabled = !paged() || st.page <= 0;
+      if (next) next.disabled = !paged() || st.page >= total - 1;
+
+      if (dotsBox) {
+        // Rebuilt rather than reordered: the page count moves with the filter
+        // and with the viewport, so there is no stable list to mutate.
+        dotsBox.textContent = "";
+        if (paged() && total > 1) {
+          for (var i = 0; i < total; i++) {
+            (function (n) {
+              var d = document.createElement("button");
+              d.type = "button";
+              d.className = "ac-dot" + (n === st.page ? " is-on" : "");
+              d.setAttribute("aria-label", "Page " + (n + 1));
+              d.addEventListener("click", function () { st.page = n; paint(); });
+              dotsBox.appendChild(d);
+            })(i);
+          }
+        }
+      }
+    }
+
+    each("[data-ac-server]", null, function (b) {
+      b.addEventListener("click", function () {
+        // Changing server resets the filter and the page — the handoff's rule,
+        // and the honest one: a page-3 Emerald view means nothing on a shard
+        // whose stock is a third of the size.
+        st.server = b.getAttribute("data-ac-server");
+        st.kind = "all"; st.page = 0;
+        paint();
+        step2.scrollIntoView({ block: "start", behavior: "smooth" });
+      });
+    });
+    var change = shop.querySelector("[data-ac-change]");
+    if (change) change.addEventListener("click", function () {
+      st.server = null; st.kind = "all"; st.page = 0;
+      paint();
+      step1.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+    each("[data-ac-kind]", null, function (b) {
+      b.addEventListener("click", function () {
+        st.kind = b.getAttribute("data-ac-kind"); st.page = 0; paint();
+      });
+    });
+    if (prev) prev.addEventListener("click", function () {
+      if (st.page > 0) { st.page--; paint(); }
+    });
+    if (next) next.addEventListener("click", function () { st.page++; paint(); });
+
+    // --ac-per is a breakpoint's, so a resize can change the page count under a
+    // reader sitting on the last page. A currency switch needs nothing here:
+    // i18n.js's reformatStaticMoney() re-splits the two-size price itself.
+    var rz;
+    window.addEventListener("resize", function () {
+      clearTimeout(rz); rz = setTimeout(paint, 150);
+    });
+
+    // Buy fires begin_checkout and hands the order over, exactly as the board
+    // it replaces did. The click is on the real link, so a middle-click still
+    // opens checkout and hydrates from the query.
+    each("[data-ac-cta]", null, function (a) {
+      if (a.getAttribute("data-ac-cta") === "out") return;
+      a.addEventListener("click", function (e) {
+        var card = a.closest ? a.closest("[data-ac-card]") : null;
+        if (!card) return;
+        var id = card.getAttribute("data-ac-id");
+        var acc = (D.accounts || {})[id];
+        if (!acc) return;
+        var order = accountOrder(id, st.server || (D.accountServers || [{}])[0].region);
+        var q = quote(order);
+        if (q.invalid) { e.preventDefault(); return; }
+        try { localStorage.setItem(CHECKOUT_KEY, JSON.stringify(order)); } catch (e2) {}
+        track("begin_checkout", {
+          currency: "USD", value: q.total,
+          items: [{ item_id: id, item_name: acc.name, item_category: "account",
+                    item_variant: order.region, price: q.total, quantity: 1 }]
+        });
+      });
+    });
+
+    paint();
+  }
+
+  /* One order object for an account listing, built from DEFAULT so every field
+     the checkout re-quote reads is present. The ranks it inherits are inert —
+     quote() returns before the ladder on this service, and build_session()
+     blanks metadata[from]/[to] so a climb nobody bought cannot reach the board. */
+  function accountOrder(id, region) {
+    // The shard list belongs to the SHOP, not to a listing: every tier is sold
+    // on every server and stock is what varies. Clamped here the same way
+    // pricing.account_pick() clamps it, so a region carried in from a boost on
+    // a shard this shop does not sell can never reach the checkout re-quote.
+    var sv = accountServer(region) || (D.accountServers || [])[0];
+    return Object.assign({}, DEFAULT, {
+      game: D.accountGame || DEFAULT.game,
+      service: "account", account: id,
+      region: sv ? sv.region : "",
+      // An account carries none of these, and a stale one riding in from the
+      // shared record would show on the checkout summary as something bought.
+      addons: [], promo: "", bundle: null, booster: "",
+      savedAt: Date.now()
+    });
+  }
+
+  /* Checkout arriving from an account card: ?account=<id>&region=<shard>.
+     The query is untrusted and is never believed — it names a listing, and
+     quote() (here) and pricing.account_pick() (on the server, which computes
+     the actual charge) both refuse an id that is unknown or sold out. It is
+     read on checkout only; the markers are stripped so a refresh cannot
+     re-hydrate over an order the buyer has since changed. */
+  function accountFromQuery() {
+    if (CFG) return;                       // never on a page that configures
+    var m = /[?&]account=([^&]+)/.exec(location.search);
+    if (!m) return;
+    var id = decodeURIComponent(m[1]);
+    if (!(D.accounts || {})[id]) return;
+    var r = /[?&]region=([^&]*)/.exec(location.search);
+    var order = accountOrder(id, r ? decodeURIComponent(r[1].replace(/\+/g, " ")) : "");
+    if (quote(order).invalid) return;
+    if (window.esbHydrate) window.esbHydrate(order);
+    try {
+      var q = new URLSearchParams(location.search);
+      q.delete("account"); q.delete("region");
+      var rest = q.toString();
+      history.replaceState(null, "", location.pathname
+        + (rest ? "?" + rest : "") + location.hash);
+    } catch (e) {}
+  }
 
   function initFeed() {
     // Re-entrant: initBoosters() re-renders the feed from /api/boosters and calls

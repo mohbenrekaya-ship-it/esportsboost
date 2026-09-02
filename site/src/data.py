@@ -655,6 +655,538 @@ COACH_FOCUS = ["Laning", "Macro & rotations", "Champion pool", "VOD review"]
 # calendar replaces this list.
 COACH_SLOTS = ["Tonight, 20:00", "Tomorrow, 18:00", "Saturday, 15:00", "Sunday, 12:00"]
 
+# ── Accounts — the fifth product, and the only one that is not a service ───
+# A ready-made League account, delivered as credentials. It shares the shop, the
+# checkout and the orders store with the four boosting products and nothing else:
+# it does not touch the rank engine, the queue, the add-ons or the sitewide sale.
+# Its price is the listing's figure plus the shard's own delta, and that is the
+# whole formula — computed identically in pricing.py (`service == "account"`,
+# through `account_price()`) and in app.js.
+#
+# ⚠ THE RISK ON THIS PRODUCT IS DIFFERENT IN KIND FROM BOOSTING, AND THE PAGE
+# HAS TO SAY SO. Boosting breaks Riot's terms; buying and selling an account
+# breaks a *specific* clause — an account is licensed to one person and is not
+# transferable — and the sanction is the account, not a suspension the buyer
+# rides out. Somebody who pays for a Diamond account and loses it has lost the
+# thing itself. ACCOUNT_DISCLAIMER is written to that, in the register
+# SAFETY["disclaimer"] set, and it is not to be softened: the whole argument of
+# the guarantee page is that this site states the checkable thing.
+#
+# ⚠ STOCK IS A COUNT NOW, AND NOTHING DECREMENTS IT. The shop handoff prints a
+# figure in four places — the promo bar's total, the server bar, each server
+# card and each tier card — and the business took that trade knowingly. The one
+# thing that keeps the four from contradicting each other is that THEY ARE ALL
+# DERIVED FROM ONE TABLE, per the handoff's first structural rule:
+#
+#     ACCOUNTS[i]["stock"]            units of that listing at full supply
+#     ACCOUNT_SERVERS[i]["share"]     EUW 1 · NA .72 · EUNE .38 · OCE .16
+#     account_stock(a, region)        max(1, round(stock * share)), 0 if sold out
+#     account_units_on(region)        Σ account_stock over every listing
+#     account_stock_total()           Σ account_units_on over every server
+#
+# An earlier build of the same page authored a per-server stock by hand beside
+# the per-listing one and the two disagreed on screen. Do not re-introduce a
+# second figure: if real inventory arrives per (listing, shard), feed it in at
+# `account_stock()` and the other three follow for free. Until a listing store
+# exists (an eighth sibling of analytics/accounts/boosters/orders/carts/mystery/
+# guides, operator-write and public-read, exactly the shape boosters.py has),
+# these counts are hand-set and go stale the moment two people buy on one build,
+# and fulfilment is manual: the webhook records the listing id and an operator
+# hands over one set of credentials from stock.
+#
+# ⚠ THE PRICES ARE A BUSINESS CALL, like the BUNDLES figures. `price` is what a
+# buyer on EUW pays; every other shard adds its own `delta`. `was` is the ONE
+# struck figure this product carries and it is only defensible while it names a
+# price this listing was actually sold at — it is not a percentage of anything
+# and nothing derives it. If a listing has never been dearer, delete its `was`
+# rather than inventing one: a reference price nobody was charged is exactly
+# what quote()'s discount rule exists to avoid.
+ACCOUNT_GAME = "League of Legends"
+
+# ⚠ FULL EMAIL ACCESS IS THE PAGE'S CENTRAL CLAIM and it is stated in four
+# places by the shop's own copy — the hero's assurance row, the handover
+# paragraph, FAQ "access" and the closing headline. It is not a constant,
+# because each of those is written for where it sits. If any batch ever arrives
+# login-only it does not go on this page: it is not the same product, it cannot
+# carry the same warranty, and four separate sentences would become lies.
+
+# ⚠ AN OPS COMMITMENT, not a description — and the largest one on the site. A
+# year of replacement liability rides on every account sold, and a claim costs
+# the whole acquisition price of a replacement. Same standing as SAFETY's
+# measure notes and GUARANTEE's refund windows: falsifiable by a single bad
+# order. It needs a claims process and a budget line behind it; if it cannot be
+# held, cut the number rather than soften it.
+ACCOUNT_WARRANTY_MONTHS = 12
+
+# ⚠ PLACEHOLDER, and the one figure on the warranty card a buyer could ask us to
+# prove. It is the count of replacement claims actually honoured — wire it to the
+# orders store, or cut the line.
+ACCOUNT_CLAIMS_HONOURED = 31
+
+# The ToS admission. Verbatim, and not to be softened — see the block comment.
+ACCOUNT_DISCLAIMER = (
+    "Riot licenses an account to one person and does not permit it to be sold or "
+    "transferred. Changing the email and the password on arrival is what makes a "
+    "ban unlikely rather than impossible, and it is why we hand over the inbox "
+    "instead of only the login. We replace anything actioned inside the warranty "
+    "window — but we will not tell you the risk is zero, because it isn't."
+)
+
+# ── The four shards, and the one table every stock figure comes from ───────
+# `region` names the shard in the League ladder's own words, so an account order
+# can never advertise a server the site does not sell on (asserted below) and
+# the shard that reaches fulfilment is the shard the boost flow uses. The two-
+# or three-letter code the cards print is REGION_SHORT's, never a second table.
+#
+# `share` is this shard's supply relative to EUW; `delta` is what it adds to
+# every listing's price. Both are hand-set business figures.
+#
+# ⚠ EVERY DELTA IS ZERO — the business's call: one price list, the same on all
+# four shards. The field stays because the price model is built on it (both
+# `account_price()` and its app.js mirror add it, and the checkout re-quote
+# reads the shard for exactly that reason), so putting a shard back on its own
+# price is one number here and nothing else. What the shard still changes is
+# STOCK, through `share`, which is what the server cards' counts and the
+# "Low stock" badge are drawn from — and the region lock, which is the real
+# reason step 1 exists at all.
+ACCOUNT_SERVERS = [
+    dict(region="Europe West", share=1.00, delta=0),
+    dict(region="North America", share=0.72, delta=0),
+    dict(region="EU Nordic & East", share=0.38, delta=0),
+    dict(region="Oceania", share=0.16, delta=0),
+]
+
+ACCOUNT_REGIONS = [s["region"] for s in ACCOUNT_SERVERS]
+_ACCOUNT_SERVER_BY_REGION = {s["region"]: s for s in ACCOUNT_SERVERS}
+
+# Unranked is not a rung of any ladder, so it has no entry in TIER_COLORS and
+# needs one here. Every other tier reads `tier_color()` — the site's one colour
+# table, the same one the live feed, the rank plates and the checkout climb line
+# resolve against. A second hex list per page is how two marks for one rank end
+# up different colours.
+ACCOUNT_UNRANKED_COLOR = "#8fa2b8"
+
+# What actually arrives, stated once and rendered on the page and in the order
+# mail, so the two cannot describe two different products.
+ACCOUNT_DELIVERY = [
+    ("envelope", False, "Credentials by email",
+     "Login, password and the original inbox with its recovery details, sent to "
+     "the address you check out with."),
+    ("clock", True, "Instant delivery",
+     "Sent the moment the payment clears, with no queue and nobody to wait "
+     "for."),
+    ("shield-check", True, "Replaced for %d months" % ACCOUNT_WARRANTY_MONTHS,
+     "If it is recovered or actioned inside the window you get another of the "
+     "same rank, or the money back."),
+    ("eye-off", True, "Never resold",
+     "A listing leaves this page the moment its last unit is sold. One buyer "
+     "per account."),
+]
+
+# ── The catalogue ──────────────────────────────────────────────────────────
+# One entry per listing. `tier` is the rank band and the colour key; `kind` is
+# the filter key and is derived, not typed. `shape` picks the rank mark's
+# geometry — three unranked variants share a tier and must not share a mark.
+#
+# ⚠ `be = 0` means the essence is RANDOM on that listing, not that it has none,
+# and it is 0 on ALL ELEVEN today: the stock is levelled in batches and what is
+# left over varies per account, so any figure would be one we cannot hold. The
+# card says "Random blue essence" instead. `account_be_random()` is the
+# discriminator and the card its only reader, so a listing given a real figure
+# still prints it — the field is kept for exactly that.
+#
+# There is deliberately NO champion count and NO description. Both were on the
+# card and came off; the shop's card is emblem, name, six feature rows, price
+# and CTA, and a listing detail page is explicitly not designed. Nothing renders
+# them, so nothing stores them.
+#
+# `level` is rendered on the UNRANKED listings only, where it is the product
+# ("Level 30" is the ranked requirement and is in the card's own name). The
+# ranked listings show an MMR band instead — see `account_mmr()`.
+# `note` is the ONE caution row on the card — the handoff's rule is that six
+# identical green ticks read as marketing and the amber line is what makes the
+# rest credible, so every listing carries one.
+#
+# ⚠ Every price, stock figure, level, champion count and essence figure below is
+# invented, exactly like BOOSTERS and REVIEW_DIST. Replace with the real stock
+# sheet before this page takes traffic.
+ACCOUNTS = [
+    dict(id="lol-unranked-basic", name="Unranked · Basic", tier="Unranked",
+         shape="ring1", price=29.90, level=30, be=0, stock=31,
+         badge="", season=False,
+         note="Placements not played",),
+    dict(id="lol-unranked-premium", name="Unranked · Premium", tier="Unranked",
+         shape="ring2", price=39.90, level=45, be=0, stock=19,
+         badge="Best seller", season=False,
+         note="Placements not played",),
+    dict(id="lol-unranked-luxury", name="Unranked · Luxury", tier="Unranked",
+         shape="ring3", price=89.90, level=52, be=0, stock=9,
+         badge="", season=False,
+         note="Placements not played",),
+    dict(id="lol-iron", name="Iron", tier="Iron",
+         shape="diamond", price=64.90, level=45, be=0, stock=14,
+         badge="", season=True,
+         note="Previous season rewards",),
+    dict(id="lol-bronze", name="Bronze", tier="Bronze",
+         shape="triangle", price=39.90, level=55, be=0, stock=12,
+         badge="", season=True,
+         note="Previous season rewards",),
+    dict(id="lol-silver", name="Silver", tier="Silver",
+         shape="pentagon", price=42.90, level=65, be=0, stock=11,
+         badge="", season=True,
+         note="Previous season rewards",),
+    dict(id="lol-gold", name="Gold", tier="Gold",
+         shape="hexagon", price=59.90, level=85, be=0, stock=8,
+         badge="", season=True,
+         note="Previous season rewards",),
+    dict(id="lol-platinum", name="Platinum", tier="Platinum",
+         shape="octagon", price=89.90, was=109.90, level=105, be=0,
+         stock=5, badge="On offer", season=True,
+         note="Previous season rewards",),
+    dict(id="lol-emerald", name="Emerald", tier="Emerald",
+         shape="kite", price=139.90, level=130, be=0, stock=7,
+         badge="", season=True,
+         note="Previous season rewards",),
+    dict(id="lol-diamond", name="Diamond", tier="Diamond",
+         shape="facet", price=199.90, level=150, be=0, stock=6,
+         badge="", season=True,
+         note="Previous season rewards",),
+    dict(id="lol-master", name="Master", tier="Master",
+         shape="star", price=289.90, level=185, be=0, stock=2,
+         badge="Low stock", season=True,
+         note="Previous season rewards",),
+]
+
+# The filter, in the order the bar draws it. Derived from the catalogue rather
+# than typed, so a filter can never return an empty carousel — the rule the
+# games catalogue's four chips already follow. `all` can never return nothing
+# and neither of the other two can return everything, which is the handoff's
+# own test for whether a filter means anything.
+ACCOUNT_KINDS = [
+    ("all", "All tiers", "Everything in stock"),
+    ("unranked", "Unranked", "Smurfs, placements unplayed"),
+    ("ranked", "Ranked", "Iron to Master — previous season rewards included"),
+]
+
+_ACCOUNT_BY_ID = {a["id"]: a for a in ACCOUNTS}
+
+
+_CHEAPEST_ID = min(ACCOUNTS, key=lambda a: a["price"])["id"] if ACCOUNTS else ""
+
+
+def account_badge(a):
+    """The card's badge.
+
+    ⚠ "Cheapest" is COMPUTED, never authored. It is a factual claim about the
+    whole board, and an authored one goes false the moment anything is
+    re-priced — which is exactly what happened the first time these prices
+    moved: a $29.90 smurf kept the badge over a $27.99 Iron. The shard deltas
+    are the same on every listing, so the cheapest listing is the cheapest on
+    all four shards and this is one computation.
+
+    The other three badges — "Best seller", "On offer", "Low stock" — are
+    editorial calls and stay authored. `account_badge` is the ONE reader, so
+    build.py never sees the raw field."""
+    if a["id"] == _CHEAPEST_ID:
+        return "Cheapest"
+    return a["badge"]
+
+
+# The MMR band a ranked listing is sold as, and the ONE place the mapping lives.
+# It is a band rather than a number because the site does not have the figure —
+# Riot does not expose MMR, so any digit here would be invented, and a band is
+# what the account is actually sourced against.
+#
+# ⚠ Unranked listings have NO band and get their level instead. An account whose
+# placements are unplayed has no rank MMR to state, and putting "High MMR" on a
+# smurf would be a claim about a number that does not exist yet — the amber row
+# on those cards says "Placements not played" three lines below it.
+ACCOUNT_MMR = {"Iron": "Low MMR", "Bronze": "Low MMR", "Silver": "Standard MMR"}
+ACCOUNT_MMR_DEFAULT = "High MMR"
+
+
+def account_mmr(a):
+    """The card's MMR row, or "" on an unranked listing."""
+    if account_kind(a) == "unranked":
+        return ""
+    return ACCOUNT_MMR.get(a["tier"], ACCOUNT_MMR_DEFAULT)
+
+
+def account_be_random(a):
+    """Whether this listing's blue essence varies per account. See the ⚠ on the
+    catalogue: the unranked stock is levelled in batches and the leftover
+    essence is not a figure we can hold, so the card says so instead of
+    printing one."""
+    return not int(a.get("be") or 0)
+
+
+def account_kind(a):
+    """`unranked` or `ranked` — derived from the tier, never a second field."""
+    return "unranked" if a["tier"] == "Unranked" else "ranked"
+
+
+def accounts_of_kind(kind):
+    return [a for a in ACCOUNTS
+            if kind == "all" or account_kind(a) == kind]
+
+
+def account(aid):
+    """One listing by id, or None. The one lookup — pricing.py, payments.py and
+    build.py all read the catalogue through it."""
+    return _ACCOUNT_BY_ID.get(str(aid or "").strip())
+
+
+def account_server(region):
+    """The shard record for a region name, or None. EUW is the reference shard:
+    its share is 1 and its delta 0, so a listing's own `price` is the EUW price."""
+    return _ACCOUNT_SERVER_BY_REGION.get(str(region or "").strip())
+
+
+def account_code(region):
+    """EUW / NA / EUNE / OCE — REGION_SHORT's, never a second table."""
+    return REGION_SHORT.get(region, region)
+
+
+def account_stock(a, region):
+    """Units of one listing on one shard. The ONE stock derivation; the promo
+    bar, the server cards, the server bar and the tier cards all reduce to it,
+    which is what stops the four figures on this page contradicting each other.
+
+    A sold-out listing stays at zero on every shard — `max(1, …)` must not
+    resurrect it, which is the one way this rounding goes wrong."""
+    units = int(a.get("stock") or 0)
+    if units <= 0:
+        return 0
+    sv = account_server(region)
+    if not sv:
+        return 0
+    return max(1, round(units * sv["share"]))
+
+
+def account_units_on(region):
+    return sum(account_stock(a, region) for a in ACCOUNTS)
+
+
+def account_stock_total():
+    """The figure the promo bar quotes. Every unit on every shard."""
+    return sum(account_units_on(s["region"]) for s in ACCOUNT_SERVERS)
+
+
+def account_ships_to(a, region):
+    """Whether a listing can be bought on a shard. An empty region means "no
+    preference" and matches anything with stock somewhere."""
+    if not region:
+        return any(account_stock(a, s["region"]) for s in ACCOUNT_SERVERS)
+    return account_stock(a, region) > 0
+
+
+def accounts_in_stock(region=""):
+    return [a for a in ACCOUNTS if account_ships_to(a, region)]
+
+
+def account_price(a, region=""):
+    """What this listing costs on this shard: its own figure plus the shard's
+    delta. Mirrored by pricing.account_price() — which is what the server
+    actually charges — and by app.js. An unknown region prices at EUW, the
+    reference shard, rather than refusing: the refusal belongs in account_pick()
+    where it can name the reason."""
+    sv = account_server(region)
+    return round(float(a["price"]) + (sv["delta"] if sv else 0), 2)
+
+
+def account_was(a, region=""):
+    """The struck figure, or 0. Carries the shard delta so the reduction stays
+    the same money on every shard."""
+    if not a.get("was"):
+        return 0.0
+    sv = account_server(region)
+    return round(float(a["was"]) + (sv["delta"] if sv else 0), 2)
+
+
+def account_floor():
+    """The cheapest account anyone can actually buy, on any shard — what the
+    hero and the nav quote as "from $NN". Reads stock, so a sold-out cheap
+    listing can never advertise a price nobody can pay."""
+    live = [(a, s["region"]) for a in ACCOUNTS for s in ACCOUNT_SERVERS
+            if account_stock(a, s["region"])]
+    return min((account_price(a, r) for a, r in live), default=0)
+
+
+def account_shard_floor(region):
+    """The same, on one shard — the "from $NN" on a server card."""
+    live = [a for a in ACCOUNTS if account_stock(a, region)]
+    return min((account_price(a, region) for a in live), default=0)
+
+
+def account_tier_color(a):
+    """The rank mark's colour. Every ranked tier reads `tier_color()` — the
+    site's ONE colour table, so an account's Gold mark is the same Gold the
+    live feed, the rank plates and the checkout climb line draw. Unranked is
+    not a rung of any ladder and is the only entry that needs its own value."""
+    if a["tier"] == "Unranked":
+        return ACCOUNT_UNRANKED_COLOR
+    lol = next((g for g in GAMES if g["name"] == ACCOUNT_GAME), None)
+    return tier_color(lol, a["tier"]) if lol else ACCOUNT_UNRANKED_COLOR
+
+
+# The catalogue has to describe something the shop actually sells, so every
+# shard is checked against the League ladder at import — the same rule WR_FLOOR
+# follows. A shard League is not sold on would put a server card on this page
+# quoting a region no booster covers and no order can be fulfilled on.
+assert any(g["name"] == ACCOUNT_GAME for g in GAMES), \
+    "ACCOUNT_GAME must name a game in GAMES"
+_ACC_REGIONS = set(next(g for g in GAMES if g["name"] == ACCOUNT_GAME)["regions"])
+assert set(ACCOUNT_REGIONS) <= _ACC_REGIONS, \
+    "an account shard names a region %s is not sold on" % ACCOUNT_GAME
+assert len(_ACCOUNT_BY_ID) == len(ACCOUNTS), "duplicate account id"
+assert {s["region"] for s in ACCOUNT_SERVERS} == set(ACCOUNT_REGIONS), \
+    "duplicate account shard"
+for _a in ACCOUNTS:
+    assert _a["tier"] == "Unranked" or _a["tier"] in TIER_COLORS, \
+        "account %s names a tier with no colour" % _a["id"]
+    assert float(_a["price"]) > 0, "account %s needs a price" % _a["id"]
+    assert not _a.get("was") or _a["was"] > _a["price"], \
+        "account %s has a struck price under what it charges" % _a["id"]
+    assert _a["note"], "account %s has no caution row" % _a["id"]
+# The three unranked listings share a tier and so a colour; a shared MARK would
+# make them one product on the shelf.
+assert len({a["shape"] for a in ACCOUNTS}) == len(ACCOUNTS), \
+    "two listings draw the same rank mark"
+assert not any(a["badge"] == "Cheapest" for a in ACCOUNTS), \
+    "'Cheapest' is computed by account_badge(), never authored — see the ⚠ there"
+# Neither half of the filter may be empty, or the bar offers a control that
+# returns nothing. Both halves non-empty also means neither can return all 11.
+assert accounts_of_kind("unranked") and accounts_of_kind("ranked"), \
+    "the tier filter has an empty half"
+
+
+# ── The handover, band 01 ─────────────────────────────────────────────────
+# Four steps with the time each happens at. Step 03 is the one that matters and
+# is deliberately an instruction rather than a promise: changing the email is
+# what turns a delivered login into an owned account, and it is the single
+# action the warranty assumes was taken.
+ACCOUNT_STEPS = [
+    ("01", "Minute 0", "Pay for the account you picked",
+     "No account needed on our side. Card or wallet, and the price on the card "
+     "is the price."),
+    ("02", "Instant delivery", "Credentials arrive by email",
+     "Login, password, and the original inbox with its recovery details. Sent "
+     "to the address you paid with."),
+    ("03", "First 10 min", "Change the email and the password",
+     "Do this before your first game. A walkthrough is in the same email, and "
+     "support will do it with you in Discord if you would rather."),
+    ("04", "Covered %d months" % ACCOUNT_WARRANTY_MONTHS,
+     "Play — and if it ever breaks, we replace it",
+     "Anything actioned inside the window is swapped for an account of the same "
+     "rank, or refunded. One claim per account, no interrogation."),
+]
+
+# What lands in the inbox. The list is what makes "full email access" checkable
+# rather than a slogan — each row names a thing the buyer can look for.
+ACCOUNT_INCLUDED = [
+    ("gamepad", "The game login",
+     "Username and password, tested minutes before it is sent."),
+    ("envelope", "The original email inbox",
+     "Address, password and recovery answers — this is what makes it yours."),
+    ("list", "A change-it-now walkthrough",
+     "Four steps to lock the account to you, with screenshots."),
+    ("file", "The full account sheet",
+     "Champions, skins, essence, honour level and match history at handover."),
+    ("shield-check", "A %d-month warranty note" % ACCOUNT_WARRANTY_MONTHS,
+     "Your order id is the claim — nothing to register."),
+]
+
+# ── Why ours, band 02 ─────────────────────────────────────────────────────
+# ⚠ Each proof line is a commitment falsifiable by one order, the same standing
+# as SAFETY["measures"]'s notes. "No scripts, no bots" is only true while
+# sourcing is controlled; the claims figure needs the orders store behind it.
+ACCOUNT_TRUST = [
+    ("user-focus", "Provenance", "Played by a person",
+     "Every account was levelled by a booster on our roster, in normal hours, on "
+     "a regional connection. The match history reads like a player because it "
+     "was one.",
+     "No scripts, no bots, ever"),
+    ("lock-key", "Ownership", "The inbox comes with it",
+     "A login without its email is a rental — the seller can pull it back "
+     "whenever they like. Ours ship with the original inbox and its recovery "
+     "details.",
+     "Yours to lock in 10 minutes"),
+    ("undo", "Warranty", "Replaced for a year",
+     "If the account is actioned within %d months we send an equivalent one. "
+     "One claim per account, no interrogation, no restocking fee."
+     % ACCOUNT_WARRANTY_MONTHS,
+     "%d claims honoured last year" % ACCOUNT_CLAIMS_HONOURED),
+]
+
+# ── Buyers, band 03 ───────────────────────────────────────────────────────
+# ⚠ INVENTED, exactly like REVIEWS and BOOSTERS. Each is tagged with what was
+# bought because that tag is the whole argument of the band — a review with no
+# purchase behind it proves nothing. The score beside them is the SITE's one
+# rating (STATS["trustpilot"]); this page does not get a second one.
+ACCOUNT_REVIEWS = [
+    ("Marek K.", "4 days ago", "Gold · EUW", 5,
+     "Email came with it, changed both in about five minutes with the guide. "
+     "Match history looks like a real account, which is the bit I was worried "
+     "about."),
+    ("Dee R.", "1 week ago", "Unranked premium · NA", 5,
+     "Ordered at 2am and the credentials were in my inbox before I closed the "
+     "tab. Bigger champion pool than the account I main on."),
+    ("Tomas V.", "2 weeks ago", "Diamond · EUW", 5,
+     "Expensive, and worth it — the honour level and season rewards were exactly "
+     "as listed. Support walked me through the email change on Discord."),
+]
+
+
+# The accounts FAQ. ⚠ THE IDS ARE A PUBLIC CONTRACT, like GUARANTEE["faq"]'s:
+# support links people at `/accounts.html#faq-<id>` and checkout deep-links
+# `#faq-warranty`, so renaming one breaks the links in old tickets.
+#
+# Three of these contradict the sale on purpose, and they are why the page is
+# credible: the ToS answer, the refund answer, and the one that sends a buyer to
+# a boost instead when a boost is the better purchase. Removing them is the
+# single easiest way to make this page worthless.
+ACCOUNT_FAQ = [
+    ("access", "Do I get the email as well as the login?",
+     "Yes, on every account. You receive the game login and the original inbox with its "
+     "password and recovery details, which is the difference between owning an account and "
+     "renting one. Change both on arrival and nobody — including us — can take it back. We "
+     "do not sell accounts we cannot hand over completely."),
+    ("tos", "Can the account be banned for this?",
+     "Buying an account is against Riot's terms of service, so the honest answer is that the "
+     "risk is not zero. What reduces it is provenance and hygiene: every account was "
+     "hand-levelled by a person rather than botted, and changing the email and password in "
+     "the first ten minutes removes the only trail back to the sale. Anything actioned "
+     "within {months} months is replaced free."),
+    ("warranty", "What happens if it is recovered or banned?",
+     "Inside {months} months of delivery you get another account of the same rank, or the "
+     "money back, your choice. One claim per account, no interrogation and no restocking "
+     "fee. The claim is your order id — there is nothing to register."),
+    ("price", "Why is a Diamond account so much more than a smurf?",
+     "A level 30 unranked takes a booster a couple of days. A Diamond account is weeks of "
+     "ranked games at a rank where losses are expensive, plus the skins and rewards that "
+     "accumulate on the way. The price tracks the hours behind the account, not the label "
+     "on it."),
+    ("division", "Can I pick the exact division?",
+     "No. A listing names a tier and you get what is in stock the day you order, inside it. "
+     "We do not know which division it will be when you buy, so we do not print one we "
+     "might not have — everything else on the card is exact."),
+    ("region", "Can I change server after buying?",
+     "No — and it is why the server is the first thing we ask. Riot does sell a transfer "
+     "service, but we do not offer transfers and an account's rank history does not follow "
+     "it cleanly. Pick the region you actually queue on."),
+    ("refund", "Can I get a refund if I change my mind?",
+     "Before the credentials are sent, yes — in full, no questions. Once they have been sent "
+     "we cannot refund, because you have had access to the account and we cannot un-know the "
+     "password. That is the trade for instant delivery, and it is why the listing shows every "
+     "stat before you buy."),
+    # The answer that argues against the sale. It stays.
+    ("or-boost", "Should I buy an account or a boost?",
+     "If you want to keep your own name, your skins and your match history, buy the boost — "
+     "it is the same rank on the account you already play. An account makes sense when you "
+     "want a second one to queue on, or a clean shard to start on. If you are choosing "
+     "between them on price alone, the boost is usually the better purchase."),
+]
+
 # ── Bundles — one-click popular climbs ─────────────────────────────────────
 # Each entry is a (from-tier, to-tier) pair naming a common two-tier jump.
 # Clicking a card configures that exact climb (from-tier IV → to-tier IV) on the
