@@ -8941,7 +8941,7 @@ html.myd-open .mobile-bar { display: none; }
   .ac-filmeta { flex: 1 0 100%; }
 }
 
-/* ── 760 · the phone. The carousel becomes a swipe rail ───────────────── */
+/* ── 760 · the phone ──────────────────────────────────────────────────── */
 @media (max-width: 760px) {
   /* A paged carousel with arrows is wrong on touch. `--ac-per` goes fractional
      so the next card peeks and says the row moves; paging is inert (JS reads
@@ -8953,16 +8953,98 @@ html.myd-open .mobile-bar { display: none; }
   .ac-track { transform: none; transition: none; }
   .ac-card { scroll-snap-align: start; }
   .ac-arrows, .ac-dots { display: none; }
-  .ac-step-row { margin-top: 28px; }
-  .ac-bar { flex-direction: column; align-items: stretch; gap: 14px; }
-  .ac-bar-r { justify-content: space-between; }
-  .ac-change { height: 44px; }
-  .ac-sv-grid { grid-template-columns: minmax(0, 1fr); }
+
+  /* The hero is the whole first screen on a phone, so it is tightened rather
+     than scaled: the step-1 heading has to be reachable without a scroll that
+     feels like the page has no content. */
+  .ac-hero-inner { padding-block: 30px 34px; }
+  .ac-h1 { font-size: clamp(28px, 8.2vw, 34px); margin-top: 12px; }
+  .ac-hero-p { font-size: 16px; margin-top: 10px; }
+  .ac-assure { gap: 7px 16px; margin-top: 16px; font-size: 12.5px; }
+  .ac-step-1 { margin-top: 26px; }
+  .ac-step-p { margin-top: 9px; font-size: 13.5px; }
+
+  /* ── step 1 · the server cards become ROWS ─────────────────────────────
+     Four 208px cards is 862px of scrolling to answer a four-way question, and
+     most of it is empty: the desktop card's height comes from a stacked code
+     plate, name, stock line and a ruled foot. On the phone the same five facts
+     read as one 78px row, which puts all four servers on screen at once — the
+     comparison the step exists to make.
+
+     `display: contents` on the two wrappers promotes their children to grid
+     items, so this is a re-layout with no extra markup. The arrow disc goes:
+     the whole card is a <button>, and an affordance that repeats what the row
+     already is costs a column the price needs. */
+  .ac-sv-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 20px; }
+  .ac-sv {
+    display: grid; align-items: center;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "code name  badge"
+      "code stock price";
+    column-gap: 13px; row-gap: 3px; padding: 12px 14px;
+  }
+  .ac-sv:hover { transform: none; }
+  .ac-sv-top, .ac-sv-foot { display: contents; }
+  /* A fixed code column, or the name starts at a different x on every card —
+     the four plates are 2 to 4 characters wide and an `auto` track sizes each
+     card's grid on its own. Four rows that do not share a left edge read as
+     four unrelated components. */
+  .ac-sv-code { grid-area: code; min-width: 74px; height: 42px; padding: 0 10px; font-size: 16px; }
+  .ac-sv-name { grid-area: name; margin-top: 0; font-size: 15px; }
+  /* "FROM" goes: a price under a server card is self-evidently a from-price,
+     and the 44px it costs is what lets "EU Nordic & East" stay on one line. */
+  .ac-sv-froml { display: none; }
+  .ac-sv-stock { grid-area: stock; margin-top: 0; }
+  .ac-sv-badge { grid-area: badge; justify-self: end; }
+  .ac-sv-from { grid-area: price; justify-self: end; font-size: 17px; margin-top: 0; padding-top: 0; border-top: 0; }
+  .ac-sv-go { display: none; }
+  /* The foot's rule belonged to the stacked card; a row has no foot. */
+  .ac-sv-foot { border-top: 0; }
+  /* A card with no badge must not leave a hole where one would sit — the name
+     takes the row back. */
+  .ac-sv:not(:has(.ac-sv-badge)) { grid-template-areas: "code name price" "code stock price"; }
+
+  /* ── step 2 ───────────────────────────────────────────────────────────── */
+  .ac-step-2 { margin-top: 26px; }
+  .ac-step-row { margin-top: 24px; }
+  /* The bar stacks: the tick + server name, then the stock and the way back.
+     Left as a row it crams three blocks into 335px and the server name wraps
+     across the stock line. */
+  .ac-bar { flex-direction: column; align-items: stretch; gap: 12px; padding: 12px 14px; }
+  .ac-bar-l { align-items: center; }
+  .ac-bar-n { flex-wrap: wrap; }
+  .ac-bar-tick { width: 30px; height: 30px; }
+  .ac-bar-r { justify-content: space-between; gap: 10px; }
+  .ac-bar-stock { min-width: 0; }
+  /* "Change server" is two words and must stay on one line — a wrapped button
+     label reads as a broken control, and it is the only way back to step 1. */
+  .ac-change { height: 44px; white-space: nowrap; flex: none; }
   .ac-fils { overflow-x: auto; scrollbar-width: none; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); }
   .ac-fils::-webkit-scrollbar { display: none; }
   .ac-fil { height: 54px; padding: 0 16px; }
-  .ac-assure { gap: 8px 18px; font-size: 12.5px; }
+  .ac-filbar { margin-top: 20px; }
+  .ac-filmeta { font-size: 12px; }
+
+  /* ── the bands ────────────────────────────────────────────────────────── */
+  .ac-band { padding-block: 40px 44px; }
+  .ac-hand-l .ac-h2 { font-size: clamp(24px, 7vw, 30px); }
+  .ac-hsteps { margin-top: 20px; padding-top: 18px; }
+  /* The time chip drops UNDER the step rather than squeezing the copy into a
+     220px column beside it — "Login, password, and the original inbox with its
+     recovery details" ran to six lines. Grid rather than flex-wrap: the chip
+     has to leave the row entirely, and a flex item with `flex: 1` beside it
+     just shrinks instead of wrapping. */
+  .ac-step-row-i {
+    display: grid; column-gap: 14px;
+    grid-template-columns: 24px minmax(0, 1fr);
+    grid-template-areas: "num text" ".  time";
+  }
+  .ac-hs-n { grid-area: num; padding-top: 2px; }
+  .ac-hs-t { grid-area: text; }
+  .ac-hs-time { grid-area: time; justify-self: start; margin-top: 9px; }
   .ac-close-cta, .ac-cta { height: 46px; }
+  .ac-close-in { padding-block: 44px; }
 }
 /* ══════════════════════════════════════════════════════════════════════════
    MOBILE PASS — defects found walking every page at 375px and 320px
