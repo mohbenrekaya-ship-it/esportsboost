@@ -8954,6 +8954,27 @@ html.myd-open .mobile-bar { display: none; }
   .ac-card { scroll-snap-align: start; }
   .ac-arrows, .ac-dots { display: none; }
 
+  /* ⚠ THE WHOLE CARD HAS TO FIT THE VIEWPORT, price and CTA included. At the
+     desktop measurements it is 460px, and on a phone the rail starts ~530px
+     down a 852px screen with a 68px sticky header and iOS Safari's ~85px
+     floating toolbar over the bottom — so the price and "Buy now" sat under
+     the browser chrome and the one action on the card was invisible until you
+     scrolled past it. Reported from a real iPhone, not a simulator.
+     Every value below is shaved off vertical rhythm only: no row is dropped,
+     no figure is hidden, and the six feature rows all stay. ~386px. */
+  .ac-card { padding: 14px; }
+  .ac-emblem { width: 38px; height: 38px; border-radius: 10px; }
+  .ac-emblem svg { width: 22px; height: 22px; }
+  .ac-card-name { margin-top: 12px; }
+  .ac-name { font-size: 17px; }
+  .ac-fts { margin-top: 12px; gap: 8px; }
+  .ac-ft { font-size: 13px; }
+  .ac-card-foot { padding-top: 14px; }
+  .ac-money-m { font-size: 26px; }
+  .ac-money-c { font-size: 15px; }
+  .ac-stock { margin-top: 8px; }
+  .ac-card-cta { margin-top: 11px; }
+
   /* The hero is the whole first screen on a phone, so it is tightened rather
      than scaled: the step-1 heading has to be reachable without a scroll that
      feels like the page has no content. */
@@ -9006,12 +9027,17 @@ html.myd-open .mobile-bar { display: none; }
   .ac-sv:not(:has(.ac-sv-badge)) { grid-template-areas: "code name price" "code stock price"; }
 
   /* ── step 2 ───────────────────────────────────────────────────────────── */
-  .ac-step-2 { margin-top: 26px; }
-  .ac-step-row { margin-top: 24px; }
+  /* 68px of sticky header, not the desktop 96 — every pixel between the top of
+     step 2 and the bottom of the card is a pixel the CTA is pushed under the
+     browser chrome. */
+  .ac-step-2 { margin-top: 26px; scroll-margin-top: 72px; }
+  .ac-step-row { margin-top: 14px; }
+  .ac-step-2 .ac-step-h { font-size: 21px; margin-top: 10px; }
+  .ac-rail { margin-top: 8px; }
   /* The bar stacks: the tick + server name, then the stock and the way back.
      Left as a row it crams three blocks into 335px and the server name wraps
      across the stock line. */
-  .ac-bar { flex-direction: column; align-items: stretch; gap: 12px; padding: 12px 14px; }
+  .ac-bar { flex-direction: column; align-items: stretch; gap: 10px; padding: 11px 14px; }
   .ac-bar-l { align-items: center; }
   .ac-bar-n { flex-wrap: wrap; }
   .ac-bar-tick { width: 30px; height: 30px; }
@@ -9022,8 +9048,9 @@ html.myd-open .mobile-bar { display: none; }
   .ac-change { height: 44px; white-space: nowrap; flex: none; }
   .ac-fils { overflow-x: auto; scrollbar-width: none; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); }
   .ac-fils::-webkit-scrollbar { display: none; }
-  .ac-fil { height: 54px; padding: 0 16px; }
-  .ac-filbar { margin-top: 20px; }
+  /* 48px still clears the 44px target; the 6px is spent on the CTA below. */
+  .ac-fil { height: 48px; padding: 0 15px; }
+  .ac-filbar { margin-top: 12px; padding-bottom: 10px; gap: 10px; }
   .ac-filmeta { font-size: 12px; }
 
   /* ── the bands ────────────────────────────────────────────────────────── */

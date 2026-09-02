@@ -6642,7 +6642,7 @@ def ac_filter_bar():
             f'<span class="ac-fil-l">{esc(label)}</span>'
             f'<span class="ac-fil-n">{len(D.accounts_of_kind(key))}</span></button>')
     n = len(D.ACCOUNTS)
-    return f"""<div class="ac-filbar">
+    return f"""<div class="ac-filbar" data-ac-filbar>
       <div class="ac-fils" role="group" aria-label="Tier">{btns}</div>
       <span class="ac-filmeta">
         <span data-ac-kindmeta>{esc(D.ACCOUNT_KINDS[0][2])}</span>

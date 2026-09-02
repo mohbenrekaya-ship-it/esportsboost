@@ -3406,6 +3406,7 @@
     var prev = shop.querySelector("[data-ac-prev]");
     var next = shop.querySelector("[data-ac-next]");
     var nojs = shop.querySelector("[data-ac-nojs]");
+    var filbar = shop.querySelector("[data-ac-filbar]");
     var st = { server: null, kind: "all", page: 0 };
 
     // The no-JS line is the one thing that is wrong the moment JS runs: with
@@ -3544,14 +3545,33 @@
         st.server = b.getAttribute("data-ac-server");
         st.kind = "all"; st.page = 0;
         paint();
-        step2.scrollIntoView({ block: "start", behavior: "smooth" });
+        /* ⚠ On the phone this scrolls to the FILTER BAR, not to the top of
+           step 2. Step 2's head is the server bar plus a heading — ~230px of
+           confirmation — and putting that at the top of an 852px screen with a
+           68px sticky header and iOS Safari's ~85px floating toolbar left the
+           card's price and "Buy now" 119px under the browser chrome: the one
+           action on the card, invisible. Reported from a real iPhone.
+           The bar and the heading are one short scroll back up; the cards are
+           what the tap was for. Desktop has the room and keeps step 2. */
+        var target = (!paged() && filbar) ? filbar : step2;
+        /* ⚠ INSTANT, and deferred a frame. paint() has just unhidden step 2 and
+           hidden step 1 — several hundred pixels of layout change — and a
+           SMOOTH scroll started against that reflow is non-deterministic: it
+           landed at 0 on one run and 53 on the next, so the card's price and
+           CTA stayed under the browser chrome and it looked like the handler
+           was never firing. `scroll-behavior: smooth` is global (ashfall.css),
+           so 'auto' would inherit it — 'instant' is the only value that means
+           instant, the same reason the guarantee page's deep-link uses it. */
+        requestAnimationFrame(function () {
+          target.scrollIntoView({ block: "start", behavior: "instant" });
+        });
       });
     });
     var change = shop.querySelector("[data-ac-change]");
     if (change) change.addEventListener("click", function () {
       st.server = null; st.kind = "all"; st.page = 0;
       paint();
-      step1.scrollIntoView({ block: "center", behavior: "smooth" });
+      step1.scrollIntoView({ block: "center", behavior: "instant" });
     });
     each("[data-ac-kind]", null, function (b) {
       b.addEventListener("click", function () {
