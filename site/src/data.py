@@ -694,18 +694,21 @@ COACH_SLOTS = ["Tonight, 20:00", "Tomorrow, 18:00", "Saturday, 15:00", "Sunday, 
 # and fulfilment is manual: the webhook records the listing id and an operator
 # hands over one set of credentials from stock.
 #
-# ⚠ THE PRICES ARE A BUSINESS CALL, like the BUNDLES figures — and ⚠ THEY WERE
-# SET IN EUROS. `price` is the USD base every currency is derived from, which is
-# what the rest of the engine needs, but the figure the business chose is the
-# EUR one in the comment beside it: `price = eur / CHARGE_RATES["eur"]`, and
-# each one round-trips back to its exact euro at today's rate. That is why the
-# dollar figures are 27.07 and 206.41 rather than something round.
+# ⚠ THE PRICES ARE A BUSINESS CALL, like the BUNDLES figures — and ⚠ `price` IS
+# NOT IN ANY ONE CURRENCY. It is the figure a buyer pays whichever currency they
+# are quoted in: €24.90 in the EU, £24.90 in the UK, $24.90 everywhere else.
+# Same digits, three symbols, no FX in between.
 #
-# ⚠ THE COMMENT IS THE SOURCE OF TRUTH, not the dollar figure. If a rate ever
-# moves, re-derive every `price` from the euro beside it — do not leave the USD
-# and let the euro drift off .90, which is the price a European buyer actually
-# reads. Re-pricing means changing the euro in the comment and the number it
-# derives, together.
+# That is the business's call and it is unique to this product. Every boosting
+# product is priced in USD and converted at `CHARGE_RATES`, so a €72 boost and a
+# £62 boost are the same money; two account listings at "24.90" are NOT, and a
+# UK buyer pays about 26% more than a French one for the same account. It is a
+# margin decision per market, deliberately taken.
+#
+# `quote()` marks this with `fixed=True`, which is what stops `charge_for()` and
+# every money formatter multiplying by a rate — see the ⚠ on `charge_for()`. If
+# accounts ever go back to one price converted, drop that flag and the whole FX
+# path is already underneath it.
 #
 # `was` is the ONE struck figure this product may carry and it is only
 # defensible while it names a price the listing was actually sold at — nothing
@@ -827,42 +830,42 @@ ACCOUNT_DELIVERY = [
 # sheet before this page takes traffic.
 ACCOUNTS = [
     dict(id="lol-unranked-basic", name="Unranked · Basic", tier="Unranked",
-         shape="ring1", price=27.07,  # EUR 24.90
+         shape="ring1", price=24.90,
          level=30, champs=20, be=0, stock=31,
          badge="", season=False,
          note="Placements not played",),
     dict(id="lol-unranked-premium", name="Unranked · Premium", tier="Unranked",
-         shape="ring2", price=37.93,  # EUR 34.90
+         shape="ring2", price=34.90,
          level=45, champs=50, be=0, stock=19,
          badge="Best seller", season=False,
          note="Placements not played",),
     dict(id="lol-unranked-luxury", name="Unranked · Luxury", tier="Unranked",
-         shape="ring3", price=86.85,  # EUR 79.90
+         shape="ring3", price=79.90,
          level=52, champs=80, be=0, stock=9,
          badge="", season=False,
          note="Placements not played",),
     dict(id="lol-iron", name="Iron", tier="Iron",
-         shape="diamond", price=54.24,  # EUR 49.90
+         shape="diamond", price=49.90,
          level=45, be=0, stock=14,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-bronze", name="Bronze", tier="Bronze",
-         shape="triangle", price=43.37,  # EUR 39.90
+         shape="triangle", price=39.90,
          level=55, be=0, stock=12,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-silver", name="Silver", tier="Silver",
-         shape="pentagon", price=46.63,  # EUR 42.90
+         shape="pentagon", price=42.90,
          level=65, be=0, stock=11,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-gold", name="Gold", tier="Gold",
-         shape="hexagon", price=48.80,  # EUR 44.90
+         shape="hexagon", price=44.90,
          level=85, be=0, stock=8,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-platinum", name="Platinum", tier="Platinum",
-         shape="octagon", price=65.11,  # EUR 59.90
+         shape="octagon", price=59.90,
          level=105, be=0,
          stock=5, badge="", season=True,
          note="Previous season rewards",),
@@ -870,17 +873,17 @@ ACCOUNTS = [
     # figure nobody chose. €74.90 sits in the Platinum→Diamond gap so the ladder
     # stays ordered; replace it with the real number.
     dict(id="lol-emerald", name="Emerald", tier="Emerald",
-         shape="kite", price=81.41,  # EUR 74.90
+         shape="kite", price=74.90,
          level=130, be=0, stock=7,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-diamond", name="Diamond", tier="Diamond",
-         shape="facet", price=97.72,  # EUR 89.90
+         shape="facet", price=89.90,
          level=150, be=0, stock=6,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-master", name="Master", tier="Master",
-         shape="star", price=206.41,  # EUR 189.90
+         shape="star", price=189.90,
          level=185, be=0, stock=2,
          badge="Low stock", season=True,
          note="Previous season rewards",),

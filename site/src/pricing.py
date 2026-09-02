@@ -173,10 +173,10 @@ def per_hour_worth_saying(total, days, ceiling=None):
 # currency, so a rate that moved with the market would re-price every card on the
 # page between one load and the next. They sit slightly on our side of mid-market
 # to absorb drift and Stripe's conversion — re-check them when the market moves.
-CHARGE_RATES = {"usd": 1.0, "eur": 0.92, "gbp": 0.79, "cad": 1.37}
+CHARGE_RATES = {"usd": 1.0, "eur": 0.92, "gbp": 0.79}
 
 
-def charge_for(total_usd, currency, cents=False):
+def charge_for(total_usd, currency, cents=False, fixed=False):
     """(currency_code, integer minor units) for the Stripe line item.
 
     On every boosting product the button shows the total as `esbMoney(total)` —
@@ -190,11 +190,17 @@ def charge_for(total_usd, currency, cents=False):
     to a whole unit there and the buyer clicks $14.99 and is charged $15, which
     is the same class of defect the whole-unit rule exists to prevent.
 
+    ⚠ `fixed` is the accounts rule: that price is not in any one currency, it is
+    the same DIGITS in all three (€24.90 / £24.90 / $24.90), so no rate is
+    applied at all. Both flags ride on the quote (`q["cents"]`, `q["fixed"]`),
+    never on a caller's guess about the service — the quote is what knows how
+    its own figure is denominated.
+
     Unknown currencies fall back to USD (the base the quote is already in)."""
     cur = str(currency or "usd").strip().lower()
     if cur not in CHARGE_RATES:
         cur = "usd"
-    amount = total_usd * CHARGE_RATES[cur]
+    amount = total_usd if fixed else total_usd * CHARGE_RATES[cur]
     if cents:
         return cur, _jsround(amount * 100)
     return cur, _jsround(amount) * 100
@@ -387,7 +393,9 @@ def quote(state):
         discount = round(subtotal - total, 2)
         return dict(
             invalid=False, total=total, total_cents=int(round(total * 100)),
-            cents=True,
+            # ⚠ Both flags are what stop this figure being multiplied by a rate
+            # or rounded to a whole unit anywhere downstream. See data.py.
+            cents=True, fixed=True,
             subtotal=subtotal, discount=discount,
             promo_code="", promo_label=ACCOUNT_OFFER_LABEL if discount else "",
             promo_pct=0, promo_ends="",

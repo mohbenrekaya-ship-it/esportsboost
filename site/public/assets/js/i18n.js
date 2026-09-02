@@ -4,7 +4,7 @@
    Loaded BEFORE app.js so window.esbMoney / window.ESB_LOCALE exist when the
    runtime takes its first quote. Two independent dimensions, both persisted:
 
-     currency : USD | EUR | GBP | CAD  (both display AND the Stripe charge — the
+     currency : USD | EUR | GBP  (both display AND the Stripe charge — the
                              checkout POSTs this and payments.py charges in it at
                              the same fixed ESB_RATES rate, so the Stripe page
                              matches the button. Amount is still recomputed
@@ -155,7 +155,7 @@
      so change one, change the other, or the Stripe page won't match the button.
      It doubles as the allowlist: a currency we have no rate for is one we cannot
      charge, so a stored or hand-typed code that isn't a key here is discarded. */
-  var RATES = window.ESB_RATES = { USD: 1, EUR: 0.92, GBP: 0.79, CAD: 1.37 };
+  var RATES = window.ESB_RATES = { USD: 1, EUR: 0.92, GBP: 0.79 };
 
   /* ── persisted locale, read synchronously so app.js sees it ───────────── */
   var locale = { lang: "en", currency: "USD", curPinned: false };
@@ -191,7 +191,7 @@
   // matters — Canada's own en-CA formats it as a bare "$72", identical to USD,
   // so a Canadian could not tell which currency the page was quoting. en-US
   // gives it a distinct mark. Never move CAD to en-CA or fr-CA to "localise" it.
-  var CUR_TAG = { USD: "en-US", GBP: "en-GB", CAD: "en-US" };
+  var CUR_TAG = { USD: "en-US", GBP: "en-GB" };
   var EUR_TAG = { en: "en-IE", fr: "fr-FR", de: "de-DE" };
 
   /* A currency whose mark we set ourselves rather than take from the formatter.
@@ -203,7 +203,12 @@
      CUR_SYM and payments.CURRENCY_SIGNS. `test_currency_signs()` asserts all
      four, because a page quoting "C$319" over a receipt saying "CA$319" is the
      same one-set-of-numbers failure as a bare "$5" in the chrome. */
-  var CUR_MARK = { CAD: "C$" };
+  // Empty today. It exists for a currency whose CLDR symbol is not the one the
+  // site shows — CAD lived here as "C$" against CLDR's "CA$" until Canada was
+  // folded into the dollar rule. A mark added here must also be added to
+  // build.py's CURRENCIES, payments.CURRENCY_SIGNS and ops.js's CUR_SYM;
+  // test_currency_signs() asserts all four agree.
+  var CUR_MARK = {};
   var _fmtCache = {};
   function formatter(cur, lang, cents) {
     var tag = cur === "EUR" ? (EUR_TAG[lang] || "en-IE") : (CUR_TAG[cur] || "en-US");
@@ -218,8 +223,12 @@
   }
 
   // Currency-aware money. app.js delegates its usd() here.
-  window.esbMoney = function (n, cents) {
-    var cur = locale.currency, rate = window.ESB_RATES[cur] || 1;
+  window.esbMoney = function (n, cents, fixed) {
+    // ⚠ `fixed` is the accounts rule: that figure is the same DIGITS in every
+    // currency (€24.90 / £24.90 / $24.90), so no rate is applied. Mirrors
+    // pricing.charge_for()'s own `fixed` — the price shown and the price
+    // charged have to agree, and they only do if both skip the multiply.
+    var cur = locale.currency, rate = fixed ? 1 : (window.ESB_RATES[cur] || 1);
     var f = formatter(cur, locale.lang, cents), v = n * rate;
     var mark = CUR_MARK[cur];
     if (!mark) return f.format(v);
@@ -3939,9 +3948,10 @@
       // A two-size price is re-split rather than flattened: writing textContent
       // over it would destroy the two spans and print the whole figure at the
       // small size. See esbMoneyParts().
+      var fixed = el.hasAttribute("data-fixed");
       var main = el.querySelector("[data-money-main]");
       if (main) {
-        var parts = window.esbMoneyParts(n);
+        var parts = window.esbMoneyParts(n, fixed);
         main.textContent = parts.main;
         var c = el.querySelector("[data-money-cents]");
         if (c) c.textContent = parts.cents;
@@ -3950,7 +3960,7 @@
       // `data-cents` is the price's own flag, not the caller's: accounts are
       // the one product quoted to the cent, and a $14.99 card that re-formatted
       // to "€14" on a currency switch would quote a price nothing charges.
-      el.textContent = window.esbMoney(n, el.hasAttribute("data-cents"));
+      el.textContent = window.esbMoney(n, el.hasAttribute("data-cents"), fixed);
     });
   }
 
@@ -3961,12 +3971,12 @@
      decimal separator (symbol included wherever it falls) and `cents` is the
      separator plus the fraction plus anything after it, so main + cents is
      always exactly esbMoney(n, true). */
-  window.esbMoneyParts = function (n) {
-    var cur = locale.currency, rate = window.ESB_RATES[cur] || 1;
+  window.esbMoneyParts = function (n, fixed) {
+    var cur = locale.currency, rate = fixed ? 1 : (window.ESB_RATES[cur] || 1);
     var f = formatter(cur, locale.lang, true), mark = CUR_MARK[cur];
     var parts;
     try { parts = f.formatToParts(n * rate); }
-    catch (e) { return { main: window.esbMoney(n, true), cents: "" }; }
+    catch (e) { return { main: window.esbMoney(n, true, fixed), cents: "" }; }
     var main = "", cents = "", seen = false;
     for (var i = 0; i < parts.length; i++) {
       var p = parts[i];

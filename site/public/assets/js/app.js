@@ -65,8 +65,8 @@
     minimumFractionDigits: 2, maximumFractionDigits: 2
   });
   // Currency-aware when i18n.js is loaded (USD/EUR display); plain USD otherwise.
-  function usd(n, cents) {
-    if (window.esbMoney) return window.esbMoney(n, cents);
+  function usd(n, cents, fixed) {
+    if (window.esbMoney) return window.esbMoney(n, cents, fixed);
     return (cents ? fmt2 : fmt0).format(n);
   }
   // Language-aware fragment lookup (English fallback when i18n.js is absent).
@@ -831,10 +831,13 @@
         // this product to the cent. Without it the summary rounds $77.99 to
         // $78 while Stripe charges 7799 — the buyer reads one number and pays
         // another. Mirrors the same flag on pricing.py's account branch.
-        cents: true,
-        price: usd(aTotal, true),
-        wasPrice: aOff ? usd(aSub, true) : "",
-        discountPrice: aOff ? "−" + usd(aOff, true) : "",
+        // ⚠ `fixed` says this figure is the same digits in every currency —
+        // the accounts rule. Mirrors pricing.py's own flag, and the charge
+        // skips the rate for the same reason the display does.
+        cents: true, fixed: true,
+        price: usd(aTotal, true, true),
+        wasPrice: aOff ? usd(aSub, true, true) : "",
+        discountPrice: aOff ? "−" + usd(aOff, true, true) : "",
         promoCode: "", promoLabel: aOff ? T(D.accountOfferLabel || "Offer price") : "",
         promoEnds: "",
         summary: acc.name + " · " + aSv.code,
@@ -1478,7 +1481,7 @@
       // at a fixed one: accounts are quoted to the cent and every boosting
       // product to the whole unit, and a summary that rounds one of them
       // disagrees with what Stripe is asked to charge.
-      var m = function (v) { return usd(v, !!q.cents); };
+      var m = function (v) { return usd(v, !!q.cents, !!q.fixed); };
       var map = {
         base: m(q.base), addons: q.addons ? "+ " + m(q.addons) : "—",
         total: m(q.total), eta: q.eta, summary: q.summary,
@@ -3438,8 +3441,8 @@
       var priceEl = el.querySelector("[data-ac-price] .ac-money");
       if (priceEl) {
         var parts = window.esbMoneyParts
-          ? window.esbMoneyParts(price)
-          : { main: usd(price, true), cents: "" };
+          ? window.esbMoneyParts(price, true)
+          : { main: usd(price, true, true), cents: "" };
         priceEl.setAttribute("data-usd", price.toFixed(2));
         setText(priceEl.querySelector("[data-money-main]"), parts.main);
         setText(priceEl.querySelector("[data-money-cents]"), parts.cents);
@@ -3449,7 +3452,7 @@
         wasEl.hidden = !(was > price);
         var wm = wasEl.querySelector(".money") || wasEl;
         wm.setAttribute("data-usd", (was || price).toFixed(2));
-        setText(wm, usd(was || price, true));
+        setText(wm, usd(was || price, true, true));
       }
       setText(el.querySelector("[data-ac-code]"), sv.code);
       setText(el.querySelector("[data-ac-shard-name]"), sv.region);

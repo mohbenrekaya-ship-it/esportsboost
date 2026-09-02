@@ -2235,7 +2235,7 @@
   // is a dollar sign, so a currency missing from this map is silently mislabelled
   // rather than obviously broken. Mirrored in payments.CURRENCY_SIGNS, i18n.js
   // CUR_MARK and build.py's CURRENCIES icon; test_pricing.py asserts all four.
-  var CUR_SYM = { usd: "$", eur: "€", gbp: "£", cad: "C$" };
+  var CUR_SYM = { usd: "$", eur: "€", gbp: "£" };
   function money(n, cur) {
     var sym = CUR_SYM[(cur || "usd").toLowerCase()] || "$";
     return sym + fmtNum.format(Math.round(n || 0));

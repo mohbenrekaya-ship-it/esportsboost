@@ -152,7 +152,8 @@ def build_session(order, base_url):
     # `cents` rides on the quote, not on a service test here: accounts are the
     # one product priced to the cent, and the quote is what knows it.
     charge_cur, charge_amount = pricing.charge_for(
-        q["total"], order.get("currency"), cents=bool(q.get("cents")))
+        q["total"], order.get("currency"),
+        cents=bool(q.get("cents")), fixed=bool(q.get("fixed")))
 
     params = {
         "mode": "payment",
@@ -549,12 +550,7 @@ def _record_order(md, obj):
 #     today; if ops can't hold it, cut the line rather than soften it.
 #   · Policy is linked, never restated. A refund window quoted in an email is a
 #     number that cannot be corrected after it is sent.
-# CAD is "C$", never a bare "$": this row states what the card was charged,
-# and a Canadian buyer reading "$415" in their confirmation cannot tell
-# whether they were billed 415 Canadian or 415 US dollars. Mirrored in
-# ops.js CUR_SYM, i18n.js CUR_MARK and build.py's CURRENCIES icon —
-# test_pricing.py asserts all four agree and cover pricing.CHARGE_RATES.
-CURRENCY_SIGNS = {"usd": "$", "eur": "€", "gbp": "£", "cad": "C$"}
+CURRENCY_SIGNS = {"usd": "$", "eur": "€", "gbp": "£"}
 
 
 SITE_ORIGIN_FALLBACK = "https://esportsboost.com"

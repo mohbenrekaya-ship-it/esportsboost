@@ -142,7 +142,6 @@ SA_COUNTRIES = {"BR", "AR", "CL", "CO", "PE", "VE", "EC", "BO",
 # the language map, where a American reading the site in French would be quoted
 # euros for a North American order.
 CUR_COUNTRIES = {
-    "CA": "CAD",
     "GB": "GBP", "IM": "GBP", "JE": "GBP", "GG": "GBP",
     "US": "USD", "MX": "USD",
 }

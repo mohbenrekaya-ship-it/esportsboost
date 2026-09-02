@@ -279,8 +279,9 @@ they only agree by accident otherwise, and `data-addon-price` depends on quoting
 ## Language and currency — `i18n.js`
 
 Two controls, persisted together in `esb.locale.v1`. They stay independent — a French reader can
-still ask for dollars — but they are **not independent defaults**. Four currencies ship: **USD, EUR,
-GBP and CAD**.
+still ask for dollars — but they are **not independent defaults**. Three currencies ship: **USD, EUR
+and GBP**, and that is the business's rule — **the EU in euros, the UK in pounds, everywhere else in
+dollars**. ⚠ CAD was dropped with that rule: Canada is now "everywhere else" and is quoted USD.
 
 - **The markets, as the business set them** (`geo.currency_for()`): the **United States in dollars,
   Canada in Canadian dollars, the UK and the crown dependencies in sterling, the rest of Europe in
@@ -294,7 +295,7 @@ GBP and CAD**.
   two that are easy to get wrong: the *European zone* test has to beat the locale, or a visitor in
   Paris whose browser is set to `en-GB` is quoted in pounds; and the *American zone* test has to sit
   after the country map and before the European locale list, so Toronto-without-a-table-entry can
-  still reach CAD while an American with a French browser is quoted for the market he is in.
+  still be placed while an American with a French browser is quoted for the market he is in.
   **English is not a market** — it is read in London, Toronto and Los Angeles — which is why
   `LANG_CUR` (`fr`/`de` → EUR) is now the *last* resort rather than the first, reached only by a
   browser that reports no usable location at all. It is resolved where the store is read, *before*
@@ -302,8 +303,6 @@ GBP and CAD**.
   it in `init()` would paint the page in dollars and swap it. The French page used to headline
   "à partir de **$5**" over a card quoting euros, which is the same one-set-of-numbers failure a
   bare `$5` in the chrome is.
-- **CAD is a default nobody outside Canada gets, and that is the point.** It ships in the switcher
-  for anyone who wants it, but only Canadian traffic opens on it.
 - **Every currency these tables can hand somebody must have a charge rate.** A country mapped to a
   code missing from `CHARGE_RATES` displays perfectly and is charged in **dollars** at the Stripe
   page (`charge_for()` falls back), so the buyer sees one currency and pays another.
@@ -329,18 +328,16 @@ GBP and CAD**.
   $72; and a currency priced server-side that the switcher never offers is dead weight. The rates
   are **hand-set, not a live feed** — the site quotes whole units, so a rate that moved with the
   market would re-price every card between one load and the next.
-- **CAD is `C$` on every surface, and never a bare `$`.** Canada's own `en-CA` formats CAD as
-  "$72" — identical to USD — so a Canadian could not tell which currency the page was quoting.
-  `CUR_TAG` pins CAD to `en-US`; **do not "localise" it to `en-CA`/`fr-CA`.** That yields CLDR's
-  "CA$", and the site shows **`C$`**, so `CUR_MARK` in i18n.js overrides it — by rewriting the
-  formatter's `currency` **part** via `formatToParts()`, never by string-replacing the finished
+- **`CUR_MARK` is empty, and it is the seam for a currency whose CLDR symbol is not ours.** CAD lived
+  there as `C$` against CLDR's `CA$` until Canada was folded into the dollar rule. A mark added back
+  must be added to **four surfaces**: `CUR_MARK` (the displayed price), the icon column of build.py's
+  `CURRENCIES` (the switcher), `payments.CURRENCY_SIGNS` (the order mail) and `CUR_SYM` in ops.js
+  (the /ops Orders tab). The last two fall back to a bare `$` for a code they don't know, so a
+  missing entry is not a broken glyph — it is an order labelled as US dollars in a customer's inbox.
+  `test_currency_signs()` asserts all four agree and that no two currencies share a mark. It rewrites
+  the formatter's `currency` **part** via `formatToParts()`, never by string-replacing the finished
   output, because where the mark sits is the formatter's business (it leads in `en-US`, trails in
-  `fr-FR`). **Four surfaces draw that mark and all four must agree**: `CUR_MARK` (the displayed
-  price), the icon column of build.py's `CURRENCIES` (the switcher control), `payments.CURRENCY_SIGNS`
-  (the order confirmation mail) and `CUR_SYM` in ops.js (the /ops Orders tab). The last two fall back
-  to a bare `$` for a code they don't know, so a missing entry is not a broken glyph — it is a CAD
-  order labelled as US dollars in a customer's inbox. `test_currency_signs()` asserts all four agree,
-  that the two maps cover `CHARGE_RATES`, and that no two currencies share a mark.
+  `fr-FR`).
 - **The pound is pinned to `en-GB` formatting, the euro follows the language.** `CUR_TAG` vs
   `EUR_TAG` in `formatter()`: the euro's symbol placement is genuinely language-specific ("€72" for
   an English reader, "72 €" for a French one), but the pound is a prefix mark wherever it is read and
@@ -1342,8 +1339,9 @@ Load-bearing:
   `.mb-money` is `flex-wrap: wrap`, so the save pill drops to a second line whenever the price, its
   struck original and the pill stop fitting, and the bar goes 109 → 139 → (on checkout) 166px.
   **Which totals do that is a property of the number, not of the page** — a three-figure total
-  already wraps at 375px in dollars, and CAD's `C$` prefix over a 1.37× amount wraps at nearly all
-  of them. The four hand-set constants were each measured against one configuration and were wrong by
+  already wraps at 375px in dollars. (CAD's wider `C$` prefix over a 1.37× amount was the worst
+  case and is gone with CAD, but the reserve stays measured — the wrap depends on the number, and an
+  accounts total quotes to the cent.) The four hand-set constants were each measured against one configuration and were wrong by
   16–23px for the rest, so `initBarReserve()` in app.js measures the bar and publishes `--mb-h` on
   `<html>`, re-measuring on every `esb:render`, on resize and on `document.fonts.ready` — the same way
   `--hd-top` follows the header's live bottom edge. The constants survive as the `var()` fallbacks

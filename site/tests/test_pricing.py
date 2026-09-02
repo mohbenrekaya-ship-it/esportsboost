@@ -574,8 +574,11 @@ def test_server_defaults():
     both = sorted(geo.NA_COUNTRIES & geo.SA_COUNTRIES)
     check(not both, "no country is both NA and SA (%s)" % (both or "none"))
 
-    # 4. The currency-by-location tables resolve the markets the business set.
-    for code, want in (("US", "USD"), ("CA", "CAD"), ("GB", "GBP"),
+    # 4. The currency-by-location tables resolve the markets the business set:
+    #    the EU in euros, the UK in pounds, everywhere else in dollars. ⚠ Canada
+    #    is deliberately in that "everywhere else" now — CAD was dropped with
+    #    that rule, so a Canadian is quoted USD like any other non-EU visitor.
+    for code, want in (("US", "USD"), ("CA", "USD"), ("GB", "GBP"),
                        ("FR", "EUR"), ("DE", "EUR"), ("PL", "EUR"),
                        ("BR", "USD"), ("JP", "USD")):
         check(geo.currency_for(code) == want,
@@ -815,13 +818,15 @@ def test_order_row_records_what_was_bought():
 
 # ── accounts: the shop's price model, and the four places it can be wrong ──
 def account_display_cents(total_usd, cur):
-    """Replica of the client display for a CENTS price: esbMoney(n, true)
-    formats total * rate with two fraction digits (Intl 'halfExpand' == round
-    half away from zero). This is the figure on the card and on the checkout
-    total — it must equal charge_for(…, cents=True), or the buyer clicks $77.99
-    and Stripe bills $78."""
-    v = total_usd * pricing.CHARGE_RATES[cur] * 100
-    return math.floor(v + 0.5)
+    """Replica of the client display for an accounts price.
+
+    ⚠ NO RATE. `esbMoney(n, true, true)` formats the figure itself with two
+    fraction digits, because an accounts price is the same DIGITS in every
+    currency (€24.90 / £24.90 / $24.90) rather than one amount converted. This
+    is what is on the card and on the checkout total, and it must equal
+    charge_for(…, cents=True, fixed=True) — otherwise the buyer clicks €24.90
+    and Stripe bills something else."""
+    return math.floor(total_usd * 100 + 0.5)
 
 
 def test_account_pricing():
@@ -990,22 +995,32 @@ def test_account_shown_equals_charged_to_the_cent():
                 continue
             q = pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
                                "account": a["id"], "region": r})
-            check_cents = q.get("cents")
-            if not check_cents:
-                bad.append("%s/%s does not declare cents" % (a["id"], r))
+            if not q.get("cents") or not q.get("fixed"):
+                bad.append("%s/%s does not declare cents+fixed" % (a["id"], r))
                 continue
             for cur in pricing.CHARGE_RATES:
-                _c, amount = pricing.charge_for(q["total"], cur, cents=True)
+                _c, amount = pricing.charge_for(q["total"], cur, cents=True,
+                                                fixed=True)
                 want = account_display_cents(q["total"], cur)
                 if amount != want:
                     bad.append("%s/%s %s: %r != %r" % (a["id"], r, cur, amount, want))
     check(not bad, "the card is charged the price it shows (%r)" % bad[:3])
+    # ⚠ And the SAME figure in all three: this is the business rule that a UK
+    # buyer pays £24.90 where a French one pays €24.90, not the FX equivalent.
+    a0 = D.ACCOUNTS[0]
+    q0 = pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
+                        "account": a0["id"], "region": D.ACCOUNT_REGIONS[0]})
+    amounts = {pricing.charge_for(q0["total"], c, cents=True, fixed=True)[1]
+               for c in pricing.CHARGE_RATES}
+    check(len(amounts) == 1 and amounts.pop() == int(round(a0["price"] * 100)),
+          "one price list: the same minor units in every currency")
     # And the whole-unit path is untouched for everything else: a boost total is
     # an integer, so both paths must still agree there.
     q = pricing.quote({"game": "League of Legends", "service": "division",
                        "from": LOL["ladder"][0], "to": LOL["ladder"][6],
                        "mode": "Solo", "addons": []})
-    check(not q.get("cents"), "a boost does not declare cents")
+    check(not q.get("cents") and not q.get("fixed"),
+          "a boost declares neither cents nor fixed — it is USD, converted")
     check(pricing.charge_for(q["total"], "eur")[1] == display_cents(q["total"], "eur"),
           "the whole-unit charge path is unchanged")
 

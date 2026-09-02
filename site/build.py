@@ -87,7 +87,7 @@ def usd(n, cents=False):
     return ("${:,.2f}" if cents else "${:,.0f}").format(n)
 
 
-def money(n, cents=False):
+def money(n, cents=False, fixed=False):
     """A static USD price wrapped so i18n.js can re-format it into the active
     currency client-side. The `data-usd` value is the raw USD amount."""
     raw = ("%.2f" % n) if cents else ("%d" % round(n))
@@ -95,19 +95,24 @@ def money(n, cents=False):
     # re-formats it to the cent on a currency switch. Without it a $14.99
     # account card re-renders as "€14" — a price nothing charges.
     flag = ' data-cents="1"' if cents else ""
+    # ⚠ `data-fixed` says this figure is the SAME NUMBER in every currency and
+    # must not be multiplied by a rate — the accounts rule. Without it a €24.90
+    # card re-renders as "$27.07" the moment somebody switches currency.
+    flag += ' data-fixed="1"' if fixed else ""
     return '<span class="money" data-usd="%s"%s>%s</span>' % (raw, flag, usd(n, cents))
 
 
-def money_parts(n):
+def money_parts(n, fixed=False):
     """A cents price split for the two-size treatment the account cards use —
     the dollars big, the cents small. Server-side this is always USD; the client
     re-splits through `esbMoneyParts()` when the currency changes, which is what
     keeps "72,99 €" splitting in the right place for a French reader."""
     whole = int(n)
-    return ('<span class="money ac-money" data-usd="%.2f" data-cents="1">'
+    return ('<span class="money ac-money" data-usd="%.2f" data-cents="1"%s>'
             '<span class="ac-money-m" data-money-main>%s</span>'
             '<span class="ac-money-c" data-money-cents>%s</span></span>'
-            % (n, usd(whole), (".%02d" % round((n - whole) * 100))))
+            % (n, ' data-fixed="1"' if fixed else "",
+               usd(whole), (".%02d" % round((n - whole) * 100))))
 
 
 def quote(game, frm, to, mode="Solo"):
@@ -203,8 +208,9 @@ _CHEV = ('<svg class="loc-chev" width="9" height="9" viewBox="0 0 10 10" aria-hi
 # confuse with another. The icon column IS the mark the site prints, and every
 # surface that prints money agrees on it: i18n.js CUR_MARK, ops.js CUR_SYM and
 # payments.CURRENCY_SIGNS (the order mail). test_currency_signs() locks it.
-CURRENCIES = [("USD", "$", "USD"), ("EUR", "€", "EUR"),
-              ("GBP", "£", "GBP"), ("CAD", "C$", "CAD")]
+# Three, and the business's rule: the EU in euros, the UK in pounds, everywhere
+# else in dollars. CAD was dropped with that rule — see geo.currency_for().
+CURRENCIES = [("USD", "$", "USD"), ("EUR", "€", "EUR"), ("GBP", "£", "GBP")]
 LANGUAGES = [("EN", "🇬🇧", "EN"), ("FR", "🇫🇷", "FR"), ("DE", "🇩🇪", "DE")]
 
 # Static "translate" mark (文 + A) for the language button. The flags stay in the
@@ -6334,7 +6340,7 @@ def ac_price_note():
     shard. Quoted off the catalogue (`D.account_floor()` reads stock), never
     typed, so a sold-out cheap listing can't leave the hero advertising a price
     nobody can pay."""
-    return money(D.account_floor(), cents=True)
+    return money(D.account_floor(), cents=True, fixed=True)
 
 
 # ── The rank marks ────────────────────────────────────────────────────────
@@ -6449,7 +6455,7 @@ def ac_server_card(sv):
         <span>in stock</span></span>
       <span class="ac-sv-foot">
         <span class="ac-sv-from"><span class="ac-sv-froml">From</span>
-          {money(D.account_shard_floor(region), cents=True)}</span>
+          {money(D.account_shard_floor(region), cents=True, fixed=True)}</span>
         <span class="ac-sv-go" aria-hidden="true">{_ico("arrow", 13, "ico", stroke=True)}</span>
       </span>
     </button>"""
@@ -6505,7 +6511,7 @@ def ac_tier_card(a, region):
     badge = (f'<span class="ac-badge{" is-low" if low_badge else ""}">{esc(label)}</span>'
              if label else "")
     struck = (f'<span class="ac-was" data-ac-was{"" if was > price else " hidden"}>'
-              f'{money(was or price, cents=True)}</span>')
+              f'{money(was or price, cents=True, fixed=True)}</span>')
 
     # Four spec rows, two green ticks and one amber caution — the mix is the
     # point. See the ⚠ in the section header.
@@ -6578,7 +6584,7 @@ def ac_tier_card(a, region):
       <ul class="ac-fts">{rows}</ul>
       <div class="ac-card-foot">
         {struck}
-        <span class="ac-price" data-ac-price>{money_parts(price)}</span>
+        <span class="ac-price" data-ac-price>{money_parts(price, fixed=True)}</span>
         {stock}
         <div class="ac-card-cta">{ctas}</div>
       </div>
