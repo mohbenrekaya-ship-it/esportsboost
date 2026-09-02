@@ -149,7 +149,10 @@ def build_session(order, base_url):
     # fixed rate app.js displayed — so the Stripe page shows the amount on the
     # button, not a raw-USD figure the buyer never saw. Server-side conversion
     # only; the client's number is never trusted for the amount.
-    charge_cur, charge_amount = pricing.charge_for(q["total"], order.get("currency"))
+    # `cents` rides on the quote, not on a service test here: accounts are the
+    # one product priced to the cent, and the quote is what knows it.
+    charge_cur, charge_amount = pricing.charge_for(
+        q["total"], order.get("currency"), cents=bool(q.get("cents")))
 
     params = {
         "mode": "payment",
@@ -608,10 +611,14 @@ def _addon_names(ids):
 def _order_rows(record, md):
     """The facts both messages state, in one place so they cannot disagree.
     Only rows with something in them survive."""
+    # ⚠ An account is not a boost, and the row that names the product must say
+    # so: this mail is the handover, and a buyer who paid for a Diamond account
+    # reading "Boost  Diamond · EUW" has been sent somebody else's receipt.
+    product = "Account" if md.get("service") == "account" else "Boost"
     rows = [
         ("Order", record.get("order_id") or ""),
         ("Game", md.get("game") or ""),
-        ("Boost", md.get("detail") or ""),
+        (product, md.get("detail") or ""),
         ("Region", md.get("region") or ""),
         ("Estimated", md.get("eta") or ""),
         ("Booster", md.get("booster") or ""),
@@ -624,25 +631,63 @@ def _order_rows(record, md):
     return [(k, str(v)) for k, v in rows if str(v).strip()]
 
 
-def _order_text(rows, origin):
+# ⚠ "What happens next" is the one part of this mail that is a PROMISE, and it
+# is completely different per product: a boost is claimed by a booster and
+# nothing about the buyer's account changes, while an account arrives as
+# credentials that the buyer has to secure themselves within minutes. Sending
+# the boost paragraph to an account buyer tells them to wait for something that
+# is never coming and omits the one action the warranty assumes they took.
+_NEXT_BOOST = ("A verified booster claims it, and we email you when they do. "
+               "Nothing about your account changes before that.")
+
+
+def _next_account():
+    import data as D
+    return ("Your credentials are on their way to this address — the login and "
+            "the original inbox with its recovery details. Change the email and "
+            "the password before your first game; the walkthrough is in that "
+            "mail. Anything actioned inside %d months is replaced free."
+            % D.ACCOUNT_WARRANTY_MONTHS)
+
+
+def _next_steps(md):
+    return _next_account() if md.get("service") == "account" else _NEXT_BOOST
+
+
+def _order_text(rows, origin, md=None):
     body = "\n".join("%-11s%s" % (k, v) for k, v in rows)
     return """Thanks — your payment went through and your order is on the board.
 
 %s
 
 What happens next
-A verified booster claims it, and we email you when they do. Nothing about
-your account changes before that.
+%s
 
 Questions, or want to change something? Reply to this mail. Quoting the order
 number puts it in front of whoever is handling it.
 
 The guarantee, in full: %s/guarantee.html
 eSports Boost
-""" % (body, origin)
+""" % (body, _wrap_next(_next_steps(md or {})), origin)
 
 
-def _order_html(rows, origin):
+def _wrap_next(text, width=76):
+    """The plain-text copy is hand-wrapped, so the paragraph that varies per
+    product has to be too — a 300-character line in a plain-text mail renders
+    as one unbroken run in half the clients that read it."""
+    out, line = [], ""
+    for word in text.split():
+        if line and len(line) + 1 + len(word) > width:
+            out.append(line)
+            line = word
+        else:
+            line = (line + " " + word).strip()
+    if line:
+        out.append(line)
+    return "\n".join(out)
+
+
+def _order_html(rows, origin, md=None):
     """The buyer's copy, as HTML. Every value is escaped: `detail`, `notes` and
     the rest arrive from Stripe metadata, which the browser filled in.
 
@@ -662,8 +707,7 @@ def _order_html(rows, origin):
    color:#ff4a1f;font-weight:700">Order confirmed</p>
   <h1 style="margin:0 0 14px;font-size:20px;color:#16161a">Your payment went through.</h1>
   <p style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#4a4a55">
-   Your order is on the board. A verified booster claims it, and we email you when
-   they do — nothing about your account changes before that.</p>
+   Your order is on the board. %s</p>
   <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%%;
    border-top:1px solid #ececf1;border-bottom:1px solid #ececf1;margin:0 0 18px">%s</table>
   <p style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#4a4a55">
@@ -676,7 +720,7 @@ def _order_html(rows, origin):
 <tr><td style="padding:14px 26px 22px;border-top:1px solid #ececf1;font-size:12px;color:#8a8a95">
   eSports Boost · <a href="%s" style="color:#8a8a95">esportsboost.com</a>
 </td></tr>
-</table></body></html>""" % (cells, origin, origin)
+</table></body></html>""" % (_esc(_next_steps(md or {})), cells, origin, origin)
 
 
 def _send_order_mail(record, md, obj):
@@ -697,7 +741,7 @@ def _send_order_mail(record, md, obj):
     if mailer.valid(buyer):
         ok, err = mailer.send(
             buyer, "Your order is confirmed — %s" % order_id,
-            _order_text(rows, origin), html=_order_html(rows, origin),
+            _order_text(rows, origin, md), html=_order_html(rows, origin, md),
             kind="order")
         if not ok:
             sys.stderr.write("[mail] confirmation for %s failed: %s\n" % (order_id, err))

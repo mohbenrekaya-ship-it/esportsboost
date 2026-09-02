@@ -813,46 +813,84 @@ def test_order_row_records_what_was_bought():
           "the play window and the pack length are two separate metadata keys")
 
 
-# ── accounts: the flat-priced product, and the two places it can be wrong ──
+# ── accounts: the shop's price model, and the four places it can be wrong ──
+def account_display_cents(total_usd, cur):
+    """Replica of the client display for a CENTS price: esbMoney(n, true)
+    formats total * rate with two fraction digits (Intl 'halfExpand' == round
+    half away from zero). This is the figure on the card and on the checkout
+    total — it must equal charge_for(…, cents=True), or the buyer clicks $77.99
+    and Stripe bills $78."""
+    v = total_usd * pricing.CHARGE_RATES[cur] * 100
+    return math.floor(v + 0.5)
+
+
 def test_account_pricing():
-    """The account branch charges the listing's own figure and nothing else.
+    """The account branch charges the listing's figure plus the shard's delta,
+    and nothing else.
 
-    Two failures this locks out, and they are the only two that matter on a
-    product with no formula: charging for a listing that is **sold out** (stock
-    is hand-set in data.py and nothing decrements it, so `account_pick()` is the
-    only gate there is), and letting the boost machinery leak into the price —
-    a queue, an add-on or the sitewide sale moving a figure the card printed as
-    flat."""
-    print("\n[accounts] the listing's price, and nothing else, is the charge")
-    live = D.accounts_in_stock()
-    check(bool(live), "the catalogue has something in stock")
+    Four failures this locks out, and on a product with no formula they are the
+    only ones that matter: charging for a listing that is **sold out on that
+    shard** (stock is hand-set in data.py and nothing decrements it, so
+    `account_pick()` is the only gate there is); letting the boost machinery
+    leak into the price; quoting one shard's price for another; and letting the
+    struck `was` figure claim a reduction the total does not make."""
+    print("\n[accounts] the listing's price on the chosen shard is the charge")
+    check(bool(D.accounts_in_stock()), "the catalogue has something in stock")
 
-    for a in live:
-        q = pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
-                           "account": a["id"], "region": a["regions"][0]})
-        if q["invalid"] or q["total"] != a["price"]:
-            check(False, "%s quotes its own price (got %r)" % (a["id"], q["total"]))
-            break
+    bad = []
+    for a in D.ACCOUNTS:
+        for sv in D.ACCOUNT_SERVERS:
+            r = sv["region"]
+            if not D.account_stock(a, r):
+                continue
+            q = pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
+                               "account": a["id"], "region": r})
+            want = round(a["price"] + sv["delta"], 2)
+            if q["invalid"] or q["total"] != want:
+                bad.append("%s/%s %r != %r" % (a["id"], r, q["total"], want))
+            # subtotal − discount == total, exactly, on the one listing that
+            # carries a struck price and on the ten that do not.
+            if round(q["subtotal"] - q["discount"], 2) != q["total"]:
+                bad.append("%s/%s does not add up" % (a["id"], r))
+    check(not bad, "every listing quotes its own price on every shard (%r)" % bad[:3])
+
+    # Whatever the deltas are, all four shards must agree with the table — the
+    # failure to catch is a card quoting one shard's price under another's name.
+    # Today every delta is zero (one price list on all four shards), so this
+    # reduces to "every shard quotes the same figure"; put a shard back on its
+    # own price and the same check follows the table instead.
+    ref = D.ACCOUNT_REGIONS[0]
+    moved = [s["region"] for s in D.ACCOUNT_SERVERS if s["delta"]]
+    a0 = D.ACCOUNTS[0]
+    if moved:
+        check(all(D.account_price(a0, s["region"]) == round(a0["price"] + s["delta"], 2)
+                  for s in D.ACCOUNT_SERVERS),
+              "each shard's delta is applied to its own price (%r)" % moved)
     else:
-        check(True, "all %d listings quote their own hand-set price" % len(live))
+        # Per LISTING, not across the board — two listings may legitimately
+        # share a price (Bronze and Unranked · Loaded are both $39.90 today).
+        check(all(len({D.account_price(a, s["region"]) for s in D.ACCOUNT_SERVERS}) == 1
+                  for a in D.ACCOUNTS),
+              "one price list, identical on all four shards")
 
-    a = live[0]
+    a = D.accounts_in_stock()[0]
     base = {"game": D.ACCOUNT_GAME, "service": "account", "account": a["id"],
-            "region": a["regions"][0]}
+            "region": ref}
     # Nothing the boost engine owns may move it. Duo, every add-on at once, the
     # sitewide code and a bundle index are all thrown at one listing.
+    flat = D.account_price(a, ref)
     noisy = dict(base, mode="Duo queue", addons=[x["id"] for x in D.ADDONS],
                  promo=next(iter(D.PROMOS), ""), bundle=0, wins=5, placements=5,
                  unranked=True, coach=3, pack=2)
     qn = pricing.quote(noisy)
-    check(qn["total"] == a["price"] and qn["discount"] == 0 and qn["addons"] == 0,
+    check(qn["total"] == flat and qn["addons"] == 0,
           "queue, add-ons, promo and bundle cannot move an account's price "
-          "(%r vs %r)" % (qn["total"], a["price"]))
+          "(%r vs %r)" % (qn["total"], flat))
     # …and a forged server-side offer cannot either. `recovery_pct` is the field
     # process_checkout() strips, but quote() must not honour it here even if one
-    # arrives: an account carries no discount at all.
+    # arrives: the only reduction an account carries is its own `was`.
     qf = pricing.quote(dict(base, recovery_pct=0.99, offer_label="x"))
-    check(qf["total"] == a["price"],
+    check(qf["total"] == flat,
           "a recovery/mystery percentage cannot discount an account (got %r)" % qf["total"])
 
     # Sold out and unknown both refuse, and both have to.
@@ -868,15 +906,14 @@ def test_account_pricing():
     check(pricing.quote(dict(base, account=""))["invalid"],
           "an account order naming no listing refuses rather than picking one")
 
-    # The shard is clamped to the listing's own list, never trusted from the body.
-    narrow = next((x for x in live if len(x["regions"]) < len(LOL["regions"])), None)
-    if narrow:
-        missing = next(r for r in LOL["regions"] if r not in narrow["regions"])
-        qs = pricing.quote(dict(base, account=narrow["id"], region=missing))
-        _acc, shard = pricing.account_pick(dict(base, account=narrow["id"], region=missing))
-        check(shard == narrow["regions"][0] and shard in qs["summary"],
-              "a shard the listing does not ship on is clamped to its own first "
-              "(got %r)" % shard)
+    # A shard this shop does not sell on is clamped to the reference, never
+    # priced at whatever delta happened to be lying in the body.
+    missing = next(r for r in LOL["regions"] + ["Korea"] if r not in D.ACCOUNT_REGIONS) \
+        if any(r not in D.ACCOUNT_REGIONS for r in LOL["regions"] + ["Korea"]) else "Korea"
+    _acc, shard = pricing.account_pick(dict(base, region=missing))
+    qs = pricing.quote(dict(base, region=missing))
+    check(shard == ref and qs["total"] == D.account_price(a, ref),
+          "an unsold shard clamps to the reference shard (got %r)" % shard)
 
     # `days` is 0, and the ETA is the delivery promise rather than a day count.
     q0 = pricing.quote(base)
@@ -886,11 +923,126 @@ def test_account_pricing():
           "the follow-up mail's per-hour claim is dropped on a product nobody plays")
 
 
+def test_account_prices_climb_with_rank():
+    """A higher rank must not cost less than a lower one.
+
+    This is the accounts board's version of `test_bundle_rules()`'s "a bigger
+    climb must never cost less than a smaller one it contains", and it matters
+    for the same reason: the whole argument of the price column is that the
+    price tracks the hours behind the account, which the FAQ says in so many
+    words. An inversion makes the dearer listing unsellable — nobody buys Iron
+    at $64.90 when Gold is $59.90 — and makes the page look like it was priced
+    by accident.
+
+    ⚠ NON-FATAL BY DESIGN, the same shape `test_bundle_never_costs_more()`'s
+    PENDING lines have: these prices are a business call and a deliberate
+    inversion is theirs to make, but it must never pass silently. It prints
+    every inversion on every run until the prices agree or the rule is dropped.
+    """
+    print("\n[accounts] the ranked ladder is priced in rank order")
+    order = {t: i for i, t in enumerate(LOL["tiers"])}
+    ranked = sorted((a for a in D.ACCOUNTS if D.account_kind(a) == "ranked"),
+                    key=lambda a: order.get(a["tier"], 0))
+    bad = []
+    for lo, hi in zip(ranked, ranked[1:]):
+        if hi["price"] < lo["price"]:
+            bad.append("%s $%.2f is under %s $%.2f"
+                       % (hi["tier"], hi["price"], lo["tier"], lo["price"]))
+    if bad:
+        for b in bad:
+            print("  PENDING  %s — a higher rank costs less than a lower one" % b)
+        print("  PENDING  confirm this is intended, or the dearer listing is dead stock")
+    else:
+        check(True, "every ranked listing costs at least the rank below it")
+    # The unranked tiers are their own ladder and must climb too — they are sold
+    # as a progression (level 30 → loaded → skinned) and the cards sit in that
+    # order on the same rail.
+    un = [a for a in D.ACCOUNTS if D.account_kind(a) == "unranked"]
+    check(all(b["price"] >= a["price"] for a, b in zip(un, un[1:])),
+          "the three unranked listings climb in catalogue order (%s)"
+          % ", ".join("%.2f" % a["price"] for a in un))
+
+
+def test_account_shown_equals_charged_to_the_cent():
+    """⚠ Accounts are the ONE product priced in cents, and `charge_for()`'s
+    default rounds to a whole currency unit. Every boosting total is an integer
+    so that rounding is invisible there; a $77.99 account rounded the same way
+    is a buyer clicking $77.99 and paying $78, in every currency.
+
+    This walks every listing on every shard in all four currencies and asserts
+    the Stripe amount equals what the card and the checkout total display."""
+    print("\n[accounts] shown == charged, to the cent, in every currency")
+    bad = []
+    for a in D.ACCOUNTS:
+        for sv in D.ACCOUNT_SERVERS:
+            r = sv["region"]
+            if not D.account_stock(a, r):
+                continue
+            q = pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
+                               "account": a["id"], "region": r})
+            check_cents = q.get("cents")
+            if not check_cents:
+                bad.append("%s/%s does not declare cents" % (a["id"], r))
+                continue
+            for cur in pricing.CHARGE_RATES:
+                _c, amount = pricing.charge_for(q["total"], cur, cents=True)
+                want = account_display_cents(q["total"], cur)
+                if amount != want:
+                    bad.append("%s/%s %s: %r != %r" % (a["id"], r, cur, amount, want))
+    check(not bad, "the card is charged the price it shows (%r)" % bad[:3])
+    # And the whole-unit path is untouched for everything else: a boost total is
+    # an integer, so both paths must still agree there.
+    q = pricing.quote({"game": "League of Legends", "service": "division",
+                       "from": LOL["ladder"][0], "to": LOL["ladder"][6],
+                       "mode": "Solo", "addons": []})
+    check(not q.get("cents"), "a boost does not declare cents")
+    check(pricing.charge_for(q["total"], "eur")[1] == display_cents(q["total"], "eur"),
+          "the whole-unit charge path is unchanged")
+
+
+def test_account_stock_is_derived_once():
+    """⚠ FOUR figures on that page state stock — the promo line's total, the
+    server bar, each server card and each tier card — and the version this
+    replaces authored a per-server figure by hand beside the per-listing one, so
+    the bar said 61 while its own cards summed to 124.
+
+    Everything must reduce to `account_stock()`. This asserts the reduction and
+    the one way its rounding goes wrong: `max(1, …)` must not resurrect a
+    sold-out listing on a low-share shard."""
+    print("\n[accounts] every stock figure reduces to one derivation")
+    for sv in D.ACCOUNT_SERVERS:
+        r = sv["region"]
+        check(D.account_units_on(r)
+              == sum(D.account_stock(a, r) for a in D.ACCOUNTS),
+              "%s's card and its own listings agree" % D.account_code(r))
+    check(D.account_stock_total()
+          == sum(D.account_units_on(s["region"]) for s in D.ACCOUNT_SERVERS),
+          "the page total is the sum of the four shards (%d)" % D.account_stock_total())
+
+    # A sold-out listing is zero everywhere, including on the shard whose share
+    # would round it back up to one.
+    ghost = dict(D.ACCOUNTS[0], stock=0)
+    check(not any(D.account_stock(ghost, s["region"]) for s in D.ACCOUNT_SERVERS),
+          "a sold-out listing stays sold out on every shard")
+    # …and a listing with stock is never rounded away on the smallest shard,
+    # which is the other half of the same clamp.
+    thin = min(D.ACCOUNT_SERVERS, key=lambda s: s["share"])
+    check(all(D.account_stock(a, thin["region"]) >= 1 for a in D.ACCOUNTS if a["stock"]),
+          "a listing in stock is never rounded to nothing on %s"
+          % D.account_code(thin["region"]))
+    # The floor the hero quotes is a price somebody can actually pay.
+    floor = D.account_floor()
+    payable = {D.account_price(a, s["region"]) for a in D.ACCOUNTS
+               for s in D.ACCOUNT_SERVERS if D.account_stock(a, s["region"])}
+    check(floor in payable, "the hero's `from` price is one a buyer can pay (%r)" % floor)
+
+
 def test_account_client_mirror():
-    """data.js must carry every listing the server prices, at the same figure and
-    with the same stock flag — app.js re-quotes an account order on the checkout
-    page, and `build_session()` refuses a total the page did not show. A listing
-    that is cheaper in one of the two is a checkout that always fails."""
+    """data.js must carry everything the server prices an account from — the
+    listing's figure and its `was`, the stock base, and the shard table with its
+    shares and deltas — because app.js re-quotes the order on the checkout page
+    and `build_session()` refuses a total the page did not show. A shard or a
+    price that differs in one of the two is a checkout that always fails."""
     print("\n[accounts] the client mirror agrees with pricing.py")
     d = _client_data()
     client = d.get("accounts") or {}
@@ -898,25 +1050,45 @@ def test_account_client_mirror():
           "data.js ships every listing (%d vs %d)" % (len(client), len(D.ACCOUNTS)))
     bad = [a["id"] for a in D.ACCOUNTS
            if client.get(a["id"], {}).get("price") != a["price"]
-           or client.get(a["id"], {}).get("stock") is not bool(a["stock"])
-           or client.get(a["id"], {}).get("regions") != a["regions"]]
-    check(not bad, "price, stock and shards match on every listing (%r)" % bad)
+           or client.get(a["id"], {}).get("was", 0) != a.get("was", 0)
+           or client.get(a["id"], {}).get("stock") != a["stock"]
+           or client.get(a["id"], {}).get("kind") != D.account_kind(a)]
+    check(not bad, "price, `was`, stock and filter key match on every listing (%r)" % bad)
+
+    svs = d.get("accountServers") or []
+    check([s["region"] for s in svs] == D.ACCOUNT_REGIONS,
+          "the shard table ships in the shop's own order")
+    check(all(s["share"] == D.ACCOUNT_SERVERS[i]["share"]
+              and s["delta"] == D.ACCOUNT_SERVERS[i]["delta"]
+              and s["code"] == D.account_code(s["region"])
+              for i, s in enumerate(svs)),
+          "every share, delta and code matches the server's")
     check(d.get("accountEta") == pricing.ACCOUNT_ETA,
           "the delivery promise is shipped from pricing.py, not typed twice")
+    check(d.get("accountOfferLabel") == pricing.ACCOUNT_OFFER_LABEL,
+          "so is the struck price's label")
     check(d.get("accountGame") == D.ACCOUNT_GAME, "the client knows which game these are")
+    check(set(d.get("accountKinds") or {}) == {k for k, _l, _m in D.ACCOUNT_KINDS},
+          "the filter's three descriptions ship")
 
     # The client's own quote is the one the CTA's price is checked against.
     js = os.path.join(ROOT, "public", "assets", "js", "app.js")
     src = open(js, encoding="utf-8").read()
     check('s.service === "account"' in src, "app.js has the account branch")
-    check("!acc || !acc.stock" in src,
-          "app.js refuses a sold-out listing, the same gate account_pick() is")
+    check("!acc || !aSv || !accountStock(acc, aSv)" in src,
+          "app.js refuses a listing sold out ON THAT SHARD — the same gate "
+          "account_pick() is")
+    for fn in ("function accountPrice", "function accountWas",
+               "function accountStock", "function accountUnitsOn"):
+        check(fn in src, "app.js mirrors %s()" % fn.split()[-1])
+    check("cents: true" in src, "app.js's account quote declares cents")
 
 
 def test_account_order_survives_to_the_store():
-    """WHICH listing was sold has to reach the orders store, because that row is
-    the only thing an operator can look up — and unlike a boost there is no
-    amount to infer it from once two listings share a price.
+    """WHICH listing was sold, and on WHICH shard, has to reach the orders store:
+    that row is the only thing an operator can look up, the shard decides what
+    credentials are handed over, and — now that shards carry a price delta — it
+    is also part of what was charged.
 
     It also asserts the two things an account order must NOT carry: a climb
     (the checkout body ships whatever ranks the shared per-game record held) and
@@ -926,15 +1098,16 @@ def test_account_order_survives_to_the_store():
     print("\n[accounts] the sold listing survives to the orders store")
     import orders                                     # noqa: E402 — same lazy import
     a = D.accounts_in_stock()[0]
+    shard = D.ACCOUNT_REGIONS[-1]                     # deliberately not the reference
     # Deliberately dirty: the ranks, queue and add-ons a shared record leaves
     # behind on a visitor who configured a boost before buying an account.
     st = {"game": D.ACCOUNT_GAME, "service": "account", "account": a["id"],
-          "region": a["regions"][0], "from": LOL["ladder"][0], "to": LOL["ladder"][6],
+          "region": shard, "from": LOL["ladder"][0], "to": LOL["ladder"][6],
           "mode": "Duo queue", "addons": ["priority", "stream"], "currency": "usd"}
     params, oid, q = payments.build_session(st, "http://localhost:4321")
     md = {k[9:-1]: v for k, v in params.items() if k.startswith("metadata[")}
     row = payments.order_row(md, {"client_reference_id": oid,
-                                  "amount_total": q["total"] * 100,
+                                  "amount_total": int(round(q["total"] * 100)),
                                   "customer_details": {"email": "buyer@example.com"}})
     stored = orders.clean_order(row)
     check(stored is not None, "the row survives orders.clean_order()")
@@ -943,7 +1116,10 @@ def test_account_order_survives_to_the_store():
           "the listing id is stored (got %r)" % stored.get("account"))
     check(stored.get("account_name") == a["name"],
           "the listing's name is stored beside it (got %r)" % stored.get("account_name"))
-    check(stored["region"] == a["regions"][0], "the shard is stored")
+    check(stored["region"] == shard,
+          "the shard that was CHARGED for is stored (got %r)" % stored["region"])
+    check(q["total"] == D.account_price(a, shard),
+          "and it is the shard's own price (%r)" % q["total"])
     check(not stored.get("addons"),
           "no add-on is recorded on a product that charges for none (got %r)"
           % (stored.get("addons"),))
@@ -962,7 +1138,7 @@ def test_account_order_survives_to_the_store():
     for cur in pricing.CHARGE_RATES:
         p2, _oid, q2 = payments.build_session(dict(st, currency=cur), "http://x")
         check(int(p2["line_items[0][price_data][unit_amount]"])
-              == display_cents(a["price"], cur)
+              == account_display_cents(q2["total"], cur)
               and p2["line_items[0][price_data][currency]"] == cur,
               "%s: the card is charged the price the board showed" % cur.upper())
 
@@ -971,7 +1147,12 @@ def test_account_checkout_payload():
     """The built checkout page has to forward the listing id. Without it the
     server re-quote refuses the order (the safe half), but the buyer is told a
     listing that is in stock is unavailable — which is the same class of bug as
-    the dropped `bundle` this file was written for."""
+    the dropped `bundle` this file was written for.
+
+    It also holds the shop page to the two rules it is built on: every listing
+    server-rendered with a real link (complete and buyable with no JS, legible
+    to a crawler), and the ToS admission ON the page rather than only inside the
+    FAQ's JSON-LD."""
     print("\n[accounts] built checkout.html forwards the listing")
     p = os.path.join(ROOT, "dist", "checkout.html")
     if not os.path.exists(p):
@@ -985,19 +1166,29 @@ def test_account_checkout_payload():
         check(False, "dist/accounts.html present (run build.py first)")
         return
     b = open(board, encoding="utf-8").read()
-    # Every in-stock listing is server-rendered with a real link, so the board
-    # is complete and buyable with no JS and legible to a crawler.
-    for a in D.accounts_in_stock():
-        if 'data-ac-buy="%s"' % a["id"] not in b:
-            check(False, "%s is missing its Buy link on the board" % a["id"])
-            break
-    else:
-        check(True, "all %d in-stock listings ship a real Buy link"
-              % len(D.accounts_in_stock()))
-    check('data-ac-buy="%s"' % (([x for x in D.ACCOUNTS if not x["stock"]] or [{"id": "\x00"}])[0]["id"])
-          not in b, "a sold-out listing ships no Buy link")
+    ref = D.ACCOUNT_REGIONS[0]
+    missing = [a["id"] for a in D.ACCOUNTS
+               if 'data-ac-id="%s"' % a["id"] not in b]
+    check(not missing, "all %d listings are server-rendered (%r)"
+          % (len(D.ACCOUNTS), missing))
+    nolink = [a["id"] for a in D.ACCOUNTS if D.account_stock(a, ref)
+              and "account=%s&region=" % a["id"] not in b]
+    check(not nolink, "every listing in stock on the reference shard ships a "
+                      "real checkout link (%r)" % nolink)
+    # All three CTA labels and all three stock states ride in the DOM — the
+    # whole-text-node i18n rule. A label written in by JS arrives untranslated.
+    for key in ("ok", "low", "out"):
+        check('data-ac-cta="%s"' % key in b, "the %r CTA ships in the DOM" % key)
+        check('data-ac-sv="%s"' % key in b, "the %r stock line ships in the DOM" % key)
+    # Both steps ship visible, so the page is a complete shop with no JS.
+    check('data-ac-step="server"' in b and 'data-ac-step="tiers"' in b,
+          "both steps are server-rendered")
+    check("data-ac-nojs" in b,
+          "the no-JS page says which shard it is priced on")
     # The admission has to be ON the page, not only in the FAQ's JSON-LD.
     check(esc_disclaimer() in b, "the ToS admission is rendered on the board")
+    # ⚠ The ids are a public contract — checkout deep-links #faq-warranty.
+    check('id="faq-warranty"' in b, "the warranty answer keeps its public id")
 
 
 def esc_disclaimer():
@@ -1017,7 +1208,11 @@ def main():
                test_eta_schedule_mirror, test_eta_is_never_a_bare_long_figure,
                test_checkout_payload_sends_state,
                test_order_row_records_what_was_bought,
-               test_account_pricing, test_account_client_mirror,
+               test_account_pricing,
+               test_account_prices_climb_with_rank,
+               test_account_shown_equals_charged_to_the_cent,
+               test_account_stock_is_derived_once,
+               test_account_client_mirror,
                test_account_order_survives_to_the_store,
                test_account_checkout_payload):
         fn()

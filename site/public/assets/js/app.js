@@ -750,6 +750,39 @@
     return days + "–" + (days + span) + " " + T("days");
   }
 
+  /* ── accounts: the three derivations, mirroring data.py ────────────────
+     One shard table, one price rule, one stock rule. Everything the accounts
+     page prints — the promo bar's total, each server card, the server bar and
+     each tier card — reduces to these, which is what stops four figures on one
+     screen contradicting each other. Change one, change data.py's twin. */
+  function accountServer(region) {
+    var list = D.accountServers || [];
+    for (var i = 0; i < list.length; i++) if (list[i].region === region) return list[i];
+    return null;
+  }
+  function accountPrice(acc, sv) {
+    return Math.round((acc.price + (sv ? sv.delta : 0)) * 100) / 100;
+  }
+  function accountWas(acc, sv) {
+    if (!acc.was) return 0;
+    return Math.round((acc.was + (sv ? sv.delta : 0)) * 100) / 100;
+  }
+  /* Units of one listing on one shard. A sold-out listing stays at zero on
+     every shard — Math.max(1, …) must not resurrect it, which is the one way
+     this rounding goes wrong. */
+  function accountStock(acc, sv) {
+    var base = acc && acc.stock ? acc.stock : 0;
+    if (base <= 0 || !sv) return 0;
+    return Math.max(1, Math.round(base * sv.share));
+  }
+  function accountUnitsOn(sv) {
+    var accs = D.accounts || {}, t = 0;
+    for (var k in accs) if (Object.prototype.hasOwnProperty.call(accs, k)) {
+      t += accountStock(accs[k], sv);
+    }
+    return t;
+  }
+
   function quote(s) {
     var per = D.perDivision;
     var factor = D.factors[s.game] || 1;
@@ -764,13 +797,18 @@
        `wasPrice` — a reference price nobody was ever charged is not a saving.
        Mirrors pricing.py's `service == "account"` branch. */
     if (s.service === "account") {
-      var accs = D.accounts || {};
-      var acc = accs[s.account];
+      var acc = (D.accounts || {})[s.account];
+      // The shard is clamped into the shop's own list, never trusted — mirrors
+      // account_pick(). A region carried over from a boost on a shard this shop
+      // does not sell on would otherwise reach checkout, and since the shard
+      // carries a price delta it would be quoted at the wrong shard's price.
+      var aSv = accountServer(s.region) || (D.accountServers || [])[0];
       /* Unknown or sold out both refuse, and both have to: stock is hand-set in
          data.py and nothing decrements it, so this and pricing.account_pick()
-         are the only two places a listing that is gone can be stopped. The
-         client's refusal is only the UI — the server makes the same call. */
-      if (!acc || !acc.stock) {
+         are the only two places a listing that is gone can be stopped. Stock is
+         a PER-SHARD figure, so the test is per shard too. The client's refusal
+         is only the UI — the server makes the same call. */
+      if (!acc || !aSv || !accountStock(acc, aSv)) {
         return {
           invalid: true, price: "—", eta: "—", total: 0,
           summary: T("That account is no longer available"),
@@ -779,19 +817,28 @@
           promoCode: "", promoLabel: "", promoEnds: ""
         };
       }
-      // The shard is clamped into the listing's own list, never trusted —
-      // mirrors account_pick(). A region carried over from a boost on a shard
-      // this listing does not ship on would otherwise reach checkout.
-      var aReg = (acc.regions || []).indexOf(s.region) >= 0
-        ? s.region : (acc.regions || [])[0] || "";
-      var aTotal = acc.price;
+      var aTotal = accountPrice(acc, aSv);
+      var aWas = accountWas(acc, aSv);
+      var aSub = aWas > aTotal ? aWas : aTotal;
+      var aOff = Math.round((aSub - aTotal) * 100) / 100;
       return {
-        invalid: false, total: aTotal, base: aTotal, addons: 0,
-        subtotal: aTotal, discount: 0,
-        price: usd(aTotal), wasPrice: "", discountPrice: "",
-        promoCode: "", promoLabel: "", promoEnds: "",
-        summary: acc.name + " · " + aReg,
-        days: 0, eta: T(D.accountEta || "Within the hour")
+        invalid: false, total: aTotal, base: aSub, addons: 0,
+        subtotal: aSub, discount: aOff,
+        // Accounts are the one product priced to the cent, so every figure they
+        // render carries the cents flag — a total shown as $15 against a card
+        // reading $14.99 is the same defect charge_for()'s cents path prevents.
+        // ⚠ `cents` is what tells render() and the checkout summary to print
+        // this product to the cent. Without it the summary rounds $77.99 to
+        // $78 while Stripe charges 7799 — the buyer reads one number and pays
+        // another. Mirrors the same flag on pricing.py's account branch.
+        cents: true,
+        price: usd(aTotal, true),
+        wasPrice: aOff ? usd(aSub, true) : "",
+        discountPrice: aOff ? "−" + usd(aOff, true) : "",
+        promoCode: "", promoLabel: aOff ? T(D.accountOfferLabel || "Offer price") : "",
+        promoEnds: "",
+        summary: acc.name + " · " + aSv.code,
+        days: 0, eta: T(D.accountEta || "Instant delivery")
       };
     }
 
@@ -1001,7 +1048,7 @@
         free: D.boostersFree, total: q.price, booster: state.booster,
         was: q.wasPrice, discount: q.discountPrice,
         promoCode: q.promoCode, promoLabel: q.promoLabel, promoEnds: q.promoEnds,
-        saveLine: q.discount ? T("You save") + " " + usd(q.discount)
+        saveLine: q.discount ? T("You save") + " " + usd(q.discount, !!q.cents)
                              + (q.promoEnds ? " · " + T("sale ends") + " " + q.promoEnds : "")
                              : "",
         // Same saving, named by the code that produced it — the order card says
@@ -1009,7 +1056,7 @@
         // itself rather than printing the internal "BUNDLE" code.
         saveWith: q.discount
           ? (q.promoCode === "BUNDLE"
-              ? T("You save") + " " + usd(q.discount) + " · " + T("bundle price")
+              ? T("You save") + " " + usd(q.discount, !!q.cents) + " · " + T("bundle price")
               // A server-issued offer token names ITSELF rather than printing
               // its own 16 characters into a sentence — same treatment BUNDLE
               // gets, and for the same reason: the string is an internal
@@ -1017,15 +1064,15 @@
               // shows where it is useful (the modal's copy chip, the email, and
               // checkout's own discount row, which is a receipt).
               : /^(BINGO|BACK)-/.test(q.promoCode || "")
-                ? T("You save") + " " + usd(q.discount) + " · " + T(q.promoLabel)
-              : T("You save") + " " + usd(q.discount)
+                ? T("You save") + " " + usd(q.discount, !!q.cents) + " · " + T(q.promoLabel)
+              : T("You save") + " " + usd(q.discount, !!q.cents)
                 + (q.promoCode ? " " + T("with") + " " + q.promoCode : ""))
           : "",
         // The saving as a bare amount, for the sticky bar's "Save $16" pill.
         // `discount` above is the signed receipt figure ("−$16"); a pill that
         // opens with a minus reads as a charge, and the word has to stay its
         // own text node to be translatable.
-        saveAmt: q.discount ? usd(q.discount) : "",
+        saveAmt: q.discount ? usd(q.discount, !!q.cents) : "",
         summaryUpper: q.summary.toUpperCase(),
         // Per-game price for the unit tabs — one win / one placement at the
         // current rank and mode, quoted live so it tracks the rank picker.
@@ -1427,9 +1474,14 @@
     // checkout breakdown
     each("[data-sum]", function (el) {
       var k = el.getAttribute("data-sum");
+      // Every figure in the breakdown is printed at the QUOTE's precision, not
+      // at a fixed one: accounts are quoted to the cent and every boosting
+      // product to the whole unit, and a summary that rounds one of them
+      // disagrees with what Stripe is asked to charge.
+      var m = function (v) { return usd(v, !!q.cents); };
       var map = {
-        base: usd(q.base), addons: q.addons ? "+ " + usd(q.addons) : "—",
-        total: usd(q.total), eta: q.eta, summary: q.summary,
+        base: m(q.base), addons: q.addons ? "+ " + m(q.addons) : "—",
+        total: m(q.total), eta: q.eta, summary: q.summary,
         game: state.game, region: state.region, mode: T(state.mode),
         booster: state.booster, was: q.wasPrice, discount: q.discountPrice,
         discountLabel: q.promoLabel
@@ -3306,131 +3358,232 @@
      insert the row. */
   var feedTimer = null;
 
-  /* ── the accounts board (/accounts.html) ────────────────────────────────
-     Ready-made League accounts: a flat-priced listing, a shard, and a handover.
-     It is the fifth product and the only one that is not a service, so it gets
-     none of the configurator — there is nothing to configure. The page is a
-     filtered grid and each card's CTA is a real link into checkout.
+  /* ── the accounts shop (/accounts.html) ─────────────────────────────────
+     design_handoff_accounts_shop. A TWO-STEP purchase: pick a server, then pick
+     a tier. That order is the design, not a preference — an account is
+     region-locked and cannot be transferred after sale, so the one irreversible
+     choice is made first, on a screen with nothing else on it.
 
-     Everything is SERVER-RENDERED, including every price, and this only hides
-     and re-links: the page is correct with no JS, legible to a crawler, and the
-     prices follow the currency switcher through the ordinary .money spans.
-     Same trade the games catalogue, the roster board and the reviews feed make.
+     Everything is SERVER-RENDERED, including all eleven cards and every price,
+     and BOTH steps ship visible: with no JS the page is a complete, priced,
+     buyable shop on the reference shard and a crawler reads the whole
+     catalogue. This function is the enhancement — it gates step 2 behind the
+     server choice and re-prices every card in place from the client mirror,
+     which is the same derivation the server used (accountPrice / accountStock,
+     mirroring data.py).
 
-     `data-ac-*` is the whole contract — see CLAUDE.md. The filter reads only
-     `data-ac-tier` / `data-ac-regions` off each row, so a board served from a
-     listing store later keeps working unchanged. */
+     ⚠ THE PAGE CHANGE IS THE THING TO VERIFY BY LOOKING AT THE CARDS, never by
+     reading the label. A label that updates over a track that did not move is
+     how seven of eleven tiers were unreachable through two of the handoff's own
+     reviews.
+
+     `data-ac-*` is the whole contract — see CLAUDE.md. */
+  var AC_SCARCE = 3;                     // mirrors AC_SCARCE in build.py
+
   function initAccounts() {
-    var grid = document.querySelector("[data-ac-grid]");
-    if (!grid) return;
-    var cards = [].slice.call(grid.querySelectorAll("[data-ac-card]"));
+    var shop = document.querySelector("[data-ac-shop]");
+    if (!shop) return;
+    var step1 = shop.querySelector('[data-ac-step="server"]');
+    var step2 = shop.querySelector('[data-ac-step="tiers"]');
+    var trackEl = shop.querySelector("[data-ac-track]");
+    if (!step1 || !step2 || !trackEl) return;
+    var cards = [].slice.call(trackEl.querySelectorAll("[data-ac-card]"));
     if (!cards.length) return;
-    var shown = [].slice.call(document.querySelectorAll("[data-ac-shown]"));
-    var empty = document.querySelector("[data-ac-empty]");
-    var foot = document.querySelector("[data-ac-foot]");
-    var emptyTier = document.querySelector("[data-ac-empty-tier]");
-    var emptyRegion = document.querySelector("[data-ac-empty-region]");
-    // "" is "any shard" — the region control's own All. The tier chips carry
-    // "all" for the same reason; both are reset targets, never a fourth state.
-    var st = { tier: "all", region: "" };
 
-    function shardsOf(el) {
-      // "|" rather than "," — two shard names on this ladder carry an
-      // ampersand and a space ("EU Nordic & East") and one day one will carry
-      // a comma. The separator has to be a character a region name cannot hold.
-      return (el.getAttribute("data-ac-regions") || "").split("|");
+    var dotsBox = shop.querySelector("[data-ac-dots]");
+    var prev = shop.querySelector("[data-ac-prev]");
+    var next = shop.querySelector("[data-ac-next]");
+    var nojs = shop.querySelector("[data-ac-nojs]");
+    var st = { server: null, kind: "all", page: 0 };
+
+    // The no-JS line is the one thing that is wrong the moment JS runs: with
+    // scripting the shard is chosen, not assumed.
+    if (nojs && nojs.parentNode) nojs.parentNode.removeChild(nojs);
+
+    /* Cards per page is CSS's, read back rather than written down twice, so the
+       page count follows the layout. Under 2 the rail is a swipe rail (the
+       phone) and paging is inert. */
+    function perPage() {
+      var v = parseFloat(getComputedStyle(shop).getPropertyValue("--ac-per"));
+      return isNaN(v) || v < 1 ? 4 : v;
+    }
+    function paged() { return perPage() >= 2; }
+
+    function visible() {
+      return cards.filter(function (c) {
+        return st.kind === "all" || c.getAttribute("data-ac-kind") === st.kind;
+      });
+    }
+    function pages(n) {
+      var per = perPage();
+      return paged() ? Math.max(1, Math.ceil(n / Math.floor(per))) : 1;
     }
 
-    function matches(el) {
-      if (st.tier !== "all" && el.getAttribute("data-ac-tier") !== st.tier) return false;
-      return !st.region || shardsOf(el).indexOf(st.region) >= 0;
+    function setText(el, v) { if (el) el.textContent = v; }
+    function each(sel, root, fn) {
+      [].slice.call((root || shop).querySelectorAll(sel)).forEach(fn);
     }
 
-    /* The shard a listing would actually be BOUGHT on: the filtered one when it
-       ships there, else its own first. Mirrors pricing.account_pick()'s clamp
-       and quote()'s, so the href, the price on the card and the amount the
-       server charges cannot name three different shards. */
-    function shardFor(el) {
-      var list = shardsOf(el);
-      return list.indexOf(st.region) >= 0 ? st.region : (list[0] || "");
+    /* One card, re-priced and re-stocked for the chosen shard. Every figure
+       here comes from the same two mirrors the checkout re-quote uses, so a
+       card can never advertise a price or an availability the server refuses. */
+    function paintCard(el, sv) {
+      var acc = (D.accounts || {})[el.getAttribute("data-ac-id")];
+      if (!acc || !sv) return;
+      var units = accountStock(acc, sv);
+      var price = accountPrice(acc, sv);
+      var was = accountWas(acc, sv);
+      var state = !units ? "out" : (units <= AC_SCARCE ? "low" : "ok");
+
+      var priceEl = el.querySelector("[data-ac-price] .ac-money");
+      if (priceEl) {
+        var parts = window.esbMoneyParts
+          ? window.esbMoneyParts(price)
+          : { main: usd(price, true), cents: "" };
+        priceEl.setAttribute("data-usd", price.toFixed(2));
+        setText(priceEl.querySelector("[data-money-main]"), parts.main);
+        setText(priceEl.querySelector("[data-money-cents]"), parts.cents);
+      }
+      var wasEl = el.querySelector("[data-ac-was]");
+      if (wasEl) {
+        wasEl.hidden = !(was > price);
+        var wm = wasEl.querySelector(".money") || wasEl;
+        wm.setAttribute("data-usd", (was || price).toFixed(2));
+        setText(wm, usd(was || price, true));
+      }
+      setText(el.querySelector("[data-ac-code]"), sv.code);
+      setText(el.querySelector("[data-ac-shard-name]"), sv.region);
+      each("[data-ac-units]", el, function (b) { b.textContent = units; });
+
+      var stock = el.querySelector("[data-ac-stock]");
+      if (stock) stock.className = "ac-stock is-" + state;
+      el.classList.toggle("is-out", state === "out");
+
+      // The CTA is a real link, so the shard rides in it: a visitor who picked
+      // EUNE and middle-clicked Buy must not land on a checkout quoting EUW.
+      var href = "/checkout.html?account=" + encodeURIComponent(acc.id || el.getAttribute("data-ac-id"))
+        + "&region=" + encodeURIComponent(sv.region);
+      each("[data-ac-cta]", el, function (a) {
+        var kind = a.getAttribute("data-ac-cta");
+        a.hidden = kind !== state;
+        if (kind !== "out") a.href = href;
+      });
     }
 
-    function draw() {
-      var hits = 0;
-      cards.forEach(function (el) {
-        var on = matches(el);
-        el.hidden = !on;
-        if (!on) return;
-        hits++;
-        // The CTA is a real link, so the shard has to ride in it: a visitor who
-        // filtered to EUW and then middle-clicked Buy must not land on a
-        // checkout quoting North America.
-        var a = el.querySelector("[data-ac-buy]");
-        if (a && a.tagName === "A") {
-          a.href = "/checkout.html?account=" + encodeURIComponent(a.getAttribute("data-ac-buy"))
-            + "&region=" + encodeURIComponent(shardFor(el));
+    function paint() {
+      var sv = st.server ? accountServer(st.server) : null;
+      var chosen = !!sv;
+      step1.hidden = chosen;
+      step2.hidden = !chosen;
+      if (!chosen) return;
+
+      each("[data-ac-server-name]", null, function (n) { n.textContent = sv.region; });
+      each("[data-ac-server-code]", null, function (n) { n.textContent = sv.code; });
+      setText(shop.querySelector("[data-ac-server-stock]"), accountUnitsOn(sv));
+
+      cards.forEach(function (c) {
+        c.hidden = !(st.kind === "all" || c.getAttribute("data-ac-kind") === st.kind);
+        if (!c.hidden) paintCard(c, sv);
+      });
+
+      var shown = visible().length;
+      var total = pages(shown);
+      if (st.page > total - 1) st.page = total - 1;
+      if (st.page < 0) st.page = 0;
+      trackEl.style.setProperty("--ac-p", paged() ? st.page : 0);
+
+      each("[data-ac-kind]", null, function (b) {
+        var on = b.getAttribute("data-ac-kind") === st.kind;
+        b.classList.toggle("is-on", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+      // Through T(): the two metas the server never renders would otherwise
+      // arrive in English on the French and German pages.
+      var meta = (D.accountKinds || {})[st.kind];
+      setText(shop.querySelector("[data-ac-kindmeta]"), meta ? T(meta) : "");
+
+      /* "Showing 1–4 of 11 tiers". Every figure rides in its own <b> so the
+         words around it stay whole translatable nodes. */
+      var per = paged() ? Math.floor(perPage()) : shown;
+      var from = shown ? st.page * per + 1 : 0;
+      var to = Math.min(shown, from + per - 1);
+      var label = shop.querySelector("[data-ac-pagelabel]");
+      if (label) {
+        var bs = label.querySelectorAll("b");
+        if (bs.length === 3) {
+          bs[0].textContent = from; bs[1].textContent = to; bs[2].textContent = shown;
         }
-      });
-      shown.forEach(function (el) { el.textContent = hits; });
-      /* The empty state is required, not optional: tier × shard genuinely
-         returns nothing (Emerald is not stocked on Oceania today), and a grid
-         that silently collapses reads as a broken page. It names both halves of
-         what was asked for, so the visitor can see which one to loosen. */
-      if (empty) {
-        empty.hidden = hits > 0;
-        if (emptyTier) emptyTier.textContent = st.tier === "all" ? "" : st.tier;
-        if (emptyRegion) emptyRegion.textContent = st.region || "";
       }
-      /* The footer's reset and the empty state's are the same control, so only
-         one of them is ever on screen — two "Show everything" buttons 40px
-         apart read as a rendering fault, not as a choice. */
-      if (foot) foot.hidden = (st.tier === "all" && !st.region) || !hits;
-    }
 
-    function mark(attr, value) {
-      each("[data-" + attr + "]", function (btn) {
-        var on = btn.getAttribute("data-" + attr) === value;
-        btn.classList.toggle("is-on", on);
-        btn.setAttribute("aria-pressed", on ? "true" : "false");
-      });
-    }
+      if (prev) prev.disabled = !paged() || st.page <= 0;
+      if (next) next.disabled = !paged() || st.page >= total - 1;
 
-    function set(key, value) {
-      st[key] = value;
-      if (key === "tier") mark("ac-tier", value);
-      if (key === "region") {
-        var sel = document.querySelector("[data-ac-regionsel]");
-        if (sel && sel.value !== value) sel.value = value;
+      if (dotsBox) {
+        // Rebuilt rather than reordered: the page count moves with the filter
+        // and with the viewport, so there is no stable list to mutate.
+        dotsBox.textContent = "";
+        if (paged() && total > 1) {
+          for (var i = 0; i < total; i++) {
+            (function (n) {
+              var d = document.createElement("button");
+              d.type = "button";
+              d.className = "ac-dot" + (n === st.page ? " is-on" : "");
+              d.setAttribute("aria-label", "Page " + (n + 1));
+              d.addEventListener("click", function () { st.page = n; paint(); });
+              dotsBox.appendChild(d);
+            })(i);
+          }
+        }
       }
-      draw();
     }
 
-    each("[data-ac-tier]", function (btn) {
-      btn.addEventListener("click", function () { set("tier", btn.getAttribute("data-ac-tier")); });
+    each("[data-ac-server]", null, function (b) {
+      b.addEventListener("click", function () {
+        // Changing server resets the filter and the page — the handoff's rule,
+        // and the honest one: a page-3 Emerald view means nothing on a shard
+        // whose stock is a third of the size.
+        st.server = b.getAttribute("data-ac-server");
+        st.kind = "all"; st.page = 0;
+        paint();
+        step2.scrollIntoView({ block: "start", behavior: "smooth" });
+      });
     });
-    each("[data-ac-regionsel]", function (sel) {
-      sel.addEventListener("change", function () { set("region", sel.value); });
+    var change = shop.querySelector("[data-ac-change]");
+    if (change) change.addEventListener("click", function () {
+      st.server = null; st.kind = "all"; st.page = 0;
+      paint();
+      step1.scrollIntoView({ block: "center", behavior: "smooth" });
     });
-    var reset = document.querySelector("[data-ac-reset]");
-    if (reset) reset.addEventListener("click", function () {
-      set("region", "");
-      var all = document.querySelector('[data-ac-tier="all"]');
-      if (all) all.click(); else set("tier", "all");
-      grid.scrollIntoView({ block: "start" });
+    each("[data-ac-kind]", null, function (b) {
+      b.addEventListener("click", function () {
+        st.kind = b.getAttribute("data-ac-kind"); st.page = 0; paint();
+      });
+    });
+    if (prev) prev.addEventListener("click", function () {
+      if (st.page > 0) { st.page--; paint(); }
+    });
+    if (next) next.addEventListener("click", function () { st.page++; paint(); });
+
+    // --ac-per is a breakpoint's, so a resize can change the page count under a
+    // reader sitting on the last page. A currency switch needs nothing here:
+    // i18n.js's reformatStaticMoney() re-splits the two-size price itself.
+    var rz;
+    window.addEventListener("resize", function () {
+      clearTimeout(rz); rz = setTimeout(paint, 150);
     });
 
-    /* Buy. The link already carries the order in its query and checkout
-       hydrates from it, so this only does the two things a plain navigation
-       cannot: commit the snapshot (so the flow is identical to every other
-       [data-continue] on the site) and fire begin_checkout BEFORE the
-       navigation, which is the CRO audit's own requirement. */
-    each("[data-ac-buy]", function (a) {
+    // Buy fires begin_checkout and hands the order over, exactly as the board
+    // it replaces did. The click is on the real link, so a middle-click still
+    // opens checkout and hydrates from the query.
+    each("[data-ac-cta]", null, function (a) {
+      if (a.getAttribute("data-ac-cta") === "out") return;
       a.addEventListener("click", function (e) {
-        var id = a.getAttribute("data-ac-buy");
         var card = a.closest ? a.closest("[data-ac-card]") : null;
+        if (!card) return;
+        var id = card.getAttribute("data-ac-id");
         var acc = (D.accounts || {})[id];
-        if (!acc || !acc.stock) { e.preventDefault(); return; }
-        var order = accountOrder(id, card ? shardFor(card) : "");
+        if (!acc) return;
+        var order = accountOrder(id, st.server || (D.accountServers || [{}])[0].region);
         var q = quote(order);
         if (q.invalid) { e.preventDefault(); return; }
         try { localStorage.setItem(CHECKOUT_KEY, JSON.stringify(order)); } catch (e2) {}
@@ -3442,7 +3595,7 @@
       });
     });
 
-    draw();
+    paint();
   }
 
   /* One order object for an account listing, built from DEFAULT so every field
@@ -3450,12 +3603,15 @@
      quote() returns before the ladder on this service, and build_session()
      blanks metadata[from]/[to] so a climb nobody bought cannot reach the board. */
   function accountOrder(id, region) {
-    var acc = (D.accounts || {})[id] || {};
-    var list = acc.regions || [];
+    // The shard list belongs to the SHOP, not to a listing: every tier is sold
+    // on every server and stock is what varies. Clamped here the same way
+    // pricing.account_pick() clamps it, so a region carried in from a boost on
+    // a shard this shop does not sell can never reach the checkout re-quote.
+    var sv = accountServer(region) || (D.accountServers || [])[0];
     return Object.assign({}, DEFAULT, {
       game: D.accountGame || DEFAULT.game,
       service: "account", account: id,
-      region: list.indexOf(region) >= 0 ? region : (list[0] || ""),
+      region: sv ? sv.region : "",
       // An account carries none of these, and a stale one riding in from the
       // shared record would show on the checkout summary as something bought.
       addons: [], promo: "", bundle: null, booster: "",

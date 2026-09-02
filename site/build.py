@@ -91,7 +91,23 @@ def money(n, cents=False):
     """A static USD price wrapped so i18n.js can re-format it into the active
     currency client-side. The `data-usd` value is the raw USD amount."""
     raw = ("%.2f" % n) if cents else ("%d" % round(n))
-    return '<span class="money" data-usd="%s">%s</span>' % (raw, usd(n, cents))
+    # `data-cents` travels with the price so i18n.js's reformatStaticMoney()
+    # re-formats it to the cent on a currency switch. Without it a $14.99
+    # account card re-renders as "€14" — a price nothing charges.
+    flag = ' data-cents="1"' if cents else ""
+    return '<span class="money" data-usd="%s"%s>%s</span>' % (raw, flag, usd(n, cents))
+
+
+def money_parts(n):
+    """A cents price split for the two-size treatment the account cards use —
+    the dollars big, the cents small. Server-side this is always USD; the client
+    re-splits through `esbMoneyParts()` when the currency changes, which is what
+    keeps "72,99 €" splitting in the right place for a French reader."""
+    whole = int(n)
+    return ('<span class="money ac-money" data-usd="%.2f" data-cents="1">'
+            '<span class="ac-money-m" data-money-main>%s</span>'
+            '<span class="ac-money-c" data-money-cents>%s</span></span>'
+            % (n, usd(whole), (".%02d" % round((n - whole) * 100))))
 
 
 def quote(game, frm, to, mode="Solo"):
@@ -6080,7 +6096,7 @@ def gp_accounts_strip(g):
             <h2 class="gp-acc-t">Or start on a second account.</h2>
             <p class="gp-acc-b"><span>Ready-made {esc(g['short'])} accounts from</span>
             <b>{ac_price_note()}</b> <span>— level 30 and ranked, on NA, EUW, EUNE and OCE,
-            with full email access and a</span> <b>{D.ACCOUNT_WARRANTY_DAYS}-day</b>
+            with full email access and a</span> <b>{D.ACCOUNT_WARRANTY_MONTHS}-month</b>
             <span>replacement. A boost is still the better buy if you want to keep
             your own name and skins.</span></p>
           </div>
@@ -6217,260 +6233,574 @@ def page_game(g):
                   g["meta"], body, current="/games", jsonld=ld,
                   og_image=img("/assets/img/keyart-%s.svg" % g["slug"]), mobile_bar=True,
                   nav_outline=True)
-
-
 # ══════════════════════════════════════════════════════════════════════════
-#  /accounts.html — ready-made League accounts
+#  /accounts.html — the League accounts shop  (`design_handoff_accounts_shop`)
 #
-#  The fifth product, and the only one that is not a service: a flat-priced
-#  listing and a handover, sharing the checkout, the Stripe session and the
+#  The fifth product, and the only one that is not a service: a ready-made
+#  account and a handover, sharing the checkout, the Stripe session and the
 #  orders store with the four boosting products and nothing else. It reads none
 #  of the rank engine — see pricing.quote()'s `service == "account"` branch.
 #
-#  Scoped on `.ac`, the ninth port after .hero-a / .co / .gg / .dsh / .rst /
-#  .tk / .hd / .gc: local tokens, product radii per element, nothing leaking.
+#  The tenth scoped port after .hero-a / .co / .gg / .dsh / .rst / .tk / .hd /
+#  .gc — tokens on `.ac`, product radii per element, nothing leaking past the
+#  scope. It borrows `.gc`'s palette on purpose: the games catalogue and this
+#  board are the same object, a filtered grid of things you can buy, and they
+#  must not look like two products from two shops.
 #
-#  Three things about this page are decisions, not layout:
+#  ── The two structural rules the handoff says are easy to reintroduce ─────
 #
-#  · **The risk plate is above the fold of the second band, not in the FAQ.**
-#    Selling an account breaks a *specific* Riot clause — an account is licensed
-#    to one person and is not transferable — and the sanction is the account,
-#    not a suspension the buyer rides out. That is a materially different risk
-#    from the boosting one `SAFETY["disclaimer"]` states, and a buyer who only
-#    finds it in question one of an accordion has been told after the decision.
-#    It is `D.ACCOUNT_DISCLAIMER`, verbatim, in the same framed plate and the
-#    same caution amber `gp_safety()` uses. Do not soften it and do not move it
-#    below the grid.
+#  1 · **It is a two-step purchase, and the order is the design.** An account is
+#    region-locked and cannot be transferred after sale, so the one irreversible
+#    choice is made first, on a screen with nothing else on it. `ac_step_server()`
+#    gates `ac_step_tiers()`; "Change server" returns and clears the filter and
+#    the page. Do not "improve" this into one screen with a shard dropdown — the
+#    dropdown is what the two-step layout exists to replace.
 #
-#  · **No struck prices anywhere.** Every other product on this site shows a
-#    reduction because there is a real one behind it; an account has a real
-#    acquisition cost and no discount, so a "was" figure here would be the
-#    grossed-up reference price `quote()`'s discount rule exists to avoid.
+#  2 · **Stock is derived, never authored twice.** Four figures on this screen
+#    state stock — the promo line, the server bar, each server card and each tier
+#    card — and every one reduces to `D.account_stock()`. The version this
+#    replaces authored a per-server figure by hand beside the per-listing one and
+#    the two disagreed on screen. If real inventory arrives per (listing, shard),
+#    it goes in at `account_stock()` and the other three follow for free.
+#    ⚠ Nothing decrements these counts — see the ⚠ in data.py.
 #
-#  · **Stock is a state, never a count.** data.py's ⚠ has the reasoning: nothing
-#    decrements it, so "3 left" would be false the moment two people buy on one
-#    build. In stock / Sold out is what the system can actually stand behind.
+#  Everything else that is load-bearing:
 #
-#  Every price is server-rendered through money(), so the board follows the
-#  currency switcher like the rest of the site and needs no client quote at all.
-#  initAccounts() only filters and re-links — the page is complete with no JS.
+#  · **The disclaimer is a framed plate above the fold of band 01, not an FAQ
+#    row.** It is `D.ACCOUNT_DISCLAIMER`, verbatim, in the same caution amber
+#    `gp_safety()` uses. On a page selling something risky the admission is the
+#    credibility; a buyer who finds it in question two of an accordion has been
+#    told after the decision.
+#
+#  · **One delivery promise, and it is `pricing.ACCOUNT_ETA`.** It appears in
+#    the hero, the handover heading, step 02, every in-stock tier card, the
+#    reviews band and the close. Six reads, one constant — composed with a
+#    following word at each ("Instant delivery", "in stock · instant") so the
+#    one word still reads as English wherever it lands. ⚠ The scarce state is
+#    the deliberate exception: under AC_SCARCE a card says "verified in 12 h"
+#    and its CTA says Reserve, because that unit is NOT instant.
+#
+#  · **The rank marks are our own geometry, deliberately not Riot's emblems** —
+#    the same trademark rule `pay_marks()`, the Trustpilot star and the rank
+#    plate's `_EMBLEM` follow. `ac_mark()` draws a muted outer polygon with a
+#    brighter inner facet, per listing. ⚠ The outer silhouette must stay above
+#    ~3:1 against the card ground: an earlier version of the handoff had it at
+#    34% and all eleven marks read as the same dot.
+#
+#  · **Tier colour is `D.account_tier_color()`, which is `tier_color()`.** The
+#    site has ONE rank colour table and an account's Gold mark is the same Gold
+#    the live feed, the rank plates and the checkout climb line draw. Unranked is
+#    the only value this page owns, because it is not a rung of any ladder.
+#
+#  · **Both steps ship visible in the HTML, and step 2 is priced on the
+#    reference shard.** The gate is a JS enhancement: with no JS the page is a
+#    complete, priced, buyable EUW shop and a crawler reads all eleven listings.
+#    `initAccounts()` hides step 2 until a server is chosen and re-prices every
+#    card in place from the client mirror — the same derivation the server used.
+#    `[data-ac-nojs]` is the "prices shown on Europe West" line JS removes.
+#
+#  · **The carousel translates a flex track by whole pages.** Cards are sized off
+#    `--ac-per`, which CSS owns per breakpoint and JS reads back, so the page
+#    count follows the layout instead of a second constant. ⚠ The handoff's own
+#    defect here: verify a page change by asserting WHICH CARDS ARE ON SCREEN,
+#    never by reading the label — a label that changes over a track that did not
+#    move is how seven of eleven tiers were unreachable through two reviews.
+#
+#  · **The feature list mixes registers on purpose** — four spec rows, two green
+#    ticks and ONE amber caution (`note`). Six identical green checkmarks read as
+#    marketing; the amber line is what makes the rest credible. Every listing
+#    carries one, asserted in data.py.
+#
+#  · **No struck price without a real one behind it.** `was` is a figure the
+#    listing was actually sold at, carried through `quote()`'s subtotal/discount
+#    so the card, the checkout receipt and the mail state one reduction.
+#
+#  Prices are server-rendered through money_parts()/money(), so the board follows
+#  the currency switcher; the client re-splits through `esbMoneyParts()` when the
+#  shard or the currency moves.
 # ══════════════════════════════════════════════════════════════════════════
 
 
+# A shard under this many units carries the amber "Low stock" badge on its
+# server card. Business figures, not measurements: the badge is a nudge toward
+# the shards that can actually be filled, and AC_SCARCE is the point where a
+# handover stops being immediate and becomes a reservation.
+AC_LOW_SHARD = 40
+AC_SCARCE = 3
+
+
 def ac_price_note():
-    """"from $27" — the cheapest listing that can actually be bought. Quoted off
-    the catalogue (`D.account_floor()` reads stock), never typed, so a sold-out
-    cheap listing can't leave the hero advertising a price nobody can pay."""
-    return money(D.account_floor())
+    """"from $12.99" — the cheapest account anyone can actually buy, on any
+    shard. Quoted off the catalogue (`D.account_floor()` reads stock), never
+    typed, so a sold-out cheap listing can't leave the hero advertising a price
+    nobody can pay."""
+    return money(D.account_floor(), cents=True)
 
 
-# The hero's three inline guarantees. `guarantee_row()`'s own set is the boost's
-# ("no account details", "regional VPN") and says nothing true about a handover,
-# so this product states its own three in the same shell — one component, one
-# row, different facts. Every one is checkable and two are read off data.py, so
-# a re-tuned warranty cannot leave a stale number in the hero.
-def ac_guarantees():
-    items = [
-        ("lock-key", "Full email access"),
-        ("shield-check", "%d-day replacement" % D.ACCOUNT_WARRANTY_DAYS),
-        ("clock", pricing.ACCOUNT_ETA),
-    ]
-    return '<div class="gtee-row">%s</div>' % "".join(
-        f'<span class="gtee">{_ico(ico, 16, "gtee-ico", stroke=True)}{esc(txt)}</span>'
-        for ico, txt in items)
+# ── The rank marks ────────────────────────────────────────────────────────
+# Our own geometry, per the handoff and the same trademark rule everything else
+# on this site follows: Riot's rank emblems are their artwork and using them
+# needs licensing. If licensed files ever arrive they drop into the same tile
+# and this table goes.
+#
+# Each entry is a list of (path, fill-level, stroke-level, stroke-width), where a
+# level is a percentage of the tier colour mixed toward the card ground. The
+# three unranked variants share a tier colour and MUST NOT share a mark, which is
+# what the ring + 1/2/3 dots are for.
+_AC_RING = "M16 3.6 A12.4 12.4 0 1 1 15.98 3.6 Z"
+_AC_SHAPES = {
+    "ring1": [(_AC_RING, None, 82, 2.6),
+              ("M16 12.4 A3.6 3.6 0 1 1 15.99 12.4 Z", 96, None, 0)],
+    "ring2": [(_AC_RING, None, 82, 2.6),
+              ("M11 12.4 A3.4 3.4 0 1 1 10.99 12.4 Z", 96, None, 0),
+              ("M21 12.4 A3.4 3.4 0 1 1 20.99 12.4 Z", 96, None, 0)],
+    "ring3": [(_AC_RING, None, 82, 2.6),
+              ("M16 8.4 A3.2 3.2 0 1 1 15.99 8.4 Z", 96, None, 0),
+              ("M10.6 15.6 A3.2 3.2 0 1 1 10.59 15.6 Z", 96, None, 0),
+              ("M21.4 15.6 A3.2 3.2 0 1 1 21.39 15.6 Z", 96, None, 0)],
+    "diamond": [("M16 3.4 L28.6 16 L16 28.6 L3.4 16 Z", 58, 82, 1.4),
+                ("M16 10 L22 16 L16 22 L10 16 Z", 96, None, 0)],
+    "triangle": [("M16 2.8 L29 26.6 H3 Z", 58, 82, 1.4),
+                 ("M16 11 L22.4 22.6 H9.6 Z", 96, None, 0)],
+    "pentagon": [("M16 2.6 L29 12.2 L24 28 H8 L3 12.2 Z", 58, 82, 1.4),
+                 ("M16 10.4 L22 14.8 L19.7 22.2 H12.3 L10 14.8 Z", 96, None, 0)],
+    "hexagon": [("M16 2.4 L28.4 9.6 V22.4 L16 29.6 L3.6 22.4 V9.6 Z", 58, 82, 1.4),
+                ("M16 10 L22 13.5 V20.5 L16 24 L10 20.5 V13.5 Z", 96, None, 0)],
+    "octagon": [("M11.2 3 H20.8 L29 11.2 V20.8 L20.8 29 H11.2 L3 20.8 V11.2 Z", 58, 82, 1.4),
+                ("M13.4 10.6 H18.6 L21.4 13.4 V18.6 L18.6 21.4 H13.4 L10.6 18.6 V13.4 Z",
+                 96, None, 0)],
+    "kite": [("M16 2.2 L27.4 16 L16 29.8 L4.6 16 Z", 58, 82, 1.4),
+             ("M16 10 L21.2 16 L16 22 L10.8 16 Z", 96, None, 0)],
+    "facet": [("M16 2.2 L27.4 16 L16 29.8 L4.6 16 Z", 58, 82, 1.4),
+              ("M16 2.2 L27.4 16 H4.6 Z", 96, None, 0),
+              ("M9.6 16 H22.4 L16 24.4 Z", 60, None, 0)],
+    "star": [("M16 2 L19.9 11.6 L30 12.4 L22.3 19 L24.7 29 L16 23.7 L7.3 29 "
+              "L9.7 19 L2 12.4 L12.1 11.6 Z", 58, 82, 1.4),
+             ("M16 9.4 L18 14.4 L23.2 14.8 L19.2 18.2 L20.5 23.4 L16 20.6 "
+              "L11.5 23.4 L12.8 18.2 L8.8 14.8 L14 14.4 Z", 96, None, 0)],
+}
+
+# The ground the marks are mixed toward — the card's own top stop, so a mark
+# never sits on a tone it was not mixed against.
+_AC_GROUND = (0x22, 0x1d, 0x19)
 
 
-def ac_card(a):
-    """One listing. Every figure rides in its own `<b>` so the words around it
-    stay whole translatable nodes — the rule i18n.js's whole-text-node matching
-    imposes everywhere on this site."""
-    shards = "".join(
-        f'<span class="ac-shard">{esc(D.REGION_SHORT.get(r, r))}</span>'
-        for r in a["regions"])
-    # The shard list is the filter's only input, joined with "|": two of these
-    # names carry an ampersand and a space, and one day one will carry a comma.
-    regions_attr = "|".join(a["regions"])
-    first = a["regions"][0]
-    price = money(a["price"])
+def _ac_mix(hexc, pct):
+    """The tier colour at `pct`% over the card ground, resolved here rather than
+    in `color-mix()`. These marks are static per listing, so computing the four
+    stops at build time costs nothing and removes the fallback-`fill` dance the
+    rank plate's emblem needs."""
+    h = hexc.lstrip("#")
+    rgb = tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    f = pct / 100.0
+    return "#%02x%02x%02x" % tuple(
+        round(c * f + g * (1 - f)) for c, g in zip(rgb, _AC_GROUND))
 
-    if a["stock"]:
-        pill = (f'<span class="ac-pill ac-pill-ok">'
-                f'{_ico("dot", 8, "ac-pill-ico")}<span>In stock</span></span>')
-        # A real link, so the card works with no JS, can be middle-clicked and
-        # is crawlable. initAccounts() rewrites the shard in the query when the
-        # region filter moves; checkout hydrates from it through
-        # accountFromQuery(), and the SERVER re-resolves the listing and the
-        # shard before it charges anything (pricing.account_pick).
-        href = "/checkout.html?account=%s&region=%s" % (
-            esc(_urlq(a["id"])), esc(_urlq(first)))
-        cta = (f'<a class="btn btn-primary ac-buy" data-ac-buy="{esc(a["id"])}" href="{href}">'
-               f'<span>Buy</span><span aria-hidden="true">·</span><span>{price}</span></a>')
-    else:
-        pill = (f'<span class="ac-pill ac-pill-out">'
-                f'{_ico("dot", 8, "ac-pill-ico")}<span>Sold out</span></span>')
-        # Not a disabled button: there is nothing to enable. A sold-out listing
-        # stays on the board because the price and the spec are still the honest
-        # answer to "what does a Diamond II cost here", and the one real action
-        # left is asking when it is back.
-        cta = (f'<a class="btn btn-outline ac-buy-out" href="/support.html">'
-               f'<span>Ask when it is back</span></a>')
 
-    return f"""<article class="ac-card{'' if a['stock'] else ' is-out'}" data-ac-card
-         data-ac-tier="{esc(a['tier'])}" data-ac-regions="{esc(regions_attr)}"
-         data-ac-price="{a['price']}">
-      <div class="ac-card-top">
-        <h3 class="ac-name">{esc(a['name'])}</h3>
-        {pill}
+def ac_mark(a, size=26):
+    """One listing's rank mark. Two or more flat shapes, no gradient, no
+    photograph — all depth on this page is CSS."""
+    colour = D.account_tier_color(a)
+    paths = ""
+    for d, fill, stroke, w in _AC_SHAPES.get(a["shape"], _AC_SHAPES["diamond"]):
+        paths += '<path d="%s" fill="%s"%s stroke-linejoin="round"/>' % (
+            d,
+            _ac_mix(colour, fill) if fill else "none",
+            (' stroke="%s" stroke-width="%s"' % (_ac_mix(colour, stroke), w))
+            if stroke else "")
+    return ('<span class="ac-emblem" style="--tier:%s">'
+            '<svg viewBox="0 0 32 32" width="%d" height="%d" aria-hidden="true" '
+            'focusable="false">%s</svg></span>' % (colour, size, size, paths))
+
+
+def _ac_be(n):
+    """"8k" / "124k" — blue essence as an account listing writes it. Unused
+    while every listing is random (see the ⚠ in data.py), and kept because it is
+    the one place the figure becomes a word if one ever comes back."""
+    return "%dk" % round(n / 1000.0) if n >= 1000 else str(n)
+
+
+# ── Step 1 — the server ───────────────────────────────────────────────────
+def ac_server_card(sv):
+    """One shard. The accent edge and "Most stock" go to the shard with the most
+    units and the amber "Low stock" to any under AC_LOW_SHARD — both COMPUTED,
+    so a shard that overtakes another cannot leave the badge on the wrong card.
+    """
+    region = sv["region"]
+    code = D.account_code(region)
+    units = D.account_units_on(region)
+    top = max(D.account_units_on(s["region"]) for s in D.ACCOUNT_SERVERS)
+    lead = units == top
+    low = units < AC_LOW_SHARD
+    badge = ""
+    if lead:
+        badge = '<span class="ac-sv-badge">Most stock</span>'
+    elif low:
+        badge = '<span class="ac-sv-badge is-low">Low stock</span>'
+    return f"""<button type="button" class="ac-sv{' is-lead' if lead else ''}"
+        data-ac-server="{esc(region)}">
+      <span class="ac-sv-edge" aria-hidden="true"></span>
+      <span class="ac-sv-top">
+        <span class="ac-sv-code">{esc(code)}</span>
+        {badge}
+      </span>
+      <span class="ac-sv-name">{esc(region)}</span>
+      <span class="ac-sv-stock">{_ico("package", 13, "ico", stroke=True)}<b>{units}</b>
+        <span>in stock</span></span>
+      <span class="ac-sv-foot">
+        <span class="ac-sv-from"><span class="ac-sv-froml">From</span>
+          {money(D.account_shard_floor(region), cents=True)}</span>
+        <span class="ac-sv-go" aria-hidden="true">{_ico("arrow", 13, "ico", stroke=True)}</span>
+      </span>
+    </button>"""
+
+
+def ac_step_server():
+    """Step 1. The region-lock warning is the reason this screen exists, so it
+    sits above the cards rather than under them."""
+    cards = "".join(ac_server_card(s) for s in D.ACCOUNT_SERVERS)
+    return f"""<div class="ac-step ac-step-1" data-ac-step="server">
+      <div class="ac-step-head">
+        <span class="ac-step-k"><i class="ac-dash" aria-hidden="true"></i>
+          <span>Step 1 of 2</span></span>
+        <h2 class="ac-step-h">Which server do you play on?</h2>
+        <p class="ac-step-p">Accounts are region-locked, so this is the one choice you
+        cannot change after purchase. Pick the server you actually queue on.</p>
       </div>
-      <span class="ac-band-rank">{esc(a['rank'])}</span>
-      <ul class="ac-facts">
-        <li><b>{a['level']}</b> <span>level</span></li>
-        <li><b>{a['be']:,}</b> <span>blue essence</span></li>
-        <li><b>{a['champs']}</b> <span>champions</span></li>
-      </ul>
-      <p class="ac-note">{esc(a['note'])}</p>
-      <div class="ac-shards" aria-label="Shards">{shards}</div>
+      <div class="ac-sv-grid">{cards}</div>
+    </div>"""
+
+
+# ── Step 2 — the tiers ────────────────────────────────────────────────────
+def ac_tier_card(a, region):
+    """One listing, priced on one shard.
+
+    Every shard-dependent node carries a `data-ac-*` hook: the price, the struck
+    price, the shard name and code, the unit counts and the CTA's href all move
+    when the server changes, and `initAccounts()` rewrites exactly these.
+    Everything else is a fact about the listing and never moves.
+
+    ⚠ ALL THREE STOCK STATES AND ALL THREE CTA LABELS SHIP IN THE DOM, with two
+    of each hidden. That is the whole-text-node rule i18n.js imposes everywhere
+    on this site: a label written in by JS arrives untranslated, and "Reserve"
+    is exactly the kind of word a French reader would then meet in English. CSS
+    picks the stock variant off the state class; JS toggles the CTAs.
+
+    The CTA is a REAL link into checkout, so the card can be middle-clicked and
+    crawled; the query is untrusted and the server re-resolves both the listing
+    and the shard before it charges anything (`pricing.account_pick`)."""
+    units = D.account_stock(a, region)
+    price = D.account_price(a, region)
+    was = D.account_was(a, region)
+    # `account_badge()` is the one reader — "Cheapest" is computed there, so a
+    # re-price can never leave the claim on a card that is not.
+    label = D.account_badge(a)
+    feat = label == "Best seller"
+    low_badge = label == "Low stock"
+    scarce = 0 < units <= AC_SCARCE
+    state = "out" if not units else ("low" if scarce else "ok")
+    href = "/checkout.html?account=%s&region=%s" % (
+        esc(_urlq(a["id"])), esc(_urlq(region)))
+
+    badge = (f'<span class="ac-badge{" is-low" if low_badge else ""}">{esc(label)}</span>'
+             if label else "")
+    struck = (f'<span class="ac-was" data-ac-was{"" if was > price else " hidden"}>'
+              f'{money(was or price, cents=True)}</span>')
+
+    # Four spec rows, two green ticks and one amber caution — the mix is the
+    # point. See the ⚠ in the section header.
+    # ⚠ A random-essence listing gets ONE whole text node, not a `<b>` with the
+    # word "Random" in it: French wants "Essence bleue aléatoire" and German
+    # "Zufällige blaue Essenz", and a figure-carrier split would impose English
+    # word order on both. A listing WITH a figure keeps the split, because there
+    # the number is the thing that moves.
+    be_row = ("<span>Random blue essence</span>" if D.account_be_random(a)
+              else f'<b>{esc(_ac_be(a["be"]))}</b> <span>blue essence</span>')
+    # The third row is the MMR band on a ranked listing and the level on an
+    # unranked one — an account with unplayed placements has no rank MMR to
+    # state. The level rides in a `{}` pattern rather than a `<b>` split so
+    # "Niveau 30+" can put the figure where French wants it.
+    mmr = D.account_mmr(a)
+    spec_row = (f'<span>{esc(mmr)}</span>' if mmr
+                else f'<span>Level {a["level"]}+</span>')
+    feats = [
+        ("globe", "spec", '<span data-ac-shard-name>%s</span>' % esc(region)),
+        ("wallet", "spec", be_row),
+        ("trophy", "spec", spec_row),
+        ("check", "ok", "<span>%s</span>" % esc("Full email access")),
+        ("check", "ok", "<span>%s</span>" % esc("Hand-levelled, never botted")),
+        ("warn", "caution", "<span>%s</span>" % esc(a["note"])),
+    ]
+    rows = "".join(
+        f'<li class="ac-ft is-{kind}">{_ico(ico, 16, "ico", stroke=True)}'
+        f'<span class="ac-ft-t">{body}</span></li>'
+        for ico, kind, body in feats)
+
+    # Under AC_SCARCE the handover stops being immediate — the unit is reserved
+    # and verified before it is handed over — so the card says so rather than
+    # repeating the delivery figure the rest of the page quotes.
+    stock = f"""<span class="ac-stock is-{state}" data-ac-stock>
+        <span class="ac-sv-one" data-ac-sv="ok">{_ico("bolt", 11, "ico")}
+          <b data-ac-units>{units}</b><span>in stock · {esc(pricing.ACCOUNT_ETA.lower())}</span></span>
+        <span class="ac-sv-one" data-ac-sv="low">{_ico("hourglass", 11, "ico", stroke=True)}
+          <b data-ac-units>{units}</b><span>left · verified in 12 h</span></span>
+        <span class="ac-sv-one" data-ac-sv="out">{_ico("dot", 11, "ico")}
+          <span>Sold out on this server</span></span>
+      </span>"""
+
+    # A sold-out listing keeps its card: the price and the spec are still the
+    # honest answer to "what does a Diamond cost here", and the one real action
+    # left is asking when it is back. Not a disabled button — there is nothing
+    # to enable.
+    # ⚠ The CTA keys ARE the stock states — `ok` / `low` / `out`, the same three
+    # `[data-ac-stock]` carries. They were `buy` / `reserve` / `out` for one
+    # revision and paint()'s `kind !== state` then hid all three, leaving every
+    # card without a CTA at all. One vocabulary, or the two drift silently.
+    ctas = f"""<a class="btn btn-primary ac-cta" data-ac-cta="ok" href="{href}"
+          {"" if state == "ok" else "hidden"}><span>Buy now</span></a>
+        <a class="btn ac-cta ac-cta-reserve" data-ac-cta="low" href="{href}"
+          {"" if state == "low" else "hidden"}><span>Reserve</span></a>
+        <a class="btn btn-outline ac-cta ac-cta-out" data-ac-cta="out" href="/support.html"
+          {"" if state == "out" else "hidden"}><span>Ask when it is back</span></a>"""
+
+    return f"""<article class="ac-card{' is-feat' if feat else ''}{' is-out' if not units else ''}"
+        data-ac-card data-ac-id="{esc(a['id'])}" data-ac-kind="{esc(D.account_kind(a))}">
+      <span class="ac-card-edge" aria-hidden="true"></span>
+      <div class="ac-card-top">
+        {ac_mark(a)}
+        {badge}
+      </div>
+      <div class="ac-card-name">
+        <h3 class="ac-name">{esc(a['name'])}</h3>
+        <span class="ac-card-code" data-ac-code>{esc(D.account_code(region))}</span>
+      </div>
+      <ul class="ac-fts">{rows}</ul>
       <div class="ac-card-foot">
-        <span class="ac-price">{price}</span>
-        {cta}
+        {struck}
+        <span class="ac-price" data-ac-price>{money_parts(price)}</span>
+        {stock}
+        <div class="ac-card-cta">{ctas}</div>
       </div>
     </article>"""
 
 
-def ac_board():
-    """The board: toolbar, grid, and the footer that only exists under a filter.
+def ac_filter_bar():
+    """Three buttons on a hairline, with the active filter's description and the
+    page label at the right end.
 
-    All eight listings ship in the HTML in catalogue order — the page is
-    complete and correctly priced with no JS, and initAccounts() only hides.
-    """
-    tiers = "".join(
-        f'<button type="button" class="ac-chip{" is-on" if i == 0 else ""}" '
-        f'data-ac-tier="{esc(t)}" aria-pressed="{"true" if i == 0 else "false"}">'
-        f'<span>{esc(t)}</span></button>'
-        for i, t in enumerate(["all"] + list(D.ACCOUNT_TIERS)))
-    # The label on the All chip is a word, not the literal "all" the filter
-    # keys on, so it stays a translatable node.
-    tiers = tiers.replace('<span>all</span>', '<span>All ranks</span>', 1)
-
-    shards = "".join('<option value="%s">%s</option>' % (esc(r), esc(r))
-                     for r in D.account_regions())
-    cards = "".join(ac_card(a) for a in D.ACCOUNTS)
+    ⚠ This band was iterated four times in the handoff — chips, a segmented
+    control, large underlined tabs, then this. The lesson that stuck was that
+    step 2 had four stacked control rows and the fix was consolidating to two,
+    not restyling the filters harder. Do not add a third row here."""
+    icons = {"all": "grid", "unranked": "rocket", "ranked": "chart-up"}
+    btns = ""
+    for i, (key, label, _meta) in enumerate(D.ACCOUNT_KINDS):
+        on = i == 0
+        btns += (
+            f'<button type="button" class="ac-fil{" is-on" if on else ""}" '
+            f'data-ac-kind="{esc(key)}" aria-pressed="{"true" if on else "false"}">'
+            f'{_ico(icons.get(key, "grid"), 20, "ico ac-fil-i", stroke=True)}'
+            f'<span class="ac-fil-l">{esc(label)}</span>'
+            f'<span class="ac-fil-n">{len(D.accounts_of_kind(key))}</span></button>')
     n = len(D.ACCOUNTS)
-    return f"""<section class="ac-band ac-board">
+    return f"""<div class="ac-filbar">
+      <div class="ac-fils" role="group" aria-label="Tier">{btns}</div>
+      <span class="ac-filmeta">
+        <span data-ac-kindmeta>{esc(D.ACCOUNT_KINDS[0][2])}</span>
+        <i class="ac-filsep" aria-hidden="true"></i>
+        <span data-ac-pagelabel><span>Showing</span> <b>1</b><span>–</span><b>{n}</b>
+          <span>of</span> <b>{n}</b> <span>tiers</span></span>
+      </span>
+    </div>"""
+
+
+def ac_step_tiers(region):
+    """Step 2: the server bar, the head row with the arrows, the filter bar and
+    the carousel. Server-rendered on the reference shard — see the section
+    header for why both steps ship visible."""
+    cards = "".join(ac_tier_card(a, region) for a in D.ACCOUNTS)
+    code = D.account_code(region)
+    return f"""<div class="ac-step ac-step-2" data-ac-step="tiers" id="tiers">
+      <div class="ac-bar">
+        <span class="ac-bar-l">
+          <span class="ac-bar-tick">{_ico("check", 14, "ico", stroke=True)}</span>
+          <span class="ac-bar-txt">
+            <span class="ac-bar-k">Step 1 · server</span>
+            <span class="ac-bar-n"><span data-ac-server-name>{esc(region)}</span>
+              <i aria-hidden="true">·</i>
+              <span data-ac-server-code>{esc(code)}</span></span>
+          </span>
+        </span>
+        <span class="ac-bar-r">
+          <span class="ac-bar-stock"><b data-ac-server-stock>{D.account_units_on(region)}</b>
+            <span>in stock on this server</span></span>
+          <button type="button" class="ac-change" data-ac-change>
+            {_ico("arrow-left", 13, "ico", stroke=True)}<span>Change server</span>
+          </button>
+        </span>
+      </div>
+
+      <div class="ac-step-row">
+        <div class="ac-step-head is-left">
+          <span class="ac-step-k"><i class="ac-dash" aria-hidden="true"></i>
+            <span>Step 2 of 2</span></span>
+          <h2 class="ac-step-h"><span>Pick your account on</span>
+            <span data-ac-server-code>{esc(code)}</span></h2>
+        </div>
+        <div class="ac-arrows">
+          <button type="button" class="ac-arrow" data-ac-prev aria-label="Previous tiers"
+                  disabled>{_ico("arrow-left", 15, "ico", stroke=True)}</button>
+          <button type="button" class="ac-arrow" data-ac-next aria-label="More tiers"
+                  >{_ico("arrow", 15, "ico", stroke=True)}</button>
+        </div>
+      </div>
+
+      {ac_filter_bar()}
+
+      <!-- ⚠ The track moves by whole pages. Verify a page change by asserting
+           which cards are on screen, never by reading the label. -->
+      <div class="ac-rail">
+        <div class="ac-track" data-ac-track>{cards}</div>
+      </div>
+      <div class="ac-dots" data-ac-dots role="tablist" aria-label="Pages"></div>
+      <p class="ac-nojs" data-ac-nojs>Prices and stock shown on
+        <b>{esc(region)}</b>. Pick a server above to see yours.</p>
+    </div>"""
+
+
+# ── Band 01 — the handover ────────────────────────────────────────────────
+def ac_handover():
+    steps = "".join(f"""<div class="ac-step-row-i">
+        <span class="ac-hs-n">{esc(num)}</span>
+        <span class="ac-hs-t">
+          <span class="ac-hs-h">{esc(title)}</span>
+          <span class="ac-hs-b">{esc(body)}</span>
+        </span>
+        <span class="ac-hs-time">{esc(when)}</span>
+      </div>""" for num, when, title, body in D.ACCOUNT_STEPS)
+
+    included = "".join(f"""<li class="ac-inc">
+        <span class="ac-inc-i">{_ico(icon, 17, "ico", stroke=True)}</span>
+        <span class="ac-inc-t"><b>{esc(name)}</b><span>{esc(note)}</span></span>
+      </li>""" for icon, name, note in D.ACCOUNT_INCLUDED)
+
+    return f"""<section class="ac-band ac-lift">
   <div class="ac-glow" aria-hidden="true"></div>
-  <div class="wrap ac-inner">
-    <div class="ac-head">
-      <div class="ac-head-l">
-        <span class="ac-kicker">{esc(spell(n).capitalize())} listings</span>
-        <h2 class="ac-h2">Pick a rank and a shard.</h2>
+  <div class="wrap ac-inner ac-hand">
+    <div class="ac-hand-l">
+      {sec_kicker("01", "Handover")}
+      <h2 class="ac-h2">{esc(pricing.ACCOUNT_ETA)}, from paying to playing.</h2>
+      <p class="ac-band-p">Every account ships with the original email inbox, not just the
+      game login — which is the only version of this that is actually yours. Change the
+      email and the password on arrival and nobody, including us, can recover it
+      afterwards.</p>
+      <div class="ac-hsteps">{steps}</div>
+    </div>
+    <div class="ac-hand-r">
+      <div class="ac-panel">
+        <div class="ac-panel-head">
+          <span class="ac-panel-t">What lands in your inbox</span>
+          <span class="ac-panel-k">{esc(D.ACCOUNT_GAME)}</span>
+        </div>
+        <ul class="ac-incs">{included}</ul>
       </div>
-      <p class="ac-head-p"><span>Every account ships with full email access, on the shard you
-      pick, replaced inside</span> <b>{D.ACCOUNT_WARRANTY_DAYS}</b> <span>days if it is
-      recovered. The exact division inside a band is whatever is in stock that day.</span></p>
-    </div>
-
-    <div class="ac-toolbar">
-      <div class="ac-chips" role="group" aria-label="Rank">{tiers}</div>
-      <label class="ac-field">
-        <span class="ac-field-l">Shard</span>
-        <select class="ac-select" data-ac-regionsel aria-label="Shard">
-          <option value="">Any shard</option>
-          {shards}
-        </select>
-      </label>
-      <span class="ac-count"><b data-ac-shown>{n}</b> <span>of</span>
-        <b>{n}</b> <span>listings</span></span>
-    </div>
-
-    <div class="ac-grid" data-ac-grid>{cards}</div>
-
-    <!-- Required, not optional: rank × shard genuinely returns nothing today
-         (Emerald is not stocked on Oceania), and a grid that silently collapses
-         reads as a broken page. Both halves of the ask are named so the visitor
-         can see which one to loosen. -->
-    <div class="ac-empty" data-ac-empty hidden>
-      <span class="ac-empty-t">Nothing in stock on that combination.</span>
-      <p class="ac-empty-b"><span>We had no</span> <b data-ac-empty-tier></b>
-      <span>account for</span> <b data-ac-empty-region></b> <span>when this page was
-      built. Loosen one of the two, or ask us in Discord — stock moves daily.</span></p>
-      <div class="ac-empty-a">
-        <button type="button" class="btn btn-outline ac-empty-btn" data-ac-reset>
-          {_ico("undo", 13, "ico", stroke=True)}<span>Show everything</span>
-        </button>
-        <a class="btn btn-outline ac-empty-btn" href="/support.html#discord"><span>Ask in Discord</span></a>
+      <!-- ⚠ VERBATIM AND NOT TO BE SOFTENED, and not to be moved into the FAQ.
+           This page sells a product whose failure mode is losing the thing you
+           bought; an accordion tells the buyer after the decision. -->
+      <div class="ac-plate">
+        <span class="ac-plate-ico">{_ico("warn", 18, "ico", stroke=True)}</span>
+        <p class="ac-plate-b">{esc(D.ACCOUNT_DISCLAIMER)}</p>
       </div>
-    </div>
-
-    <div class="ac-foot" data-ac-foot hidden>
-      <button type="button" class="ac-reset" data-ac-reset>
-        {_ico("undo", 13, "ico ac-reset-i", stroke=True)}<span>Show everything</span>
-      </button>
     </div>
   </div>
 </section>"""
 
 
-def ac_delivery():
-    """Band 01 — what actually arrives. One card per D.ACCOUNT_DELIVERY row, so
-    the page and the order mail describe one product."""
-    cards = "".join(f"""<article class="ac-del-card">
-        <span class="ac-tile">{_ico(icon, 19, "ico", stroke=stroke)}</span>
-        <h3 class="ac-del-t">{esc(title)}</h3>
-        <p class="ac-del-b">{esc(body)}</p>
-      </article>""" for icon, stroke, title, body in D.ACCOUNT_DELIVERY)
+# ── Band 02 — why ours ────────────────────────────────────────────────────
+def ac_why():
+    cards = "".join(f"""<article class="ac-trust">
+        <div class="ac-trust-head">
+          <span class="ac-tile">{_ico(icon, 18, "ico", stroke=True)}</span>
+          <span class="ac-trust-k">{esc(kicker)}</span>
+        </div>
+        <h3 class="ac-trust-t">{esc(title)}</h3>
+        <p class="ac-trust-b">{esc(body)}</p>
+        <span class="ac-proof">{_ico("check", 12, "ico", stroke=True)}<span>{esc(proof)}</span></span>
+      </article>""" for icon, kicker, title, body, proof in D.ACCOUNT_TRUST)
+    return f"""<section class="ac-band ac-lift">
+  <div class="wrap ac-inner">
+    <div class="ac-head">
+      <div class="ac-head-l">
+        {sec_kicker("02", "Why ours")}
+        <h2 class="ac-h2">Hand-levelled, never botted.</h2>
+      </div>
+      <p class="ac-head-p">Three things decide whether a bought account is worth having: who
+      played it, whether you can lock it to yourself, and what happens if it goes wrong.</p>
+    </div>
+    <div class="ac-trusts">{cards}</div>
+  </div>
+</section>"""
+
+
+# ── Band 03 — buyers ──────────────────────────────────────────────────────
+def ac_review_card(name, when, bought, stars, body):
+    """The reviews page's card shell, with the climb row replaced by what was
+    bought — an account order has no climb to draw, and the purchase tag IS the
+    argument of this band. Same `.rv-*` atoms as `review_card()` (the stars, the
+    quote, the verified seal), so a review reads the same here as on the page
+    the rating links to.
+
+    ⚠ The three reviews are invented, exactly like D.REVIEWS."""
+    return f"""<figure class="rv-card ac-rv">
+      <div class="rv-card-top">
+        {rating_stars(stars)}
+        <span class="rv-date">{esc(when)}</span>
+      </div>
+      <div class="ac-rv-tag">{esc(bought)}</div>
+      <blockquote class="rv-quote">{esc(body)}</blockquote>
+      <figcaption class="rv-foot">
+        <span class="rv-verified">{_ico("seal", 11, "rv-seal", evenodd=True)}<span>Verified order</span></span>
+        <span class="rv-sep" aria-hidden="true">·</span>
+        <span class="rv-game">{esc(name)}</span>
+      </figcaption>
+    </figure>"""
+
+
+def ac_buyers():
+    """The rating is the SITE's one rating (`STATS["trustpilot"]`), not a second
+    one computed for this page: the whole reason the reviews page publishes its
+    distribution is that this site quotes one score everywhere."""
+    cards = "".join(ac_review_card(n, w, b, s, t) for n, w, b, s, t in D.ACCOUNT_REVIEWS)
     return f"""<section class="ac-band">
   <div class="wrap ac-inner">
     <div class="ac-head">
       <div class="ac-head-l">
-        {sec_kicker("01", "What arrives")}
-        <h2 class="ac-h2">Credentials, and the mailbox behind them.</h2>
+        {sec_kicker("03", "Buyers")}
+        <h2 class="ac-h2">From accounts sold this month.</h2>
       </div>
-      <p class="ac-head-p">{esc(D.ACCOUNT_ACCESS)}. Without that an account is a rental
-      somebody else can end, so we do not sell one we cannot hand over completely.</p>
+      <div class="ac-rate">
+        <span class="ac-rate-n">{esc(D.STATS['trustpilot'])}</span>
+        <span class="ac-rate-t">{rating_stars(5)}
+          <span class="ac-rate-l"><b>{esc(pricing.ACCOUNT_ETA)}</b><span>,
+            every time</span></span>
+        </span>
+      </div>
     </div>
-    <div class="ac-del-grid">{cards}</div>
+    <div class="ac-rvs">{cards}</div>
+    <p class="ac-rv-note">{_ico("seal", 12, "ico", evenodd=True)}<span>Every review here is
+    tied to a paid order id. We do not solicit them and we do not filter by score —</span>
+    <a href="/reviews.html">read every review</a><span>.</span></p>
   </div>
 </section>"""
 
 
-def ac_risk():
-    """Band 02 — the admission, in the plate `gp_safety()` uses.
-
-    ⚠ VERBATIM AND NOT TO BE SOFTENED. This page sells a product whose failure
-    mode is losing the thing you bought, and the whole argument of the guarantee
-    page is that this site states the checkable thing. The alternative — burying
-    it in the FAQ — tells the buyer after the decision.
-    """
-    return f"""<section class="ac-band ac-risk">
-  <div class="wrap ac-inner">
-    <div class="ac-head">
-      <div class="ac-head-l">
-        {sec_kicker("02", "The risk")}
-        <h2 class="ac-h2">What Riot's rules actually say.</h2>
-      </div>
-      <p class="ac-head-p">The same standard as the rest of the site: we tell you what the
-      risk is, what we do about it, and where our warranty stops.</p>
-    </div>
-    <div class="ac-plate">
-      <span class="ac-plate-ico">{_ico("warn", 18, "ico", stroke=True)}</span>
-      <p class="ac-plate-b">{esc(D.ACCOUNT_DISCLAIMER)}</p>
-    </div>
-    <div class="ac-risk-links">
-      <a class="ac-link" href="/guarantee.html">{esc("Read the full guarantee")}
-        {_ico("arrow", 13, "ico", stroke=True)}</a>
-      <a class="ac-link" href="/legal/refunds.html"><span>Refund policy</span>
-        {_ico("arrow", 13, "ico", stroke=True)}</a>
-    </div>
-  </div>
-</section>"""
-
-
+# ── Band 04 — the FAQ ─────────────────────────────────────────────────────
 def ac_faq_items():
-    """The FAQ, with every figure substituted rather than typed — the warranty
-    window is `D.ACCOUNT_WARRANTY_DAYS`, so re-tuning it cannot leave a stale
-    number in an answer. ⚠ The ids are a public contract: support links people
-    at `/accounts.html#faq-<id>`."""
-    fills = {"days": D.ACCOUNT_WARRANTY_DAYS}
+    """Every figure substituted rather than typed — the warranty window is
+    `D.ACCOUNT_WARRANTY_MONTHS`, so re-tuning it cannot leave a stale number in
+    an answer. ⚠ The ids are a public contract: support links people at
+    `/accounts.html#faq-<id>` and checkout deep-links `#faq-warranty`."""
+    fills = {"months": D.ACCOUNT_WARRANTY_MONTHS}
     return [(fid, q, a.format(**fills)) for fid, q, a in D.ACCOUNT_FAQ]
 
 
@@ -6478,10 +6808,10 @@ def ac_faq(items):
     return f"""<section class="ac-band ac-faq-band">
   <div class="wrap ac-inner ac-faq-inner">
     <div class="ac-faq-l">
-      {sec_kicker("03", "Questions")}
-      <h2 class="ac-h2">The ones that decide it.</h2>
+      {sec_kicker("04", "FAQ")}
+      <h2 class="ac-h2">Before you buy an account.</h2>
       <p class="ac-faq-p">Three of these argue against the sale. They are the reason the
-      other four are worth reading.</p>
+      other five are worth reading.</p>
       <a class="ac-link" href="/support.html"><span>Ask us anything else</span>
         {_ico("arrow", 13, "ico", stroke=True)}</a>
     </div>
@@ -6490,25 +6820,51 @@ def ac_faq(items):
 </section>"""
 
 
+def ac_close():
+    """The handoff's close, not the shared `cta_band()`: the headline is the
+    page's central claim said one last time, and there is nothing to read back —
+    an account order has no climb, so `cta_band(live=True)` has nothing to
+    close on."""
+    return f"""<section class="hero-a hero-a-lit ac-close">
+  <div class="fx hero-a-glow" aria-hidden="true"></div>
+  <div class="wrap ac-close-in">
+    <h2 class="ac-close-h">Full email access, or it's not an account.</h2>
+    <p class="ac-close-p"><span>{esc(spell(len(D.ACCOUNTS)).capitalize())} tiers on
+      {esc(spell(len(D.ACCOUNT_SERVERS)))} servers, from</span> {ac_price_note()}<span>,
+      replaced for {D.ACCOUNT_WARRANTY_MONTHS} months if it ever breaks.</span></p>
+    <div class="ac-close-a">
+      <a class="btn btn-primary ac-close-cta" href="#top"><span>Pick your server</span></a>
+      <a class="ac-link" href="/games/{esc(BY_NAME[D.ACCOUNT_GAME]['slug'])}.html">
+        <span>Or boost the account you already play</span>
+        {_ico("arrow", 13, "ico", stroke=True)}</a>
+    </div>
+  </div>
+</section>"""
+
+
 def page_accounts():
     faq = ac_faq_items()
     lol = BY_NAME[D.ACCOUNT_GAME]
-    live = D.accounts_in_stock()
+    ref = D.ACCOUNT_REGIONS[0]              # the reference shard, EUW
+    live = [(a, s["region"]) for a in D.ACCOUNTS for s in D.ACCOUNT_SERVERS
+            if D.account_stock(a, s["region"])]
 
-    # One Product with an AggregateOffer over the listings that can actually be
-    # bought. Deliberately no aggregateRating — the ratings on this site are
-    # placeholder, and `rating_ld()` is gated on TRUSTPILOT_URL for exactly that
-    # reason; a page selling accounts must not be the one that leaks invented
-    # review stars into a SERP.
+    # One Product with an AggregateOffer over what can actually be bought.
+    # Deliberately no aggregateRating — the ratings on this site are placeholder
+    # and `rating_ld()` is gated on TRUSTPILOT_URL for exactly that reason; a
+    # page selling accounts must not be the one that leaks invented review stars
+    # into a SERP.
     product = {
         "@context": "https://schema.org", "@type": "Product",
         "name": "%s accounts" % D.ACCOUNT_GAME,
         "description": "Ready-made %s accounts with full email access, delivered on the "
-                       "shard you pick." % D.ACCOUNT_GAME,
+                       "server you pick." % D.ACCOUNT_GAME,
         "brand": {"@type": "Brand", "name": D.BRAND},
         "offers": {"@type": "AggregateOffer", "priceCurrency": "USD",
-                   "lowPrice": min((a["price"] for a in live), default=0),
-                   "highPrice": max((a["price"] for a in live), default=0),
+                   "lowPrice": "%.2f" % min((D.account_price(a, r) for a, r in live),
+                                            default=0),
+                   "highPrice": "%.2f" % max((D.account_price(a, r) for a, r in live),
+                                             default=0),
                    "offerCount": len(live),
                    "availability": "https://schema.org/InStock"},
     }
@@ -6522,46 +6878,46 @@ def page_accounts():
         ]},
     ]
 
-    body = f"""<div class="ac">
+    # ⚠ The hero is the ONE centred band on this page; everything below it is
+    # flush left, matching the rest of the site.
+    body = f"""<div class="ac" data-ac-shop>
   <section class="hero-a hero-a-lit ac-hero" id="top" style="--game-hue:{lol['hue']}">
     <div class="fx hero-a-glow" aria-hidden="true"></div>
     <div class="fx hero-a-hatch" aria-hidden="true"></div>
     <div class="fx fx-grain" aria-hidden="true"></div>
     <div class="wrap ac-hero-inner">
       <div class="ac-hero-copy">
-        <nav class="crumbs crumbs-slash" aria-label="Breadcrumb">
-          <a href="/">Home</a> <span aria-hidden="true">/</span>
-          <span class="crumbs-here">Accounts</span>
-        </nav>
-        <h1 class="h-lg ac-h1">{esc(lol['name'])} accounts<br>
-          <span class="grad-text">from {ac_price_note()}.</span></h1>
-        <p class="lede">Level 30 and ranked, on NA, EUW, EUNE and OCE. Full email access on
-        every one, so you change the recovery mailbox and the password the moment it lands
-        and it is genuinely yours.</p>
-        {ac_guarantees()}
+        <span class="ac-hero-k">{esc(lol['name'])} accounts</span>
+        <h1 class="ac-h1">Buy {esc(lol['name'])} accounts</h1>
+        <p class="ac-hero-p">Ranked ready, full email access, no grind</p>
+        <div class="ac-assure">
+          <span class="ac-as">{_ico("bolt", 15, "ico")}
+            <span>{esc(pricing.ACCOUNT_ETA)}</span></span>
+          <span class="ac-as">{_ico("envelope", 15, "ico", stroke=True)}
+            <span>Original inbox included</span></span>
+          <span class="ac-as">{_ico("shield-check", 15, "ico", stroke=True)}
+            <span>{D.ACCOUNT_WARRANTY_MONTHS}-month replacement warranty</span></span>
+        </div>
       </div>
+
+      {ac_step_server()}
+      {ac_step_tiers(ref)}
     </div>
   </section>
 
-  {ac_board()}
-  {ac_delivery()}
-  {ac_risk()}
+  {ac_handover()}
+  {ac_why()}
+  {ac_buyers()}
   {ac_faq(faq)}
-</div>
+  {ac_close()}
+</div>"""
 
-{cta_band(title="Or climb on the account you already play.",
-          sub="A boost keeps your name, your skins and your match history. If you are choosing "
-              "between the two on price alone, that is usually the better purchase.",
-          cta=("Configure a %s boost" % lol['short'], "/games/%s.html" % lol['slug']),
-          readback=False)}"""
-
-    return layout(ACCOUNTS_HREF, "Buy a %s Account - %s" % (D.ACCOUNT_GAME, D.BRAND),
-                  "Ready-made League of Legends accounts from %s: level 30 and ranked, "
-                  "full email access, delivered on NA, EUW, EUNE or OCE within the hour."
-                  % usd(D.account_floor()),
+    return layout(ACCOUNTS_HREF, "Buy %s Accounts - %s" % (D.ACCOUNT_GAME, D.BRAND),
+                  "Ready-made League of Legends accounts from %s: unranked smurfs to "
+                  "Master, full email access on every one, %s on EUW, NA, EUNE or OCE."
+                  % (usd(D.account_floor(), cents=True), pricing.ACCOUNT_ETA.lower()),
                   body, current=ACCOUNTS_HREF, jsonld=ld,
                   extra_js=faq_accordion_js(), nav_outline=True)
-
 
 def page_how():
     body = f"""<section class="wrap section">
@@ -8719,7 +9075,7 @@ def page_checkout():
                nothing here — no one claims an account — and a refund line that
                does not apply is worse than none. -->
           <p class="co-refund" data-when-service="account" hidden>{_ico("shield", 15, "ico")}<span>Replaced or
-          refunded for {D.ACCOUNT_WARRANTY_DAYS} days</span><span aria-hidden="true">·</span><a href="{ACCOUNTS_HREF}#faq-warranty">Read the
+          refunded for {D.ACCOUNT_WARRANTY_MONTHS} months</span><span aria-hidden="true">·</span><a href="{ACCOUNTS_HREF}#faq-warranty">Read the
           warranty</a></p>
 
           <!-- The live total detaches into the games-page sticky bar: the same
@@ -8865,7 +9221,7 @@ def page_checkout():
                from the page that sold it. -->
           <div class="co-chips" data-when-service="account" hidden>
             <span class="co-tchip">{_ico("lock-key", 12, "ico", stroke=True)}<span>Full email access</span></span>
-            <span class="co-tchip">{_ico("shield-check", 12, "ico", stroke=True)}<span>{D.ACCOUNT_WARRANTY_DAYS}-day replacement</span></span>
+            <span class="co-tchip">{_ico("shield-check", 12, "ico", stroke=True)}<span>{D.ACCOUNT_WARRANTY_MONTHS}-month replacement</span></span>
             <span class="co-tchip">{_ico("clock", 12, "ico", stroke=True)}<span>{esc(pricing.ACCOUNT_ETA)}</span></span>
           </div>
         </div>
@@ -9878,19 +10234,32 @@ def client_data():
         },
         "addons": D.ADDONS,
         "promos": D.PROMOS,
-        # Accounts — the flat-priced listings. The client needs the price (to
-        # re-quote the order checkout charges), the shard list (to clamp the
-        # same way pricing.account_pick() does) and the name (the checkout
-        # summary prints it). `stock` ships too, so the refusal is the same on
-        # both sides: nothing decrements stock, so a listing that is gone can
-        # only be stopped by the flag, and the flag has to be readable here or
-        # the page would let somebody start a checkout the server then refuses.
-        # Sold-out listings are shipped rather than dropped — the card renders
-        # its own state, and a client holding a cached data.js must be able to
-        # tell "gone" from "never existed".
+        # Accounts — the flat-priced listings. The client needs the price and
+        # the shard deltas (to re-quote the order checkout charges), the stock
+        # base and the shard shares (to derive availability the same way
+        # `D.account_stock()` does), and the name (the checkout summary prints
+        # it). Sold-out listings are shipped rather than dropped — the card
+        # renders its own state, and a client holding a cached data.js must be
+        # able to tell "gone" from "never existed".
+        #
+        # ⚠ There is ONE stock derivation and it is `stock × share`, mirrored by
+        # `accountStock()` in app.js. Shipping a pre-computed per-shard table
+        # here would be the second authored figure data.py's ⚠ warns about, and
+        # it would go stale against the server the first time a share moved.
         "accounts": {a["id"]: {"name": a["name"], "price": a["price"],
-                               "stock": bool(a["stock"]), "regions": a["regions"]}
+                               "was": a.get("was", 0), "stock": a["stock"],
+                               "tier": a["tier"], "kind": D.account_kind(a)}
                      for a in D.ACCOUNTS},
+        # The shards, in the order the picker draws them. `code` is
+        # REGION_SHORT's — the client never derives a second one.
+        "accountServers": [{"region": s["region"], "code": D.account_code(s["region"]),
+                            "share": s["share"], "delta": s["delta"]}
+                           for s in D.ACCOUNT_SERVERS],
+        "accountOfferLabel": pricing.ACCOUNT_OFFER_LABEL,
+        # The filter's description line, keyed by filter. app.js writes it into
+        # one node rather than shipping three — it is a whole text node either
+        # way, and esbT() resolves it the same way a server-rendered twin is.
+        "accountKinds": {k: meta for k, _label, meta in D.ACCOUNT_KINDS},
         "accountGame": D.ACCOUNT_GAME,
         # The delivery promise, from pricing.py so the mirror cannot drift —
         # app.js translates it as a whole node, the server ships it in English
