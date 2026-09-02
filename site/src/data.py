@@ -805,10 +805,15 @@ ACCOUNT_DELIVERY = [
 # discriminator and the card its only reader, so a listing given a real figure
 # still prints it — the field is kept for exactly that.
 #
-# There is deliberately NO champion count and NO description. Both were on the
-# card and came off; the shop's card is emblem, name, six feature rows, price
-# and CTA, and a listing detail page is explicitly not designed. Nothing renders
-# them, so nothing stores them.
+# `champs` is on the UNRANKED listings only, where the champion pool is the
+# product — a smurf is bought to queue on, and how many champions it can pick is
+# the question. A ranked listing shows its MMR band there instead: the pool is
+# not why anybody buys Diamond. So the field is present on three listings and
+# absent on eight, and `account_spec()` reads it.
+#
+# There is deliberately NO description. It was the old board's card paragraph;
+# the shop's card is emblem, name, six feature rows, price and CTA, and a
+# listing detail page is explicitly not designed.
 #
 # `level` is rendered on the UNRANKED listings only, where it is the product
 # ("Level 30" is the ranked requirement and is in the card's own name). The
@@ -823,17 +828,17 @@ ACCOUNT_DELIVERY = [
 ACCOUNTS = [
     dict(id="lol-unranked-basic", name="Unranked · Basic", tier="Unranked",
          shape="ring1", price=27.07,  # EUR 24.90
-         level=30, be=0, stock=31,
+         level=30, champs=20, be=0, stock=31,
          badge="", season=False,
          note="Placements not played",),
     dict(id="lol-unranked-premium", name="Unranked · Premium", tier="Unranked",
          shape="ring2", price=37.93,  # EUR 34.90
-         level=45, be=0, stock=19,
+         level=45, champs=50, be=0, stock=19,
          badge="Best seller", season=False,
          note="Placements not played",),
     dict(id="lol-unranked-luxury", name="Unranked · Luxury", tier="Unranked",
          shape="ring3", price=86.85,  # EUR 79.90
-         level=52, be=0, stock=9,
+         level=52, champs=80, be=0, stock=9,
          badge="", season=False,
          note="Placements not played",),
     dict(id="lol-iron", name="Iron", tier="Iron",
@@ -934,6 +939,23 @@ def account_mmr(a):
     if account_kind(a) == "unranked":
         return ""
     return ACCOUNT_MMR.get(a["tier"], ACCOUNT_MMR_DEFAULT)
+
+
+def account_spec(a):
+    """The card's third feature row, as (template, *figures).
+
+    One row, two shapes. A ranked listing states its MMR band; an unranked one
+    states its level and champion pool, which is what a smurf is actually bought
+    on. Returned as a template so build.py can emit it as ONE text node with
+    `{}` placeholders — French and German both move the figures, and a
+    `<b>`-per-number split would impose English word order on the row.
+    """
+    mmr = account_mmr(a)
+    if mmr:
+        return (mmr,)
+    if a.get("champs"):
+        return ("Level {}+, {}+ champions", a["level"], a["champs"])
+    return ("Level {}+", a["level"])
 
 
 def account_be_random(a):
@@ -1080,6 +1102,10 @@ for _a in ACCOUNTS:
     assert not _a.get("was") or _a["was"] > _a["price"], \
         "account %s has a struck price under what it charges" % _a["id"]
     assert _a["note"], "account %s has no caution row" % _a["id"]
+    # A ranked listing must not carry a champion count: it has no row to show it
+    # in, so the field would be data nothing renders.
+    assert account_kind(_a) == "unranked" or "champs" not in _a, \
+        "account %s is ranked and should not carry a champion count" % _a["id"]
 # The three unranked listings share a tier and so a colour; a shared MARK would
 # make them one product on the shelf.
 assert len({a["shape"] for a in ACCOUNTS}) == len(ACCOUNTS), \
@@ -1162,7 +1188,7 @@ ACCOUNT_REVIEWS = [
      "about."),
     ("Dee R.", "1 week ago", "Unranked premium · NA", 5,
      "Ordered at 2am and the credentials were in my inbox before I closed the "
-     "tab. Bigger champion pool than the account I main on."),
+     "tab. 50 champions is more than my main has."),
     ("Tomas V.", "2 weeks ago", "Diamond · EUW", 5,
      "Expensive, and worth it — the honour level and season rewards were exactly "
      "as listed. Support walked me through the email change on Discord."),

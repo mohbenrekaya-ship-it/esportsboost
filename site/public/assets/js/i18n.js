@@ -2011,7 +2011,6 @@
       "Pick your server": "Choisis ton serveur",
       "Or boost the account you already play": "Ou booste le compte que tu joues déjà",
       "Instant delivery": "Livraison instantanée",
-      "Random blue essence": "Essence bleue aléatoire",
 
       "{}, from paying to playing.": "{}, entre le paiement et la première partie.",
       ", every time": ", à chaque commande",
@@ -2022,8 +2021,10 @@
       "Low MMR": "MMR bas",
       "Standard MMR": "MMR standard",
       "High MMR": "MMR élevé",
-      "Level {}+": "Niveau {}+",
       "Ordered at 2am and the credentials were in my inbox before I closed the tab. Bigger champion pool than the account I main on.": "Commandé à 2 h du matin, les identifiants étaient dans ma boîte avant que je ferme l’onglet. Pool de champions plus large que sur mon compte principal.",
+
+      "Random BE/skins": "BE/skins aléatoires",
+      "Level {}+, {}+ champions": "Niveau {}+, {}+ champions",
 
     },
 
@@ -3739,7 +3740,6 @@
       "Pick your server": "Wähle deinen Server",
       "Or boost the account you already play": "Oder booste den Account, den du schon spielst",
       "Instant delivery": "Sofortlieferung",
-      "Random blue essence": "Zufällige blaue Essenz",
 
       "{}, from paying to playing.": "{}, von der Zahlung bis zur ersten Runde.",
       ", every time": ", jedes Mal",
@@ -3750,8 +3750,10 @@
       "Low MMR": "Niedriger MMR",
       "Standard MMR": "Normaler MMR",
       "High MMR": "Hoher MMR",
-      "Level {}+": "Level {}+",
       "Ordered at 2am and the credentials were in my inbox before I closed the tab. Bigger champion pool than the account I main on.": "Um 2 Uhr nachts bestellt, die Zugangsdaten waren im Postfach, bevor ich den Tab zugemacht habe. Größerer Champion-Pool als auf meinem Main.",
+
+      "Random BE/skins": "Zufällige BE/Skins",
+      "Level {}+, {}+ champions": "Level {}+, {}+ Champions",
 
     }
   };

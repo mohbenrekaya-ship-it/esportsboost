@@ -6509,20 +6509,21 @@ def ac_tier_card(a, region):
 
     # Four spec rows, two green ticks and one amber caution — the mix is the
     # point. See the ⚠ in the section header.
-    # ⚠ A random-essence listing gets ONE whole text node, not a `<b>` with the
-    # word "Random" in it: French wants "Essence bleue aléatoire" and German
-    # "Zufällige blaue Essenz", and a figure-carrier split would impose English
-    # word order on both. A listing WITH a figure keeps the split, because there
-    # the number is the thing that moves.
-    be_row = ("<span>Random blue essence</span>" if D.account_be_random(a)
+    # ⚠ A random listing gets ONE whole text node, not a `<b>` with the word
+    # "Random" in it: French wants "BE/skins aléatoires" and German "Zufällige
+    # BE/Skins", and a figure-carrier split would impose English word order on
+    # both. A listing WITH an essence figure keeps the split, because there the
+    # number is the thing that moves.
+    be_row = ("<span>Random BE/skins</span>" if D.account_be_random(a)
               else f'<b>{esc(_ac_be(a["be"]))}</b> <span>blue essence</span>')
-    # The third row is the MMR band on a ranked listing and the level on an
-    # unranked one — an account with unplayed placements has no rank MMR to
-    # state. The level rides in a `{}` pattern rather than a `<b>` split so
-    # "Niveau 30+" can put the figure where French wants it.
-    mmr = D.account_mmr(a)
-    spec_row = (f'<span>{esc(mmr)}</span>' if mmr
-                else f'<span>Level {a["level"]}+</span>')
+    # The third row is the MMR band on a ranked listing and the level plus the
+    # champion pool on an unranked one — an account with unplayed placements has
+    # no rank MMR to state, and the pool is what a smurf is bought on.
+    # `account_spec()` hands back a template so this is ONE text node with `{}`
+    # placeholders: both translations move the figures, and a `<b>`-per-number
+    # split would impose English word order on the row.
+    spec = D.account_spec(a)
+    spec_row = "<span>%s</span>" % esc(spec[0].format(*spec[1:]))
     feats = [
         ("globe", "spec", '<span data-ac-shard-name>%s</span>' % esc(region)),
         ("wallet", "spec", be_row),

@@ -1124,19 +1124,23 @@ resolver and `build.py`, `quote()` and `payments.build_session()` all read the c
   and its CTA says Reserve, because that unit is not instant and must not claim to be.
 - ⚠ **`be = 0` means the essence is RANDOM, not that it has none — and it is 0 on all eleven.** The
   stock is levelled in batches, so what is left over varies per account and any figure would be one
-  we cannot hold. `D.account_be_random()` is the discriminator and the tier card its only reader, so
-  a listing given a real figure back still prints it. A random listing gets the row as ONE whole text
-  node ("Random blue essence"), because French wants "Essence bleue aléatoire" and a `<b>`-split
-  would impose English word order on it.
-- **The card's third row is an MMR band on a ranked listing and the level on an unranked one.**
-  `D.account_mmr()` is the one mapping — Iron/Bronze low, Silver standard, everything above high. It
-  is a **band, not a number**, because Riot does not expose MMR and any digit here would be invented.
-  ⚠ An unranked listing gets no band at all and shows `Level N+` instead: an account whose placements
-  are unplayed has no rank MMR to state, and "High MMR" on a smurf would be a claim about a number
-  that does not exist yet — the amber row three lines below says "Placements not played".
-- **There is no champion count on the card**, on the business's instruction, so nothing stores one.
-  `_ac_be()` survives unused for the same reason `be` does: it is the one place a figure becomes a
-  word if one comes back.
+  we cannot hold. The row says **"Random BE/skins"**, covering both, as ONE whole text node — French
+  wants "BE/skins aléatoires" and a `<b>`-split would impose English word order on it.
+  `D.account_be_random()` is the discriminator and the tier card its only reader, so a listing given
+  a real figure back still prints it through the other branch; `_ac_be()` survives unused for that.
+- **The card's third row is `D.account_spec()`, and it has two shapes.** A ranked listing states its
+  MMR band (`D.account_mmr()` — Iron/Bronze low, Silver standard, everything above high); an unranked
+  one states `Level N+, M+ champions`. It is returned as a TEMPLATE with `{}` placeholders and
+  rendered as one text node, because both translations move the figures and a `<b>`-per-number split
+  would impose English word order on the row.
+  - The band is a **band, not a number**: Riot does not expose MMR and any digit here would be
+    invented.
+  - ⚠ An unranked listing gets no band at all. An account whose placements are unplayed has no rank
+    MMR to state, and "High MMR" on a smurf would be a claim about a number that does not exist yet —
+    the amber row three lines below says "Placements not played".
+  - **`champs` is on the unranked listings only** and data.py asserts a ranked one never carries it.
+    A smurf is bought to queue on, so the pool is the question; nobody buys Diamond for its champion
+    count, and there is no row to show it in.
 - ⚠ **"Cheapest" is COMPUTED by `D.account_badge()`, never authored** — it is a factual claim about
   the whole board and an authored one goes false the moment anything is re-priced, which is exactly
   what happened the first time these prices moved (a $29.90 smurf kept the badge over a $27.99 Iron).
