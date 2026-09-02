@@ -834,9 +834,9 @@ ACCOUNT_DELIVERY = [
 # the shop's card is emblem, name, six feature rows, price and CTA, and a
 # listing detail page is explicitly not designed.
 #
-# `level` is rendered on the UNRANKED listings only, where it is the product
-# ("Level 30" is the ranked requirement and is in the card's own name). The
-# ranked listings show an MMR band instead — see `account_mmr()`.
+# There is deliberately NO `level`. It came off the card on the business's
+# instruction — an unranked listing states its champion pool and nothing else
+# there — and nothing else rendered it, so nothing stores it.
 # `note` is the ONE caution row on the card — the handoff's rule is that six
 # identical green ticks read as marketing and the amber line is what makes the
 # rest credible, so every listing carries one.
@@ -847,42 +847,42 @@ ACCOUNT_DELIVERY = [
 ACCOUNTS = [
     dict(id="lol-unranked-basic", name="Unranked · Basic", tier="Unranked",
          shape="ring1", price=dict(usd=29.90, eur=24.90, gbp=24.90),
-         level=30, champs=20, be=0, stock=31,
+         champs=20, be=0, stock=31,
          badge="", season=False,
          note="Placements not played",),
     dict(id="lol-unranked-premium", name="Unranked · Premium", tier="Unranked",
          shape="ring2", price=dict(usd=39.90, eur=34.90, gbp=34.90),
-         level=45, champs=50, be=0, stock=19,
+         champs=50, be=0, stock=19,
          badge="Best seller", season=False,
          note="Placements not played",),
     dict(id="lol-unranked-luxury", name="Unranked · Luxury", tier="Unranked",
          shape="ring3", price=dict(usd=89.90, eur=79.90, gbp=79.90),
-         level=52, champs=80, be=0, stock=9,
+         champs=80, be=0, stock=9,
          badge="", season=False,
          note="Placements not played",),
     dict(id="lol-iron", name="Iron", tier="Iron",
          shape="diamond", price=dict(usd=64.90, eur=49.90, gbp=49.90),
-         level=45, be=0, stock=14,
+         be=0, stock=14,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-bronze", name="Bronze", tier="Bronze",
          shape="triangle", price=dict(usd=39.90, eur=39.90, gbp=39.90),
-         level=55, be=0, stock=12,
+         be=0, stock=12,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-silver", name="Silver", tier="Silver",
          shape="pentagon", price=dict(usd=42.90, eur=42.90, gbp=42.90),
-         level=65, be=0, stock=11,
+         be=0, stock=11,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-gold", name="Gold", tier="Gold",
          shape="hexagon", price=dict(usd=59.90, eur=44.90, gbp=44.90),
-         level=85, be=0, stock=8,
+         be=0, stock=8,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-platinum", name="Platinum", tier="Platinum",
          shape="octagon", price=dict(usd=89.90, eur=59.90, gbp=59.90),
-         level=105, be=0,
+         be=0,
          stock=5, badge="", season=True,
          note="Previous season rewards",),
     # ⚠ NOT in the business's price list — the only listing still carrying a
@@ -890,17 +890,17 @@ ACCOUNTS = [
     # stays ordered; replace it with the real number.
     dict(id="lol-emerald", name="Emerald", tier="Emerald",
          shape="kite", price=dict(usd=129.90, eur=74.90, gbp=74.90),
-         level=130, be=0, stock=7,
+         be=0, stock=7,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-diamond", name="Diamond", tier="Diamond",
          shape="facet", price=dict(usd=199.90, eur=89.90, gbp=89.90),
-         level=150, be=0, stock=6,
+         be=0, stock=6,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-master", name="Master", tier="Master",
          shape="star", price=dict(usd=289.90, eur=189.90, gbp=189.90),
-         level=185, be=0, stock=2,
+         be=0, stock=2,
          badge="Low stock", season=True,
          note="Previous season rewards",),
 ]
@@ -974,11 +974,7 @@ def account_spec(a):
     `<b>`-per-number split would impose English word order on the row.
     """
     mmr = account_mmr(a)
-    if mmr:
-        return (mmr,)
-    if a.get("champs"):
-        return ("Level {}+, {}+ champions", a["level"], a["champs"])
-    return ("Level {}+", a["level"])
+    return (mmr,) if mmr else ("{}+ champions", a["champs"])
 
 
 def account_be_random(a):
@@ -1116,7 +1112,7 @@ assert set(ACCOUNT_REGIONS) <= _ACC_REGIONS, \
 assert len(_ACCOUNT_BY_ID) == len(ACCOUNTS), "duplicate account id"
 assert {s["region"] for s in ACCOUNT_SERVERS} == set(ACCOUNT_REGIONS), \
     "duplicate account shard"
-_ACCOUNT_FIELDS = {"id", "name", "tier", "shape", "price", "level", "be",
+_ACCOUNT_FIELDS = {"id", "name", "tier", "shape", "price", "be",
                    "stock", "badge", "season", "note"}
 for _a in ACCOUNTS:
     # Every field, on every listing. A missing one does not raise on its own —
@@ -1138,10 +1134,15 @@ for _a in ACCOUNTS:
         _a["was"][c] > _a["price"][c] for c in ACCOUNT_CURRENCIES), \
         "account %s has a struck price under what it charges" % _a["id"]
     assert _a["note"], "account %s has no caution row" % _a["id"]
-    # A ranked listing must not carry a champion count: it has no row to show it
-    # in, so the field would be data nothing renders.
-    assert account_kind(_a) == "unranked" or "champs" not in _a, \
-        "account %s is ranked and should not carry a champion count" % _a["id"]
+    # A ranked listing must not carry a champion count (it has no row to show it
+    # in), and an unranked one MUST — the count is its whole spec row now, and a
+    # listing without one would draw a five-row card in a rail of six-row ones.
+    if account_kind(_a) == "unranked":
+        assert _a.get("champs"), \
+            "unranked account %s needs a champion count — it is its spec row" % _a["id"]
+    else:
+        assert "champs" not in _a, \
+            "account %s is ranked and should not carry a champion count" % _a["id"]
 # The three unranked listings share a tier and so a colour; a shared MARK would
 # make them one product on the shelf.
 assert len({a["shape"] for a in ACCOUNTS}) == len(ACCOUNTS), \

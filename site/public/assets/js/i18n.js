@@ -2033,7 +2033,8 @@
       "Ordered at 2am and the credentials were in my inbox before I closed the tab. Bigger champion pool than the account I main on.": "Commandé à 2 h du matin, les identifiants étaient dans ma boîte avant que je ferme l’onglet. Pool de champions plus large que sur mon compte principal.",
 
       "Random BE/skins": "BE/skins aléatoires",
-      "Level {}+, {}+ champions": "Niveau {}+, {}+ champions",
+
+      "{}+ champions": "{}+ champions",
 
     },
 
@@ -3762,7 +3763,8 @@
       "Ordered at 2am and the credentials were in my inbox before I closed the tab. Bigger champion pool than the account I main on.": "Um 2 Uhr nachts bestellt, die Zugangsdaten waren im Postfach, bevor ich den Tab zugemacht habe. Größerer Champion-Pool als auf meinem Main.",
 
       "Random BE/skins": "Zufällige BE/Skins",
-      "Level {}+, {}+ champions": "Level {}+, {}+ Champions",
+
+      "{}+ champions": "{}+ Champions",
 
     }
   };
