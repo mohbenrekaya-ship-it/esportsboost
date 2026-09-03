@@ -41,7 +41,7 @@ like production. It also hosts the **Stripe payment API** the checkout page call
 Verification is: the five test files pass — `python3 site/tests/test_pricing.py` (the pricing engine,
 the bundle rules, the JS/Python mirror, the currency charge, the checkout payload and the
 accounts shop — its per-shard price, the cents invariant that stops a $77.99 card being charged as
-$78, the single stock derivation behind its four on-screen figures, its sold-out refusal and what
+$78, the single stock derivation behind its on-screen figures, its sold-out refusal and what
 its order records), `python3
 site/tests/test_mail.py` (header injection, the honeypot, the rate cap and the two order mails),
 `python3 site/tests/test_carts.py` (abandoned-checkout capture and the recovery token),
@@ -231,7 +231,7 @@ reuse these rather than inventing new hooks:
 | `data-rst-*` | The roster board. `data-rst-row` carries `data-game` / `data-free` / `data-win` — the filter reads only these, so a server-rendered board keeps working. `data-rst-game\|avail\|sort` are the three controls, `data-rst-body\|shown\|fgame\|ffree\|more\|reset\|empty*` the things `initRoster()` rewrites |
 | `data-bp-*` | A profile's completed orders: `data-bp-row` (+ `data-mode`), `data-bp-filter`, `data-bp-body\|shown\|total\|more` |
 | `data-gc-*` | The catalogue grid on `/games/`. `data-gc-card` carries `data-gc-riot\|valve\|coaching` (the filter reads only these, so a filter is one attribute) plus `data-gc-order\|price\|name` (the three sorts). `data-gc-filter\|sort\|sortsel` are the controls — the segment and the native select write one state and `initCatalog()` re-marks both — and `data-gc-grid\|foot\|shown\|reset\|sortlabel\|dots\|dot` are what it rewrites |
-| `data-ac-*` | The accounts shop (`/accounts.html`). `data-ac-shop` is the root and `data-ac-step="server\|tiers"` the two steps, switched by `hidden`. `data-ac-server="<region>"` is a server card and `data-ac-change` returns to step 1; `data-ac-server-name\|code\|stock` are the bar's readouts. `data-ac-kind="all\|unranked\|ranked"` are the three filters, with `data-ac-kindmeta` and `data-ac-pagelabel` beside them. `data-ac-track\|prev\|next\|dots` are the carousel. Each `data-ac-card` carries `data-ac-id` / `data-ac-kind`, and the nodes that move with the shard are `data-ac-price` (a `money_parts()` span), `data-ac-was`, `data-ac-code`, `data-ac-shard-name`, `data-ac-units`, `data-ac-stock` and `data-ac-cta`. ⚠ The CTA keys are the STOCK STATES — `ok\|low\|out` — and all three CTAs and all three stock lines ride in the DOM with two hidden, per the whole-text-node rule. `data-ac-nojs` is the line JS removes |
+| `data-ac-*` | The accounts shop (`/accounts.html`). `data-ac-shop` is the root and `data-ac-step="server\|tiers"` the two steps, switched by `hidden`. `data-ac-server="<region>"` is a server card and `data-ac-change` returns to step 1; `data-ac-server-name\|code\|stock` are the bar's readouts. `data-ac-kind="all\|unranked\|ranked"` are the three filters, with `data-ac-kindmeta` and `data-ac-pagelabel` beside them. `data-ac-track\|prev\|next\|dots` are the carousel. Each `data-ac-card` carries `data-ac-id` / `data-ac-kind`, and the nodes that move with the shard are `data-ac-price` (a `money_parts()` span), `data-ac-was`, `data-ac-code`, `data-ac-shard-name`, `data-ac-stock` and `data-ac-cta`. ⚠ The CTA keys are the STOCK STATES — `ok\|low\|out` — and all three CTAs and all three `data-ac-sv` lines ride in the DOM with two hidden, per the whole-text-node rule; those lines state the warranty window and the delivery, not a unit count (`data-ac-units` is gone from the card, and `data-ac-sv-units` is step 1's). `data-ac-nojs` is the line JS removes |
 | `data-rv-stars` / `data-rv-game` | The two facts the reviews page filters and sorts a card on, emitted by `review_card(filterable=True)`. The whole feed reads only these, so a server-paged feed keeps working |
 | `data-rvp-*` | The reviews feed's controls: `data-rvp-game\|rating\|sort` (three radio groups) and `data-rvp-dist` (the distribution rows, `aria-pressed` toggles). Both rating controls write one state — `initReviews()` re-marks both whenever either fires. `data-rvp-grid\|shown\|total\|crumb\|clear\|empty\|more\|more-label` are what it rewrites; `data-rvp-worst` is the hero's "Read the worst first" |
 | `data-when-booster` / `data-out="booster"` / `data-sum="booster"` / `data-booster-clear` | The named booster. Rows that `hidden` themselves when none is set; it is an order attribute, never a price input — `quote()` must not read it |
@@ -1113,14 +1113,17 @@ resolver and `build.py`, `quote()` and `payments.build_session()` all read the c
   sale, so the one irreversible choice is made first, on a screen with nothing else on it. "Change
   server" returns and clears the filter and the page. Do not "improve" this into one screen with a
   shard dropdown — the dropdown is what the two-step layout exists to replace.
-- ⚠ **Stock is derived, never authored twice.** Four figures on that screen state stock — the hero's
-  promo line, the server bar, each server card and each tier card — and every one reduces to
+- ⚠ **Stock is derived, never authored twice.** Three figures on that screen state stock — the
+  hero's promo line, the server bar and each server card — and every one reduces to
   `D.account_stock(listing, shard)` = `max(1, round(stock × share))`, zero when the listing is sold
-  out. An earlier build of the same page authored a per-server figure by hand beside the per-listing
-  one and the two disagreed on screen (the bar said 61 while its own cards summed to 124). If real
-  inventory arrives per (listing, shard) it goes in at `account_stock()` and the other three follow
-  for free. `test_account_stock_is_derived_once()` asserts the reduction **and** the one way the
-  rounding goes wrong: `max(1, …)` must not resurrect a sold-out listing on a low-share shard.
+  out. So does each tier card's **state** (`ok` / `low` / `out`), which is the fourth reader even
+  though the card prints no count: its line under the price states the **warranty window**
+  (`D.ACCOUNT_WARRANTY_MONTHS`) rather than a figure nothing decrements — see the ⚠ on that constant
+  and the note in `ac_tier_card()`. An earlier build of the same page authored a per-server figure by
+  hand beside the per-listing one and the two disagreed on screen (the bar said 61 while its own
+  cards summed to 124). If real inventory arrives per (listing, shard) it goes in at
+  `account_stock()` and the rest follow for free. `test_account_stock_is_derived_once()` asserts the
+  reduction **and** the one way the rounding goes wrong: `max(1, …)` must not resurrect a sold-out listing on a low-share shard.
 - ⚠ **The carousel translates a flex track by whole pages, and the page change is verified by
   asserting WHICH CARDS ARE ON SCREEN, never by reading the label.** A label that changes over a
   track that did not move is how seven of eleven tiers were unreachable through two of the handoff's
@@ -1184,7 +1187,8 @@ resolver and `build.py`, `quote()` and `payments.build_session()` all read the c
   `stock.py` holds the credentials, `payments.process_checkout()` refuses a listing it cannot hand
   over, and the webhook claims one unit and mails it. ⚠ **The figures below are still what the PAGE
   shows** — publishing the real counts is behind `STOCK_PUBLIC_COUNTS` and is off by the business's
-  call, so these hand-set numbers remain the four on-screen stock claims and still go stale the
+  call, so these hand-set numbers remain the three on-screen stock claims (the tier cards state the
+  warranty window instead of a count) and still go stale the
   moment two people buy on one build. They are also the per-(listing, shard) fallback for the sale
   itself wherever the store has never held that pair, which is what lets stock be loaded one tier at
   a time.

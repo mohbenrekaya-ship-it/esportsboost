@@ -46,7 +46,7 @@ UNIT_MIN, UNIT_MAX = 1, 5
 #
 # It is the WHOLE phrase, not a bare adjective, so every surface prints it
 # untouched ("Instant Delivery", "Instant Delivery, from paying to playing",
-# "31 in stock · instant delivery") and nothing appends a word to it. Do not
+# "12-month warranty · instant delivery") and nothing appends a word to it. Do not
 # shorten it back to "Instant" and rebuild the noun at each call site — that is
 # how a constant ends up as "Instant Delivery delivery" on one surface and
 # untranslated on another.

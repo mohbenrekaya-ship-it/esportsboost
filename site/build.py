@@ -6294,12 +6294,14 @@ def page_game(g):
 #    the page. Do not "improve" this into one screen with a shard dropdown — the
 #    dropdown is what the two-step layout exists to replace.
 #
-#  2 · **Stock is derived, never authored twice.** Four figures on this screen
-#    state stock — the promo line, the server bar, each server card and each tier
-#    card — and every one reduces to `D.account_stock()`. The version this
-#    replaces authored a per-server figure by hand beside the per-listing one and
-#    the two disagreed on screen. If real inventory arrives per (listing, shard),
-#    it goes in at `account_stock()` and the other three follow for free.
+#  2 · **Stock is derived, never authored twice.** Three figures on this screen
+#    state stock — the promo line, the server bar and each server card — and
+#    every one reduces to `D.account_stock()`, as does each tier card's STATE
+#    (ok / low / out), which is the fourth reader even though it prints no
+#    count. The version this replaces authored a per-server figure by hand
+#    beside the per-listing one and the two disagreed on screen. If real
+#    inventory arrives per (listing, shard), it goes in at `account_stock()` and
+#    the rest follow for free.
 #    ⚠ Nothing decrements these counts — see the ⚠ in data.py.
 #
 #  Everything else that is load-bearing:
@@ -6313,7 +6315,8 @@ def page_game(g):
 #  · **One delivery promise, and it is `pricing.ACCOUNT_ETA`.** It appears in
 #    the hero, the handover heading, step 02, every in-stock tier card, the
 #    reviews band and the close. Six reads, one constant — composed with a
-#    following word at each ("Instant Delivery", "in stock · instant") so the
+#    preceding phrase at each ("Instant Delivery", "12-month warranty ·
+#    instant delivery") so the
 #    one word still reads as English wherever it lands. ⚠ The scarce state is
 #    the deliberate exception: under AC_SCARCE a card says "verified in 12 h"
 #    and its CTA says Reserve, because that unit is NOT instant.
@@ -6581,14 +6584,24 @@ def ac_tier_card(a, region):
         f'<span class="ac-ft-t">{body}</span></li>'
         for ico, kind, body in feats)
 
-    # Under AC_SCARCE the handover stops being immediate — the unit is reserved
-    # and verified before it is handed over — so the card says so rather than
-    # repeating the delivery figure the rest of the page quotes.
+    # The line under the price states the WARRANTY, not the count. It used to
+    # read "31 in stock · instant delivery": a figure nothing decrements, on the
+    # one product where a second buyer of the last unit is a manual refund, in
+    # the loudest position on the card. The warranty window is true of every
+    # unit on the shelf and is the claim the buyer is actually weighing — and it
+    # is read off `D.ACCOUNT_WARRANTY_MONTHS`, so a re-tune cannot leave a stale
+    # number here. ⚠ The three STATES are unchanged and still derived from
+    # stock: `out` is what takes a sold-out listing off sale, and under
+    # AC_SCARCE the handover stops being immediate — that unit is reserved and
+    # verified before it is handed over, so the `low` line says so rather than
+    # repeating the delivery figure the rest of the page quotes. Each variant is
+    # ONE text node with its figures as `{}` captures: both translations move
+    # them, and a `<b>`-per-number split would impose English word order.
     stock = f"""<span class="ac-stock is-{state}" data-ac-stock>
-        <span class="ac-sv-one" data-ac-sv="ok">{_ico("bolt", 11, "ico")}
-          <b data-ac-units>{units}</b><span>in stock · {esc(pricing.ACCOUNT_ETA.lower())}</span></span>
+        <span class="ac-sv-one" data-ac-sv="ok">{_ico("shield-check", 11, "ico", stroke=True)}
+          <span>{D.ACCOUNT_WARRANTY_MONTHS}-month warranty · {esc(pricing.ACCOUNT_ETA.lower())}</span></span>
         <span class="ac-sv-one" data-ac-sv="low">{_ico("hourglass", 11, "ico", stroke=True)}
-          <b data-ac-units>{units}</b><span>left · verified in 12 h</span></span>
+          <span>{D.ACCOUNT_WARRANTY_MONTHS}-month warranty · verified in 12 h</span></span>
         <span class="ac-sv-one" data-ac-sv="out">{_ico("dot", 11, "ico")}
           <span>Sold out on this server</span></span>
       </span>"""

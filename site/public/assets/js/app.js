@@ -3472,8 +3472,11 @@
          two would disagree the first time one of them was changed. */
       setText(el.querySelector("[data-ac-code]"), sv.code);
       setText(el.querySelector("[data-ac-shard-name]"), sv.region);
-      each("[data-ac-units]", el, function (b) { b.textContent = units; });
 
+      /* The card prints no unit count — the line under the price states the
+         warranty window, which is true of every unit on the shelf. `units` is
+         still what decides the STATE, and the state is what takes a sold-out
+         listing off sale, so this stays a stock read. */
       var stock = el.querySelector("[data-ac-stock]");
       if (stock) stock.className = "ac-stock is-" + state;
       el.classList.toggle("is-out", state === "out");
