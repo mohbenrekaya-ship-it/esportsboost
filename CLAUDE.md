@@ -291,6 +291,29 @@ still ask for dollars — but they are **not independent defaults**. Three curre
 and GBP**, and that is the business's rule — **the EU in euros, the UK in pounds, everywhere else in
 dollars**. ⚠ CAD was dropped with that rule: Canada is now "everywhere else" and is quoted USD.
 
+- **A location implies a LANGUAGE too, and France is the whole of that rule today.**
+  `geo.LANG_COUNTRIES` (`{"FR": "fr"}`) is the language twin of `CUR_COUNTRIES`, mirrored to the
+  client as `geo.langCountries` / `geo.langZones` and read by `defaultLang()` in i18n.js — the same
+  three signals in the same order as the currency (edge cookie → IANA timezone → locale region
+  subtag), so a visitor in France opens the site in French instead of correcting the one control
+  that decides whether they can read it. Three things about it are load-bearing:
+  - **It is the location, deliberately NOT `navigator.language`.** A browser's language list says
+    what the machine is set to, which is English on a great many French machines — the exact reason
+    the site was in English for them. A zone we cannot place therefore falls through to **English,
+    not to the locale subtag**: a French browser in Montreal or Brussels would otherwise be read as
+    France.
+  - **`langPinned` is the visitor's own pick and outranks it**, exactly as `curPinned` does — only a
+    click on the language dropdown sets it, and the migration is the same non-obvious one: under the
+    old code **English was the default in every region**, so a stored `en` is not evidence of a
+    choice and is re-resolved; only a stored non-English can have come from a click, so only that
+    migrates in as pinned. The language is settled **before** the currency at parse time, so the
+    currency ladder's last resort (`LANG_CUR`) reads the language this visitor will actually be
+    shown.
+  - ⚠ **Every country added to that table is a claim that our translation is the one its readers
+    expect.** Germany, Belgium, Austria and Switzerland are one line each and are a business call,
+    not a technical one — a Belgian handed the French of France, or a Swiss reader handed `du`, is a
+    decision somebody owns. Adding a country whose language has no dictionary block ships that
+    market a half-translated page.
 - **The markets, as the business set them** (`geo.currency_for()`): the **United States in dollars,
   Canada in Canadian dollars, the UK and the crown dependencies in sterling, the rest of Europe in
   euros**, and everywhere else the dollar — which is what an international price is quoted in, and
