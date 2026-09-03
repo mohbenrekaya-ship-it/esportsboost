@@ -2041,7 +2041,7 @@ SPOTLIGHT = dict(
 # replaces the auto promo when it is worth more, and is otherwise ignored, so a
 # buyer can never make their price worse by entering one.
 PROMOS = {
-    "SPLIT15": dict(pct=0.15, label="Summer sale", auto=True, ends="31 Aug"),
+    "SPLIT15": dict(pct=0.15, label="Summer sale", auto=True, ends="30 Sep"),
     # Affiliate and win-back codes go here, e.g.
     # "COMEBACK20": dict(pct=0.20, label="Welcome back", auto=False, ends=""),
 }
