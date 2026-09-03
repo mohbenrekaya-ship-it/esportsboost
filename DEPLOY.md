@@ -443,6 +443,96 @@ Notes worth keeping in mind:
 
 ---
 
+## Load the accounts you sell (and turn on automatic delivery)
+
+`/accounts.html` sells ready-made League accounts. **The credentials live in
+their own store** (`src/stock.py`), and once a payment clears the webhook takes
+one off the shelf and mails it to the buyer — no manual step. Until you load
+something, the shop keeps quoting the hand-set stock figures in `data.py` and a
+paid order has **nothing to hand over**, so do this before taking account
+traffic.
+
+1. **Upstash is required in production.** It is the same database the analytics
+   console uses (a separate Redis key, no extra variables) — see "Turn on the
+   analytics console" above. Vercel's filesystem is ephemeral, so a file store
+   would lose your entire inventory the moment a function froze.
+
+2. **Write your accounts one per line, `user:pass`.** Two optional fields carry
+   the original inbox, which is what the warranty assumes the buyer secures:
+
+   ```
+   # gold-euw.txt — one account per line
+   SmurfKing123:gamepassword
+   OtherGuy:pw2:inbox@mail.com
+   ThirdGuy:pw3:inbox2@mail.com:inboxpassword
+   ```
+
+   If a password contains a colon, write that line as `user|pass` instead. A
+   line the parser cannot split unambiguously is **reported with its number and
+   skipped**, never guessed at.
+
+3. **Load it**, once per tier and server (an account is region-locked, so the
+   shard is part of what you are loading):
+
+   ```bash
+   # against production — --force is required for a configured Upstash store
+   UPSTASH_REDIS_REST_URL=… UPSTASH_REDIS_REST_TOKEN=… \
+     python3 site/tools/stock_import.py --sku lol-gold --region EUW \
+       -f gold-euw.txt --force
+
+   python3 site/tools/stock_import.py --list     # the tier ids and the shards
+   python3 site/tools/stock_import.py --status   # what is on the shelf
+   ```
+
+   ⚠ **Shred the import file afterwards** and keep it out of the repo. It is a
+   list of live logins; `*.accounts.txt` and `site/stock-in/` are gitignored for
+   the same reason.
+
+4. **Check it** with `python3 site/tools/stock_import.py --status`, or in
+   `/ops` → Stock.
+
+   ⚠ **The shop deliberately does not show your real counts.** `/api/stock`
+   answers `204` unless you set `STOCK_PUBLIC_COUNTS=1`, so `/accounts.html`
+   keeps quoting the hand-set figures in `data.py`. The store is still enforced
+   where it matters: a sold-out tier is refused at checkout and the handover is
+   still automatic. The cost of that trade is that the page can advertise 8
+   Gold while 2 are on the shelf, and buyers three and four are turned away at
+   the till. Set `STOCK_PUBLIC_COUNTS=1` in Vercel and redeploy the day you
+   want the page to be honest about the numbers.
+
+5. **Watch the `/ops` → Stock tab.** Its first card is **"Paid, not
+   delivered"** — orders that were charged and whose handover mail did not go
+   out. That list should always be empty. Each row has a **Reveal** button
+   (the one place a password is shown, and every use is written to the function
+   log) so you can send one by hand.
+
+**What happens on a sale**, with `STRIPE_WEBHOOK_SECRET` and SMTP configured:
+Stripe calls the webhook → one unit is claimed atomically → the buyer gets the
+order confirmation *and* a second mail with the login, the password, the inbox
+and the four steps to secure it → the unit is marked sold. If the shelf is
+empty, or the mail fails, **`info@` is emailed instead** with the order number
+and what to do. Nothing fails silently.
+
+- ⚠ **Two people can no longer buy the last account.** `POST /api/checkout`
+  refuses a sold-out tier before Stripe is ever called. It only does this for a
+  (tier, shard) the store actually holds — one it has never held still sells on
+  `data.py`'s figure.
+- ⚠ **Prune the store.** The credentials of a sold account are worth stealing
+  for as long as they are stored. Run this monthly:
+
+  ```bash
+  python3 site/tools/stock_import.py --purge-sold 400 --force
+  ```
+
+  It blanks the login and password of anything sold longer ago than the
+  12-month warranty window and keeps the sale on the record.
+
+Optional env: `STOCK_PUBLIC_COUNTS` (`1` publishes the real counts on the shop
+— off by default, see step 4), `STOCK_MAX` (`20000`, the cap on stored units),
+`STOCK_LOG` (the dev file path).
+
+---
+
 ## Turn on social sign-in (Google + Discord)
 
 The header's "Continue with Google / Discord" buttons run a real OAuth
@@ -528,6 +618,12 @@ For real fulfilment you'll want to replace that seam in
 Postgres/KV, Supabase). The **email half of that is now built** — a paid order
 mails the buyer and copies the support inbox (see "Turn on email" above) — so
 even before a queue exists, no order can clear without someone being told.
+
+**Account orders are the exception: they are fully fulfilled.** The credentials
+come out of the Upstash-backed stock store and go out by mail automatically, and
+the /ops **Stock** tab is the durable record of which account went to which
+order — see "Load the accounts you sell" above. Boosts are the ones still
+waiting on a board.
 
 ---
 

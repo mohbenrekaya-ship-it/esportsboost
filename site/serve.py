@@ -73,6 +73,7 @@ import mailer     # noqa: E402  — outbound SMTP seam (support tickets, order m
 import oauth      # noqa: E402  — social sign-in (Google/Discord), also used by /api
 import ops        # noqa: E402  — gated dashboard API (also used by /api)
 import payments   # noqa: E402  — shared Stripe/pricing logic (also used by /api)
+import stock      # noqa: E402  — account credentials + the handover mail (also used by /api)
 import support    # noqa: E402  — /api/support, the contact form (also used by /api)
 import apply      # noqa: E402  — /api/apply, the become-a-booster form (also used by /api)
 
@@ -328,6 +329,21 @@ class Handler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 return
             return self._json(status, payload)
+        if route == "/api/stock":
+            # Public, anonymous read of the account-stock store — how many units
+            # of each listing are left on each shard, so the accounts shop's
+            # four stock figures follow real inventory. ⚠ COUNTS ONLY: the store
+            # behind it holds live credentials and this route is public.
+            # 204 when the store is empty so the client keeps the
+            # server-rendered data.py figures rather than blanking them.
+            status, payload = stock.process_list()
+            if payload is None:
+                self.send_response(status)
+                self.send_header("Content-Length", "0")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
+            return self._json(status, payload)
         if route == "/api/orders":
             # The signed-in customer's OWN orders, for /orders.html. Authenticated
             # by the signed session cookie alone (oauth.read_session) — the email
@@ -406,6 +422,10 @@ if __name__ == "__main__":
     print("  social sign-in → %s"
           % (", ".join(on) + " enabled" if on
              else "OFF (set GOOGLE_/DISCORD_CLIENT_ID + _SECRET to enable)"))
+    print("  account stock → %s"
+          % ("%d unit(s), %d available" % (stock.count(), stock.total_available())
+             if stock.has_data()
+             else "store EMPTY — the shop quotes data.py's hand-set counts"))
     print("  outbound mail → %s%s"
           % (mailer.status(),
              "" if not mailer.configured()

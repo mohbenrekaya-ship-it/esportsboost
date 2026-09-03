@@ -74,7 +74,17 @@ __pycache__/
 site/tools/.assetcache/
 
 # The outbox: every message sent, with its full body next to the recipient's
-# address and live discount codes. The most sensitive store on the site — same
-# rule as carts.ndjson and mystery.ndjson. Production writes to Upstash.
+# address and live discount codes. Same rule as carts.ndjson and mystery.ndjson.
+# Production writes to Upstash.
 site/maillog.ndjson
 maillog.ndjson
+
+# ⚠ The account-stock store (src/stock.py): the LOGIN AND PASSWORD of every
+# League account we hold or have sold. This is the most sensitive file the
+# project can produce — a commit of it is a handover of the inventory. Never
+# committed under any circumstances; production writes to Upstash.
+site/stock.ndjson
+stock.ndjson
+# And the import sheets themselves, which are the same secret in transit.
+*.accounts.txt
+site/stock-in/

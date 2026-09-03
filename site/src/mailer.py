@@ -200,20 +200,31 @@ def build(to, subject, text, html=None, reply_to="", sender_name=""):
     return msg
 
 
-def _log(to, subject, text, html, kind, ok, error):
+def _log(to, subject, text, html, kind, ok, error, redact=""):
     """Record one send in the outbox. Best-effort and completely isolated: a
     logging failure must never turn a delivered message into a reported error,
-    and must never stop the next one going out."""
+    and must never stop the next one going out.
+
+    ⚠ `redact` is what lets a message be *recorded* without its body being
+    *kept*. The outbox exists so anybody can answer "what did we send that
+    person", and the account handover has to appear there like everything else
+    — but its body is a live login, and the outbox is a retention-capped list
+    with no per-row deletion. So that one caller passes a replacement line
+    naming where the real credentials live, and the row still proves the mail
+    went out. Never use it to hide a body that is merely long."""
     try:
         import maillog
         maillog.record(to=to if isinstance(to, str) else ", ".join(to or []),
-                       subject=subject, text=text or "", html=html or "",
+                       subject=subject,
+                       text=redact if redact else (text or ""),
+                       html="" if redact else (html or ""),
                        kind=kind, ok=ok, error=error, sender=from_addr())
     except Exception:                                          # noqa: BLE001
         pass
 
 
-def send(to, subject, text, html=None, reply_to="", sender_name="", kind=""):
+def send(to, subject, text, html=None, reply_to="", sender_name="", kind="",
+         redact=""):
     """Send one message. Returns `(ok, error)` and **never raises** — the
     callers all have something better to do with a failure than 500.
 
@@ -230,11 +241,11 @@ def send(to, subject, text, html=None, reply_to="", sender_name="", kind=""):
     happened, and its absence would read as "we never tried".
     """
     if not configured():
-        _log(to, subject, text, html, kind, False, "mail_not_configured")
+        _log(to, subject, text, html, kind, False, "mail_not_configured", redact)
         return False, "mail_not_configured"
     msg = build(to, subject, text, html, reply_to, sender_name)
     if msg is None:
-        _log(to, subject, text, html, kind, False, "no_recipient")
+        _log(to, subject, text, html, kind, False, "no_recipient", redact)
         return False, "no_recipient"
 
     ctx = ssl.create_default_context()
@@ -252,7 +263,11 @@ def send(to, subject, text, html=None, reply_to="", sender_name="", kind=""):
                     s.ehlo()
                 elif _env("SMTP_INSECURE") != "1":
                     # A relay that cannot encrypt is a relay we do not hand a
-                    # password to. Local test relays opt in explicitly.
+                    # password to. Local test relays opt in explicitly. Logged
+                    # like every other outcome — this function's promise is that
+                    # nothing leaves (or fails to leave) without a row.
+                    _log(to, subject, text, html, kind, False,
+                         "starttls_unavailable", redact)
                     return False, "starttls_unavailable"
                 s.login(user(), password())
                 s.send_message(msg)
@@ -262,7 +277,7 @@ def send(to, subject, text, html=None, reply_to="", sender_name="", kind=""):
         sys.stderr.write("[mail] send failed after %.1fs: %s: %s\n"
                          % (time.time() - started, type(e).__name__, e))
         _log(to, subject, text, html, kind, False,
-             "%s: %s" % (type(e).__name__, e))
+             "%s: %s" % (type(e).__name__, e), redact)
         return False, "send_failed"
-    _log(to, subject, text, html, kind, True, "")
+    _log(to, subject, text, html, kind, True, "", redact)
     return True, ""

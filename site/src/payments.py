@@ -319,6 +319,32 @@ def process_checkout(raw, base_url):
         except Exception:                                       # noqa: BLE001
             pass          # a store hiccup must not block a paying customer
 
+    # ── nothing is sold that cannot be handed over ───────────────────────
+    # `pricing.account_pick()` already refuses a listing `data.py` calls sold
+    # out, but that figure is hand-set and never moves. Once the operator has
+    # loaded real credentials for a (listing, shard) the STORE is the authority
+    # for that pair, so the last unit is genuinely the last one — two buyers
+    # cannot both reach Stripe for it.
+    #
+    # ⚠ It fails OPEN, and deliberately: a pair the store has never held, and a
+    # store that cannot be reached at all, both fall back to the catalogue
+    # figure — the behaviour the shop had before this store existed. The
+    # webhook's out-of-stock alert is the backstop for the second case, and a
+    # refused checkout on a store hiccup would be a lost sale on an account we
+    # actually have.
+    if (order.get("service") or "") == "account":
+        try:
+            import stock
+            acc, shard = pricing.account_pick(order)
+            if acc and not stock.sellable(acc["id"], shard):
+                sys.stderr.write("[checkout] refused: %s is out of stock on %s\n"
+                                 % (acc["id"], shard))
+                return 409, {"error": "out_of_stock",
+                             "message": "That account has just been bought. "
+                                        "Pick another tier or another server."}
+        except Exception as e:                                  # noqa: BLE001
+            sys.stderr.write("[stock] availability check skipped: %s\n" % e)
+
     try:
         params, order_id, q = build_session(order, base_url)
         # Keyed on the order id we just minted, so a retry of THIS request
@@ -436,6 +462,26 @@ def process_webhook(raw, sig_header):
             _send_order_mail(record, md, obj)
         except Exception as e:               # noqa: BLE001 — never break fulfilment
             sys.stderr.write("order mail skipped: %s\n" % e)
+        # ⚠ THE ACCOUNT HANDOVER. This is the one product where fulfilment is
+        # the mail: a boost joins the board and a person plays it, but an
+        # account order is finished the moment the credentials arrive, and
+        # `pricing.ACCOUNT_ETA` promises that happens instantly. `stock.fulfil()`
+        # claims one unit atomically, mails it, and alerts ops when either half
+        # fails — it never raises, for the reason every other call in this block
+        # is wrapped: a non-200 here means Stripe redelivers and the order is
+        # fulfilled twice. It is idempotent per order id, so a redelivery that
+        # gets past the in-memory event de-dupe still hands over one account.
+        if md.get("service") == "account":
+            try:
+                import stock
+                res = stock.fulfil(md, record.get("order_id") or "",
+                                   record.get("email") or "")
+                sys.stderr.write("[stock] %s → %s%s\n"
+                                 % (record.get("order_id"),
+                                    "delivered" if res.get("ok") else "NOT DELIVERED",
+                                    " (%s)" % res["reason"] if res.get("reason") else ""))
+            except Exception as e:           # noqa: BLE001 — never break fulfilment
+                sys.stderr.write("[stock] handover skipped: %s\n" % e)
         sys.stderr.write("paid order → %s\n" % record.get("order_id"))
     return 200, {"received": True}
 

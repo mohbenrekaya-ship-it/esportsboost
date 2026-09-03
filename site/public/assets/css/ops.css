@@ -688,3 +688,16 @@ select.field { padding-right: 26px; }
   .ops *, .ops *::before, .ops *::after { transition: none !important; }
   .lv-dot { animation: none; }
 }
+
+/* ── Stock tab ────────────────────────────────────────────────────────────
+   Two utilities, both used where a table has to state something is wrong: an
+   undelivered handover is the one row on that tab somebody has to act on
+   today, and a revealed credential is monospaced because it is going to be
+   copied by hand into a mail. */
+.tbl .bad { color: var(--critical); }
+.tbl code {
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 1px 5px; border-radius: 4px;
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  user-select: all;
+}

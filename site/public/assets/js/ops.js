@@ -625,6 +625,12 @@
                 // the same master-detail shape as Sessions.
                 orders: null, ordersLoading: false, ordersError: null,
                 orderId: null, orderDetail: null,
+                // The account-stock store — the credentials behind the accounts
+                // shop. Its own store, fetched on demand like every other. ⚠ The
+                // list never carries a password; `revealed` holds the ones an
+                // operator has deliberately read out, for this page load only —
+                // it is never persisted to sessionStorage.
+                stock: null, stockLoading: false, stockError: null, revealed: {},
                 // The abandoned-checkout store — captured emails + the config the
                 // buyer was about to pay for. Its own store (PII), fetched on
                 // demand. Distinct from the "Abandoned" tab, which is the
@@ -717,6 +723,7 @@
           if (state.tab === "boosters") loadBoosters();
           if (state.tab === "orders" && !state.orderId) loadOrders();
           if (state.tab === "carts") loadCarts();
+          if (state.tab === "stock") loadStock();
           if (state.tab === "mystery") loadMystery();
           if (state.tab === "maildiscounts") loadMailDiscounts();
           if (state.tab === "outbox") loadOutbox();
@@ -2051,6 +2058,279 @@
     });
 
     f.appendChild(el);
+    return f;
+  }
+
+  /* ── Stock: the account credentials behind the accounts shop ──────────────
+     The one tab in this console that sits next to live secrets. Three rules
+     hold here and none is cosmetic:
+
+       * the LIST never carries a password (`stock.summary()` masks the login
+         and omits the rest) — this table answers "how much is left", and it is
+         rendered into a browser that keeps it in memory;
+       * reading one out is a separate, deliberate click per unit
+         (`stock_reveal`), logged server-side, and kept in memory for this page
+         load only — never sessionStorage, which survives the tab;
+       * the first thing on the tab is anything PAID AND NOT DELIVERED, because
+         that is a customer sitting with a receipt and no account. */
+  function loadStock() {
+    if (state.stockLoading) return;
+    state.stockLoading = true;
+    state.stockError = null;
+    api({ action: "stock", token: state.token, days: state.days }).then(function (res) {
+      state.stockLoading = false;
+      if (res.status === 200 && res.body.stock) {
+        state.stock = res.body.stock;
+      } else if (res.status === 401) {
+        toGate();
+        return;
+      } else if (res.status === 200) {
+        state.stockError = "This server doesn't serve the stock store yet — it is running an " +
+          "older build. Restart serve.py (the /api routes only reload on restart), then Refresh.";
+      } else {
+        state.stockError = "Couldn't load the stock — the server returned " + res.status + ".";
+      }
+      if (state.tab === "stock") render();
+    }).catch(function () {
+      state.stockLoading = false;
+      state.stockError = "Couldn't reach the server. Is it running?";
+      if (state.tab === "stock") render();
+    });
+  }
+
+  function revealUnit(uid) {
+    api({ action: "stock_reveal", token: state.token, unit: uid }).then(function (res) {
+      if (res.status === 401) return toGate();
+      if (res.status === 200 && res.body.unit) state.revealed[uid] = res.body.unit;
+      else state.revealed[uid] = { id: uid, error: "not found" };
+      if (state.tab === "stock") render();
+    });
+  }
+
+  function panelStock() {
+    var f = document.createDocumentFragment();
+    var a = state.stock;
+
+    if (state.stockError && !a) {
+      var er = document.createElement("div");
+      er.className = "card";
+      er.innerHTML = '<p class="empty">' + esc(state.stockError) + "</p>";
+      var retry = document.createElement("button");
+      retry.className = "btn btn-sm";
+      retry.type = "button";
+      retry.textContent = "Try again";
+      retry.style.margin = "0 auto 16px";
+      retry.style.display = "block";
+      retry.addEventListener("click", function () { state.stockError = null; loadStock(); render(); });
+      er.appendChild(retry);
+      f.appendChild(er);
+      return f;
+    }
+    if (!a) {
+      loadStock();
+      var wait = document.createElement("div");
+      wait.className = "card";
+      wait.innerHTML = '<p class="empty">Loading stock…</p>';
+      f.appendChild(wait);
+      return f;
+    }
+
+    var note = document.createElement("div");
+    note.className = "banner synthetic";
+    note.innerHTML = '<span class="ico">▲</span><div><strong>Live account credentials.</strong> ' +
+      "Every row is a real login. The list below never shows a password — reading one out is a " +
+      "separate click, and it is recorded in the server log. Load stock with " +
+      "<code>site/tools/stock_import.py</code>, and prune it with <code>--purge-sold</code>.</div>";
+    f.appendChild(note);
+
+    if (!a.total) {
+      var empty = document.createElement("div");
+      empty.className = "card";
+      empty.innerHTML = '<p class="empty">No accounts stored. The shop is quoting ' +
+        "<code>data.py</code>'s hand-set stock figures, and a paid order has nothing to hand over.<br>" +
+        "Load a batch:<br><code>python3 site/tools/stock_import.py --sku lol-gold " +
+        '--region "Europe West" -f gold-euw.txt</code></p>';
+      f.appendChild(empty);
+      return f;
+    }
+
+    // ⚠ First, because it is the only thing here that is somebody waiting.
+    var undel = a.undelivered || [];
+    if (undel.length) {
+      var un = document.createElement("div");
+      un.className = "card";
+      un.innerHTML = '<div class="card-hd"><h3>Paid, not delivered</h3></div>' +
+        '<p class="card-sub">These orders were charged and the handover mail did not go out. ' +
+        "Reveal the credentials and send them by hand.</p>";
+      var uh = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+        ["Order", "Account", "Server", "Customer", "Unit", ""].map(function (h) {
+          return "<th>" + esc(h) + "</th>"; }).join("") + "</tr></thead><tbody>";
+      undel.forEach(function (r) {
+        uh += "<tr><td>" + esc(r.order_id || "—") + "</td><td>" + esc(r.listing) + "</td>" +
+          '<td class="dim">' + esc(r.region) + "</td><td>" + esc(r.buyer || "—") + "</td>" +
+          '<td class="dim">' + esc(r.id) + "</td>" +
+          '<td><button class="btn btn-sm" type="button" data-reveal="' + esc(r.id) +
+          '">Reveal</button></td></tr>';
+      });
+      un.insertAdjacentHTML("beforeend", uh + "</tbody></table></div>");
+      f.appendChild(un);
+    }
+
+    // What has been read out on this page load, and nowhere else.
+    var revealedIds = Object.keys(state.revealed);
+    if (revealedIds.length) {
+      var rv = document.createElement("div");
+      rv.className = "card";
+      rv.innerHTML = '<div class="card-hd"><h3>Revealed credentials</h3>' +
+        '<span class="spacer"></span><button class="btn btn-sm" type="button" data-hide-revealed>' +
+        "Hide</button></div>" +
+        '<p class="card-sub">This page load only — nothing is stored in the browser. ' +
+        "Close the tab when you are done.</p>";
+      var rh = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+        ["Unit", "Account", "Server", "Login", "Password", "Inbox", "Inbox password"]
+          .map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") +
+        "</tr></thead><tbody>";
+      revealedIds.forEach(function (uid) {
+        var u = state.revealed[uid];
+        if (u.error) {
+          rh += '<tr><td class="dim">' + esc(uid) + '</td><td colspan="6">' + esc(u.error) + "</td></tr>";
+          return;
+        }
+        rh += '<tr><td class="dim">' + esc(u.id) + "</td><td>" + esc(u.listing || u.sku) + "</td>" +
+          '<td class="dim">' + esc(u.region) + "</td><td><code>" + esc(u.login) + "</code></td>" +
+          "<td><code>" + esc(u.password) + "</code></td>" +
+          "<td>" + esc(u.email || "—") + "</td>" +
+          "<td>" + (u.email_password ? "<code>" + esc(u.email_password) + "</code>" : "—") + "</td></tr>";
+      });
+      rv.insertAdjacentHTML("beforeend", rh + "</tbody></table></div>");
+      f.appendChild(rv);
+    }
+
+    var kr = document.createElement("div");
+    kr.className = "kpis";
+    kr.appendChild(kpi("Available", num(a.available), undefined, "", true));
+    kr.appendChild(kpi("Sold, all time", num(a.sold)));
+    kr.appendChild(kpi("Sold in period", num(a.sold_window)));
+    kr.appendChild(kpi("Not delivered", num(undel.length)));
+    f.appendChild(kr);
+
+    var servers = a.servers || [];
+    var listings = (a.listings || []).filter(function (r) { return r.available || r.sold; });
+    var g = document.createElement("div");
+    g.className = "grid";
+    g.appendChild(card({
+      cls: "half", title: "On the shelf, per server",
+      sub: "Units that can be sold right now.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: servers.map(function (r) { return { label: r.region, value: r.available }; }),
+          color: SERIES[0], alt: "Available per server"
+        });
+      },
+      table: {
+        head: ["Server", "Available"], num: [1],
+        rows: servers.map(function (r) { return [r.region, num(r.available)]; })
+      }
+    }));
+    g.appendChild(card({
+      cls: "half", title: "On the shelf, per tier",
+      sub: "A tier with none left refuses at checkout instead of selling.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: listings.map(function (r) { return { label: r.listing, value: r.available }; }),
+          color: SERIES[2], alt: "Available per listing"
+        });
+      },
+      table: {
+        head: ["Tier", "Available", "Sold"], num: [1, 2],
+        rows: listings.map(function (r) {
+          return [r.listing, num(r.available), num(r.sold)]; })
+      }
+    }));
+    f.appendChild(g);
+
+    // The grid the operator actually restocks from: listing × shard.
+    var grid = document.createElement("div");
+    grid.className = "card";
+    grid.innerHTML = '<div class="card-hd"><h3>Stock by tier and server</h3></div>' +
+      '<p class="card-sub">The figure the shop quotes. A tier the store has never held is ' +
+      "still sold on <code>data.py</code>'s hand-set count — those read “·”.</p>";
+    var cols = servers.map(function (s2) { return s2.code; });
+    var gh = '<div class="scroll-x"><table class="tbl"><thead><tr><th>Tier</th>' +
+      cols.map(function (c) { return '<th class="num">' + esc(c) + "</th>"; }).join("") +
+      '<th class="num">Sold</th></tr></thead><tbody>';
+    listings.forEach(function (r) {
+      gh += "<tr><td>" + esc(r.listing) + "</td>" +
+        servers.map(function (s2) {
+          // null = never loaded (still selling on data.py's count) → "·".
+          // A NUMBER, zero included, is the store's own answer.
+          var n = (r.servers || {})[s2.region];
+          return '<td class="num">' +
+            (n === null || n === undefined ? '<span class="dim">·</span>' : num(n)) + "</td>";
+        }).join("") + '<td class="num">' + num(r.sold) + "</td></tr>";
+    });
+    grid.insertAdjacentHTML("beforeend", gh + "</tbody></table></div>");
+    f.appendChild(grid);
+
+    // Every unit, newest first.
+    var rows = a.rows || [];
+    var el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML = '<div class="card-hd"><h3>Units</h3><span class="spacer"></span>' +
+      '<button class="btn btn-sm" type="button" data-export-stock>Export CSV</button></div>' +
+      '<p class="card-sub">Newest first' +
+      (a.total > rows.length ? ", first " + num(rows.length) + " of " + num(a.total) : "") +
+      ". Logins are masked; the CSV carries no credential either.</p>";
+    var head = ["Unit", "Tier", "Server", "Login", "State", "Order", "Customer", "Mailed", ""];
+    var html = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+      head.map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") + "</tr></thead><tbody>";
+    rows.forEach(function (r) {
+      var stateChip = r.status === "available"
+        ? '<span class="chip">available</span>'
+        : esc(r.status);
+      html += "<tr>" +
+        '<td class="dim">' + esc(r.id) + "</td>" +
+        "<td>" + esc(r.listing) + "</td>" +
+        '<td class="dim">' + esc(r.region) + "</td>" +
+        "<td>" + esc(r.login) + "</td>" +
+        "<td>" + stateChip + "</td>" +
+        "<td>" + esc(r.order_id || "—") + "</td>" +
+        "<td>" + esc(r.buyer || "—") + "</td>" +
+        "<td>" + (r.status !== "sold" ? '<span class="dim">—</span>'
+          : (r.mailed ? "yes" : '<b class="bad">no</b>')) + "</td>" +
+        '<td><button class="btn btn-sm" type="button" data-reveal="' + esc(r.id) +
+        '">Reveal</button></td>' +
+        "</tr>";
+    });
+    el.insertAdjacentHTML("beforeend", html + "</tbody></table></div>");
+    f.appendChild(el);
+
+    // One delegated handler for every Reveal button on the tab.
+    [].slice.call(f.querySelectorAll("[data-reveal]")).forEach(function (b) {
+      b.addEventListener("click", function () { revealUnit(b.getAttribute("data-reveal")); });
+    });
+    var hide = f.querySelector("[data-hide-revealed]");
+    if (hide) hide.addEventListener("click", function () { state.revealed = {}; render(); });
+
+    var exp = f.querySelector("[data-export-stock]");
+    if (exp) exp.addEventListener("click", function () {
+      var cols2 = ["unit", "tier", "server", "login_masked", "status", "order_id",
+                   "customer", "mailed", "note"];
+      var lines = [cols2.join(",")];
+      rows.forEach(function (r) {
+        lines.push([r.id, r.listing, r.region, r.login, r.status, r.order_id, r.buyer,
+                    r.mailed ? "yes" : "no", r.note]
+          .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; })
+          .join(","));
+      });
+      var blob = new Blob([lines.join("\n")], { type: "text/csv" });
+      var link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "esb-stock-" + new Date().toISOString().slice(0, 10) + ".csv";
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+    });
+
     return f;
   }
 
@@ -3739,6 +4019,7 @@
     overview: panelOverview, funnel: panelFunnel, configurator: panelConfigurator,
     journey: panelJourney, sessions: panelSessions, orders: panelOrders,
     carts: panelCarts,
+    stock: panelStock,
     mystery: panelMystery,
     maildiscounts: panelMailDiscounts,
     outbox: panelOutbox,
@@ -3946,6 +4227,7 @@
       if (state.tab === "boosters") loadBoosters();
       if (state.tab === "orders") loadOrders();
       if (state.tab === "carts") loadCarts();
+      if (state.tab === "stock") loadStock();
       if (state.tab === "mystery") loadMystery();
       if (state.tab === "maildiscounts") loadMailDiscounts();
     });

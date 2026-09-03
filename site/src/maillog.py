@@ -68,6 +68,11 @@ KINDS = {
     "bingo_warn": "Mystery card — reminder",
     "bingo_chase": "Mystery card — 35% last call",
     "application": "Booster application",
+    # ⚠ Recorded with its body REDACTED — see mailer._log()'s `redact`. The row
+    # proves the handover went out; the credentials themselves live once, in
+    # the stock store, where they can be purged per account.
+    "account_delivery": "Account handover — credentials",
+    "stock_alert": "Stock alert to ops",
     "test": "Test message",
     "": "Other",
 }

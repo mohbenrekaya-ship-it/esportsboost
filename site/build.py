@@ -6483,7 +6483,7 @@ def ac_server_card(sv):
         {badge}
       </span>
       <span class="ac-sv-name">{esc(region)}</span>
-      <span class="ac-sv-stock">{_ico("package", 13, "ico", stroke=True)}<b>{units}</b>
+      <span class="ac-sv-stock">{_ico("package", 13, "ico", stroke=True)}<b data-ac-sv-units>{units}</b>
         <span>in stock</span></span>
       <span class="ac-sv-foot">
         <span class="ac-sv-from"><span class="ac-sv-froml">From</span>
@@ -9933,6 +9933,7 @@ OPS_TABS = [
     ("liveview", "Live view"),
     ("overview", "Overview"), ("funnel", "Funnel"), ("configurator", "Configurator"),
     ("journey", "Journey"), ("sessions", "Sessions"), ("orders", "Orders"),
+    ("stock", "Stock"),
     ("carts", "Carts"),
     ("accounts", "Accounts"),
     ("guides", "Guides mails"),
@@ -10290,7 +10291,11 @@ def client_data():
         # `price` and `was` ship as the whole per-currency TABLE, not a figure:
         # the client picks the buyer's row exactly as pricing.py does, because
         # there is no rate between them to derive one from another.
-        "accounts": {a["id"]: {"name": a["name"], "price": a["price"],
+        # `id` is repeated inside the row as well as being the key: the live
+        # stock map (/api/stock) is keyed "<listing>|<shard>", so a listing
+        # object has to be able to name itself when it is handed round on its
+        # own — accountStock() takes the object, not the key.
+        "accounts": {a["id"]: {"id": a["id"], "name": a["name"], "price": a["price"],
                                "was": a.get("was") or 0, "stock": a["stock"],
                                "tier": a["tier"], "kind": D.account_kind(a)}
                      for a in D.ACCOUNTS},

@@ -776,12 +776,30 @@
   }
   function accountPrice(acc) { return accountRow(acc && acc.price); }
   function accountWas(acc) { return acc && acc.was ? accountRow(acc.was) : 0; }
-  /* Units of one listing on one shard. A sold-out listing stays at zero on
-     every shard — Math.max(1, …) must not resurrect it, which is the one way
-     this rounding goes wrong. */
+  /* Units of one listing on one shard — the ONE stock derivation on the
+     client, mirroring data.py's `account_stock()`.
+
+     `window.ESB_STOCK` is the live store's answer when there is one (see
+     initStock): the credentials backend counts what is actually on the shelf,
+     and once a (listing, shard) is in it, it is the authority — that is what
+     makes the last unit read as the last unit instead of a figure that never
+     moves. A pair the store has never held is NOT in the map and falls through
+     to the catalogue derivation below, so an operator who has loaded EUW and
+     not EUNE has not taken EUNE off sale. `hasOwnProperty` is what carries a
+     genuine ZERO through: a sold-out pair is present and 0, and `||` would
+     read it as absent and resurrect the hand-set figure.
+
+     A sold-out listing stays at zero on every shard — Math.max(1, …) must not
+     resurrect it, which is the one way this rounding goes wrong. */
   function accountStock(acc, sv) {
-    var base = acc && acc.stock ? acc.stock : 0;
-    if (base <= 0 || !sv) return 0;
+    if (!acc || !sv) return 0;
+    var live = window.ESB_STOCK;
+    if (live) {
+      var k = (acc.id || "") + "|" + sv.region;
+      if (Object.prototype.hasOwnProperty.call(live, k)) return live[k];
+    }
+    var base = acc.stock ? acc.stock : 0;
+    if (base <= 0) return 0;
     return Math.max(1, Math.round(base * sv.share));
   }
   function accountUnitsOn(sv) {
@@ -2191,6 +2209,7 @@
     initReviews();
     initCatalog();
     initAccounts();
+    initStock();
     // Hydrates its own paint (esbHydrate calls render), so it does not have to
     // beat the render() above — but it must run before the first user input, or
     // an edit on checkout would be made against the wrong order.
@@ -3475,6 +3494,15 @@
       var chosen = !!sv;
       step1.hidden = chosen;
       step2.hidden = !chosen;
+      // Step 1's own counts, which are the same claim as the card counts one
+      // screen later — four figures, one derivation (see data.py's ⚠). They
+      // are painted whether or not a server is chosen, because the reader comes
+      // back to this screen through "Change server".
+      each("[data-ac-server]", null, function (b) {
+        var svc = accountServer(b.getAttribute("data-ac-server"));
+        var out = b.querySelector("[data-ac-sv-units]");
+        if (svc && out) out.textContent = accountUnitsOn(svc);
+      });
       if (!chosen) return;
 
       each("[data-ac-server-name]", null, function (n) { n.textContent = sv.region; });
@@ -3618,7 +3646,31 @@
       });
     });
 
+    // initStock() calls this once the live counts land, the same contract
+    // `window.esbRefreshRoster` has with initBoosters().
+    window.esbRefreshAccounts = paint;
     paint();
+  }
+
+  /* The live stock read. Progressive enhancement, exactly like initBoosters():
+     the page is already a complete, priced, correctly-stocked shop from
+     data.py's figures, and this replaces those counts with what the
+     credentials store actually holds. A 204 (empty store), a non-200 or a
+     network failure leaves the server-rendered figures in place — the counts
+     never blank.
+
+     ⚠ The endpoint serves COUNTS. There is no client-side anything here that
+     could ask it for more: the payload shape is a flat map of numbers. */
+  function initStock() {
+    if (!document.querySelector("[data-ac-shop]")) return;
+    fetch("/api/stock", { headers: { Accept: "application/json" } })
+      .then(function (r) { return r.status === 200 ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.units) return;         // 204 / empty store → keep the fallback
+        window.ESB_STOCK = data.units;
+        if (window.esbRefreshAccounts) window.esbRefreshAccounts();
+      })
+      .catch(function () {});                     // network error → keep the fallback
   }
 
   /* One order object for an account listing, built from DEFAULT so every field

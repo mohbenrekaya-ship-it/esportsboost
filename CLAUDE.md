@@ -23,6 +23,11 @@ OPS_PASSWORD=some-long-password python3 site/serve.py 4321
 python3 site/tools/seed_analytics.py --clear --days 70 --sessions 1600   # synthetic traffic
 python3 site/tools/seed_analytics.py --clear --sessions 900 --accounts 40 # + synthetic header sign-ups
 python3 site/tools/seed_boosters.py --clear   # fill the roster store from data.py's BOOSTERS
+
+# the accounts actually sold at /accounts.html — the credentials store
+python3 site/tools/stock_import.py --status                                    # what is on the shelf
+python3 site/tools/stock_import.py --sku lol-gold --region EUW -f gold.txt     # load user:pass lines
+python3 site/tools/stock_import.py --purge-sold                                # prune old credentials
 ```
 
 `.claude/launch.json` defines an `esportsboost` preview server on port 4321 — start it with the
@@ -33,13 +38,16 @@ and rebuild after every source edit; there is no watcher and no HMR.
 like production. It also hosts the **Stripe payment API** the checkout page calls — see
 [Payments](#payments-stripe) below. With no `STRIPE_SECRET_KEY` set it stays a plain static preview.
 
-Verification is: the four test files pass — `python3 site/tests/test_pricing.py` (the pricing engine,
+Verification is: the five test files pass — `python3 site/tests/test_pricing.py` (the pricing engine,
 the bundle rules, the JS/Python mirror, the currency charge, the checkout payload and the
 accounts shop — its per-shard price, the cents invariant that stops a $77.99 card being charged as
 $78, the single stock derivation behind its four on-screen figures, its sold-out refusal and what
 its order records), `python3
 site/tests/test_mail.py` (header injection, the honeypot, the rate cap and the two order mails),
-`python3 site/tests/test_carts.py` (abandoned-checkout capture and the recovery token) and `python3
+`python3 site/tests/test_carts.py` (abandoned-checkout capture and the recovery token),
+`python3 site/tests/test_stock.py` (the account stock store — one claim per unit, idempotent per
+order, the sold-out refusal at checkout, and that no public payload carries a credential) and
+`python3
 site/tests/test_mystery.py` (the mystery-discount token, its hour, one-card-per-inbox, the copy
 rule that keeps the flat deck honest, and the follow-up: revive-not-reissue, one chase ever, and the
 per-hour claim that drops itself when it stops arguing for the order, the halfway
@@ -1149,14 +1157,14 @@ resolver and `build.py`, `quote()` and `payments.build_session()` all read the c
   replacement liability on every account sold, and a claim costs the acquisition price of a
   replacement. Same standing as `SAFETY`'s measure notes and `GUARANTEE`'s refund windows: falsifiable
   by a single bad order. It needs a claims process and a budget line behind it.
-- ⚠ **Stock is hand-set and NOTHING decrements it.** There is no listing store. So the counts on the
-  page go stale the moment two people buy on one build, and the only place a sold-out listing can be
-  stopped is `account_pick()`, on the server, at the moment somebody tries to pay for it —
-  per shard, because stock is a per-shard figure. `app.js`'s branch makes the same refusal for the
-  UI. **The next thing to build here is a real listing store** — an eighth store sibling of
-  analytics / accounts / boosters / orders / carts / mystery / guides, operator-write and
-  public-read, exactly the shape `boosters.py` has. Until it exists fulfilment is manual: the webhook
-  records the listing id and the shard, and an operator hands over one set of credentials.
+- **Stock is real now — see [The account stock store](#the-account-stock-store--stockpy-the-credentials-and-the-handover).**
+  `stock.py` holds the credentials, `payments.process_checkout()` refuses a listing it cannot hand
+  over, and the webhook claims one unit and mails it. ⚠ **The figures below are still what the PAGE
+  shows** — publishing the real counts is behind `STOCK_PUBLIC_COUNTS` and is off by the business's
+  call, so these hand-set numbers remain the four on-screen stock claims and still go stale the
+  moment two people buy on one build. They are also the per-(listing, shard) fallback for the sale
+  itself wherever the store has never held that pair, which is what lets stock be loaded one tier at
+  a time.
 - ⚠ **Accounts are the ONE product priced in cents**, and that is why `pricing.charge_for()` grew a
   `cents` path. Every boosting total is a whole unit and is charged as one (`round(total × rate)`),
   which is invisible on an integer; a $77.99 account rounded the same way is a buyer clicking $77.99
@@ -1294,6 +1302,110 @@ cosmetic:
   account is stored as 78. Stripe and the customer's mail are exact to the cent; only /ops reporting
   rounds. Fixing it means widening `orders.py`'s integer schema — revenue, AOV, the CSV and the
   console all read it as an int.
+
+## The account stock store — `stock.py`, the credentials and the handover
+
+`src/stock.py` is the **eighth store sibling** of analytics / accounts / boosters / orders / carts /
+mystery / guides, and the thing the accounts shop was shipped without: the accounts themselves. It
+closes the ⚠ that stood in `data.py` from the day that page launched — *"stock is a count and
+nothing decrements it … fulfilment is manual: the webhook records the listing id and an operator
+hands over one set of credentials"*. Both halves are built now.
+
+```
+user:pass sheet ──stock_import.py──► esb:stock ──► GET /api/stock ──► the shop's four counts
+                                        │
+     checkout ──► sellable()? ──refuse──┤
+                                        │
+  Stripe webhook (paid) ──► claim() (atomic, idempotent) ──► the handover mail ──► the buyer
+                                        └── nothing left? ──► an alert to ops
+```
+
+- **The format is `user:pass`, one account per line**, with two optional fields —
+  `user:pass:inbox@mail.com:inboxpassword`. `#` comments and blank lines are skipped. The separator
+  is chosen **per line** (tab, `|`, `;`, then `:`), so a password containing a colon is imported as
+  `user|pass`; a line that splits into more fields than the format has is **reported with its line
+  number, never guessed at**, because a silently truncated password is discovered by the customer.
+- **`tools/stock_import.py` is the operator's whole interface**: `--status` (what is on the shelf),
+  `--sku`/`--region`/`-f` (load a batch, or paste on stdin), `--dry-run`, `--reveal`, `--restock` (a
+  refunded order's account goes back on sale), `--hold`, `--purge-sold`, `--clear`. Writing to a
+  configured **Upstash** store needs `--force`, the same guard the seeders have — but this is the
+  one tool whose `--force` you use in anger, because that is where real inventory lives.
+- ⚠ **This is the most sensitive store on the site.** Every row is a live login. Three rules carry
+  that and none is cosmetic: **no public route returns a credential** (`/api/stock` serves counts,
+  and `public_counts()` is the allowlist); **the /ops list masks the login and omits the password**,
+  with a per-unit `stock_reveal` action as the one deliberate exception, logged to stderr when it is
+  used; and **the handover mail's body is redacted in the outbox** through `mailer.send(...,
+  redact=…)`, so /ops can prove the mail went out without keeping a second copy of the password in a
+  retention-capped list with no per-row deletion. `site/stock.ndjson` is gitignored, and so is
+  `*.accounts.txt` — the sheet you import from is the same secret in transit.
+- ⚠ **Credentials are stored in PLAINTEXT and they have to be**: the mail reproduces them, so there
+  is nothing to compare against and a hash is useless. The store's access control is therefore the
+  whole protection — Upstash in production, never the file store on a shared box — and
+  **`--purge-sold` is what bounds the blast radius**. It blanks the login and password of anything
+  sold past the warranty window and keeps the row, so the sale is still auditable. Run it on a
+  schedule; without it the store's exposure is every account ever sold.
+- **The claim is ATOMIC, because a double-sold account cannot be un-sold.** Available unit ids sit
+  in a per-(listing, shard) **LIST** and a claim is one `LPOP`; the row itself lives in the HASH.
+  Two webhooks arriving together get two different rows or one of them gets nothing — which a
+  read-modify-write over a HASH could not promise.
+- **It is idempotent per order.** `esb:stock:orders` maps order id → unit id, so a redelivered
+  webhook is handed the SAME account back rather than burning a second one. That matters because
+  `payments._seen_event()` is in-memory and does not survive a cold start, which is exactly what a
+  serverless function does between retries. `fulfil()` additionally refuses to **re-send** a unit
+  that is already marked mailed: one handover per unit, or a replay is a second copy of somebody's
+  password in flight.
+- ⚠ **`PAIRS_KEY` is what tells "sold out" apart from "never loaded", and both halves of the site
+  depend on it.** `available_map()` reports an explicit **0** for a pair the store has held and
+  **omits** one it never has; `sellable()` and the client's own `accountStock()` read that
+  difference. Get it wrong and a listing that sold out an hour ago goes back on sale at `data.py`'s
+  hand-set figure on the next page load — which is what happened the first time this was built, and
+  what `test_sold_out_is_reported_as_a_zero_never_as_a_gap()` now holds.
+- **The store is the authority only once it holds something, and PER PAIR.** An operator who has
+  loaded EUW and not EUNE has not taken EUNE off sale: a pair the store has never held still sells
+  on the catalogue figure, exactly as the shop did before this existed. There is no feature flag —
+  loading the first batch turns it on and clearing the store turns it off.
+- **Two guards, at the two moments that matter.** `payments.process_checkout()` refuses an account
+  the store cannot hand over **before** a Stripe session is created (409 `out_of_stock`, with copy
+  that sends the buyer to another tier or shard); and the webhook's `stock.fulfil()` is what
+  actually takes it off the shelf. The checkout guard **fails open** — a store it cannot reach falls
+  back to the catalogue figure, because a refused checkout on a store hiccup is a lost sale on an
+  account we do have, and the webhook's out-of-stock alert is the backstop for the other direction.
+- **The handover mail is the fulfilment**, and it is a separate message from the order
+  confirmation — which already says the credentials are on their way and points at the walkthrough
+  in this one. ⚠ **The four steps are ordered against the warranty's own assumption**: the inbox
+  first, its password, then the game account's email, then its password last. Do not reorder them so
+  the game password comes first — the recovery address is what an original owner would use to take
+  the account back.
+- **Two failures are mailed to ops rather than swallowed**: a paid order with nothing left to hand
+  over, and a handover whose mail did not go out. Both name the order, the customer and the unit id,
+  because the fix in each case is a person sending credentials by hand out of the /ops **Stock**
+  tab — whose first card is exactly that list, "Paid, not delivered".
+- **`stock.fulfil()` never raises.** It is called from inside the Stripe webhook, where an exception
+  is a non-200, which is a redelivery, which is a second fulfilment. `test_fulfil_never_raises()`
+  walks it with junk.
+- ⚠ **The shop does NOT publish real stock, and that is a business decision (2026-09-03).**
+  `PUBLIC_COUNTS` in stock.py is off unless `STOCK_PUBLIC_COUNTS=1`, so `/api/stock` answers **204**
+  and `initStock()` in app.js keeps every server-rendered `data.py` figure — the four counts on the
+  page stay the hand-set marketing ones. **What it does not switch off is the store**: `sellable()`
+  still refuses a sold-out (listing, shard) at checkout and the webhook still claims and mails a real
+  account. So the page can advertise 8 Gold while 2 are on the shelf, and the third buyer is refused
+  at the till with "that account has just been bought" rather than charged for something nobody can
+  hand over. That trade is the point of the flag; flipping it to `1` is the whole change the day the
+  counts should be real, because the client already treats a 200 as authoritative and a 204 as "keep
+  the fallback".
+- **The live path is built and tested behind that flag.** `accountStock()` on the client is still the
+  ONE derivation; the live map sits in front of it, and `hasOwnProperty` is what carries a genuine
+  zero through where `||` would resurrect the hand-set figure. ⚠ One thing to settle before the flag
+  is flipped: with real inventory most tiers sit at or under `AC_SCARCE` (3), so most cards would
+  draw the scarce state — "Reserve", "verified in 12 h" — while the handover is now genuinely
+  instant. That is a copy decision, not a bug.
+- **Restart the server after touching this file** — `/api/stock` lives in `serve.py` and the `stock`
+  / `stock_reveal` actions in `ops.py`; there is no watcher. `api/stock.py` is the Vercel shell. Env
+  knobs: `STOCK_PUBLIC_COUNTS` (off — see the ⚠ above), `STOCK_LOG` (the dev file), `STOCK_MAX`.
+- **Tests**: `python3 site/tests/test_stock.py` — the claim being at most once and idempotent per
+  order, the sold-out refusal at checkout, the zero-vs-gap rule, that no public payload carries a
+  credential, that the outbox row is redacted, and the `user:pass` parser including its ambiguity
+  error.
 
 ## The sticky mobile checkout bar (`.mobile-bar`)
 
@@ -2753,6 +2865,8 @@ public/assets/js/analytics.js  ──►  POST /api/collect  ──►  src/anal
 | `site/src/accounts.py` | The header sign-up list — a **separate** store, `POST /api/account` to write, `ops.py`'s `accounts` action to read. Holds name + email, never a password. The *moment* an account is made is in the analytics stream instead — see [the account flow](#the-account-flow-in-the-session-timeline). |
 | `site/src/boosters.py` | The roster store — another **separate** store (operator-write / public-read), `GET /api/boosters` to read, `ops.py`'s `boosters` action for the console. See [The roster store](#the-roster-store--boosters-in-the-backend). |
 | `site/tools/seed_boosters.py` | Fills the roster store from `data.py`'s `BOOSTERS` (tags rows `syn`). |
+| `site/src/stock.py` | **The account stock store** — the League credentials behind `/accounts.html`, and the handover mail sent when a payment clears. Its own store again (`esb:stock`), operator-write / public-read, and the only one holding live logins. `GET /api/stock` serves COUNTS ONLY; `ops.py`'s `stock` action → the /ops **Stock** tab, and `stock_reveal` is the one gated route that returns a credential. Filled by `tools/stock_import.py`. See [The account stock store](#the-account-stock-store--stockpy-the-credentials-and-the-handover). |
+| `site/tools/stock_import.py` | Loads `user:pass` sheets into the stock store, plus `--status` / `--reveal` / `--restock` / `--purge-sold`. |
 | `site/src/mystery.py` | The mystery-discount store — a **separate** store again, `POST /api/bingo` to capture + issue, `GET /api/bingo?token=` to resolve, `ops.py`'s `mystery` action to read. Holds an email next to a live single-use discount. See [The mystery discount](#the-mystery-discount--mysterypy--the-modal-on-every-game-page). |
 | `site/src/maillog.py` | **The outbox** — every message the site actually sent, with its body. Written from inside `mailer.send()`, the one SMTP seam, so nothing can send without appearing; failures are recorded too. `ops.py`'s `outbox` action → the /ops **Outbox** tab. Append-only (LIST), retention-capped, and the most sensitive store here: a recipient's address next to a live discount code. |
 | `site/src/followup.py` | The second mystery mail — revives a lapsed card to 35% and chases it once, on the same cron as the cart sweep. Composes its own message; shares only `mailer.py`'s transport. See [The follow-up](#the-follow-up--followuppy-one-second-mail-on-a-lapsed-card). |

@@ -38,6 +38,7 @@ import maillist
 import maillog
 import mystery
 import orders
+import stock
 
 TOKEN_TTL = 12 * 3600      # a working day, then log in again
 MIN_PASSWORD = 12          # refuse to protect the dashboard with less
@@ -300,6 +301,34 @@ def process_ops(raw):
         # be its own liability and its own deletion path. PII, so it is fetched
         # on demand like Accounts and Carts.
         return 200, {"maildiscounts": maillist.summary(days)}
+
+    if action == "stock":
+        # The account-stock store — how many credentials are on the shelf per
+        # (listing, shard), what has sold, and what a paid order never received.
+        # Fetched on demand like every other store tab. ⚠ `stock.summary()`
+        # never carries a password: the list is rendered into a browser, and
+        # the question this tab answers is "how much is left", not "what is the
+        # login". Reading one out is the separate, deliberate action below.
+        return 200, {"stock": stock.summary(days)}
+
+    if action == "stock_reveal":
+        # ⚠ THE ONE ROUTE THAT RETURNS A LIVE CREDENTIAL, and the only reason it
+        # exists is the case nothing else can resolve: a paid order whose
+        # handover mail did not go out, which an operator has to send by hand.
+        # Behind the ops token like everything else here, one unit at a time,
+        # never in a list — and logged, because a credential read is a thing
+        # somebody should be able to account for afterwards.
+        uid = body.get("unit")
+        if not isinstance(uid, str) or not uid.startswith("u_"):
+            return 400, {"error": "bad_unit"}
+        row = stock.reveal(uid)
+        if row is None:
+            return 404, {"error": "not_found"}
+        time_now = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
+        import sys as _sys
+        _sys.stderr.write("[stock] credentials revealed in /ops: %s (%s)\n"
+                          % (uid, time_now))
+        return 200, {"unit": row}
 
     if action == "orders":
         # The orders store — the receipts fulfilment writes (and the seeder
