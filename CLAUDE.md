@@ -1376,6 +1376,26 @@ user:pass sheet ──stock_import.py──► esb:stock ──► GET /api/stoc
   first, its password, then the game account's email, then its password last. Do not reorder them so
   the game password comes first — the recovery address is what an original owner would use to take
   the account back.
+- ⚠ **The Stock tab is the console's ONE write surface, and the only exception to a rule the rest
+  of /ops keeps.** Everything else there reports — the Boosters tab says outright that writes go
+  through a tool, not the console, and analytics must never be editable. These four actions
+  (`stock_add` / `stock_update` / `stock_delete` / `stock_status`) are deliberate, because the
+  alternative is that an operator with a paid order and an empty shelf needs a shell on the box.
+  They are behind the same token as every other action, they touch one store, and **every one of
+  them writes a stderr line** — a credential added, changed or removed has to be answerable
+  afterwards, the same reason a reveal is logged. Delete is the only confirm dialog in the console,
+  and it earns it.
+- **A product opens into its keys.** Clicking a tier opens `slot(sku, region)` — master-detail, the
+  shape Sessions and Orders use — with a paste box for `user:pass` lines, and Reveal / Edit /
+  Off sale / Delete per key. The list stays masked; a password is still one deliberate reveal.
+  **An import reports the lines it REFUSED with their numbers**, because "12 added" over a paste of
+  15 is how a truncated password reaches a customer. Every write re-reads the slot from its own
+  response, so what is on screen after an edit is the store's answer and never a local guess.
+- ⚠ **Deleting the last row of a pair forgets the pair** (`_forget_if_untouched`). A slot with
+  nothing in it is indistinguishable from one never stocked, and holding it "known" would pin it at
+  zero — permanently refusing orders behind a page still advertising it. A *sold* row is what
+  normally keeps a pair known, so deleting one deletes the evidence of that sale along with the
+  credential; the confirm dialog says so.
 - **The /ops Stock tab is organised BY SERVER, one at a time**, the way the shop's own two-step
   purchase is — an account is region-locked, so every stocking decision is about one shard and one
   tier, and a four-column matrix made you read across a row to answer the only question the tab gets

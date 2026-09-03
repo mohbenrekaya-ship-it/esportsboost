@@ -41,6 +41,8 @@
   (GEO.euCountries || []).forEach(function (c) { EU_COUNTRIES[c] = 1; });
   var ZONE_CUR = GEO.zoneCur || {};
   var REGION_CUR = GEO.curCountries || {};
+  var ZONE_LANG = GEO.langZones || {};
+  var REGION_LANG = GEO.langCountries || {};
 
   function zone() {
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; }
@@ -147,6 +149,39 @@
     return LANG_CUR[lang] || "USD";
   }
 
+  /* ── a location implies a language too ────────────────────────────────────
+     The site shipped in English to every visitor on earth, so a French buyer's
+     first act on the page was correcting the one control that decides whether
+     they can read it. This is `defaultCurrency()`'s twin and it reads the same
+     three signals in the same order, against geo.LANG_COUNTRIES rather than
+     the currency tables:
+
+       0. the edge's own country, from the `esb_geo` cookie — the only signal
+          that follows the CONNECTION, so the one a VPN or a roaming SIM gets
+          right;
+       1. the browser's IANA timezone, which says where the machine IS;
+       2. the locale's region subtag, for a browser that reports no zone.
+
+     Deliberately NOT the browser's language list. `navigator.language` says
+     what the machine is set to, which is English on a great many French
+     machines and is exactly the reason the site was in English for them. The
+     business's rule is the location, and the dropdown is one tap away.
+
+     A DEFAULT only: a visitor who picks a language pins it (`langPinned`) and
+     the pin wins forever after — same contract as `curPinned`. */
+  function defaultLang() {
+    var cc = cookieCountry();
+    if (cc) return REGION_LANG[cc] || "en";
+    var tz = zone();
+    if (tz && ZONE_LANG[tz]) return ZONE_LANG[tz];
+    // A zone we could not place cannot fall through to the locale — a French
+    // browser in Montreal or Brussels would be read as France. Only a browser
+    // with no usable zone at all gets the region subtag.
+    if (tz) return "en";
+    var reg = uiRegion();
+    return (reg && REGION_LANG[reg]) || "en";
+  }
+
   /* ── the currencies, and the rate each is charged at ──────────────────────
      Fixed FX rate for both the displayed price AND the Stripe charge. The amount
      is recomputed server-side (pricing.py) in USD, then converted to the picked
@@ -158,13 +193,20 @@
   var RATES = window.ESB_RATES = { USD: 1, EUR: 0.92, GBP: 0.79 };
 
   /* ── persisted locale, read synchronously so app.js sees it ───────────── */
-  var locale = { lang: "en", currency: "USD", curPinned: false };
+  var locale = { lang: "en", currency: "USD", curPinned: false, langPinned: false };
   try {
     var raw = localStorage.getItem(LKEY);
     if (raw) {
       var s = JSON.parse(raw);
       if (s && (s.lang === "en" || s.lang === "fr" || s.lang === "de")) locale.lang = s.lang;
       if (s && RATES[s.currency]) locale.currency = s.currency;
+      // Same migration the currency makes below, and for the same reason: under
+      // the old code English was the default for every visitor in every region,
+      // so a stored "en" is not evidence of a choice and a returning French
+      // visitor — the whole case this fixes — would be read as having picked it.
+      // Only a stored non-English can have come from a click on the dropdown.
+      locale.langPinned = (s && typeof s.langPinned === "boolean") ? s.langPinned
+        : !!(s && s.lang && s.lang !== "en");
       // Records written before this default existed carry no flag, and the test
       // is NOT "does it disagree with the language" — under the old code USD was
       // the default in every language and in every region, so a stored USD tells
@@ -176,8 +218,12 @@
         : !!(s && s.currency && s.currency !== "USD");
     }
   } catch (e) {}
-  // Resolved here, not in init(), because app.js reads ESB_LOCALE.currency on
-  // its first quote — deriving it later would paint the page in $ and swap it.
+  // Resolved here, not in init(), because app.js reads ESB_LOCALE.currency and
+  // .lang on its first quote — deriving either later would paint the page in
+  // English dollars and swap it. The language is settled FIRST, so the currency
+  // ladder's last resort (LANG_CUR) reads the language this visitor will
+  // actually be shown rather than the one they were about to stop being on.
+  if (!locale.langPinned) locale.lang = defaultLang();
   if (!locale.curPinned) locale.currency = defaultCurrency(locale.lang);
   window.ESB_LOCALE = locale;
 
@@ -485,7 +531,7 @@
       "From": "À partir de",
       "from": "à partir de",
       "Configure your boost": "Configure ton boost",
-      "Watch a live boost": "Voir un boost en direct",
+      "Buy LoL accounts": "Acheter des comptes LoL",
       "Continue your order": "Reprends ta commande",
 
       /* home hero — the utility bar's roster count and the spotlight card.
@@ -2271,7 +2317,7 @@
       "From": "Ab",
       "from": "ab",
       "Configure your boost": "Konfiguriere deinen Boost",
-      "Watch a live boost": "Live-Boost ansehen",
+      "Buy LoL accounts": "LoL-Accounts kaufen",
       "Continue your order": "Bestellung fortsetzen",
 
       /* home hero — see the note on the French block above. */
@@ -3903,8 +3949,12 @@
     });
   }
 
-  function applyLang(lang) {
+  function applyLang(lang, pinned) {
     locale.lang = lang;
+    // Only a click pins. Applying the stored or geo-resolved language at boot
+    // must not, or a default could never be moved by a later visit from
+    // somewhere else — the same rule applyCurrency() follows.
+    if (pinned) locale.langPinned = true;
     document.documentElement.setAttribute("lang", lang);
     // The language carries its currency with it until the visitor pins one, so
     // switching to French re-quotes the whole page in euros. Set before the walk
@@ -4065,7 +4115,7 @@
     loc.querySelectorAll(".loc-opt").forEach(function (opt) {
       var pick = function () {
         var val = opt.getAttribute("data-value");
-        if (kind === "language") applyLang(val.toLowerCase());
+        if (kind === "language") applyLang(val.toLowerCase(), true);
         else applyCurrency(val, true);
         persist();
         syncAll();
@@ -4099,8 +4149,9 @@
     document.addEventListener("click", closeMenus);
 
     // apply stored preferences (currency first so esbRender picks up both).
-    // locale.currency was already resolved against the language at parse time,
-    // so a French visitor with no pick of their own arrives on EUR here.
+    // Both were already resolved at parse time — against the visitor's own pick
+    // if they have one, else against where they are — so a visitor in France
+    // with no pick of their own arrives on French and euros here.
     if (locale.currency !== "USD") applyCurrency(locale.currency);
     if (locale.lang !== "en") applyLang(locale.lang);
   }

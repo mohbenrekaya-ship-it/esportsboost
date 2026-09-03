@@ -178,6 +178,15 @@ def dashboard_data(days=30, game=None, synthetic=False, start=None, end=None,
     return payload
 
 
+def _log_write(what):
+    """Every stock write leaves a line. The store holds live credentials, so
+    "who changed what" has to be answerable from the function log — the same
+    reason a reveal is logged."""
+    import sys
+    sys.stderr.write("[stock] /ops write: %s (%s)\n"
+                     % (what, time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())))
+
+
 def process_ops(raw):
     """POST /api/ops → (status, payload).
 
@@ -329,6 +338,74 @@ def process_ops(raw):
         _sys.stderr.write("[stock] credentials revealed in /ops: %s (%s)\n"
                           % (uid, time_now))
         return 200, {"unit": row}
+
+    # ── the stock WRITE actions ───────────────────────────────────────────
+    # ⚠ The console is read-only everywhere else on purpose — Boosters says so
+    # outright, and analytics must never be editable. These four are the
+    # deliberate exception, because the alternative is worse: an operator with
+    # a paid order and an empty shelf otherwise needs a shell on the box. They
+    # are behind the same token as everything here, they touch ONE store, and
+    # every one of them writes a stderr line, so a credential that is added,
+    # changed or removed is a thing somebody can account for afterwards.
+    if action in ("stock_slot", "stock_add", "stock_update", "stock_delete",
+                  "stock_status"):
+        sku = body.get("sku")
+        region = body.get("region")
+        uid = body.get("unit")
+        if action == "stock_slot":
+            det = stock.slot(sku if isinstance(sku, str) else "",
+                             region if isinstance(region, str) else "")
+            if det is None:
+                return 400, {"error": "bad_slot"}
+            return 200, {"slot": det}
+
+        if action == "stock_add":
+            text = body.get("text")
+            if not isinstance(text, str) or not text.strip():
+                return 400, {"error": "empty"}
+            if len(text) > stock.MAX_IMPORT * 400:
+                return 400, {"error": "too_big"}
+            note = body.get("note")
+            res = stock.process_import(
+                sku if isinstance(sku, str) else "",
+                region if isinstance(region, str) else "", text,
+                note=note if isinstance(note, str) else "")
+            _log_write("added %d unit(s) to %s/%s" % (res["added"], sku, region))
+            det = stock.slot(sku, region)
+            return 200, {"result": res, "slot": det}
+
+        if not isinstance(uid, str) or not uid.startswith("u_"):
+            return 400, {"error": "bad_unit"}
+
+        if action == "stock_delete":
+            row = stock.delete(uid)
+            if row is None:
+                return 404, {"error": "not_found"}
+            _log_write("DELETED unit %s (%s/%s)"
+                       % (uid, row.get("sku"), row.get("region")))
+            return 200, {"slot": stock.slot(row.get("sku"), row.get("region"))}
+
+        if action == "stock_status":
+            want = body.get("status")
+            if want == "held":
+                row = stock.hold(uid)
+            elif want == "available":
+                row = stock.restock(uid)
+            else:
+                return 400, {"error": "bad_status"}
+            if row is None:
+                return 404, {"error": "not_found"}
+            _log_write("unit %s → %s" % (uid, want))
+            return 200, {"slot": stock.slot(row.get("sku"), row.get("region"))}
+
+        fields = body.get("fields")
+        if not isinstance(fields, dict):
+            return 400, {"error": "bad_fields"}
+        row = stock.update(uid, fields)
+        if row is None:
+            return 400, {"error": "rejected"}
+        _log_write("edited unit %s (%s/%s)" % (uid, row.get("sku"), row.get("region")))
+        return 200, {"slot": stock.slot(row.get("sku"), row.get("region"))}
 
     if action == "orders":
         # The orders store — the receipts fulfilment writes (and the seeder

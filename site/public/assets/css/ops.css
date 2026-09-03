@@ -701,3 +701,23 @@ select.field { padding-right: 26px; }
   background: color-mix(in srgb, var(--muted) 14%, transparent);
   user-select: all;
 }
+
+/* ── Stock: the slot editor, the console's one write surface ──────────────
+   Everything else here reports; this one takes credentials in, so the fields
+   are full-width and monospaced (a login is copied, not read) and the row
+   actions sit on one line so Delete can never land where Reveal was. */
+.card > .field { display: block; width: 100%; margin: 0 0 10px; }
+textarea.ta {
+  min-height: 120px; resize: vertical; line-height: 1.55;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+}
+.row-actions { white-space: nowrap; text-align: right; }
+.row-actions .btn { margin-left: 6px; }
+.edit-row {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; padding: 10px 0 4px;
+}
+.edit-row label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 11px; color: var(--muted); flex: 1 1 160px;
+}
+.edit-row .field { margin: 0; width: 100%; }

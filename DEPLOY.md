@@ -500,7 +500,13 @@ traffic.
    the till. Set `STOCK_PUBLIC_COUNTS=1` in Vercel and redeploy the day you
    want the page to be honest about the numbers.
 
-5. **Watch the `/ops` → Stock tab.** Its first card is **"Paid, not
+5. **Or skip the shell entirely.** `/ops` → **Stock** lists all 11 tiers on each
+   of the 4 servers; click one and you get a paste box for `user:pass` lines
+   plus Reveal / Edit / Off sale / Delete on every key. It is the same store
+   and the same validation as the tool — including the per-line errors — so use
+   whichever suits. Every write is recorded in the function log.
+
+6. **Watch the `/ops` → Stock tab.** Its first card is **"Paid, not
    delivered"** — orders that were charged and whose handover mail did not go
    out. That list should always be empty. Each row has a **Reveal** button
    (the one place a password is shown, and every use is written to the function

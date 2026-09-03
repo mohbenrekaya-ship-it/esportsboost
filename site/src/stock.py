@@ -721,6 +721,175 @@ def purge_sold(older_than_days=400):
     return done
 
 
+def update(uid, fields):
+    """Edit one unit's credentials. Returns the row, or None.
+
+    ⚠ Only the credential fields — a status change is `hold()` / `restock()`
+    and a removal is `delete()`, because both of those have to move the claim
+    queue and this must not. Editing the login also moves it in `LOGIN_KEY`, or
+    the old one keeps blocking a re-import and the new one is not protected
+    from being added twice.
+    """
+    row = get(uid)
+    if not row:
+        return None
+    old_login = row.get("login", "")
+    out = {}
+    for k in ("login", "password", "email", "email_password"):
+        if k in fields:
+            out[k] = _s(fields[k])
+    if "note" in fields:
+        out["note"] = _s(fields["note"], MAX_NOTE)
+    if not out:
+        return row
+    if "login" in out and not out["login"]:
+        return None                      # a unit with no login is not a unit
+    if "password" in out and not out["password"]:
+        return None
+    row.update(out)
+    row["edited"] = int(time.time())
+    if not put(row):
+        return None
+    if _up() and out.get("login") and out["login"] != old_login:
+        try:
+            analytics._upstash([
+                ["SREM", LOGIN_KEY, "%s|%s|%s" % (row["sku"], row["region"], old_login.lower())],
+                ["SADD", LOGIN_KEY, _login_key(row)]])
+        except analytics.StoreError:
+            pass
+    return row
+
+
+def delete(uid):
+    """Remove one unit outright. Returns the row it removed, or None.
+
+    Takes the id out of the claim queue as well as the store, so a delete can
+    never leave an id that resolves to nothing — `claim()` skips those, but only
+    for a bounded number of tries, and enough of them would look like an empty
+    shelf on a full one.
+
+    ⚠ **Deleting the LAST row of a pair — of any status — forgets the pair.**
+    A slot with nothing in it at all is indistinguishable from one that was
+    never stocked, and holding it "known" would pin it at zero: permanently off
+    sale, behind a page still advertising it, with no way back except adding
+    keys. A *sold* row is what normally keeps a pair known (that is genuinely
+    sold out, and it must not fall back to the hand-set figure) — so deleting a
+    sold row deletes the evidence of the sale along with the credential, which
+    is what the console's confirm dialog warns about. See `known_pairs()` for
+    why this distinction is the whole basis of the fallback."""
+    row = get(uid)
+    if not row:
+        return None
+    sku, region = row.get("sku", ""), row.get("region", "")
+    if _up():
+        cmds = [["HDEL", LIST_KEY, uid],
+                ["LREM", queue_key(sku, region), 0, uid],
+                ["SREM", LOGIN_KEY, _login_key(row)]]
+        if row.get("order_id"):
+            cmds.append(["HDEL", ORDER_KEY, row["order_id"]])
+        try:
+            analytics._upstash(cmds)
+        except analytics.StoreError:
+            return None
+    else:
+        store = _read_file()
+        store.pop(uid, None)
+        if not _write_file(store):
+            return None
+    _forget_if_untouched(sku, region)
+    return row
+
+
+def _forget_if_untouched(sku, region):
+    """Drop a (listing, shard) out of `PAIRS_KEY` once no row of it remains at
+    all — see the ⚠ on `delete()`."""
+    if available(sku, region):
+        return False
+    for r in read():
+        if r.get("sku") == sku and r.get("region") == region:
+            return False              # a sold or held row is still a row
+    if _up():
+        try:
+            analytics._upstash([["SREM", PAIRS_KEY, "%s|%s" % (sku, region)]])
+        except analytics.StoreError:
+            return False
+    return True                       # the file store derives pairs from rows
+
+
+def slot(sku, region):
+    """One product on one server: the 44th of the board, opened.
+
+    Everything the console needs to stock and manage that pair — the catalogue
+    facts, both counts (what we hold and what the page advertises), and the
+    units themselves, **masked**. A password is still one deliberate `reveal()`
+    per unit from here."""
+    a = D.account(sku)
+    if not a or not region_ok(region):
+        return None
+    rows = [r for r in read()
+            if r.get("sku") == sku and r.get("region") == region]
+    rows.sort(key=lambda r: (r.get("status") != AVAILABLE, -_int(r.get("at"))))
+    n_avail = sum(1 for r in rows if r.get("status") == AVAILABLE)
+    return {
+        "sku": sku,
+        "listing": a["name"],
+        "tier": a["tier"],
+        "kind": D.account_kind(a),
+        "region": region,
+        "code": D.account_code(region),
+        "known": known(sku, region),
+        "available": n_avail,
+        "sold": sum(1 for r in rows if r.get("status") == SOLD),
+        "held": sum(1 for r in rows if r.get("status") == HELD),
+        # What /accounts.html advertises for this pair. Hand-set in data.py and
+        # published while PUBLIC_COUNTS is off, which is exactly why the console
+        # shows both numbers side by side.
+        "shown": D.account_stock(a, region),
+        "public_counts": PUBLIC_COUNTS,
+        "undelivered": sum(1 for r in rows
+                           if r.get("status") == SOLD and not _int(r.get("mailed"))
+                           and not _int(r.get("purged"))),
+        "rows": [_public_row(r) for r in rows],
+    }
+
+
+def slots():
+    """All 44 — every listing on every server, with both counts. The board."""
+    amap = available_map()
+    pairs = known_pairs()
+    sold = [r for r in read() if r.get("status") == SOLD]
+    out = []
+    for a in D.ACCOUNTS:
+        for rg in D.ACCOUNT_REGIONS:
+            key = "%s|%s" % (a["id"], rg)
+            out.append({
+                "sku": a["id"], "listing": a["name"], "tier": a["tier"],
+                "kind": D.account_kind(a), "region": rg, "code": D.account_code(rg),
+                "known": key in pairs,
+                "available": amap.get(key, 0) if key in pairs else None,
+                "sold": sum(1 for r in sold
+                            if r.get("sku") == a["id"] and r.get("region") == rg),
+                "shown": D.account_stock(a, rg),
+            })
+    return out
+
+
+def process_import(sku, region, text, note=""):
+    """The console's add-keys action: parse `user:pass` lines and store them.
+
+    Returns what the operator needs to see — how many landed, how many were
+    already there, and every line that was refused **with its number**, because
+    an import of 300 accounts has to say which three to fix."""
+    rows, errors = parse_lines(text, sku, region, note=note)
+    res = {"added": 0, "duplicate": 0,
+           "errors": [{"line": n, "message": m} for n, m in errors]}
+    if rows:
+        got = add(rows)
+        res["added"] = got["added"]
+        res["duplicate"] = got["duplicate"]
+    return res
+
+
 def reveal(uid):
     """One unit's full credentials. **The only function that returns a
     password**, and the only caller is the ops console behind its token."""

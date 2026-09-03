@@ -157,6 +157,37 @@ EU_COUNTRIES = frozenset(
 )
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  which language a country's traffic is shown in by default
+# ══════════════════════════════════════════════════════════════════════════
+# The site ships three languages and opened in English for every visitor on
+# earth, so a French buyer's first act on the page was correcting the one
+# control that decides whether they can read it. This is the language half of
+# `currency_for()`, and it is a country map for the same reason: a location is
+# a market, where a browser's language list is only what the machine is set to.
+#
+# ⚠ It is deliberately NARROW — one entry, France. Every country listed here is
+# a claim that our translation of that language is the one its readers expect,
+# and only French and German are written at all (see the register-and-voice
+# rules in CLAUDE.md). Adding Germany, Belgium, Austria or Switzerland is one
+# line each; it is a business call, not a technical one, because a Belgian
+# quoted in the French of France and a Swiss reader handed `du` are both
+# decisions somebody owns.
+#
+# It sets a DEFAULT only. A visitor who opens the language dropdown pins their
+# pick, and that pin outranks this forever after — same contract as the
+# currency's `curPinned` and the server's `regionPicked`.
+LANG_COUNTRIES = {
+    "FR": "fr",
+}
+
+
+def language_for(code):
+    """The language a country's traffic is shown in by default, or "" when it
+    is one we have no opinion about (which the caller reads as English)."""
+    return LANG_COUNTRIES.get(str(code or "").strip().upper(), "")
+
+
 def currency_for(code):
     """The currency a country's traffic is quoted and charged in by default."""
     code = str(code or "").strip().upper()

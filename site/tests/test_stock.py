@@ -325,6 +325,83 @@ def test_an_order_with_nothing_to_hand_over_is_reported():
     check(len(alerts) >= 1, "and an alert to ops is logged (SMTP off -> recorded as failed)")
 
 
+# -- the console's write path ---------------------------------------------
+def test_there_are_44_slots_whether_or_not_they_are_stocked():
+    reset()
+    all_slots = stock.slots()
+    check(len(all_slots) == len(D.ACCOUNTS) * len(D.ACCOUNT_REGIONS),
+          "every listing x every server is a slot (%d), stocked or not"
+          % (len(D.ACCOUNTS) * len(D.ACCOUNT_REGIONS)))
+    check(all(s["shown"] >= 0 and "available" in s for s in all_slots),
+          "each carries both figures — what we hold and what the site advertises")
+    check(all(s["available"] is None for s in all_slots),
+          "an unstocked slot's shelf count is None, not 0 — the same "
+          "never-loaded/sold-out distinction the public map draws")
+    one = stock.slot(SKU, REGION)
+    check(one and one["listing"] and one["code"] and one["rows"] == [],
+          "and one opens with its catalogue facts and an empty key list")
+    check(stock.slot("nope", REGION) is None and stock.slot(SKU, "Mars") is None,
+          "a slot that is not in the catalogue does not exist")
+
+
+def test_add_edit_delete_a_key():
+    reset()
+    res = stock.process_import(SKU, REGION, "alpha:pw1\nbeta:pw2:in@x.com\nbroken")
+    check(res["added"] == 2 and len(res["errors"]) == 1,
+          "add reports what landed AND which line was refused, with its number")
+    check(res["errors"][0]["line"] == 3, "the line number is the one in the paste")
+
+    uid = stock.slot(SKU, REGION)["rows"][0]["id"]
+    row = stock.update(uid, {"login": "renamed", "password": "newpw", "note": "checked"})
+    check(row and row["login"] == "renamed" and row["password"] == "newpw",
+          "edit rewrites the credential")
+    check(stock.get(uid)["note"] == "checked", "and the note beside it")
+    check(stock.update(uid, {"password": ""}) is None,
+          "but a unit cannot be edited into having no password")
+    check(stock.available(SKU, REGION) == 2, "editing never moves the shelf count")
+
+    check(stock.delete(uid) is not None, "delete removes it")
+    check(stock.available(SKU, REGION) == 1 and stock.get(uid) is None,
+          "and it comes off the shelf with it — not left as a dead id in the queue")
+    again = stock.add(stock.parse_lines("renamed:pw", SKU, REGION)[0])
+    check(again["added"] == 1,
+          "a deleted login can be added again — the dedupe set let go of it too")
+
+
+def test_emptying_a_slot_completely_puts_it_back_on_the_catalogue_figure():
+    """Otherwise a slot stocked, emptied and never sold from is pinned at zero:
+    permanently refusing orders behind a page that still advertises it, with no
+    way back except adding keys."""
+    reset()
+    load(1)
+    check(stock.known(SKU, REGION) and not stock.sellable(SKU, REGION) is False,
+          "a stocked pair is known")
+    uid = stock.slot(SKU, REGION)["rows"][0]["id"]
+    stock.delete(uid)
+    check(not stock.known(SKU, REGION),
+          "emptying it entirely forgets the pair")
+    check(stock.sellable(SKU, REGION),
+          "so it sells on data.py's figure again rather than refusing for ever")
+    load(2)
+    stock.claim(SKU, REGION, order_id="ESB-KEPT")
+    check(stock.known(SKU, REGION) and stock.available(SKU, REGION) == 1,
+          "a sold row keeps the pair known while it is still there")
+
+
+def test_hold_takes_a_unit_off_sale_without_losing_it():
+    reset()
+    load(2)
+    uid = stock.slot(SKU, REGION)["rows"][0]["id"]
+    stock.hold(uid)
+    check(stock.available(SKU, REGION) == 1, "a held unit is off the shelf")
+    check(stock.get(uid)["status"] == "held", "but still stored")
+    claimed = [stock.claim(SKU, REGION, order_id="ESB-H%d" % i) for i in range(2)]
+    check(claimed[0] and claimed[0]["id"] != uid and claimed[1] is None,
+          "and can never be claimed while it is held")
+    stock.restock(uid)
+    check(stock.available(SKU, REGION) == 1, "putting it back returns it to the shelf")
+
+
 def test_one_handover_per_unit():
     reset()
     load(1)
@@ -378,6 +455,10 @@ def main():
                test_the_delivery_mail_states_the_credentials,
                test_the_handover_is_redacted_in_the_outbox,
                test_an_order_with_nothing_to_hand_over_is_reported,
+               test_there_are_44_slots_whether_or_not_they_are_stocked,
+               test_add_edit_delete_a_key,
+               test_emptying_a_slot_completely_puts_it_back_on_the_catalogue_figure,
+               test_hold_takes_a_unit_off_sale_without_losing_it,
                test_one_handover_per_unit, test_fulfil_never_raises, test_purge_keeps_the_sale_and_drops_the_secret):
         print("\n" + fn.__name__)
         fn()

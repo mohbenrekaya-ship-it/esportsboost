@@ -4926,7 +4926,7 @@ def page_home():
       <p class="lede">{esc(H['lede'])}</p>
       <div class="btn-row hero-h-cta">
         <a class="btn btn-primary" href="/games">Configure your boost{_ico("arrow", 15, "ico", stroke=True)}</a>
-        <a class="btn btn-secondary" href="#live">{_ico("play", 18, "hero-h-play", evenodd=True)}Watch a live boost</a>
+        <a class="btn btn-secondary" href="{ACCOUNTS_HREF}">{_ico("user-dashed", 17, "hero-h-ico", stroke=True)}Buy LoL accounts</a>
       </div>
       <div class="hero-h-proof">
         {guarantee_row()}
@@ -10279,6 +10279,17 @@ def client_data():
             # The locale fallback, for a browser that reports no timezone.
             "curCountries": dict(geo.CUR_COUNTRIES),
             "euCountries": sorted(geo.EU_COUNTRIES),
+            # Language by location — the same three signals again, and derived
+            # from geo.LANG_COUNTRIES so there is no second copy of the rule.
+            # `langZones` is the timezone half, carried in full rather than as a
+            # prefix rule: there is no prefix that means "France" the way
+            # `Europe/…` means "the euro", and the map is one entry per listed
+            # country. Both are empty maps the moment LANG_COUNTRIES is, so the
+            # client falls back to English with no special case.
+            "langCountries": dict(geo.LANG_COUNTRIES),
+            "langZones": {z: geo.LANG_COUNTRIES[c]
+                          for z, c in geo.TZ_COUNTRY.items()
+                          if c in geo.LANG_COUNTRIES},
         },
         "addons": D.ADDONS,
         "promos": D.PROMOS,

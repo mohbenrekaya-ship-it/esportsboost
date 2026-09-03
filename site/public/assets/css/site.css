@@ -2011,8 +2011,8 @@ body.hd-locked {
 .hero-h-cta .btn-secondary:hover {
   border-color: rgba(255, 90, 31, .5); background: rgba(255, 90, 31, .08); color: #ffd0b0;
 }
-.hero-h-play { color: #ff8a3d; flex: none; }
-.hero-h-cta .btn-secondary:hover .hero-h-play { color: inherit; }
+.hero-h-ico { color: #ff8a3d; flex: none; }
+.hero-h-cta .btn-secondary:hover .hero-h-ico { color: inherit; }
 
 /* ── proof ─────────────────────────────────────────────────────────────── */
 /* Three chips, on ONE line wherever the column can hold it. They are three

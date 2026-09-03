@@ -636,6 +636,14 @@
                 // is region-locked and a stock decision is only ever about one
                 // shard. null = the first server in the payload.
                 stockServer: null,
+                // The open product, master-detail like Sessions and Orders:
+                // {sku, region} plus the slot payload the server returns. This
+                // is the one place in the console that WRITES, so the detail is
+                // always re-read from the response of the write rather than
+                // patched client-side — the store is the authority on what a
+                // slot holds after an edit.
+                slot: null, slotDetail: null, slotBusy: false, slotMsg: null,
+                slotEdit: null,
                 // The abandoned-checkout store — captured emails + the config the
                 // buyer was about to pay for. Its own store (PII), fetched on
                 // demand. Distinct from the "Abandoned" tab, which is the
@@ -2103,6 +2111,48 @@
     });
   }
 
+  /* The 44th product, opened. Every write below re-reads the slot from its own
+     response, so the list a operator is looking at is the store's answer and
+     never a local guess about what the store now holds. */
+  function openSlot(sku, region) {
+    state.slot = { sku: sku, region: region };
+    state.slotDetail = null;
+    state.slotMsg = null;
+    state.slotEdit = null;
+    render();
+    stockCall("stock_slot", { sku: sku, region: region });
+  }
+
+  function closeSlot() {
+    state.slot = null; state.slotDetail = null; state.slotMsg = null;
+    state.slotEdit = null;
+    loadStock();                       // the board's counts moved while we were in
+    render();
+  }
+
+  function stockCall(action, extra, onDone) {
+    if (state.slotBusy) return;
+    state.slotBusy = true;
+    var body = { action: action, token: state.token };
+    for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) body[k] = extra[k];
+    api(body).then(function (res) {
+      state.slotBusy = false;
+      if (res.status === 401) return toGate();
+      if (res.body && res.body.slot) state.slotDetail = res.body.slot;
+      if (res.status !== 200) {
+        state.slotMsg = { bad: true, text: "The server refused that: " +
+          ((res.body && res.body.error) || res.status) + "." };
+      } else if (onDone) {
+        onDone(res.body);
+      }
+      render();
+    }).catch(function () {
+      state.slotBusy = false;
+      state.slotMsg = { bad: true, text: "Couldn't reach the server." };
+      render();
+    });
+  }
+
   function revealUnit(uid) {
     api({ action: "stock_reveal", token: state.token, unit: uid }).then(function (res) {
       if (res.status === 401) return toGate();
@@ -2113,6 +2163,7 @@
   }
 
   function panelStock() {
+    if (state.slot) return panelSlot();
     var f = document.createDocumentFragment();
     var a = state.stock;
 
@@ -2324,7 +2375,8 @@
     listings.forEach(function (r) {
       var n = (r.servers || {})[sv.region];
       var shown = (r.shown || {})[sv.region];
-      gh += "<tr><td>" + esc(r.listing) + "</td>" +
+      gh += '<tr><td><button type="button" class="link-btn" data-slot="' + esc(r.sku) +
+        '">' + esc(r.listing) + "</button></td>" +
         '<td class="dim">' + esc(r.kind || "") + "</td>" +
         '<td class="num">' +
           (n === null || n === undefined ? '<span class="dim">·</span>'
@@ -2335,10 +2387,14 @@
     gh += "</tbody></table></div>";
     grid.insertAdjacentHTML("beforeend", gh);
     grid.insertAdjacentHTML("beforeend",
-      '<p class="card-sub">Stock a tier on ' + esc(sv.code) + ' with<br>' +
-      '<code>python3 site/tools/stock_import.py --sku &lt;tier id&gt; --region ' +
-      esc(sv.code) + " -f accounts.txt</code>" +
-      "</p>");
+      '<p class="card-sub">Click a tier to add, edit or remove its keys. From a ' +
+      "shell it is <code>python3 site/tools/stock_import.py --sku &lt;tier id&gt; " +
+      "--region " + esc(sv.code) + " -f accounts.txt</code></p>");
+    [].slice.call(grid.querySelectorAll("[data-slot]")).forEach(function (b) {
+      b.addEventListener("click", function () {
+        openSlot(b.getAttribute("data-slot"), sv.region);
+      });
+    });
     f.appendChild(grid);
 
     // Every unit, newest first. Nothing to draw on an empty store — the board
@@ -2407,6 +2463,256 @@
       setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
     });
 
+    return f;
+  }
+
+  /* ── One product on one server: add, edit, delete its keys ────────────────
+     The console's ONE write surface. Three rules it keeps:
+
+       * a password is never in the list — the rows are masked exactly as the
+         board's are, and Reveal is still one deliberate click per unit;
+       * every write re-reads the slot from its own response, so what is on
+         screen after an edit is the store's answer, not a local guess;
+       * an import reports the lines it REFUSED with their numbers. Pasting 300
+         accounts and being told "12 added" without hearing about the other
+         three is how a truncated password reaches a customer. */
+  function panelSlot() {
+    var f = document.createDocumentFragment();
+    var d = state.slotDetail;
+
+    var back = document.createElement("button");
+    back.className = "btn btn-sm back-btn";
+    back.type = "button";
+    back.textContent = "← All products";
+    back.addEventListener("click", closeSlot);
+    f.appendChild(back);
+
+    if (!d) {
+      var wait = document.createElement("div");
+      wait.className = "card";
+      wait.innerHTML = '<p class="empty">Loading product…</p>';
+      f.appendChild(wait);
+      return f;
+    }
+
+    var head = document.createElement("div");
+    head.className = "card";
+    head.innerHTML =
+      '<div class="card-hd"><h3>' + esc(d.listing) + " · " + esc(d.region) + "</h3>" +
+      '<span class="spacer"></span><span class="chip">' + esc(d.code) + "</span>" +
+      '<span class="chip">' + esc(d.kind) + "</span></div>" +
+      '<p class="card-sub">' +
+      "<b>" + num(d.available) + "</b> on the shelf · <b>" + num(d.sold) + "</b> sold" +
+      (d.held ? " · <b>" + num(d.held) + "</b> off sale" : "") +
+      " · the site advertises <b>" + num(d.shown) + "</b> here" +
+      (d.public_counts ? "" : " (<code>data.py</code>'s figure — real counts are unpublished)") +
+      ".</p>" +
+      (d.undelivered
+        ? '<p class="card-sub"><b class="bad">' + num(d.undelivered) +
+          " sold unit(s) here were never mailed.</b> Reveal them and send by hand.</p>"
+        : "") +
+      (d.known && !d.available
+        ? '<p class="card-sub"><b class="bad">Nothing left on this server.</b> ' +
+          "Checkout refuses this tier on " + esc(d.code) + " until you add keys — the " +
+          "page still advertises " + num(d.shown) + ".</p>"
+        : "") +
+      (!d.known
+        ? '<p class="card-sub">Never stocked here. An order for it is <b>taken anyway</b>, ' +
+          "against the advertised figure, and has nothing behind it — add keys, or expect to " +
+          "refund.</p>"
+        : "");
+    f.appendChild(head);
+
+    if (state.slotMsg) {
+      var msg = document.createElement("div");
+      msg.className = "banner" + (state.slotMsg.bad ? " synthetic" : "");
+      msg.innerHTML = '<span class="ico">' + (state.slotMsg.bad ? "▲" : "✓") + "</span><div>" +
+        state.slotMsg.text + "</div>";
+      f.appendChild(msg);
+    }
+
+    // ── add keys ─────────────────────────────────────────────────────────
+    var addCard = document.createElement("div");
+    addCard.className = "card";
+    addCard.innerHTML = '<div class="card-hd"><h3>Add accounts</h3></div>' +
+      '<p class="card-sub">One per line, <code>user:pass</code>. Two optional fields carry the ' +
+      "original inbox: <code>user:pass:inbox@mail.com:inboxpassword</code>. If a password " +
+      "contains a colon write that line as <code>user|pass</code>. Lines starting with " +
+      "<code>#</code> are ignored.</p>";
+    var ta = document.createElement("textarea");
+    ta.className = "field ta";
+    ta.rows = 6;
+    ta.spellcheck = false;
+    ta.placeholder = "SmurfKing123:gamepassword\nOtherGuy:pw2:inbox@mail.com";
+    addCard.appendChild(ta);
+    var noteIn = document.createElement("input");
+    noteIn.className = "field";
+    noteIn.type = "text";
+    noteIn.placeholder = "Note on this batch (optional) — e.g. bought 3 Sep, seller X";
+    addCard.appendChild(noteIn);
+    var addBtn = document.createElement("button");
+    addBtn.className = "btn";
+    addBtn.type = "button";
+    addBtn.textContent = state.slotBusy ? "Adding…" : "Add to " + d.code;
+    addBtn.disabled = !!state.slotBusy;
+    addBtn.addEventListener("click", function () {
+      var text = ta.value;
+      if (!text.trim()) return;
+      stockCall("stock_add", { sku: d.sku, region: d.region, text: text,
+                               note: noteIn.value || "" }, function (b) {
+        var r = (b && b.result) || {};
+        var parts = [num(r.added || 0) + " added"];
+        if (r.duplicate) parts.push(num(r.duplicate) + " already stored");
+        var errs = r.errors || [];
+        state.slotMsg = {
+          bad: !!errs.length,
+          text: "<strong>" + parts.join(", ") + ".</strong>" +
+            (errs.length
+              ? " " + num(errs.length) + " line(s) refused: " +
+                errs.slice(0, 6).map(function (e) {
+                  return "line " + e.line + " — " + esc(e.message);
+                }).join("; ") + (errs.length > 6 ? "; …" : "") +
+                " Fix those and paste them again."
+              : "")
+        };
+      });
+    });
+    addCard.appendChild(addBtn);
+    f.appendChild(addCard);
+
+    // ── the keys ─────────────────────────────────────────────────────────
+    var list = document.createElement("div");
+    list.className = "card";
+    list.innerHTML = '<div class="card-hd"><h3>Keys</h3><span class="spacer"></span>' +
+      '<span class="chip">' + num((d.rows || []).length) + " stored</span></div>" +
+      '<p class="card-sub">Available first. Logins are masked — Reveal shows one, and every ' +
+      "reveal is written to the server log.</p>";
+
+    if (!(d.rows || []).length) {
+      list.insertAdjacentHTML("beforeend",
+        '<p class="empty">No keys here yet. Paste some above.</p>');
+      f.appendChild(list);
+      return f;
+    }
+
+    var tbl = document.createElement("table");
+    tbl.className = "tbl";
+    tbl.innerHTML = "<thead><tr>" +
+      ["Unit", "Login", "State", "Order", "Mailed", ""].map(function (h) {
+        return "<th>" + esc(h) + "</th>";
+      }).join("") + "</tr></thead>";
+    var tb = document.createElement("tbody");
+
+    (d.rows || []).forEach(function (r) {
+      var tr = document.createElement("tr");
+      var shown = state.revealed[r.id];
+      tr.innerHTML =
+        '<td class="dim">' + esc(r.id) + "</td>" +
+        "<td>" + (shown && !shown.error
+          ? "<code>" + esc(shown.login) + "</code> <code>" + esc(shown.password) + "</code>" +
+            (shown.email ? " <span class=\"dim\">" + esc(shown.email) + "</span>" : "")
+          : esc(r.login)) + "</td>" +
+        "<td>" + (r.status === "available" ? '<span class="chip">available</span>'
+          : esc(r.status)) + "</td>" +
+        "<td>" + esc(r.order_id || "—") + "</td>" +
+        "<td>" + (r.status !== "sold" ? '<span class="dim">—</span>'
+          : (r.mailed ? "yes" : '<b class="bad">no</b>')) + "</td>";
+
+      var act = document.createElement("td");
+      act.className = "row-actions";
+      [["Reveal", function () { revealUnit(r.id); }],
+       ["Edit", function () { state.slotEdit = r.id; revealUnit(r.id); }],
+       [r.status === "held" ? "Put back" : "Off sale", function () {
+         if (r.status === "sold") return;
+         stockCall("stock_status", { unit: r.id,
+           status: r.status === "held" ? "available" : "held" });
+       }],
+       ["Delete", function () {
+         // Irreversible and it is a real account, so it asks — the only
+         // confirm in the console, and it earns it.
+         if (!window.confirm("Delete " + r.id + " from " + d.listing + " · " + d.code +
+             "?\n\nThis removes the account from the shelf for good. If it was sold, the " +
+             "record of that sale goes with it.")) return;
+         delete state.revealed[r.id];
+         stockCall("stock_delete", { unit: r.id }, function () {
+           state.slotMsg = { text: "<strong>Deleted.</strong> " + esc(r.id) + " is gone." };
+         });
+       }]].forEach(function (pair) {
+        if (pair[0] === "Off sale" && r.status === "sold") return;
+        if (pair[0] === "Put back" && r.status !== "held") return;
+        var b = document.createElement("button");
+        b.className = "btn btn-sm";
+        b.type = "button";
+        b.textContent = pair[0];
+        b.disabled = !!state.slotBusy;
+        b.addEventListener("click", pair[1]);
+        act.appendChild(b);
+      });
+      tr.appendChild(act);
+      tb.appendChild(tr);
+
+      // The edit form opens under its own row, filled from the reveal.
+      if (state.slotEdit === r.id) {
+        var ed = document.createElement("tr");
+        var cell = document.createElement("td");
+        cell.colSpan = 6;
+        if (!shown || shown.error) {
+          cell.innerHTML = '<p class="card-sub">Reading the current values…</p>';
+        } else {
+          var fields = [["login", "Login"], ["password", "Password"],
+                        ["email", "Account inbox"], ["email_password", "Inbox password"],
+                        ["note", "Note"]];
+          var wrap = document.createElement("div");
+          wrap.className = "edit-row";
+          var inputs = {};
+          fields.forEach(function (fl) {
+            var lab = document.createElement("label");
+            lab.textContent = fl[1];
+            var inp = document.createElement("input");
+            inp.className = "field";
+            inp.type = "text";
+            inp.spellcheck = false;
+            inp.value = shown[fl[0]] || "";
+            inputs[fl[0]] = inp;
+            lab.appendChild(inp);
+            wrap.appendChild(lab);
+          });
+          var save = document.createElement("button");
+          save.className = "btn";
+          save.type = "button";
+          save.textContent = "Save";
+          save.disabled = !!state.slotBusy;
+          save.addEventListener("click", function () {
+            var payload = {};
+            for (var k in inputs) payload[k] = inputs[k].value;
+            stockCall("stock_update", { unit: r.id, fields: payload }, function () {
+              state.slotEdit = null;
+              delete state.revealed[r.id];
+              state.slotMsg = { text: "<strong>Saved.</strong> " + esc(r.id) + " updated." };
+            });
+          });
+          var cancel = document.createElement("button");
+          cancel.className = "btn btn-sm";
+          cancel.type = "button";
+          cancel.textContent = "Cancel";
+          cancel.addEventListener("click", function () {
+            state.slotEdit = null; render();
+          });
+          wrap.appendChild(save);
+          wrap.appendChild(cancel);
+          cell.appendChild(wrap);
+        }
+        ed.appendChild(cell);
+        tb.appendChild(ed);
+      }
+    });
+
+    tbl.appendChild(tb);
+    var scroll = document.createElement("div");
+    scroll.className = "scroll-x";
+    scroll.appendChild(tbl);
+    list.appendChild(scroll);
+    f.appendChild(list);
     return f;
   }
 
