@@ -1033,17 +1033,12 @@ def deliver(row, buyer, order_id="", md=None):
     return ok, err
 
 
-# ⚠ A BUSINESS COMMITMENT, and it is one line to remove. When we take money for
-# an account we cannot hand over, this mail offers the buyer a refund rather
-# than only a wait. `pricing.ACCOUNT_ETA` promised them instant delivery and the
-# confirmation they have already read says the credentials are on their way —
-# so the alternative to offering the refund is asking somebody to wait an
-# unstated length of time for something they were told they already had. Set it
-# False if the business would rather handle refunds case by case; the rest of
-# the mail stands on its own.
-BACKORDER_OFFER_REFUND = True
-
-
+# ⚠ THIS MAIL DOES NOT OFFER A REFUND, and that is the business's decision
+# (2026-09-03), not an oversight. It shipped with the offer for one revision and
+# was taken out. Do not put it back as a "fix": a buyer who wants one asks in
+# either of the two places this mail sends them, and it is handled case by case
+# there. What the mail must keep is the honesty either side of it — it names
+# what went wrong, it points at a person, and it never invents a time.
 def _backorder_text(order_id, listing, region, discord):
     return """Your payment went through. One thing about the handover:
 
@@ -1060,12 +1055,10 @@ The fastest way to get them
   %s
 
 You can also just reply to this mail with that order number and we will send
-them here instead.%s
+them here instead.
 
 eSports Boost
-""" % (order_id or "", listing, region, order_id or "your order number", discord,
-       ("\n\nIf you would rather not wait, say so in either place and we will "
-        "refund\nthe order in full.") if BACKORDER_OFFER_REFUND else "")
+""" % (order_id or "", listing, region, order_id or "your order number", discord)
 
 
 def _backorder_html(order_id, listing, region, discord):
@@ -1075,9 +1068,6 @@ def _backorder_html(order_id, listing, region, discord):
         'font-size:14px;font-weight:600">%s</td></tr>' % (_esc(k), _esc(v))
         for k, v in (("Order", order_id or ""), ("Account", listing),
                      ("Server", region)) if str(v).strip())
-    refund = ('<p style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#4a4a55">'
-              "If you would rather not wait, say so in either place and we will refund the "
-              "order in full.</p>") if BACKORDER_OFFER_REFUND else ""
     return """<!doctype html><html><body style="margin:0;padding:24px;background:#f5f5f7;
  font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
 <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;
@@ -1100,12 +1090,11 @@ def _backorder_html(order_id, listing, region, discord):
   <p style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#4a4a55">
    You can also just reply to this mail with that order number and we will send them
    here instead.</p>
-  %s
 </td></tr>
 <tr><td style="padding:14px 26px 22px;border-top:1px solid #ececf1;font-size:12px;color:#8a8a95">
   eSports Boost
 </td></tr>
-</table></body></html>""" % (rows, _esc(discord), refund)
+</table></body></html>""" % (rows, _esc(discord))
 
 
 def notify_backorder(order_id, sku, region, buyer):
@@ -1121,7 +1110,7 @@ def notify_backorder(order_id, sku, region, buyer):
 
     It never states a time. Nothing in the system knows when the next unit
     arrives, and a made-up "within 2 hours" would be the second promise broken
-    in the same order."""
+    in the same order. It does not offer a refund either — see the ⚠ above."""
     import mailer
     if not mailer.valid(buyer or ""):
         return False, "no_recipient"

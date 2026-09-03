@@ -436,6 +436,8 @@ def test_an_empty_shelf_sends_the_buyer_to_discord():
     check("reply" in body.lower(), "and a reply-by-mail route for anyone not on Discord")
     check("hour" not in body.lower() and "minute" not in body.lower(),
           "it never invents a time — nothing here knows when the next unit lands")
+    check("refund" not in body.lower(),
+          "and it does not offer a refund — the business's call, taken out on purpose")
     alerts = [r for r in maillog.read()
               if r.get("kind") == "stock_alert" and "ESB-NOSTOCK" in json.dumps(r)]
     check(alerts and "Discord" in json.dumps(alerts[0]),

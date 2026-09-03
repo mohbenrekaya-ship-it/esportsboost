@@ -1442,8 +1442,9 @@ user:pass sheet ──stock_import.py──► esb:stock ──► GET /api/stoc
   account over (`D.DISCORD_URL`), quotes the order number they have to give, and offers a
   reply-by-mail route for anybody not on Discord. **It never states a time**: nothing in the system
   knows when the next unit lands, and an invented "within two hours" would be the second promise
-  broken on one order. `BACKORDER_OFFER_REFUND` is the one business commitment in it and is one line
-  to remove.
+  broken on one order. ⚠ **It does not offer a refund either** — it shipped with that offer for one
+  revision and the business took it out (2026-09-03); a buyer who wants one asks in either of the
+  two places the mail sends them. Do not add it back as a "fix".
 - **`stock.fulfil()` never raises.** It is called from inside the Stripe webhook, where an exception
   is a non-200, which is a redelivery, which is a second fulfilment. `test_fulfil_never_raises()`
   walks it with junk.
