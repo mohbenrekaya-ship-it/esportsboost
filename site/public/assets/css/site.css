@@ -8702,10 +8702,31 @@ html.myd-open .mobile-bar { display: none; }
   width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
   border-radius: 10px; cursor: pointer; background: rgba(255, 255, 255, .03);
   border: 1px solid rgba(255, 255, 255, .12); color: #e7e2dd;
+  transition: border-color .16s ease, background .16s ease, color .16s ease, transform .12s ease;
 }
+/* FORWARD carries the accent, back stays a ghost. Seven of the eleven tiers are
+   off-screen to the right on the first page, so the two arrows are not the same
+   invitation and the tinted one is the direction worth taking. The pair also had
+   no hover state at all — the control never answered the pointer — which is what
+   the three rules under this actually fix. */
+.ac-arrow[data-ac-next] {
+  border-color: rgba(255, 90, 31, .45); background: rgba(255, 90, 31, .1); color: #ffb887;
+}
+.ac-arrow[data-ac-next]:hover:not([disabled]) {
+  border-color: rgba(255, 90, 31, .7); background: rgba(255, 90, 31, .18); color: #ffd9c2;
+}
+.ac-arrow[data-ac-prev]:hover:not([disabled]) { border-color: rgba(255, 255, 255, .26); color: #fff; }
+.ac-arrow:active:not([disabled]) { transform: translateY(1px); }
 /* Dim at the ends rather than disappearing — a control that vanishes moves the
-   row it sits in and tells the reader nothing about why. */
-.ac-arrow[disabled] { opacity: .34; cursor: default; color: var(--g-faint); }
+   row it sits in and tells the reader nothing about why. It is the GLYPH that
+   goes quiet now, not the whole button at 34%: the frame stays put so the row
+   never twitches, and the accent comes off the forward arrow the moment it is
+   spent. ⚠ This block must stay BELOW the [data-ac-next] rules — they tie on
+   specificity and this one only wins on source order. */
+.ac-arrow[disabled] {
+  opacity: 1; cursor: default; color: #55504b;
+  background: transparent; border-color: rgba(255, 255, 255, .055);
+}
 
 /* ── step 2 · the filter bar ──────────────────────────────────────────── */
 .ac-filbar {
