@@ -1033,6 +1033,110 @@ def deliver(row, buyer, order_id="", md=None):
     return ok, err
 
 
+# ⚠ A BUSINESS COMMITMENT, and it is one line to remove. When we take money for
+# an account we cannot hand over, this mail offers the buyer a refund rather
+# than only a wait. `pricing.ACCOUNT_ETA` promised them instant delivery and the
+# confirmation they have already read says the credentials are on their way —
+# so the alternative to offering the refund is asking somebody to wait an
+# unstated length of time for something they were told they already had. Set it
+# False if the business would rather handle refunds case by case; the rest of
+# the mail stands on its own.
+BACKORDER_OFFER_REFUND = True
+
+
+def _backorder_text(order_id, listing, region, discord):
+    return """Your payment went through. One thing about the handover:
+
+Order      %s
+Account    %s
+Server     %s
+
+This one is being prepared by hand rather than sent automatically, so the
+details are not in your inbox yet.
+
+The fastest way to get them
+  Join our Discord and send us your order number, %s. We hand the
+  details over there:
+  %s
+
+You can also just reply to this mail with that order number and we will send
+them here instead.%s
+
+eSports Boost
+""" % (order_id or "", listing, region, order_id or "your order number", discord,
+       ("\n\nIf you would rather not wait, say so in either place and we will "
+        "refund\nthe order in full.") if BACKORDER_OFFER_REFUND else "")
+
+
+def _backorder_html(order_id, listing, region, discord):
+    rows = "".join(
+        '<tr><td style="padding:6px 16px 6px 0;color:#6b6b76;font-size:13px;'
+        'white-space:nowrap">%s</td><td style="padding:6px 0;color:#16161a;'
+        'font-size:14px;font-weight:600">%s</td></tr>' % (_esc(k), _esc(v))
+        for k, v in (("Order", order_id or ""), ("Account", listing),
+                     ("Server", region)) if str(v).strip())
+    refund = ('<p style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#4a4a55">'
+              "If you would rather not wait, say so in either place and we will refund the "
+              "order in full.</p>") if BACKORDER_OFFER_REFUND else ""
+    return """<!doctype html><html><body style="margin:0;padding:24px;background:#f5f5f7;
+ font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+<table role="presentation" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;
+ background:#fff;border-radius:10px;border:1px solid #e4e4ea">
+<tr><td style="padding:26px 26px 8px">
+  <p style="margin:0 0 4px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+   color:#ff4a1f;font-weight:700">Your account</p>
+  <h1 style="margin:0 0 14px;font-size:20px;color:#16161a">One step before we hand it over.</h1>
+  <p style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#4a4a55">
+   Your payment went through. This one is being prepared by hand rather than sent
+   automatically, so the details are not in your inbox yet.</p>
+  <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%%;
+   border-top:1px solid #ececf1;border-bottom:1px solid #ececf1;margin:0 0 18px">%s</table>
+  <p style="margin:0 0 14px;font-size:14px;line-height:1.55;color:#4a4a55">
+   <b>The fastest way to get them:</b> join our Discord and send us your order number —
+   we hand the details over there.</p>
+  <p style="margin:0 0 18px"><a href="%s"
+   style="display:inline-block;padding:10px 16px;border-radius:6px;background:#5865f2;
+   color:#fff;text-decoration:none;font-size:14px;font-weight:600">Join the Discord</a></p>
+  <p style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#4a4a55">
+   You can also just reply to this mail with that order number and we will send them
+   here instead.</p>
+  %s
+</td></tr>
+<tr><td style="padding:14px 26px 22px;border-top:1px solid #ececf1;font-size:12px;color:#8a8a95">
+  eSports Boost
+</td></tr>
+</table></body></html>""" % (rows, _esc(discord), refund)
+
+
+def notify_backorder(order_id, sku, region, buyer):
+    """Tell the BUYER when their paid account cannot be handed over yet.
+
+    ⚠ This mail exists because the one before it is now wrong. The order
+    confirmation has already told them the credentials are on their way to that
+    address, and `ACCOUNT_ETA` promised instant — so silence here is not a delay,
+    it is a broken promise they are sitting and watching. It names the one place
+    a person can actually hand the account over (the Discord), quotes the order
+    number they need to give, and offers the reply-by-mail route for somebody
+    who does not use Discord.
+
+    It never states a time. Nothing in the system knows when the next unit
+    arrives, and a made-up "within 2 hours" would be the second promise broken
+    in the same order."""
+    import mailer
+    if not mailer.valid(buyer or ""):
+        return False, "no_recipient"
+    discord = getattr(D, "DISCORD_URL", "")
+    listing = listing_name(sku)
+    ok, err = mailer.send(
+        buyer, "About your account — %s" % (order_id or "your order"),
+        _backorder_text(order_id, listing, region, discord),
+        html=_backorder_html(order_id, listing, region, discord),
+        kind="account_backorder")
+    if not ok:
+        sys.stderr.write("[stock] backorder note to %s failed: %s\n" % (buyer, err))
+    return ok, err
+
+
 def alert_ops(subject, body):
     """Tell a human. Used for the two cases nothing else can resolve: a paid
     order with nothing left to hand over, and a handover whose mail bounced."""
@@ -1070,13 +1174,19 @@ def fulfil(md, order_id, buyer):
         sys.stderr.write("[stock] claim failed: %s\n" % e)
         row = None
     if not row:
+        # The buyer first — they have just been told by the confirmation that
+        # their credentials are on the way, and that is now untrue. They get the
+        # Discord, where a person can actually hand the account over.
+        try:
+            notify_backorder(order_id, sku, region, buyer)
+        except Exception as e:                                 # noqa: BLE001
+            sys.stderr.write("[stock] backorder note skipped: %s\n" % e)
         alert_ops(
             "STOCK EMPTY — %s is paid and has nothing to hand over" % (order_id or "an order"),
             "A customer has paid for an account and the store had no unit left.\n\n"
             "Order      %s\nAccount    %s\nServer     %s\nCustomer   %s\n\n"
-            "Nothing has been sent to them. Load stock and deliver it by hand, or\n"
-            "refund. The order confirmation has already told them the credentials\n"
-            "are on their way.\n"
+            "They have been mailed and pointed at the Discord with their order\n"
+            "number — WATCH FOR THEM THERE. Load stock and hand it over, or refund.\n"
             % (order_id or "", listing_name(sku), region, buyer or ""))
         return {"ok": False, "reason": "out_of_stock"}
     if _int(row.get("mailed")):

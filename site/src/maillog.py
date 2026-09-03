@@ -72,6 +72,7 @@ KINDS = {
     # proves the handover went out; the credentials themselves live once, in
     # the stock store, where they can be purged per account.
     "account_delivery": "Account handover — credentials",
+    "account_backorder": "Account handover — come to Discord",
     "stock_alert": "Stock alert to ops",
     "test": "Test message",
     "": "Other",

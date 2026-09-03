@@ -515,9 +515,15 @@ traffic.
 **What happens on a sale**, with `STRIPE_WEBHOOK_SECRET` and SMTP configured:
 Stripe calls the webhook → one unit is claimed atomically → the buyer gets the
 order confirmation *and* a second mail with the login, the password, the inbox
-and the four steps to secure it → the unit is marked sold. If the shelf is
-empty, or the mail fails, **`info@` is emailed instead** with the order number
-and what to do. Nothing fails silently.
+and the four steps to secure it → the unit is marked sold.
+
+**If the shelf is empty**, the buyer is mailed too — their payment went through,
+the account is being prepared by hand, and the fastest way to get it is to join
+the Discord and quote their order number (replying to the mail works as well).
+⚠ **So watch the Discord after that alert.** `info@` gets its own copy naming
+the order and the customer. If the handover mail itself fails, `info@` is
+alerted with the unit id so it can be sent by hand from `/ops`. Nothing fails
+silently.
 
 - ⚠ **Two people can no longer buy the last account.** `POST /api/checkout`
   refuses a sold-out tier before Stripe is ever called. It only does this for a

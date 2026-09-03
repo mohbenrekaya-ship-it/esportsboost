@@ -416,6 +416,39 @@ def test_one_handover_per_unit():
           "a replayed event does not send a second copy of somebody's password")
 
 
+def test_an_empty_shelf_sends_the_buyer_to_discord():
+    """The confirmation has already told them the credentials are on the way and
+    ACCOUNT_ETA promised instant, so silence here is not a delay — it is a
+    broken promise they are sitting and watching."""
+    reset()
+    load(1)
+    stock.claim(SKU, REGION, order_id="ESB-TAKEN")
+    res = stock.fulfil({"service": "account", "account": SKU, "region": REGION},
+                       "ESB-NOSTOCK", "buyer@example.com")
+    check(res["reason"] == "out_of_stock", "the order is reported as unfulfilled")
+    # The outbox is shared across these tests, so this order names itself.
+    note = [r for r in maillog.read()
+            if r.get("kind") == "account_backorder" and "ESB-NOSTOCK" in json.dumps(r)]
+    check(len(note) == 1, "the BUYER is mailed, not only ops")
+    body = json.dumps(note[0])
+    check(D.DISCORD_URL in body, "and pointed at the Discord, where a person can hand it over")
+    check("ESB-NOSTOCK" in body, "with the order number they have to quote")
+    check("reply" in body.lower(), "and a reply-by-mail route for anyone not on Discord")
+    check("hour" not in body.lower() and "minute" not in body.lower(),
+          "it never invents a time — nothing here knows when the next unit lands")
+    alerts = [r for r in maillog.read()
+              if r.get("kind") == "stock_alert" and "ESB-NOSTOCK" in json.dumps(r)]
+    check(alerts and "Discord" in json.dumps(alerts[0]),
+          "and ops is told to watch for them there")
+
+
+def test_the_backorder_note_needs_a_real_address():
+    reset()
+    ok, err = stock.notify_backorder("ESB-X", SKU, REGION, "")
+    check(not ok and err == "no_recipient",
+          "a guest checkout with no email gets no note, and says so rather than throwing")
+
+
 def test_fulfil_never_raises():
     reset()
     for md in ({}, {"service": "account"}, {"service": "account", "account": "nope"},
@@ -459,7 +492,10 @@ def main():
                test_add_edit_delete_a_key,
                test_emptying_a_slot_completely_puts_it_back_on_the_catalogue_figure,
                test_hold_takes_a_unit_off_sale_without_losing_it,
-               test_one_handover_per_unit, test_fulfil_never_raises, test_purge_keeps_the_sale_and_drops_the_secret):
+               test_one_handover_per_unit,
+               test_an_empty_shelf_sends_the_buyer_to_discord,
+               test_the_backorder_note_needs_a_real_address,
+               test_fulfil_never_raises, test_purge_keeps_the_sale_and_drops_the_secret):
         print("\n" + fn.__name__)
         fn()
     for path in (_TMP.name, _TMPM.name):

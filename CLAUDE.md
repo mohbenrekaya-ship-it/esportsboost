@@ -1435,6 +1435,15 @@ user:pass sheet ──stock_import.py──► esb:stock ──► GET /api/stoc
   over, and a handover whose mail did not go out. Both name the order, the customer and the unit id,
   because the fix in each case is a person sending credentials by hand out of the /ops **Stock**
   tab — whose first card is exactly that list, "Paid, not delivered".
+- ⚠ **An empty shelf also mails the BUYER, and that mail exists because the one before it is now
+  wrong.** The confirmation has already told them the credentials are on their way to that address
+  and `ACCOUNT_ETA` promised instant, so silence is not a delay — it is a broken promise they are
+  sitting and watching. `notify_backorder()` names the one place a person can actually hand the
+  account over (`D.DISCORD_URL`), quotes the order number they have to give, and offers a
+  reply-by-mail route for anybody not on Discord. **It never states a time**: nothing in the system
+  knows when the next unit lands, and an invented "within two hours" would be the second promise
+  broken on one order. `BACKORDER_OFFER_REFUND` is the one business commitment in it and is one line
+  to remove.
 - **`stock.fulfil()` never raises.** It is called from inside the Stripe webhook, where an exception
   is a non-200, which is a redelivery, which is a second fulfilment. `test_fulfil_never_raises()`
   walks it with junk.

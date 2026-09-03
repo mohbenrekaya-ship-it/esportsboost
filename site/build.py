@@ -6597,11 +6597,21 @@ def ac_tier_card(a, region):
     # repeating the delivery figure the rest of the page quotes. Each variant is
     # ONE text node with its figures as `{}` captures: both translations move
     # them, and a `<b>`-per-number split would impose English word order.
+    # Two claims on one row rather than one run-on sentence: the glyphs carry
+    # the colour and the words stay readable — `.mb-assure`'s idiom. The
+    # warranty leads because it is the claim being made; the second item is the
+    # qualifier and stays muted, which is also what lets the `low` state swap
+    # the amber bolt for a caution hourglass without rewriting the row.
+    warranty = (f'<span class="ac-sv-i is-w">{_ico("shield-check", 12, "ico", stroke=True)}'
+                f'<span>{D.ACCOUNT_WARRANTY_MONTHS}-month warranty</span></span>'
+                '<i class="ac-sv-sep" aria-hidden="true"></i>')
     stock = f"""<span class="ac-stock is-{state}" data-ac-stock>
-        <span class="ac-sv-one" data-ac-sv="ok">{_ico("shield-check", 11, "ico", stroke=True)}
-          <span>{D.ACCOUNT_WARRANTY_MONTHS}-month warranty · {esc(pricing.ACCOUNT_ETA.lower())}</span></span>
-        <span class="ac-sv-one" data-ac-sv="low">{_ico("hourglass", 11, "ico", stroke=True)}
-          <span>{D.ACCOUNT_WARRANTY_MONTHS}-month warranty · verified in 12 h</span></span>
+        <span class="ac-sv-one" data-ac-sv="ok">{warranty}
+          <span class="ac-sv-i is-d">{_ico("bolt", 11, "ico")}
+            <span>{esc(pricing.ACCOUNT_ETA.lower())}</span></span></span>
+        <span class="ac-sv-one" data-ac-sv="low">{warranty}
+          <span class="ac-sv-i is-hold">{_ico("hourglass", 11, "ico", stroke=True)}
+            <span>verified in 12 h</span></span></span>
         <span class="ac-sv-one" data-ac-sv="out">{_ico("dot", 11, "ico")}
           <span>Sold out on this server</span></span>
       </span>"""

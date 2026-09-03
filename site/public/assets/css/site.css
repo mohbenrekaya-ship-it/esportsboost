@@ -8783,17 +8783,33 @@ html.myd-open .mobile-bar { display: none; }
 .ac-money-m { font-size: 30px; font-weight: 600; letter-spacing: -.03em; line-height: 1; color: var(--g-text); }
 .ac-money-c { font-size: 17px; font-weight: 600; letter-spacing: -.01em; color: var(--g-note); }
 .ac-stock {
-  display: flex; align-items: center; gap: 7px; margin-top: 10px;
-  font: 600 10.5px/1 var(--display); letter-spacing: .06em; color: var(--g-good);
+  display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 11px;
+  font: 600 10.5px/1 var(--display); letter-spacing: .04em; color: var(--g-good);
 }
 .ac-stock.is-low { color: var(--g-note); }
 .ac-stock.is-out { color: var(--g-caution); }
 /* All three states ride in the DOM (the whole-text-node i18n rule) and CSS
    picks one off the state class — see ac_tier_card()'s ⚠. */
-.ac-sv-one { display: none; align-items: center; gap: 7px; }
+.ac-sv-one { display: none; align-items: center; justify-content: center; gap: 8px; }
 .ac-stock.is-ok [data-ac-sv="ok"],
 .ac-stock.is-low [data-ac-sv="low"],
 .ac-stock.is-out [data-ac-sv="out"] { display: flex; }
+/* Two claims, one row, split by a hairline: the GLYPHS carry the colour and
+   the words stay readable — the same trade `.mb-assure` makes, and the reason
+   this row is no longer one uniform green sentence. The warranty leads in text
+   colour because it is the claim; the delivery is its qualifier and stays
+   muted, which is what lets `low` swap the amber bolt for a caution hourglass
+   and read correctly with no other change. The `out` line has no `.ac-sv-i`
+   and keeps `.is-out`'s caution colour on both glyph and words. */
+.ac-sv-i { display: inline-flex; align-items: center; gap: 5px; }
+.ac-sv-i .ico { flex: none; }
+.ac-sv-i.is-w { color: var(--g-text); }
+.ac-sv-i.is-w .ico { color: var(--g-good); }
+.ac-sv-i.is-d { color: var(--g-note); }
+.ac-sv-i.is-d .ico { color: var(--g-tint); }
+.ac-sv-i.is-hold { color: var(--g-note); }
+.ac-sv-i.is-hold .ico { color: var(--g-caution); }
+.ac-sv-sep { width: 1px; height: 11px; background: var(--g-line-4); flex: none; }
 .ac-card-cta { display: flex; gap: 7px; width: 100%; margin-top: 15px; }
 .ac-cta {
   flex: 1; height: 44px; border-radius: 10px;
@@ -8972,7 +8988,14 @@ html.myd-open .mobile-bar { display: none; }
   .ac-card-foot { padding-top: 14px; }
   .ac-money-m { font-size: 26px; }
   .ac-money-c { font-size: 15px; }
+  /* The two claims sit a hairline apart at desktop width. A phone card is
+     ~270px of content and the FRENCH row measures 268, so it is given
+     permission to become two centred lines rather than overflow on a 360 or a
+     320. The divider comes off with it — a hairline stranded at the end of the
+     first line reads as a defect, and each item is already glyph-led. */
   .ac-stock { margin-top: 8px; }
+  .ac-sv-one { flex-wrap: wrap; row-gap: 6px; column-gap: 10px; }
+  .ac-sv-sep { display: none; }
   .ac-card-cta { margin-top: 11px; }
 
   /* The hero is the whole first screen on a phone, so it is tightened rather
