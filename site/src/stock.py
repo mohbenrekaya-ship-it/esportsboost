@@ -1019,18 +1019,36 @@ def summary(days=30, now=None):
     # sold-out tier reads as 0 rather than as "not stocked here". Collapsing the
     # two is the same mistake that used to drop a sold-out pair out of the
     # public map and put it back on sale.
+    # EVERY listing on EVERY shard, always — the shop sells 11 products on each
+    # of 4 servers and the console is where they are stocked, so all 44 slots
+    # have to be visible whether or not anything is in them. Filtering to the
+    # ones that already have units made an empty store look like a shop with no
+    # products, which is the opposite of what this tab is for.
     pairs = known_pairs()
     by_listing = []
     for a in D.ACCOUNTS:
-        per = {rg: (amap.get("%s|%s" % (a["id"], rg), 0)
-                    if "%s|%s" % (a["id"], rg) in pairs else None)
-               for rg in D.ACCOUNT_REGIONS}
+        per, cat = {}, {}
+        for rg in D.ACCOUNT_REGIONS:
+            key = "%s|%s" % (a["id"], rg)
+            per[rg] = amap.get(key, 0) if key in pairs else None
+            # What the PAGE currently claims for this pair. It is `data.py`'s
+            # hand-set figure and it is what a visitor reads, because publishing
+            # the real counts is off (see PUBLIC_COUNTS) — so the console is the
+            # only place the two can be compared, and that comparison is the
+            # whole reason this column exists.
+            cat[rg] = D.account_stock(a, rg)
         total = sum(v for v in per.values() if v)
-        s = sum(1 for r in sold if r.get("sku") == a["id"])
-        if not total and not s:
-            continue
+        # Sold PER SHARD as well as in total: the console is organised by
+        # server, and one number covering all four in a table headed "Europe
+        # West" is a figure about somewhere else.
+        sold_by = {rg: sum(1 for r in sold if r.get("sku") == a["id"]
+                           and r.get("region") == rg)
+                   for rg in D.ACCOUNT_REGIONS}
         by_listing.append({"sku": a["id"], "listing": a["name"], "tier": a["tier"],
-                           "available": total, "sold": s, "servers": per,
+                           "kind": D.account_kind(a),
+                           "available": total, "sold": sum(sold_by.values()),
+                           "sold_by": sold_by, "servers": per,
+                           "shown": cat, "shown_total": sum(cat.values()),
                            "catalogue": int(a.get("stock") or 0)})
 
     return {
@@ -1042,7 +1060,14 @@ def summary(days=30, now=None):
         "held": sum(1 for r in rows if r.get("status") == HELD),
         "undelivered": undelivered,
         "servers": [{"region": rg, "code": D.account_code(rg),
-                     "available": units_on(rg, amap)} for rg in D.ACCOUNT_REGIONS],
+                     "available": units_on(rg, amap),
+                     "sold": sum(1 for r in sold if r.get("region") == rg),
+                     "shown": D.account_units_on(rg)} for rg in D.ACCOUNT_REGIONS],
+        # Off unless STOCK_PUBLIC_COUNTS=1 — the console says which of the two
+        # columns below the shop is actually quoting.
+        "public_counts": PUBLIC_COUNTS,
+        "products": len(D.ACCOUNTS),
+        "shards": len(D.ACCOUNT_REGIONS),
         "listings": by_listing,
         "rows": [_public_row(r) for r in rows[:400]],
         "days": days,

@@ -1376,6 +1376,14 @@ user:pass sheet ──stock_import.py──► esb:stock ──► GET /api/stoc
   first, its password, then the game account's email, then its password last. Do not reorder them so
   the game password comes first — the recovery address is what an original owner would use to take
   the account back.
+- **The /ops Stock tab is organised BY SERVER, one at a time**, the way the shop's own two-step
+  purchase is — an account is region-locked, so every stocking decision is about one shard and one
+  tier, and a four-column matrix made you read across a row to answer the only question the tab gets
+  asked. It lists **all 11 products on the chosen server whether or not they are stocked** (44 slots
+  in total): a slot that has never been stocked reads "·", and one that has and is empty reads a red
+  **0**, the same distinction `PAIRS_KEY` draws everywhere else. Each cell is **on shelf / shown** —
+  what can be handed over, beside what `/accounts.html` advertises there. Those two differ on purpose
+  while `PUBLIC_COUNTS` is off, and this tab is the only place the gap is visible.
 - **Two failures are mailed to ops rather than swallowed**: a paid order with nothing left to hand
   over, and a handover whose mail did not go out. Both name the order, the customer and the unit id,
   because the fix in each case is a person sending credentials by hand out of the /ops **Stock**

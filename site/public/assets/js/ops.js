@@ -631,6 +631,11 @@
                 // operator has deliberately read out, for this page load only —
                 // it is never persisted to sessionStorage.
                 stock: null, stockLoading: false, stockError: null, revealed: {},
+                // Which server's shelf is on screen. The tab is organised the
+                // way the shop is — one server at a time — because an account
+                // is region-locked and a stock decision is only ever about one
+                // shard. null = the first server in the payload.
+                stockServer: null,
                 // The abandoned-checkout store — captured emails + the config the
                 // buyer was about to pay for. Its own store (PII), fetched on
                 // demand. Distinct from the "Abandoned" tab, which is the
@@ -2143,15 +2148,21 @@
       "<code>site/tools/stock_import.py</code>, and prune it with <code>--purge-sold</code>.</div>";
     f.appendChild(note);
 
+    // ⚠ An empty store gets the SAME grid, not a dead end. The shop sells
+    // `products × shards` accounts and every one of those slots is something an
+    // operator fills; replacing the tab with one "nothing here" line hid the
+    // whole catalogue behind the fact that none of it was stocked yet.
     if (!a.total) {
       var empty = document.createElement("div");
       empty.className = "card";
-      empty.innerHTML = '<p class="empty">No accounts stored. The shop is quoting ' +
-        "<code>data.py</code>'s hand-set stock figures, and a paid order has nothing to hand over.<br>" +
-        "Load a batch:<br><code>python3 site/tools/stock_import.py --sku lol-gold " +
-        '--region "Europe West" -f gold-euw.txt</code></p>';
+      empty.innerHTML = '<p class="empty">Nothing stocked yet — ' +
+        "<b>" + num((a.products || 0) * (a.shards || 0)) + "</b> empty slots (" +
+        num(a.products || 0) + " tiers on " + num(a.shards || 0) + " servers).<br>" +
+        "The shop is quoting <code>data.py</code>'s hand-set figures, and a paid order has " +
+        "nothing to hand over.<br>Fill one:<br>" +
+        "<code>python3 site/tools/stock_import.py --sku lol-gold --region EUW -f gold-euw.txt</code>" +
+        "</p>";
       f.appendChild(empty);
-      return f;
     }
 
     // ⚠ First, because it is the only thing here that is somebody waiting.
@@ -2206,82 +2217,148 @@
       f.appendChild(rv);
     }
 
+    var servers = a.servers || [];
+    var listings = a.listings || [];          // all of them, stocked or not
+
     var kr = document.createElement("div");
     kr.className = "kpis";
     kr.appendChild(kpi("Available", num(a.available), undefined, "", true));
+    kr.appendChild(kpi("Slots", num((a.products || 0) * (a.shards || 0))));
     kr.appendChild(kpi("Sold, all time", num(a.sold)));
-    kr.appendChild(kpi("Sold in period", num(a.sold_window)));
     kr.appendChild(kpi("Not delivered", num(undel.length)));
     f.appendChild(kr);
 
-    var servers = a.servers || [];
-    var listings = (a.listings || []).filter(function (r) { return r.available || r.sold; });
-    var g = document.createElement("div");
-    g.className = "grid";
-    g.appendChild(card({
-      cls: "half", title: "On the shelf, per server",
-      sub: "Units that can be sold right now.",
-      chart: function (w) {
-        return barsH(w, {
-          rows: servers.map(function (r) { return { label: r.region, value: r.available }; }),
-          color: SERIES[0], alt: "Available per server"
-        });
-      },
-      table: {
-        head: ["Server", "Available"], num: [1],
-        rows: servers.map(function (r) { return [r.region, num(r.available)]; })
-      }
-    }));
-    g.appendChild(card({
-      cls: "half", title: "On the shelf, per tier",
-      sub: "A tier with none left refuses at checkout instead of selling.",
-      chart: function (w) {
-        return barsH(w, {
-          rows: listings.map(function (r) { return { label: r.listing, value: r.available }; }),
-          color: SERIES[2], alt: "Available per listing"
-        });
-      },
-      table: {
-        head: ["Tier", "Available", "Sold"], num: [1, 2],
-        rows: listings.map(function (r) {
-          return [r.listing, num(r.available), num(r.sold)]; })
-      }
-    }));
-    f.appendChild(g);
+    if (a.total) {
+      var g = document.createElement("div");
+      g.className = "grid";
+      g.appendChild(card({
+        cls: "half", title: "On the shelf, per server",
+        sub: "Units that can be sold right now.",
+        chart: function (w) {
+          return barsH(w, {
+            rows: servers.map(function (r) { return { label: r.region, value: r.available }; }),
+            color: SERIES[0], alt: "Available per server"
+          });
+        },
+        table: {
+          head: ["Server", "On the shelf", "Shown on site"], num: [1, 2],
+          rows: servers.map(function (r) {
+            return [r.region, num(r.available), num(r.shown)]; })
+        }
+      }));
+      g.appendChild(card({
+        cls: "half", title: "On the shelf, per tier",
+        sub: "A tier with none left refuses at checkout instead of selling.",
+        chart: function (w) {
+          return barsH(w, {
+            rows: listings.map(function (r) { return { label: r.listing, value: r.available }; }),
+            color: SERIES[2], alt: "Available per listing"
+          });
+        },
+        table: {
+          head: ["Tier", "Available", "Sold"], num: [1, 2],
+          rows: listings.map(function (r) {
+            return [r.listing, num(r.available), num(r.sold)]; })
+        }
+      }));
+      f.appendChild(g);
+    }
 
     // The grid the operator actually restocks from: listing × shard.
+    /* ── The board, ONE SERVER AT A TIME ──────────────────────────────────
+       Organised the way the shop is: an account is region-locked, so every
+       stocking decision is about one shard and one tier. A 4-column matrix
+       made you read across a row to answer "what do I have on EUW", which is
+       the only question this tab gets asked.
+
+       Two figures per tier, and the pair is the point —
+         on shelf : real credentials, what a buyer can actually be given
+         shown    : what /accounts.html advertises, data.py's hand-set count
+       They differ on purpose while STOCK_PUBLIC_COUNTS is off (the business's
+       call), and this is the only place the gap is visible. A tier at "·" has
+       never been stocked here, so an order for it is taken with nothing
+       behind it. */
+    if (!state.stockServer && servers.length) state.stockServer = servers[0].region;
+    var sv = servers.filter(function (x) { return x.region === state.stockServer; })[0]
+             || servers[0] || { region: "", code: "", available: 0, shown: 0 };
+
+    var picker = document.createElement("div");
+    picker.className = "card";
+    picker.innerHTML = '<div class="card-hd"><h3>Server</h3><span class="spacer"></span>' +
+      '<span class="chip">' + num(listings.length) + " products each</span></div>" +
+      '<p class="card-sub">An account is locked to the server it was made on, so stock ' +
+      "is held per server. Pick one.</p>";
+    var chips = document.createElement("div");
+    chips.className = "seg";
+    servers.forEach(function (x) {
+      // A plain child of `.seg` — the console's own segmented control styles
+      // it, and `aria-pressed` is what it reads for the active state. A `.btn`
+      // in here would bring its own border and break the joined row.
+      var b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute("aria-pressed", x.region === sv.region ? "true" : "false");
+      b.innerHTML = esc(x.code) + ' <span class="dim">' + num(x.available) + "</span>";
+      b.title = x.region + " — " + x.available + " on the shelf, " + x.shown + " shown on site";
+      b.addEventListener("click", function () { state.stockServer = x.region; render(); });
+      chips.appendChild(b);
+    });
+    picker.appendChild(chips);
+    f.appendChild(picker);
+
     var grid = document.createElement("div");
     grid.className = "card";
-    grid.innerHTML = '<div class="card-hd"><h3>Stock by tier and server</h3></div>' +
-      '<p class="card-sub">The figure the shop quotes. A tier the store has never held is ' +
-      "still sold on <code>data.py</code>'s hand-set count — those read “·”.</p>";
-    var cols = servers.map(function (s2) { return s2.code; });
-    var gh = '<div class="scroll-x"><table class="tbl"><thead><tr><th>Tier</th>' +
-      cols.map(function (c) { return '<th class="num">' + esc(c) + "</th>"; }).join("") +
-      '<th class="num">Sold</th></tr></thead><tbody>';
+    grid.innerHTML = '<div class="card-hd"><h3>' + esc(sv.region) + '</h3>' +
+      '<span class="spacer"></span><span class="chip">' + esc(sv.code) + "</span>" +
+      '<span class="chip">' + num(sv.available) + " on the shelf</span></div>" +
+      '<p class="card-sub">' +
+      (a.public_counts
+        ? "The shop is publishing these real counts."
+        : "<b>On shelf</b> is what we can hand over on " + esc(sv.code) + ". <b>Shown</b> is " +
+          "what the site advertises there — <code>data.py</code>'s hand-set figures, because " +
+          "publishing the real counts is off. A tier at “·” has never been stocked on this " +
+          "server, so an order for it will be taken and have nothing behind it.") + "</p>";
+    var gh = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+      ["Tier", "Kind", "On shelf", "Shown on site", "Sold"].map(function (h, i) {
+        return '<th' + (i >= 2 ? ' class="num"' : "") + ">" + esc(h) + "</th>";
+      }).join("") + "</tr></thead><tbody>";
     listings.forEach(function (r) {
+      var n = (r.servers || {})[sv.region];
+      var shown = (r.shown || {})[sv.region];
       gh += "<tr><td>" + esc(r.listing) + "</td>" +
-        servers.map(function (s2) {
-          // null = never loaded (still selling on data.py's count) → "·".
-          // A NUMBER, zero included, is the store's own answer.
-          var n = (r.servers || {})[s2.region];
-          return '<td class="num">' +
-            (n === null || n === undefined ? '<span class="dim">·</span>' : num(n)) + "</td>";
-        }).join("") + '<td class="num">' + num(r.sold) + "</td></tr>";
+        '<td class="dim">' + esc(r.kind || "") + "</td>" +
+        '<td class="num">' +
+          (n === null || n === undefined ? '<span class="dim">·</span>'
+            : (n === 0 ? '<b class="bad">0</b>' : num(n))) + "</td>" +
+        '<td class="num dim">' + num(shown) + "</td>" +
+        '<td class="num">' + num((r.sold_by || {})[sv.region] || 0) + "</td></tr>";
     });
-    grid.insertAdjacentHTML("beforeend", gh + "</tbody></table></div>");
+    gh += "</tbody></table></div>";
+    grid.insertAdjacentHTML("beforeend", gh);
+    grid.insertAdjacentHTML("beforeend",
+      '<p class="card-sub">Stock a tier on ' + esc(sv.code) + ' with<br>' +
+      '<code>python3 site/tools/stock_import.py --sku &lt;tier id&gt; --region ' +
+      esc(sv.code) + " -f accounts.txt</code>" +
+      "</p>");
     f.appendChild(grid);
 
-    // Every unit, newest first.
-    var rows = a.rows || [];
+    // Every unit, newest first. Nothing to draw on an empty store — the board
+    // above is what that case needs.
+    var rows = (a.rows || []).filter(function (r) { return r.region === sv.region; });
+    if (!rows.length) {
+      [].slice.call(f.querySelectorAll("[data-reveal]")).forEach(function (b) {
+        b.addEventListener("click", function () { revealUnit(b.getAttribute("data-reveal")); });
+      });
+      return f;
+    }
     var el = document.createElement("div");
     el.className = "card";
-    el.innerHTML = '<div class="card-hd"><h3>Units</h3><span class="spacer"></span>' +
+    el.innerHTML = '<div class="card-hd"><h3>Units on ' + esc(sv.code) + '</h3>' +
+      '<span class="spacer"></span>' +
       '<button class="btn btn-sm" type="button" data-export-stock>Export CSV</button></div>' +
-      '<p class="card-sub">Newest first' +
-      (a.total > rows.length ? ", first " + num(rows.length) + " of " + num(a.total) : "") +
-      ". Logins are masked; the CSV carries no credential either.</p>";
-    var head = ["Unit", "Tier", "Server", "Login", "State", "Order", "Customer", "Mailed", ""];
+      '<p class="card-sub">Newest first, ' + esc(sv.region) + " only — " +
+      num(rows.length) + " of " + num(a.total) +
+      " stored. Logins are masked; the CSV carries no credential either.</p>";
+    var head = ["Unit", "Tier", "Login", "State", "Order", "Customer", "Mailed", ""];
     var html = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
       head.map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") + "</tr></thead><tbody>";
     rows.forEach(function (r) {
@@ -2291,7 +2368,6 @@
       html += "<tr>" +
         '<td class="dim">' + esc(r.id) + "</td>" +
         "<td>" + esc(r.listing) + "</td>" +
-        '<td class="dim">' + esc(r.region) + "</td>" +
         "<td>" + esc(r.login) + "</td>" +
         "<td>" + stateChip + "</td>" +
         "<td>" + esc(r.order_id || "—") + "</td>" +
