@@ -9048,8 +9048,23 @@ html.myd-open .mobile-bar { display: none; }
   .ac-change { height: 44px; white-space: nowrap; flex: none; }
   .ac-fils { overflow-x: auto; scrollbar-width: none; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); }
   .ac-fils::-webkit-scrollbar { display: none; }
-  /* 48px still clears the 44px target; the 6px is spent on the CTA below. */
-  .ac-fil { height: 48px; padding: 0 15px; }
+  /* 48px still clears the 44px target; the 6px is spent on the CTA below.
+     ⚠ The three categories have to be VISIBLE, not merely reachable. At the
+     desktop metrics the chips measure 155/171/155 against a 375px screen, so
+     the third one sat entirely off the right edge with nothing saying the row
+     moved — a filter set you cannot see is not a filter. The count drops its
+     pill and rides as bare text, the glyph and the label step down, and the
+     rail keeps its scroll for the languages whose labels run longer than the
+     English ones. `initScrollHints()` draws the fade when it does overflow. */
+  .ac-fils { gap: 6px; }
+  .ac-fil { height: 48px; padding: 0 9px; gap: 6px; }
+  .ac-fil-i { width: 18px; height: 18px; }
+  .ac-fil-l { font-size: 12.5px; }
+  .ac-fil-n {
+    min-width: 0; height: auto; padding: 0; border-radius: 0;
+    background: none; font-size: 11px;
+  }
+  .ac-fil.is-on .ac-fil-n { background: none; }
   .ac-filbar { margin-top: 12px; padding-bottom: 10px; gap: 10px; }
   .ac-filmeta { font-size: 12px; }
 

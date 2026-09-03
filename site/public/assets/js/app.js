@@ -3535,6 +3535,10 @@
           }
         }
       }
+
+      // Step 2 was hidden when the rails were first measured, so the filter row
+      // could not know it overflows. See esbSyncRails.
+      if (window.esbSyncRails) window.esbSyncRails();
     }
 
     each("[data-ac-server]", null, function (b) {
@@ -3882,7 +3886,7 @@
      already fits points at nothing. */
   function initScrollHints() {
     var rails = [].slice.call(document.querySelectorAll(
-      ".ob-tabs, .ob-bundles-grid, .rvp-chips, .rst-chips, .gc-chips, .gc-svcs-grid, .gp-rv-grid, .gp-dps"));
+      ".ob-tabs, .ob-bundles-grid, .rvp-chips, .rst-chips, .gc-chips, .gc-svcs-grid, .gp-rv-grid, .gp-dps, .ac-fils"));
     if (!rails.length) return;
     function sync(el) {
       var over = el.scrollWidth - el.clientWidth;
@@ -3897,6 +3901,11 @@
       sync(el);
       el.addEventListener("scroll", function () { sync(el); }, { passive: true });
     });
+    /* A rail inside a `hidden` panel measures zero, which reads as "it fits" —
+       the accounts shop's filter row is inside step 2, hidden until a server is
+       picked, so its first measurement is always a false negative. Exposed the
+       way `esbRefreshRoster` is, and called from the shop's own paint(). */
+    window.esbSyncRails = function () { rails.forEach(sync); };
     var t;
     window.addEventListener("resize", function () {
       clearTimeout(t);
