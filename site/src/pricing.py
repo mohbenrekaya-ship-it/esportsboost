@@ -51,9 +51,16 @@ UNIT_MIN, UNIT_MAX = 1, 5
 # how a constant ends up as "Instant Delivery delivery" on one surface and
 # untranslated on another.
 #
-# The scarce state is the deliberate exception and stays: a listing under
-# AC_SCARCE says "verified in 12 h" and its CTA says Reserve, because that unit
-# is NOT delivered instantly and the card must not claim it is.
+# ⚠ There is no longer an exception to it. A scarce state used to say "verified
+# in 12 h" over a Reserve button under AC_SCARCE units, which was the one card
+# that did not promise instant handover; it was removed on the business's call
+# (2026-09-03) so that anything on the shelf sells with the same button. So this
+# constant is now the promise on EVERY card that has stock, which means the
+# automated handover in `stock.py` has to be what actually answers it — a
+# (listing, shard) pair that has never been loaded into the credentials store
+# still sells on `data.py`'s fallback figure, and that sale is fulfilled by a
+# person reading the out-of-stock alert. Load the store, or this word is untrue
+# for those buyers.
 ACCOUNT_ETA = "Instant Delivery"
 
 # The label on the discount row when a listing carries a struck `was` price.

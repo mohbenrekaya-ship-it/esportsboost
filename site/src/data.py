@@ -679,7 +679,7 @@ COACH_SLOTS = ["Tonight, 20:00", "Tomorrow, 18:00", "Saturday, 15:00", "Sunday, 
 # DERIVED FROM ONE TABLE, per the handoff's first structural rule:
 #
 #     ACCOUNTS[i]["stock"]            units of that listing at full supply
-#     ACCOUNT_SERVERS[i]["share"]     EUW 1 · NA .72 · EUNE .38 · OCE .16
+#     ACCOUNT_SERVERS[i]["share"]     EUW 1 · NA .72 · EUNE .38 · OCE .32
 #     account_stock(a, region)        max(1, round(stock * share)), 0 if sold out
 #     account_units_on(region)        Σ account_stock over every listing
 #     account_stock_total()           Σ account_units_on over every server
@@ -770,7 +770,7 @@ ACCOUNT_SERVERS = [
     dict(region="Europe West", share=1.00),
     dict(region="North America", share=0.72),
     dict(region="EU Nordic & East", share=0.38),
-    dict(region="Oceania", share=0.16),
+    dict(region="Oceania", share=0.32),
 ]
 
 # ⚠ The currencies the price table must cover, and it MUST equal
@@ -847,61 +847,61 @@ ACCOUNT_DELIVERY = [
 ACCOUNTS = [
     dict(id="lol-unranked-basic", name="Unranked · Basic", tier="Unranked",
          shape="ring1", price=dict(usd=29.90, eur=24.90, gbp=24.90),
-         champs=20, be=0, stock=31,
+         champs=20, be=0, stock=34,
          badge="", season=False,
          note="Placements not played",),
     dict(id="lol-unranked-premium", name="Unranked · Premium", tier="Unranked",
          shape="ring2", price=dict(usd=39.90, eur=34.90, gbp=34.90),
-         champs=50, be=0, stock=19,
+         champs=50, be=0, stock=24,
          badge="Best seller", season=False,
          note="Placements not played",),
     dict(id="lol-unranked-luxury", name="Unranked · Luxury", tier="Unranked",
          shape="ring3", price=dict(usd=89.90, eur=79.90, gbp=79.90),
-         champs=80, be=0, stock=9,
+         champs=80, be=0, stock=14,
          badge="", season=False,
          note="Placements not played",),
     dict(id="lol-iron", name="Iron", tier="Iron",
          shape="diamond", price=dict(usd=64.90, eur=49.90, gbp=49.90),
-         be=0, stock=14,
+         be=0, stock=18,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-bronze", name="Bronze", tier="Bronze",
          shape="triangle", price=dict(usd=39.90, eur=39.90, gbp=39.90),
-         be=0, stock=12,
+         be=0, stock=16,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-silver", name="Silver", tier="Silver",
          shape="pentagon", price=dict(usd=42.90, eur=42.90, gbp=42.90),
-         be=0, stock=11,
+         be=0, stock=15,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-gold", name="Gold", tier="Gold",
          shape="hexagon", price=dict(usd=59.90, eur=44.90, gbp=44.90),
-         be=0, stock=8,
+         be=0, stock=13,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-platinum", name="Platinum", tier="Platinum",
          shape="octagon", price=dict(usd=89.90, eur=59.90, gbp=59.90),
          be=0,
-         stock=5, badge="", season=True,
+         stock=11, badge="", season=True,
          note="Previous season rewards",),
     # ⚠ NOT in the business's price list — the only listing still carrying a
     # figure nobody chose. €74.90 sits in the Platinum→Diamond gap so the ladder
     # stays ordered; replace it with the real number.
     dict(id="lol-emerald", name="Emerald", tier="Emerald",
          shape="kite", price=dict(usd=129.90, eur=74.90, gbp=74.90),
-         be=0, stock=7,
+         be=0, stock=12,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-diamond", name="Diamond", tier="Diamond",
          shape="facet", price=dict(usd=199.90, eur=89.90, gbp=89.90),
-         be=0, stock=6,
+         be=0, stock=11,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-master", name="Master", tier="Master",
          shape="star", price=dict(usd=289.90, eur=189.90, gbp=189.90),
-         be=0, stock=2,
-         badge="Low stock", season=True,
+         be=0, stock=10,
+         badge="", season=True,
          note="Previous season rewards",),
 ]
 

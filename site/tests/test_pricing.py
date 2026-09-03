@@ -1214,11 +1214,17 @@ def test_account_checkout_payload():
               and "account=%s&region=" % a["id"] not in b]
     check(not nolink, "every listing in stock on the reference shard ships a "
                       "real checkout link (%r)" % nolink)
-    # All three CTA labels and all three stock states ride in the DOM — the
+    # Both CTA labels and both stock states ride in the DOM — the
     # whole-text-node i18n rule. A label written in by JS arrives untranslated.
-    for key in ("ok", "low", "out"):
+    # There was a third, `low`, which drew a Reserve button on a scarce listing;
+    # it was removed on the business's call and app.js can no longer produce
+    # that state. The pair below has to stay in step with `paint()`: a state the
+    # DOM has no CTA for hides every CTA on the card.
+    for key in ("ok", "out"):
         check('data-ac-cta="%s"' % key in b, "the %r CTA ships in the DOM" % key)
         check('data-ac-sv="%s"' % key in b, "the %r stock line ships in the DOM" % key)
+    check('data-ac-cta="low"' not in b and 'data-ac-sv="low"' not in b,
+          "the scarce 'Reserve' state is gone from the card")
     # Both steps ship visible, so the page is a complete shop with no JS.
     check('data-ac-step="server"' in b and 'data-ac-step="tiers"' in b,
           "both steps are server-rendered")

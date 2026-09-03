@@ -1939,13 +1939,10 @@
       "Browse accounts": "Voir les comptes",
       "Account": "Compte",
       "Price": "Prix",
-      "This is where the login, the password and the recovery mailbox are sent. Check it is one you can open — no marketing unless you tick the box at the end.":
-        "C’est là que sont envoyés l’identifiant, le mot de passe et la boîte de récupération. Vérifie que tu peux l’ouvrir — aucune pub sauf si tu coches la case à la fin.",
-      "Anything we should know": "Quelque chose à nous signaler",
+      "This is where the login, the password and the recovery mailbox are sent. Check it is one you can open.":
+        "C’est là que sont envoyés l’identifiant, le mot de passe et la boîte de récupération. Vérifie que tu peux l’ouvrir.",
       "Replaced or refunded for {} days": "Remplacé ou remboursé pendant {} jours",
       "Read the warranty": "Lire la garantie de remplacement",
-      "Email me when the account is on its way. Nothing else.":
-        "Préviens-moi par e-mail quand le compte part. Rien d’autre.",
       /* The listing NAME, as a pattern: the rank it captures is data and passes
          through verbatim (a capture gets one exact dictionary lookup on the way
          out, which is what turns "Iron to Silver" into its own entry below).
@@ -1990,10 +1987,8 @@
       "Placements not played": "Placements non joués",
       "Previous season rewards": "Récompenses de la saison précédente",
       "{}-month warranty": "{} mois de garantie",
-      "verified in 12 h": "vérifié sous 12 h",
       "Sold out on this server": "Épuisé sur ce serveur",
       "Buy now": "Acheter",
-      "Reserve": "Réserver",
       "Prices and stock shown on": "Prix et stock affichés sur",
       ". Pick a server above to see yours.": ". Choisis ton serveur ci-dessus pour voir les tiens.",
       "Handover": "Remise",
@@ -3669,13 +3664,10 @@
       "Browse accounts": "Accounts ansehen",
       "Account": "Account",
       "Price": "Preis",
-      "This is where the login, the password and the recovery mailbox are sent. Check it is one you can open — no marketing unless you tick the box at the end.":
-        "Hierhin gehen Login, Passwort und Wiederherstellungs-Postfach. Prüf, dass du sie öffnen kannst — keine Werbung, außer du setzt das Häkchen am Ende.",
-      "Anything we should know": "Etwas, das wir wissen sollten",
+      "This is where the login, the password and the recovery mailbox are sent. Check it is one you can open.":
+        "Hierhin gehen Login, Passwort und Wiederherstellungs-Postfach. Prüf, dass du sie öffnen kannst.",
       "Replaced or refunded for {} days": "{} Tage lang Ersatz oder Erstattung",
       "Read the warranty": "Ersatzgarantie lesen",
-      "Email me when the account is on its way. Nothing else.":
-        "Mail mir, wenn der Account unterwegs ist. Sonst nichts.",
       /* The listing NAME, as a pattern: the rank it captures is data and passes
          through verbatim (a capture gets one exact dictionary lookup on the way
          out, which is what turns "Iron to Silver" into its own entry below).
@@ -3720,10 +3712,8 @@
       "Placements not played": "Platzierungen ungespielt",
       "Previous season rewards": "Belohnungen der letzten Season",
       "{}-month warranty": "{} Monate Garantie",
-      "verified in 12 h": "in 12 Std. geprüft",
       "Sold out on this server": "Auf diesem Server ausverkauft",
       "Buy now": "Jetzt kaufen",
-      "Reserve": "Reservieren",
       "Prices and stock shown on": "Preise und Bestand gezeigt für",
       ". Pick a server above to see yours.": ". Wähle oben einen Server, um deine zu sehen.",
       "Handover": "Übergabe",

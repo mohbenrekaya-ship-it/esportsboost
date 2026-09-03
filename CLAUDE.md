@@ -231,7 +231,7 @@ reuse these rather than inventing new hooks:
 | `data-rst-*` | The roster board. `data-rst-row` carries `data-game` / `data-free` / `data-win` — the filter reads only these, so a server-rendered board keeps working. `data-rst-game\|avail\|sort` are the three controls, `data-rst-body\|shown\|fgame\|ffree\|more\|reset\|empty*` the things `initRoster()` rewrites |
 | `data-bp-*` | A profile's completed orders: `data-bp-row` (+ `data-mode`), `data-bp-filter`, `data-bp-body\|shown\|total\|more` |
 | `data-gc-*` | The catalogue grid on `/games/`. `data-gc-card` carries `data-gc-riot\|valve\|coaching` (the filter reads only these, so a filter is one attribute) plus `data-gc-order\|price\|name` (the three sorts). `data-gc-filter\|sort\|sortsel` are the controls — the segment and the native select write one state and `initCatalog()` re-marks both — and `data-gc-grid\|foot\|shown\|reset\|sortlabel\|dots\|dot` are what it rewrites |
-| `data-ac-*` | The accounts shop (`/accounts.html`). `data-ac-shop` is the root and `data-ac-step="server\|tiers"` the two steps, switched by `hidden`. `data-ac-server="<region>"` is a server card and `data-ac-change` returns to step 1; `data-ac-server-name\|code\|stock` are the bar's readouts. `data-ac-kind="all\|unranked\|ranked"` are the three filters, with `data-ac-kindmeta` and `data-ac-pagelabel` beside them. `data-ac-track\|prev\|next\|dots` are the carousel. Each `data-ac-card` carries `data-ac-id` / `data-ac-kind`, and the nodes that move with the shard are `data-ac-price` (a `money_parts()` span), `data-ac-was`, `data-ac-code`, `data-ac-shard-name`, `data-ac-stock` and `data-ac-cta`. ⚠ The CTA keys are the STOCK STATES — `ok\|low\|out` — and all three CTAs and all three `data-ac-sv` lines ride in the DOM with two hidden, per the whole-text-node rule; those lines state the warranty window and the delivery, not a unit count (`data-ac-units` is gone from the card, and `data-ac-sv-units` is step 1's). `data-ac-nojs` is the line JS removes |
+| `data-ac-*` | The accounts shop (`/accounts.html`). `data-ac-shop` is the root and `data-ac-step="server\|tiers"` the two steps, switched by `hidden`. `data-ac-server="<region>"` is a server card and `data-ac-change` returns to step 1; `data-ac-server-name\|code\|stock` are the bar's readouts. `data-ac-kind="all\|unranked\|ranked"` are the three filters, with `data-ac-kindmeta` and `data-ac-pagelabel` beside them. `data-ac-track\|prev\|next\|dots` are the carousel. Each `data-ac-card` carries `data-ac-id` / `data-ac-kind`, and the nodes that move with the shard are `data-ac-price` (a `money_parts()` span), `data-ac-was`, `data-ac-code`, `data-ac-shard-name`, `data-ac-stock` and `data-ac-cta`. ⚠ The CTA keys are the STOCK STATES — `ok\|out` — and both CTAs and both `data-ac-sv` lines ride in the DOM with one of each hidden, per the whole-text-node rule (a third, `low`, drew a Reserve button on a scarce listing and was removed with the state itself — a state the DOM has no CTA for hides every CTA on the card); those lines state the warranty window and the delivery, not a unit count (`data-ac-units` is gone from the card, and `data-ac-sv-units` is step 1's). `data-ac-nojs` is the line JS removes |
 | `data-rv-stars` / `data-rv-game` | The two facts the reviews page filters and sorts a card on, emitted by `review_card(filterable=True)`. The whole feed reads only these, so a server-paged feed keeps working |
 | `data-rvp-*` | The reviews feed's controls: `data-rvp-game\|rating\|sort` (three radio groups) and `data-rvp-dist` (the distribution rows, `aria-pressed` toggles). Both rating controls write one state — `initReviews()` re-marks both whenever either fires. `data-rvp-grid\|shown\|total\|crumb\|clear\|empty\|more\|more-label` are what it rewrites; `data-rvp-worst` is the hero's "Read the worst first" |
 | `data-when-booster` / `data-out="booster"` / `data-sum="booster"` / `data-booster-clear` | The named booster. Rows that `hidden` themselves when none is set; it is an order attribute, never a price input — `quote()` must not read it |
@@ -1151,8 +1151,14 @@ resolver and `build.py`, `quote()` and `payments.build_session()` all read the c
   on another. ⚠ It is the **strongest ops commitment this product makes** and it leaves no room at all: "instant" means the credentials go
   out by machine the moment the payment clears, and a buyer who waits ten minutes has been told
   something untrue by seven surfaces. If the handover is manual, the word is the thing to change.
-  **The scarce state is the deliberate exception**: under `AC_SCARCE` a card says "verified in 12 h"
-  and its CTA says Reserve, because that unit is not instant and must not claim to be.
+  ⚠ **There is no longer an exception to it.** A scarce state under `AC_SCARCE` used to say
+  "verified in 12 h" over a **Reserve** button — the one card that did not promise an instant
+  handover — and it was removed on the business's call (2026-09-03) so that anything on the shelf
+  sells with the same button as everything else. So the promise is now on **every card with stock**,
+  and `stock.py`'s automated handover is what has to answer it: a (listing, shard) pair the
+  credentials store has never held still sells on `data.py`'s fallback figure, and that sale is
+  fulfilled by a person reading the out-of-stock alert. Load the store, or the word is untrue for
+  those buyers.
 - ⚠ **`be = 0` means the essence is RANDOM, not that it has none — and it is 0 on all eleven.** The
   stock is levelled in batches, so what is left over varies per account and any figure would be one
   we cannot hold. The row says **"Random BE/skins"**, covering both, as ONE whole text node — French
@@ -1460,10 +1466,11 @@ user:pass sheet ──stock_import.py──► esb:stock ──► GET /api/stoc
   the fallback".
 - **The live path is built and tested behind that flag.** `accountStock()` on the client is still the
   ONE derivation; the live map sits in front of it, and `hasOwnProperty` is what carries a genuine
-  zero through where `||` would resurrect the hand-set figure. ⚠ One thing to settle before the flag
-  is flipped: with real inventory most tiers sit at or under `AC_SCARCE` (3), so most cards would
-  draw the scarce state — "Reserve", "verified in 12 h" — while the handover is now genuinely
-  instant. That is a copy decision, not a bug.
+  zero through where `||` would resurrect the hand-set figure. The scarce state that used to
+  complicate this — most tiers sitting at or under `AC_SCARCE` with real inventory, so most cards
+  would have drawn "Reserve" — is gone, so flipping the flag now only changes the counts, never the
+  button. ⚠ What it does change is that a real zero takes the listing off sale on the shard, which
+  is the whole point of publishing them.
 - **Restart the server after touching this file** — `/api/stock` lives in `serve.py` and the `stock`
   / `stock_reveal` actions in `ops.py`; there is no watcher. `api/stock.py` is the Vercel shell. Env
   knobs: `STOCK_PUBLIC_COUNTS` (off — see the ⚠ above), `STOCK_LOG` (the dev file), `STOCK_MAX`.

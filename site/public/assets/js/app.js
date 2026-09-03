@@ -3409,8 +3409,6 @@
      reviews.
 
      `data-ac-*` is the whole contract — see CLAUDE.md. */
-  var AC_SCARCE = 3;                     // mirrors AC_SCARCE in build.py
-
   function initAccounts() {
     var shop = document.querySelector("[data-ac-shop]");
     if (!shop) return;
@@ -3463,7 +3461,11 @@
       var acc = (D.accounts || {})[el.getAttribute("data-ac-id")];
       if (!acc || !sv) return;
       var units = accountStock(acc, sv);
-      var state = !units ? "out" : (units <= AC_SCARCE ? "low" : "ok");
+      /* TWO states. The `low` one (under a scarce threshold) swapped the CTA to
+         "Reserve" and the delivery promise to "verified in 12 h"; it is gone,
+         so anything on the shelf sells with the same button. Keep this in step
+         with `ac_tier_card()` — a state the DOM has no CTA for hides them all. */
+      var state = units ? "ok" : "out";
 
       /* ⚠ The money is NOT rewritten here. A shard changes stock, not price,
          and a currency switch is handled by i18n.js's reformatStaticMoney(),

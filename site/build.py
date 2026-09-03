@@ -6318,8 +6318,8 @@ def page_game(g):
 #    preceding phrase at each ("Instant Delivery", "12-month warranty ·
 #    instant delivery") so the
 #    one word still reads as English wherever it lands. ⚠ The scarce state is
-#    the deliberate exception: under AC_SCARCE a card says "verified in 12 h"
-#    and its CTA says Reserve, because that unit is NOT instant.
+#    the same promise on every card that has anything to sell: the scarce
+#    state that said "verified in 12 h" over a Reserve button is gone.
 #
 #  · **The rank marks are our own geometry, deliberately not Riot's emblems** —
 #    the same trademark rule `pay_marks()`, the Trustpilot star and the rank
@@ -6363,11 +6363,16 @@ def page_game(g):
 
 
 # A shard under this many units carries the amber "Low stock" badge on its
-# server card. Business figures, not measurements: the badge is a nudge toward
-# the shards that can actually be filled, and AC_SCARCE is the point where a
-# handover stops being immediate and becomes a reservation.
+# server card. A business figure, not a measurement: the badge is a nudge toward
+# the shards that can actually be filled.
+#
+# AC_SCARCE sat here too — the unit count under which a tier card stopped
+# offering to sell and offered to RESERVE, on a 12-hour verification. It is gone
+# (2026-09-03, the business's call): anything on the shelf sells, with the same
+# button as everything else. Removing it means removing the `low` state from the
+# card's stock line, its CTA and app.js's mirror in one pass — see
+# `ac_tier_card()`.
 AC_LOW_SHARD = 40
-AC_SCARCE = 3
 
 
 def ac_price_note():
@@ -6521,11 +6526,12 @@ def ac_tier_card(a, region):
     when the server changes, and `initAccounts()` rewrites exactly these.
     Everything else is a fact about the listing and never moves.
 
-    ⚠ ALL THREE STOCK STATES AND ALL THREE CTA LABELS SHIP IN THE DOM, with two
-    of each hidden. That is the whole-text-node rule i18n.js imposes everywhere
-    on this site: a label written in by JS arrives untranslated, and "Reserve"
-    is exactly the kind of word a French reader would then meet in English. CSS
-    picks the stock variant off the state class; JS toggles the CTAs.
+    ⚠ BOTH STOCK STATES AND BOTH CTA LABELS SHIP IN THE DOM, with one of each
+    hidden. That is the whole-text-node rule i18n.js imposes everywhere on this
+    site: a label written in by JS arrives untranslated, and "Sold out on this
+    server" is exactly the kind of line a French reader would then meet in
+    English. CSS picks the stock variant off the state class; JS toggles the
+    CTAs.
 
     The CTA is a REAL link into checkout, so the card can be middle-clicked and
     crawled; the query is untrusted and the server re-resolves both the listing
@@ -6538,8 +6544,15 @@ def ac_tier_card(a, region):
     label = D.account_badge(a)
     feat = label == "Best seller"
     low_badge = label == "Low stock"
-    scarce = 0 < units <= AC_SCARCE
-    state = "out" if not units else ("low" if scarce else "ok")
+    # TWO states, not three. There was a `low` one under AC_SCARCE that swapped
+    # the CTA to "Reserve" and promised the unit "verified in 12 h" instead of
+    # instantly — and with the shard shares what they are it was firing on most
+    # of Oceania and on every thin tier, so the board's own best-selling ranks
+    # were asking to be reserved rather than bought. The business's call
+    # (2026-09-03) is that a listing with anything on the shelf sells, and sells
+    # with the same button as every other. Anything left is `ok`; only a genuine
+    # zero is `out`, which is what keeps the sold-out card honest.
+    state = "ok" if units else "out"
     href = "/checkout.html?account=%s&region=%s" % (
         esc(_urlq(a["id"])), esc(_urlq(region)))
 
@@ -6590,18 +6603,14 @@ def ac_tier_card(a, region):
     # the loudest position on the card. The warranty window is true of every
     # unit on the shelf and is the claim the buyer is actually weighing — and it
     # is read off `D.ACCOUNT_WARRANTY_MONTHS`, so a re-tune cannot leave a stale
-    # number here. ⚠ The three STATES are unchanged and still derived from
-    # stock: `out` is what takes a sold-out listing off sale, and under
-    # AC_SCARCE the handover stops being immediate — that unit is reserved and
-    # verified before it is handed over, so the `low` line says so rather than
-    # repeating the delivery figure the rest of the page quotes. Each variant is
-    # ONE text node with its figures as `{}` captures: both translations move
-    # them, and a `<b>`-per-number split would impose English word order.
+    # number here. ⚠ Both STATES are still derived from stock — `out` is what
+    # takes a genuinely empty listing off sale — and each variant is ONE text
+    # node with its figures as `{}` captures: both translations move them, and a
+    # `<b>`-per-number split would impose English word order.
     # Two claims on one row rather than one run-on sentence: the glyphs carry
     # the colour and the words stay readable — `.mb-assure`'s idiom. The
-    # warranty leads because it is the claim being made; the second item is the
-    # qualifier and stays muted, which is also what lets the `low` state swap
-    # the amber bolt for a caution hourglass without rewriting the row.
+    # warranty leads because it is the claim being made; the delivery is its
+    # qualifier and stays muted.
     warranty = (f'<span class="ac-sv-i is-w">{_ico("shield-check", 12, "ico", stroke=True)}'
                 f'<span>{D.ACCOUNT_WARRANTY_MONTHS}-month warranty</span></span>'
                 '<i class="ac-sv-sep" aria-hidden="true"></i>')
@@ -6609,9 +6618,6 @@ def ac_tier_card(a, region):
         <span class="ac-sv-one" data-ac-sv="ok">{warranty}
           <span class="ac-sv-i is-d">{_ico("bolt", 11, "ico")}
             <span>{esc(pricing.ACCOUNT_ETA.lower())}</span></span></span>
-        <span class="ac-sv-one" data-ac-sv="low">{warranty}
-          <span class="ac-sv-i is-hold">{_ico("hourglass", 11, "ico", stroke=True)}
-            <span>verified in 12 h</span></span></span>
         <span class="ac-sv-one" data-ac-sv="out">{_ico("dot", 11, "ico")}
           <span>Sold out on this server</span></span>
       </span>"""
@@ -6620,14 +6626,14 @@ def ac_tier_card(a, region):
     # honest answer to "what does a Diamond cost here", and the one real action
     # left is asking when it is back. Not a disabled button — there is nothing
     # to enable.
-    # ⚠ The CTA keys ARE the stock states — `ok` / `low` / `out`, the same three
+    # ⚠ The CTA keys ARE the stock states — `ok` / `out`, the same two
     # `[data-ac-stock]` carries. They were `buy` / `reserve` / `out` for one
-    # revision and paint()'s `kind !== state` then hid all three, leaving every
-    # card without a CTA at all. One vocabulary, or the two drift silently.
+    # revision and paint()'s `kind !== state` then hid all of them, leaving every
+    # card without a CTA at all. One vocabulary, or the two drift silently — and
+    # that is why removing the `low` state means removing it from BOTH lists and
+    # from app.js's state calculation in the same pass.
     ctas = f"""<a class="btn btn-primary ac-cta" data-ac-cta="ok" href="{href}"
           {"" if state == "ok" else "hidden"}><span>Buy now</span></a>
-        <a class="btn ac-cta ac-cta-reserve" data-ac-cta="low" href="{href}"
-          {"" if state == "low" else "hidden"}><span>Reserve</span></a>
         <a class="btn btn-outline ac-cta ac-cta-out" data-ac-cta="out" href="/support.html"
           {"" if state == "out" else "hidden"}><span>Ask when it is back</span></a>"""
 
@@ -9078,8 +9084,8 @@ def page_checkout():
           data-hide-service="account">Used for your order link, and to
           send you your cart if you don't finish. No marketing unless you tick the box at
           the end.</span><span data-when-service="account" hidden>This is where the login,
-          the password and the recovery mailbox are sent. Check it is one you can open —
-          no marketing unless you tick the box at the end.</span></p>
+          the password and the recovery mailbox are sent. Check it is one you can
+          open.</span></p>
 
           <div class="co-two" data-hide-service="account">
             <div class="co-fieldset">
@@ -9100,14 +9106,20 @@ def page_checkout():
             </div>
           </div>
 
-          <div class="co-lab-row co-lab-row-sp">
-            <label class="co-lab" for="k-notes"><span data-hide-service="account">Anything the
-            booster should know</span><span data-when-service="account" hidden>Anything we
-            should know</span></label>
-            <span class="co-opt-lab">Optional</span>
+          <!-- Nothing an account buyer could write here is acted on: the shard was
+               chosen in step 1 of the shop, delivery is by machine and no booster
+               ever reads the order. A free-text box asking for champion pools over
+               a purchase that has none is a field that appears to do something and
+               does not — the same reason Server and Preferred hours are hidden
+               above. So the whole block goes on this service, label included. -->
+          <div data-hide-service="account">
+            <div class="co-lab-row co-lab-row-sp">
+              <label class="co-lab" for="k-notes">Anything the booster should know</label>
+              <span class="co-opt-lab">Optional</span>
+            </div>
+            <textarea class="co-input co-textarea" id="k-notes"
+                      placeholder="Champion pool, roles, don't touch ranked flex…"></textarea>
           </div>
-          <textarea class="co-input co-textarea" id="k-notes"
-                    placeholder="Champion pool, roles, don't touch ranked flex…"></textarea>
 
           <div class="co-div"></div>
 
@@ -9124,11 +9136,14 @@ def page_checkout():
 
           {f'<div class="co-div"></div>{tp}' if tp else ''}
 
-          <label class="co-toggle">
+          <!-- Boost only. An account arrives in the same minute the payment clears
+               (ACCOUNT_ETA), so "email me when it is on its way" offers a heads-up
+               that can only land after the credentials themselves — an opt-in for a
+               message nobody would ever receive. The order mail is the delivery. -->
+          <label class="co-toggle" data-hide-service="account">
             <input type="checkbox" id="k-optin">
-            <span class="co-toggle-t"><span data-hide-service="account">Email me when my order is
-            claimed and when it's done. Nothing else.</span><span data-when-service="account"
-            hidden>Email me when the account is on its way. Nothing else.</span></span>
+            <span class="co-toggle-t">Email me when my order is claimed and when it's done.
+            Nothing else.</span>
           </label>
 
           <p class="co-err" data-pay-error role="alert" hidden></p>
