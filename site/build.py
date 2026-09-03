@@ -6565,7 +6565,13 @@ def ac_tier_card(a, region):
     feats = [
         ("globe", "spec", '<span data-ac-shard-name>%s</span>' % esc(region)),
         ("package", "spec", be_row),
-        ("users", "spec", spec_row),
+        # ⚠ Two shapes, two marks: `account_spec()` states a CHAMPION POOL on an
+        # unranked listing and an MMR BAND on a ranked one, and one glyph could
+        # only ever be right for one of them — `users` is a cast of characters,
+        # which says nothing about a rating. Derived from the tier through
+        # `account_kind()`, so nothing is authored twice.
+        ("users" if D.account_kind(a) == "unranked" else "shield-check",
+         "spec", spec_row),
         ("check", "ok", "<span>%s</span>" % esc("Full email access")),
         ("check", "ok", "<span>%s</span>" % esc("Hand-levelled, never botted")),
         ("warn", "caution", "<span>%s</span>" % esc(a["note"])),
