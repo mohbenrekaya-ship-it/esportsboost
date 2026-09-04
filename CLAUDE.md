@@ -2967,6 +2967,35 @@ with nothing to configure.
 - **`/ops` is not part of the shop.** No canonical tag, not in `sitemap.xml`, `Disallow: /ops` in
   robots.txt, `noindex` in its own head, and zero links to it from any page. It is written after the
   sitemap loop in `main()` for exactly that reason.
+- **The accounts shop has its own three steps, and they are NOT in `FUNNEL`.**
+  `/accounts` is not a configurator, so it fires none of the funnel's events
+  (`view_item`, `engage`, `configure`) — between `page_view` and `begin_checkout` it used to
+  emit **nothing at all**, and three completely different visits were one row in /ops: somebody
+  who read the hero and left, somebody who picked a shard and balked at the board, and somebody
+  whose browser loaded the HTML but never mounted the shop. `initAccounts()` now emits
+  `account_shop` (mounted and interactive — once per page), `account_server` (a shard was picked,
+  `meta.shard`) and `account_tiers` (step 2 on screen, once per shard, `meta.tiers` / `meta.stock`).
+  - ⚠ **`account_shop` is a RENDER RECEIPT, and its absence is the reading.** A session with a
+    `page_view` on `/accounts` and no `account_shop` behind it is one whose browser ran the
+    beacon but not the shop — a broken render, not a bounce. Every early return in
+    `initAccounts()` lands in exactly that gap. This is the one thing `page_view` cannot say,
+    and it is why the event exists at all.
+  - **`SHOP_FUNNEL` in `insights.py` is deliberately separate from `FUNNEL`.** Every percentage
+    on the dashboard is computed over `FUNNEL`; a step nine tenths of the traffic can never
+    reach would read as a collapse rather than as "this page is a different product".
+    `_furthest_step()` reads the shop step **only while the main funnel is still on `session`**,
+    so a checkout, a payment or a purchase always wins — those are the same events whichever
+    product was bought. That is what stops the sessions table reporting every account visitor as
+    "Visited the site".
+  - ⚠ **They are house names, never `select_item` / `view_item_list`.** `select_item` is pushed
+    by the configurator on every re-quote and is kept out of `analytics.js`'s `BRIDGE` on purpose;
+    borrowing it here would count boosting re-quotes as account picks.
+  - **`META_KEYS` in `analytics.js` gained `shard` / `tiers` / `stock`** — a region code and two
+    counts. Product facts about the page, never about the person, which is the only test a key
+    added to that list has to pass. The bridge's meta check is `!= null`, **not** truthiness:
+    `stock: 0` is the reading this beacon exists to catch, and a truthy test would drop it.
+  - **Restart the server after touching `analytics.py`** — `ALLOWED_EVENTS` is read by the
+    running process, so a new event name is silently dropped at `/api/collect` until it restarts.
 - **The re-quote count drives real conclusions.** `configure` fires only when the quote signature
   actually changes, watched through the documented `data-*` contract rather than app.js internals.
   The `dataLayer` bridge deliberately ignores `select_item`/`add_to_cart` so re-quotes aren't

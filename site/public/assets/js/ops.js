@@ -1459,14 +1459,19 @@
       var cols = ["started", "ended", "session_id", "visitor_id", "source", "medium", "campaign",
                   "device", "country_code", "country", "country_source", "timezone", "language",
                   "entry", "exit", "pages", "seconds", "events", "requotes", "furthest_step",
-                  "paid", "value_usd", "returning", "account_step"];
+                  "paid", "value_usd", "returning", "account_step", "shop_step"];
       var lines = [cols.join(",")];
       rows.forEach(function (r) {
         lines.push([new Date(r.start * 1000).toISOString(), new Date(r.end * 1000).toISOString(),
                     r.id, r.anon, r.src, r.med, r.cmp, r.dev, r.co, countryName(r.co),
                     r.cosrc, r.tz, r.lang, r.entry, r.exit,
                     r.pages, r.duration, r.events, r.requotes, r.step, r.paid ? "yes" : "no",
-                    r.value, r.returning ? "yes" : "no", r.acct || "guest"]
+                    r.value, r.returning ? "yes" : "no", r.acct || "guest",
+                    // The accounts shop's own furthest step. Blank for every
+                    // session that never opened it, which is most of them —
+                    // `furthest_step` already carries it in words where it is
+                    // the furthest thing that happened.
+                    r.shop_step || ""]
           .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; })
           .join(","));
       });

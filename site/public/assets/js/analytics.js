@@ -242,13 +242,24 @@
     begin_checkout: "begin_checkout", add_payment_info: "add_payment_info",
     purchase: "purchase", generate_lead: "generate_lead",
     auth_open: "auth_open", oauth_start: "oauth_start", sign_up: "sign_up",
-    login: "login", logout: "logout", auth_error: "auth_error"
+    login: "login", logout: "logout", auth_error: "auth_error",
+    /* The accounts shop's own three steps. They are house names, deliberately
+       NOT `select_item` / `view_item_list`: `select_item` is pushed by the
+       configurator on every re-quote and is kept out of this bridge on purpose
+       (see the note on `configure` below), so borrowing it here would start
+       double-counting boosting re-quotes as account picks. */
+    account_shop: "account_shop", account_server: "account_server",
+    account_tiers: "account_tiers"
   };
 
   // Only these keys are carried, and each is stringified — a payload key that
   // is not named here never reaches the store, which is what stops a future
   // caller passing `email` into track() and having it silently persisted.
-  var META_KEYS = ["transaction_id", "method", "mode", "reason", "promotion"];
+  // `shard`, `tiers` and `stock` are the accounts shop's: a region code and two
+  // counts. Product facts about the page, never about the person — which is the
+  // only test a key added here has to pass.
+  var META_KEYS = ["transaction_id", "method", "mode", "reason", "promotion",
+                   "shard", "tiers", "stock"];
 
   function bridge(payload) {
     if (!payload || typeof payload !== "object") return;
@@ -259,7 +270,11 @@
     var meta = {};
     for (var k = 0; k < META_KEYS.length; k++) {
       var key = META_KEYS[k];
-      if (payload[key]) meta[key] = String(payload[key]);
+      /* `!= null` and not a truthiness test: the accounts shop's `stock` and
+         `tiers` are counts, and ZERO is the reading worth having — a shard
+         whose whole board is sold out is the one case this beacon exists to
+         catch. An empty string is still dropped. */
+      if (payload[key] != null && payload[key] !== "") meta[key] = String(payload[key]);
     }
     if (Object.keys(meta).length) extra.meta = meta;
     emit(name, extra);

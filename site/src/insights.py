@@ -55,6 +55,22 @@ FUNNEL = [
     ("purchase",  "Paid",                 ("purchase",)),
 ]
 
+# The accounts shop's steps, in order. Deliberately NOT part of FUNNEL: that
+# list is the boosting funnel, every percentage on the dashboard is computed
+# over it, and a step nine tenths of the traffic can never reach would read as
+# a collapse rather than as "this page is a different product". The shop has no
+# configurator, so an account visitor can never reach `engage` or `configure`
+# and every one of them landed on "Visited the site" — which is exactly the
+# question that traffic was being asked. Read only where the main funnel has
+# nothing further to say (see `_furthest_step`).
+SHOP_FUNNEL = [
+    ("shop",        "Opened the account shop",  ("account_shop",)),
+    ("shop_server", "Picked a server",          ("account_server",)),
+    ("shop_tiers",  "Saw the account tiers",    ("account_tiers",)),
+]
+
+SHOP_ORDER = [k for k, _l, _n in SHOP_FUNNEL]
+
 PRICE_BUCKETS = [(0, 25), (25, 50), (50, 100), (100, 200), (200, 400), (400, None)]
 THRASH_BUCKETS = [(1, 1), (2, 3), (4, 6), (7, 10), (11, None)]
 
@@ -74,6 +90,11 @@ EVENT_LABELS = {
     "oauth_start": "Left for a sign-in provider",
     "sign_up": "Created an account", "login": "Logged in",
     "logout": "Logged out", "auth_error": "Account step refused",
+    # The accounts shop. `account_shop` reads as a render receipt on purpose:
+    # its absence under a /accounts page_view is the interesting reading.
+    "account_shop": "Account shop ready",
+    "account_server": "Picked a server",
+    "account_tiers": "Saw the account tiers",
 }
 
 # What a session's `acct` marker can say, most significant first. A session is
@@ -141,7 +162,7 @@ class Session(object):
     __slots__ = ("id", "anon", "start", "end", "events", "pages", "entry", "dev",
                  "co", "src", "med", "cmp", "ref", "reached", "configs",
                  "last_cfg", "buy_cfg", "value", "requotes", "returning", "lang",
-                 "tz", "cosrc", "acct")
+                 "tz", "cosrc", "acct", "shop")
 
     def __init__(self, sid, anon):
         self.id, self.anon = sid, anon
@@ -156,6 +177,7 @@ class Session(object):
         self.requotes = 0
         self.returning = False
         self.acct = ""
+        self.shop = ""          # furthest SHOP_FUNNEL key, "" if never mounted
 
     @property
     def paid(self):
@@ -172,6 +194,10 @@ def sessionize(events):
     for key, _label, names in FUNNEL:
         for n in names:
             step_of[n] = key
+    shop_of = {}
+    for key, _label, names in SHOP_FUNNEL:
+        for n in names:
+            shop_of[n] = key
 
     out = OrderedDict()
     for ev in sorted(events, key=lambda e: (e.get("t", 0), e.get("n", 0))):
@@ -188,6 +214,13 @@ def sessionize(events):
         name = ev.get("e")
         if name in step_of:
             s.reached.add(step_of[name])
+        # The accounts shop's furthest step. Kept on its own attribute rather
+        # than in `s.reached`, which is normalised to FUNNEL keys below and
+        # would drop these on the floor.
+        if name in shop_of:
+            k = shop_of[name]
+            if not s.shop or SHOP_ORDER.index(k) > SHOP_ORDER.index(s.shop):
+                s.shop = k
         if name == "configure":
             s.requotes += 1
         # The account marker, so the sessions table answers "did this visitor
@@ -624,11 +657,29 @@ def _page_visits(rows):
     return visits
 
 
-def _furthest_step(reached):
+def _furthest_step(reached, shop=""):
+    """The furthest funnel step a session reached, in words.
+
+    `shop` is the accounts shop's own furthest step, and it is read ONLY while
+    the main funnel is still on its first rung. The shop fires no configurator
+    events, so without this every account visitor — the one who bounced off the
+    hero and the one who picked a shard and read all eleven tiers — reported
+    the identical "Visited the site". Anything past `session` on the real
+    funnel (a checkout, a payment, a purchase) always wins: those are the same
+    events whichever product was bought, and they are further along than
+    anything on this list.
+    """
     label = ""
+    reached_past_session = False
     for key, text, _names in FUNNEL:
         if key in reached:
             label = text
+            if key != "session":
+                reached_past_session = True
+    if shop and not reached_past_session:
+        for key, text, _names in SHOP_FUNNEL:
+            if key == shop:
+                return text
     return label
 
 
@@ -646,7 +697,8 @@ def _session_row(s):
         "entry": s.entry or "", "exit": visits[-1]["path"] if visits else "",
         "pages": len(visits), "events": len(s.events),
         "returning": s.returning, "requotes": s.requotes, "acct": s.acct,
-        "paid": s.paid, "step": _furthest_step(s.reached),
+        "paid": s.paid, "step": _furthest_step(s.reached, s.shop),
+        "shop_step": s.shop,
         "value": _money(s.value or cfg.get("total") or 0),
         "game": cfg.get("game", ""), "summary": cfg.get("summary", ""),
     }

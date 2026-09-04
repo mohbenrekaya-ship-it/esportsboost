@@ -71,6 +71,21 @@ ALLOWED_EVENTS = {
     # that reason. Nothing below may ever carry either — see the note at the top
     # of this file, and `meta` is capped and stringified like every other field.
     "auth_open", "oauth_start", "sign_up", "login", "logout", "auth_error",
+    # The accounts shop (`/accounts`), which is NOT a configurator and so fires
+    # none of the funnel's own events. Between `page_view` and `begin_checkout`
+    # that page emitted nothing at all, which made three very different visits
+    # indistinguishable in /ops: somebody who read the hero and left, somebody
+    # who picked a server and balked at the board, and somebody whose browser
+    # loaded the HTML but never mounted the shop. In order:
+    #   account_shop    the shop mounted and is interactive (the denominator,
+    #                   and the one thing `page_view` cannot say — a page_view
+    #                   on /accounts with no account_shop behind it is a broken
+    #                   render, not a bounce)
+    #   account_server  step 1 answered: a shard was picked
+    #   account_tiers   step 2 on screen with real cards, once per shard
+    # `meta` carries the shard code and two counts (`tiers`, `stock`) — product
+    # facts about the page, never about the person, like everything else here.
+    "account_shop", "account_server", "account_tiers",
 }
 
 # Configurator fields mirrored from the order state in app.js. Anything else in

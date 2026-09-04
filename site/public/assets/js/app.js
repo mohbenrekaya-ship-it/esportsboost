@@ -3425,6 +3425,15 @@
     var nojs = shop.querySelector("[data-ac-nojs]");
     var filbar = shop.querySelector("[data-ac-filbar]");
     var st = { server: null, kind: "all", page: 0 };
+    /* Instrumentation state. The accounts shop is not a configurator, so it
+       fires none of the funnel's own events (`view_item`, `engage`,
+       `configure`) and between `page_view` and `begin_checkout` this page used
+       to emit NOTHING — a paid visitor who read the hero and left, one who
+       picked a server and balked at the prices, and one whose browser never
+       mounted the shop at all were three identical rows in /ops. These three
+       beacons are the difference. See ALLOWED_EVENTS in analytics.py. */
+    var shopSeen = false;   // `account_shop` fires once per page
+    var tiersFor = null;    // the shard `account_tiers` last reported
 
     // The no-JS line is the one thing that is wrong the moment JS runs: with
     // scripting the shard is chosen, not assumed.
@@ -3569,6 +3578,23 @@
         }
       }
 
+      /* Step 2 is on screen with real cards on it. Reported once per shard
+         rather than once per paint(), because the filter chips, the carousel
+         and a resize all repaint and none of those is a new screen. `stock` is
+         how many of the shown tiers can actually be bought — a shard whose
+         board is mostly sold out is a different page from one that is not, and
+         the count is the only thing that says so. */
+      if (st.server !== tiersFor) {
+        tiersFor = st.server;
+        track("account_tiers", {
+          shard: sv.code || sv.region,
+          tiers: shown,
+          stock: visible().filter(function (c) {
+            return !c.classList.contains("is-out");
+          }).length
+        });
+      }
+
       // Step 2 was hidden when the rails were first measured, so the filter row
       // could not know it overflows. See esbSyncRails.
       if (window.esbSyncRails) window.esbSyncRails();
@@ -3581,6 +3607,11 @@
         // whose stock is a third of the size.
         st.server = b.getAttribute("data-ac-server");
         st.kind = "all"; st.page = 0;
+        /* The one thing step 1 exists to find out. Fired BEFORE paint() so it
+           is recorded even if a repaint throws — the beacon is the measurement,
+           not a side effect of the render succeeding. */
+        var picked = accountServer(st.server);
+        track("account_server", { shard: (picked && picked.code) || st.server });
         paint();
         /* ⚠ On the phone this scrolls to the FILTER BAR, not to the top of
            step 2. Step 2's head is the server bar plus a heading — ~230px of
@@ -3607,6 +3638,7 @@
     var change = shop.querySelector("[data-ac-change]");
     if (change) change.addEventListener("click", function () {
       st.server = null; st.kind = "all"; st.page = 0;
+      tiersFor = null;   // coming back and picking again IS a second look
       paint();
       step1.scrollIntoView({ block: "center", behavior: "instant" });
     });
@@ -3655,6 +3687,17 @@
     // `window.esbRefreshRoster` has with initBoosters().
     window.esbRefreshAccounts = paint;
     paint();
+
+    /* The shop is mounted and interactive. This is the denominator for the two
+       beacons above, and it is deliberately NOT the same claim as `page_view`:
+       a session that recorded page_view on /accounts and no `account_shop` is
+       one whose browser loaded the HTML and then failed to run this — the
+       "is the page broken for them?" question, answerable instead of guessed
+       at. Every early return above lands in exactly that gap. */
+    if (!shopSeen) {
+      shopSeen = true;
+      track("account_shop", { tiers: cards.length });
+    }
   }
 
   /* The live stock read. Progressive enhancement, exactly like initBoosters():
