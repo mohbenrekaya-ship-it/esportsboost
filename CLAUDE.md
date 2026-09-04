@@ -2994,6 +2994,21 @@ with nothing to configure.
     counts. Product facts about the page, never about the person, which is the only test a key
     added to that list has to pass. The bridge's meta check is `!= null`, **not** truthiness:
     `stock: 0` is the reading this beacon exists to catch, and a truthy test would drop it.
+  - **`_mod_shop()` is the aggregate, on the Funnel tab under the site funnel.** Same row shape as
+    `_mod_funnel()` so it draws through the same `funnelChart()` — one shape, one renderer. Two
+    things about its arithmetic are load-bearing:
+    - **The denominator is sessions that LANDED on `/accounts`**, never all traffic. A session
+      that never opened the page cannot be said to have dropped out of its first step.
+    - **Only MEASURED sessions are counted, and the boundary is READ, not typed.**
+      `_shop_since()` is the timestamp of the first `account_shop` in the store — a hardcoded
+      deploy date is wrong the moment the store is cleared, replayed or seeded, and wrong in the
+      direction that invents a page fault. Sessions from before it are reported separately as
+      `unmeasured`. Without that split the funnel is **not monotonic** over a window straddling
+      the deploy: older sessions still reach `begin_checkout` (that event predates this work)
+      while carrying no shop steps, so "Started checkout 3" printed under "Saw the tiers 1".
+      A session is judged on its **last** `/accounts` page load — not on `s.start` (a session can
+      begin on the homepage and reach the shop minutes later) and not on its first (a session
+      either side of the deploy is measured; the newest load carries the JS that reports).
   - **Restart the server after touching `analytics.py`** — `ALLOWED_EVENTS` is read by the
     running process, so a new event name is silently dropped at `/api/collect` until it restarts.
 - **The re-quote count drives real conclusions.** `configure` fires only when the quote signature

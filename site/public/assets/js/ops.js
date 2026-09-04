@@ -917,6 +917,63 @@
       }
     }));
 
+    /* The accounts shop's own funnel. It is a separate card and not extra rows
+       on the one above, for the reason SHOP_FUNNEL is separate from FUNNEL in
+       insights.py: /accounts is a different product on a page with no
+       configurator, so its visitors can never reach "Touched the configurator"
+       and folding them in would read as a collapse. Denominator is sessions
+       that LANDED on the shop, never all traffic. */
+    var sp = d.shop;
+    if (sp && (sp.landed || sp.unmeasured)) {
+      var since = sp.since
+        ? new Date(sp.since * 1000).toLocaleString(undefined,
+            { dateStyle: "medium", timeStyle: "short" })
+        : null;
+      var note = since
+        ? "Measured since " + since + ", when the shop's beacons shipped."
+        : "The shop's beacons have not arrived yet — deploy, then read this.";
+      if (sp.unmeasured) {
+        note += " " + num(sp.unmeasured) + " earlier visit" +
+          (sp.unmeasured === 1 ? " is" : "s are") + " excluded: they carry no " +
+          "shop events at all, so counting them would invent a page fault.";
+      }
+      g.appendChild(card({
+        title: "The accounts shop",
+        sub: "Where a visitor to /accounts stops. " + note,
+        chart: function (w) { return funnelChart(w, sp.rows); },
+        table: {
+          head: ["Step", "Sessions", "Of all", "Of previous", "Lost here"],
+          num: [1, 2, 3, 4],
+          rows: sp.rows.map(function (r) {
+            return [r.label, num(r.sessions), pct(r.pct_total), pct(r.pct_prev),
+                    num(r.lost)];
+          })
+        }
+      }));
+
+      var sk = document.createElement("div");
+      sk.className = "kpis";
+      sk.appendChild(kpi("Landed on the shop", num(sp.landed)));
+      /* ⚠ THE ONE TO READ FIRST. A session that recorded a page view on
+         /accounts and never reported the shop mounting is a browser that ran
+         the beacon and then did not render the shop — a broken page, not a
+         bounce. Single figures are noise (a visitor who left mid-load); a
+         steady share is a bug, and it is the one thing a bounce rate can
+         never tell you apart from disinterest. */
+      sk.appendChild(kpi("Shop never rendered", num(sp.stalled) +
+                         (sp.landed ? " · " + pct(sp.stalled_pct) : "")));
+      /* A shard whose whole board was sold out when somebody looked at it.
+         That is a page nobody can buy from, and left uncounted it reads as a
+         price objection. */
+      sk.appendChild(kpi("Sold-out boards seen", num(sp.sold_out_views)));
+      sk.appendChild(kpi("Servers picked", sp.shards.length
+        ? sp.shards.map(function (r) { return r.shard + " " + num(r.n); }).join(" · ")
+        : "—"));
+      g.appendChild(wrapCard("What the shop's own steps say",
+        "Step 1 is a server, step 2 is the board. These say which one they " +
+        "stopped at, and whether the page worked at all.", sk));
+    }
+
     var kr = document.createElement("div");
     kr.className = "kpis";
     kr.appendChild(kpi("Started checkout", num(fr.abandon.began)));

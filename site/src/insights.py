@@ -620,6 +620,148 @@ def _mod_abandoned(sess, limit=60):
     return rows[:limit]
 
 
+SHOP_PATH = "/accounts"
+
+def _shop_since(events):
+    """When the shop beacons started arriving — READ, never typed.
+
+    Sessions from before that deploy carry no `account_shop` at all, so they
+    would every one of them read as a broken render. The boundary is the
+    timestamp of the first `account_shop` we hold, which is self-maintaining:
+    a hardcoded deploy date is wrong the moment the store is cleared, replayed
+    or seeded, and wrong in the direction that invents a page bug.
+
+    `None` means the beacons have never arrived — the honest answer before the
+    deploy reaches production, and the console says so rather than drawing an
+    empty funnel that looks like a collapse.
+    """
+    ts = [e.get("t", 0) for e in events if e.get("e") == "account_shop"]
+    return min(ts) if ts else None
+
+
+def _mod_shop(sess, events):
+    """The accounts shop's own funnel — its version of `_mod_funnel`.
+
+    Separate for the same reason `SHOP_FUNNEL` is separate from `FUNNEL`: the
+    shop is a different product on a page with no configurator, and folding it
+    into the site funnel would either dilute that funnel or hide this one
+    inside it.
+
+    The rows are counted over sessions that actually LANDED on /accounts, not
+    over all traffic. That is the honest denominator — a session that never
+    opened the page cannot be said to have dropped out of its first step.
+    """
+    def _shop_view(s):
+        """When this session LAST loaded /accounts, or None if it never did.
+
+        Two deliberate choices, both of which were wrong first:
+
+          * Not `s.start` — a session can begin on the homepage and reach the
+            shop minutes later, so the session's own start booked a shop visit
+            that happened after the deploy as unmeasured.
+          * The LAST such load, not the first. A session that opened the shop
+            three times either side of the deploy is measured: `s.shop` is the
+            furthest step reached across the whole session, and the newest page
+            load is the one carrying the JS that could report it.
+        """
+        ts = [e.get("t", 0) for e in s.events
+              if e.get("e") == "page_view" and norm_path(e.get("p")) == SHOP_PATH]
+        return max(ts) if ts else None
+
+    on_shop = [(s, t) for s, t in ((s, _shop_view(s)) for s in sess)
+               if t is not None]
+    # ⚠ The funnel is computed over MEASURED sessions only — the ones that
+    # started after the beacons shipped. A window straddling that deploy
+    # otherwise renders a funnel that is not monotonic: the older sessions can
+    # still reach `begin_checkout` (that event predates this work) while
+    # carrying no shop steps at all, so "Started checkout 3" printed under
+    # "Saw the tiers 1" and the panel read as broken rather than as young.
+    # The excluded count is reported as `unmeasured` instead of hidden.
+    since = _shop_since(events)
+    # No beacon has ever arrived: every session is unmeasured, and none of them
+    # is evidence of anything. Guarding here rather than letting `since` be 0
+    # is what stops the panel reporting 100% stalled on the day before deploy.
+    pre = len(on_shop) if since is None else sum(1 for _s, t in on_shop
+                                                 if t < since)
+    landed = [] if since is None else [s for s, t in on_shop if t >= since]
+
+    def _at_least(key):
+        i = SHOP_ORDER.index(key)
+        return sum(1 for s in landed
+                   if s.shop and SHOP_ORDER.index(s.shop) >= i)
+
+    # Checkout is counted from the EVENT'S OWN PATH, never from the session
+    # reaching the `checkout` funnel step: a visitor who configured a boost and
+    # also looked at the accounts page would otherwise be booked as an account
+    # checkout. `begin_checkout` fires on /accounts itself (the tier card's CTA
+    # is a real link and the beacon goes before the navigation), so it is exact.
+    started = sum(1 for s in landed
+                  if any(e.get("e") == "begin_checkout"
+                         and norm_path(e.get("p")) == SHOP_PATH for e in s.events))
+
+    # Same row shape as `_mod_funnel`, so the console draws it with the same
+    # `funnelChart()` and reads identically to the funnel above it. One shape,
+    # one renderer — a second one would drift.
+    steps = [("landed", "Landed on the shop", len(landed))]
+    steps += [(k, lbl, _at_least(k)) for k, lbl, _n in SHOP_FUNNEL]
+    steps += [("checkout", "Started checkout", started)]
+
+    total = len(landed)
+    rows, prev = [], None
+    for key, label, n in steps:
+        rows.append({
+            "key": key, "label": label, "sessions": n,
+            "pct_total": _rate(n, total),
+            "pct_prev": _rate(n, prev) if prev is not None else 100.0,
+            "lost": (prev - n) if prev is not None else 0,
+        })
+        prev = n
+    top = total or 1
+
+    # THE READING THIS MODULE EXISTS FOR. A session that recorded a page_view on
+    # /accounts and no `account_shop` is one whose browser ran the beacon and
+    # then did not mount the shop — a broken render, not a bounce. Anything
+    # above single figures here is a bug on the page, not a market problem, and
+    # it is the one question a bounce rate can never answer.
+    stalled = sum(1 for s in landed if not s.shop)
+
+    # Which shard step 1 is actually answered with, and how often the board
+    # behind it was empty. `stock: 0` on an `account_tiers` is a shard whose
+    # whole board was sold out at the moment somebody looked at it — a page
+    # that cannot be bought from, which reads as a price objection unless it is
+    # counted separately.
+    shards, sold_out = {}, 0
+    for s in landed:
+        for e in s.events:
+            m = e.get("meta") or {}
+            if e.get("e") == "account_server" and m.get("shard"):
+                shards[m["shard"]] = shards.get(m["shard"], 0) + 1
+            elif e.get("e") == "account_tiers":
+                try:
+                    if int(m.get("stock", 1)) == 0:
+                        sold_out += 1
+                except (TypeError, ValueError):
+                    pass
+
+    return {
+        "rows": rows,
+        "landed": len(landed),
+        "stalled": stalled,
+        "stalled_pct": round(100.0 * stalled / top, 1),
+        # Sessions from before the beacons shipped. They carry no shop events at
+        # all, so they are excluded from `stalled` rather than counted as broken
+        # renders — and named, so a low funnel over a window that straddles the
+        # deploy is read as missing instrumentation, not as a collapse.
+        "unmeasured": pre,
+        "sold_out_views": sold_out,
+        "shards": sorted([{"shard": k, "n": v} for k, v in shards.items()],
+                         key=lambda r: -r["n"]),
+        # When the instrumentation started. The console prints it so a young
+        # panel is read as young rather than as a broken page.
+        "since": since,
+    }
+
+
 def _page_visits(rows):
     """Consecutive page visits in a session, with time spent on each.
 
@@ -1100,6 +1242,10 @@ def compute(events, days=30, game=None, now=None, with_stripe=True,
         "friction": _mod_friction(sess, window),
         "sessions": _mod_sessions(sess, source),
         "abandoned": _mod_abandoned(sess),
+        # Passed the FULL store, not the window: the boundary between measured
+        # and unmeasured sessions is a property of the deploy, not of whatever
+        # period the reader happens to have selected.
+        "shop": _mod_shop(sess, events),
         "live": _mod_live(window),
         # The live view is always "right now", not the selected period — it
         # reads its own short windows off the full store.
