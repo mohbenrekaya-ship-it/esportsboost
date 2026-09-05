@@ -9049,12 +9049,25 @@ html.myd-open .mobile-bar { display: none; }
      four unrelated components. */
   .ac-sv-code { grid-area: code; min-width: 74px; height: 42px; padding: 0 10px; font-size: 16px; }
   .ac-sv-name { grid-area: name; margin-top: 0; font-size: 15px; }
-  /* "FROM" goes: a price under a server card is self-evidently a from-price,
-     and the 44px it costs is what lets "EU Nordic & East" stay on one line. */
-  .ac-sv-froml { display: none; }
+  /* ⚠ "FROM" STAYS on the phone. It came off here to buy 44px for the name,
+     and what that bought was a row reading a flat "$29.90" per server — which
+     is not the shard's price, it is the floor of eleven listings, and the four
+     rows sitting at one figure made it read as a per-server price that happens
+     to be identical everywhere. The width is bought back instead: the label is
+     STACKED over the figure, not set beside it. Column 3 is shared with the
+     badge, so an inline label widens that track and takes the width straight
+     off the name — "EU Nordic & East" is the row that cannot afford it. At
+     8.5px the label is narrower than the price, so it costs no width at all,
+     and the ~11px of height it adds is slack the 42px code plate already
+     holds. */
+  .ac-sv-froml { font-size: 8.5px; letter-spacing: .12em; }
   .ac-sv-stock { grid-area: stock; margin-top: 0; }
   .ac-sv-badge { grid-area: badge; justify-self: end; }
-  .ac-sv-from { grid-area: price; justify-self: end; font-size: 17px; margin-top: 0; padding-top: 0; border-top: 0; }
+  .ac-sv-from {
+    grid-area: price; justify-self: end;
+    flex-direction: column; align-items: flex-end; gap: 1px;
+    font-size: 17px; margin-top: 0; padding-top: 0; border-top: 0;
+  }
   .ac-sv-go { display: none; }
   /* The foot's rule belonged to the stacked card; a row has no foot. */
   .ac-sv-foot { border-top: 0; }
