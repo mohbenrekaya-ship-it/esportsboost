@@ -3640,7 +3640,19 @@
       st.server = null; st.kind = "all"; st.page = 0;
       tiersFor = null;   // coming back and picking again IS a second look
       paint();
-      step1.scrollIntoView({ block: "center", behavior: "instant" });
+      /* ⚠ Back to the TOP of the shop, not to the centre of step 1. Step 1 is
+         465px on a phone, so `block: "center"` scrolled the page down far
+         enough to bury the kicker and the first line of the H1 under the
+         sticky header — "Change server" landed the visitor mid-page with the
+         beginning of the page missing. Desktop never showed it because step 1
+         fits there and centring resolved to ~0. `html` carries
+         `scroll-padding-top: 96px`, so start clears the header on its own.
+         Deferred a frame for the same reason the step-2 scroll is: paint()
+         has just re-hidden step 2 and a scroll started against that reflow
+         is non-deterministic. */
+      requestAnimationFrame(function () {
+        shop.scrollIntoView({ block: "start", behavior: "instant" });
+      });
     });
     each("[data-ac-kind]", null, function (b) {
       b.addEventListener("click", function () {
