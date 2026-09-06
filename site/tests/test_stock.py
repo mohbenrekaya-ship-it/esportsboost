@@ -12,10 +12,10 @@ an account twice or leak one:
   * **a claim is idempotent per order** — Stripe retries its webhook, and the
     in-memory event de-dupe does not survive a cold start, so a redelivery must
     hand over the SAME account rather than burn a second one.
-  * **the last unit is the last unit** — once a (listing, shard) is in the
-    store, checkout refuses when it is empty; a pair the store has never held
-    still sells on data.py's figure, so loading one shard does not take the
-    other three off sale.
+  * **the shelf never refuses a sale** — an empty (listing, shard) is still
+    buyable (the business's call, 2026-09-06); `sellable()` still REPORTS the
+    difference between a pair that ran out and one never stocked, because the
+    handover path and /ops both read it, but nothing gates checkout on it.
   * **no public payload carries a credential** — `public_counts()` and
     `summary()` are the two things that leave this module for a browser.
   * **the handover mail is redacted in the outbox** — the row proves the mail
@@ -187,37 +187,61 @@ def test_restock_puts_it_back():
 
 
 # -- what the shop is allowed to sell -------------------------------------
-def test_the_last_unit_is_the_last_unit():
+def test_sellable_still_reports_what_is_on_the_shelf():
+    """`sellable()` is a REPORT, not a gate — see the next test. It still has to
+    tell an empty pair from one that was never stocked, because that is the
+    distinction `available_map()` and the /ops Stock tab are built on."""
     reset()
     check(stock.sellable(SKU, REGION),
-          "with an empty store every listing still sells on data.py's figure")
+          "with an empty store every listing reports as sellable on data.py's figure")
     load(1)
-    check(stock.sellable(SKU, REGION), "a loaded listing with stock sells")
+    check(stock.sellable(SKU, REGION), "a loaded listing with stock reports sellable")
     check(stock.sellable("lol-iron", REGION),
-          "a listing the store has NEVER held still sells on the catalogue figure - "
-          "loading one tier does not take the others off sale")
+          "a listing the store has NEVER held reports on the catalogue figure - "
+          "loading one tier says nothing about the others")
     check(stock.sellable(SKU, OTHER),
-          "and a shard the store has never held for this listing sells too")
+          "and a shard the store has never held for this listing too")
     stock.claim(SKU, REGION, order_id="ESB-LAST")
     check(not stock.sellable(SKU, REGION),
-          "but once that pair is sold out the store refuses it")
+          "and a pair that has run out reports empty, never as a gap")
 
 
-def test_checkout_refuses_an_account_it_cannot_hand_over():
+def test_checkout_never_refuses_an_account_for_stock():
+    """⚠ The business's rule, taken 2026-09-06: every product on the board is
+    always buyable. An empty shelf used to return 409 `out_of_stock` here, and
+    it refused four real checkout attempts across two buyers. It now goes
+    through to Stripe, and `fulfil()` mails the buyer a backorder note and
+    alerts ops — the same path every never-stocked pair has always taken.
+    `test_an_empty_shelf_sends_the_buyer_to_discord` is the other half: that the
+    buyer taking that path is still reached."""
     reset()
     load(1)
     stock.claim(SKU, REGION, order_id="ESB-GONE")
+    check(not stock.sellable(SKU, REGION), "the pair really is empty")
+    # The real quote, because we now get PAST the shelf and into the price
+    # guard, which refuses a total the page never showed.
+    import pricing
     order = {"service": "account", "account": SKU, "region": REGION,
-             "game": D.ACCOUNT_GAME, "client_total": 0}
+             "game": D.ACCOUNT_GAME}
+    order["client_total"] = pricing.quote(order)["total"]
+    # Stripe is stubbed: the assertion is that checkout REACHES it, and a real
+    # call would be a socket this suite promises never to open.
+    calls = []
+    real_call, real_key = payments.stripe_call, os.environ.get("STRIPE_SECRET_KEY")
+    payments.stripe_call = lambda *a, **k: (calls.append(a) or
+                                            {"url": "https://stripe.test/pay"})
     os.environ["STRIPE_SECRET_KEY"] = "sk_test_stock_check"
     try:
         status, payload = payments.process_checkout(json.dumps(order).encode(), "http://x")
     finally:
+        payments.stripe_call = real_call
         os.environ.pop("STRIPE_SECRET_KEY", None)
-    check(status == 409 and payload.get("error") == "out_of_stock",
-          "checkout refuses a sold-out account BEFORE it reaches Stripe")
-    check("another" in payload.get("message", "").lower(),
-          "and tells the buyer what to do instead")
+        if real_key is not None:
+            os.environ["STRIPE_SECRET_KEY"] = real_key
+    check(status != 409 and payload.get("error") != "out_of_stock",
+          "a sold-out account is NOT refused at checkout")
+    check(status == 200 and calls,
+          "it reaches Stripe and the buyer is given a payment page")
 
 
 # -- nothing public may carry a credential --------------------------------
@@ -277,7 +301,7 @@ def test_the_public_route_publishes_nothing_by_default():
     finally:
         stock.PUBLIC_COUNTS = saved
     check(stock.sellable(SKU, REGION) is True,
-          "switching the DISPLAY off never switches the sold-out refusal off")
+          "switching the DISPLAY off never changes what the store reports")
 
 
 # -- the handover ---------------------------------------------------------
@@ -482,8 +506,8 @@ def main():
                test_unknown_listing_or_shard_is_refused, test_one_row_per_login,
                test_a_unit_is_claimed_at_most_once, test_a_claim_is_idempotent_per_order,
                test_claim_is_per_listing_and_per_shard, test_restock_puts_it_back,
-               test_the_last_unit_is_the_last_unit,
-               test_checkout_refuses_an_account_it_cannot_hand_over,
+               test_sellable_still_reports_what_is_on_the_shelf,
+               test_checkout_never_refuses_an_account_for_stock,
                test_no_public_payload_carries_a_credential,
                test_sold_out_is_reported_as_a_zero_never_as_a_gap,
                test_the_public_route_publishes_nothing_by_default,

@@ -319,31 +319,39 @@ def process_checkout(raw, base_url):
         except Exception:                                       # noqa: BLE001
             pass          # a store hiccup must not block a paying customer
 
-    # ── nothing is sold that cannot be handed over ───────────────────────
-    # `pricing.account_pick()` already refuses a listing `data.py` calls sold
-    # out, but that figure is hand-set and never moves. Once the operator has
-    # loaded real credentials for a (listing, shard) the STORE is the authority
-    # for that pair, so the last unit is genuinely the last one — two buyers
-    # cannot both reach Stripe for it.
+    # ── the shelf never refuses a sale ───────────────────────────────────
+    # ⚠ THE STORE IS NOT A GATE. An empty (listing, shard) used to return 409
+    # here and the buyer was told "that account has just been bought" — which
+    # cost four real checkout attempts across two buyers on the highest-volume
+    # listing of the shard every European visitor defaults onto, while the page
+    # beside them still advertised 34 in stock. That is the business's call,
+    # taken 2026-09-06: **every product on the board is always buyable.**
     #
-    # ⚠ It fails OPEN, and deliberately: a pair the store has never held, and a
-    # store that cannot be reached at all, both fall back to the catalogue
-    # figure — the behaviour the shop had before this store existed. The
-    # webhook's out-of-stock alert is the backstop for the second case, and a
-    # refused checkout on a store hiccup would be a lost sale on an account we
-    # actually have.
-    if (order.get("service") or "") == "account":
-        try:
-            import stock
-            acc, shard = pricing.account_pick(order)
-            if acc and not stock.sellable(acc["id"], shard):
-                sys.stderr.write("[checkout] refused: %s is out of stock on %s\n"
-                                 % (acc["id"], shard))
-                return 409, {"error": "out_of_stock",
-                             "message": "That account has just been bought. "
-                                        "Pick another tier or another server."}
-        except Exception as e:                                  # noqa: BLE001
-            sys.stderr.write("[stock] availability check skipped: %s\n" % e)
+    # Nothing downstream needed changing, because the empty shelf was already a
+    # handled case rather than an error: `stock.fulfil()` claims a unit when one
+    # exists and mails it, and when none does it mails the BUYER a backorder
+    # note pointing at Discord with their order number and raises an ops alert
+    # ("STOCK EMPTY — … is paid and has nothing to hand over"). So an unstocked
+    # sale lands as a manual handover, exactly as every (listing, shard) pair
+    # the store has never held has always done.
+    #
+    # ⚠ What this costs, stated plainly so it is a decision and not a surprise:
+    # `pricing.ACCOUNT_ETA` promises "Instant delivery" on every card, and an
+    # order taken against an empty shelf cannot keep that promise. The backorder
+    # mail is the apology, not the fulfilment — somebody has to be watching
+    # Discord. Keep the shelf loaded (`tools/stock_import.py`) and this branch
+    # stays theoretical.
+    #
+    # ⚠ `STOCK_PUBLIC_COUNTS` must stay OFF for this to hold end to end. With it
+    # on, `/api/stock` publishes a real zero, `accountStock()` in app.js reads
+    # it as authoritative and the card renders its `out` state with no CTA at
+    # all — the listing would come off sale in the browser before a checkout it
+    # would now accept was ever attempted.
+    #
+    # `pricing.account_pick()` still refuses a listing whose catalogue `stock`
+    # is 0 in data.py. That is the operator's own switch for pulling a listing
+    # off sale deliberately, not the credentials store deciding — every one of
+    # the eleven is non-zero today, so nothing is refused.
 
     try:
         params, order_id, q = build_session(order, base_url)

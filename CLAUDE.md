@@ -41,12 +41,13 @@ like production. It also hosts the **Stripe payment API** the checkout page call
 Verification is: the five test files pass — `python3 site/tests/test_pricing.py` (the pricing engine,
 the bundle rules, the JS/Python mirror, the currency charge, the checkout payload and the
 accounts shop — its per-shard price, the cents invariant that stops a $77.99 card being charged as
-$78, the single stock derivation behind its on-screen figures, its sold-out refusal and what
+$78, the single stock derivation behind its on-screen figures, and what
 its order records), `python3
 site/tests/test_mail.py` (header injection, the honeypot, the rate cap and the two order mails),
 `python3 site/tests/test_carts.py` (abandoned-checkout capture and the recovery token),
 `python3 site/tests/test_stock.py` (the account stock store — one claim per unit, idempotent per
-order, the sold-out refusal at checkout, and that no public payload carries a credential) and
+order, that an empty shelf never refuses a sale, and that no public payload carries a
+credential) and
 `python3
 site/tests/test_mystery.py` (the mystery-discount token, its hour, one-card-per-inbox, the copy
 rule that keeps the flat deck honest, and the follow-up: revive-not-reissue, one chase ever, and the
@@ -1190,8 +1191,9 @@ resolver and `build.py`, `quote()` and `payments.build_session()` all read the c
   replacement. Same standing as `SAFETY`'s measure notes and `GUARANTEE`'s refund windows: falsifiable
   by a single bad order. It needs a claims process and a budget line behind it.
 - **Stock is real now — see [The account stock store](#the-account-stock-store--stockpy-the-credentials-and-the-handover).**
-  `stock.py` holds the credentials, `payments.process_checkout()` refuses a listing it cannot hand
-  over, and the webhook claims one unit and mails it. ⚠ **The figures below are still what the PAGE
+  `stock.py` holds the credentials and the webhook claims one unit and mails it. ⚠ **Checkout never
+  refuses** — an empty shelf still sells and is handed over by a person (the business's call,
+  2026-09-06; see the ⚠ in that section). ⚠ **The figures below are still what the PAGE
   shows** — publishing the real counts is behind `STOCK_PUBLIC_COUNTS` and is off by the business's
   call, so these hand-set numbers remain the three on-screen stock claims (the tier cards state the
   warranty window instead of a count) and still go stale the
@@ -1347,7 +1349,7 @@ hands over one set of credentials"*. Both halves are built now.
 ```
 user:pass sheet ──stock_import.py──► esb:stock ──► GET /api/stock ──► the shop's four counts
                                         │
-     checkout ──► sellable()? ──refuse──┤
+     checkout ──► (never refuses: an empty shelf still sells) ──┤
                                         │
   Stripe webhook (paid) ──► claim() (atomic, idempotent) ──► the handover mail ──► the buyer
                                         └── nothing left? ──► an alert to ops
@@ -1397,12 +1399,20 @@ user:pass sheet ──stock_import.py──► esb:stock ──► GET /api/stoc
   loaded EUW and not EUNE has not taken EUNE off sale: a pair the store has never held still sells
   on the catalogue figure, exactly as the shop did before this existed. There is no feature flag —
   loading the first batch turns it on and clearing the store turns it off.
-- **Two guards, at the two moments that matter.** `payments.process_checkout()` refuses an account
-  the store cannot hand over **before** a Stripe session is created (409 `out_of_stock`, with copy
-  that sends the buyer to another tier or shard); and the webhook's `stock.fulfil()` is what
-  actually takes it off the shelf. The checkout guard **fails open** — a store it cannot reach falls
-  back to the catalogue figure, because a refused checkout on a store hiccup is a lost sale on an
-  account we do have, and the webhook's out-of-stock alert is the backstop for the other direction.
+- ⚠ **THE STORE IS NOT A GATE — every product on the board is always buyable.** This is the
+  business's call, taken **2026-09-06**, and it reversed the behaviour this store shipped with.
+  `payments.process_checkout()` used to answer 409 `out_of_stock` for a (listing, shard) the store
+  had held and emptied; it refused **four real checkout attempts across two buyers** on
+  `lol-unranked-basic` / Europe West — the cheapest listing on the shard every European visitor is
+  defaulted onto — while `/accounts.html` beside them still advertised 34 in stock. The guard is
+  gone. `stock.fulfil()` is still what takes a unit off the shelf, and an empty shelf was already a
+  handled case rather than an error: the buyer gets `notify_backorder()` (Discord, their order
+  number, no invented time, no refund offer) and ops gets the "STOCK EMPTY" alert. So an unstocked
+  sale lands as a **manual handover**, exactly as every pair the store has never held always has.
+  ⚠ The cost is `ACCOUNT_ETA`: "Instant delivery" is on every card and an order taken against an
+  empty shelf cannot keep it — the backorder mail is the apology, not the fulfilment. Keep the shelf
+  loaded and this branch stays theoretical. `sellable()` survives as the honest **report** behind
+  `available_map()` and the /ops Stock tab; nothing gates on it any more.
 - **The handover mail is the fulfilment**, and it is a separate message from the order
   confirmation — which already says the credentials are on their way and points at the walkthrough
   in this one. ⚠ **The four steps are ordered against the warranty's own assumption**: the inbox
@@ -1457,13 +1467,15 @@ user:pass sheet ──stock_import.py──► esb:stock ──► GET /api/stoc
 - ⚠ **The shop does NOT publish real stock, and that is a business decision (2026-09-03).**
   `PUBLIC_COUNTS` in stock.py is off unless `STOCK_PUBLIC_COUNTS=1`, so `/api/stock` answers **204**
   and `initStock()` in app.js keeps every server-rendered `data.py` figure — the four counts on the
-  page stay the hand-set marketing ones. **What it does not switch off is the store**: `sellable()`
-  still refuses a sold-out (listing, shard) at checkout and the webhook still claims and mails a real
-  account. So the page can advertise 8 Gold while 2 are on the shelf, and the third buyer is refused
-  at the till with "that account has just been bought" rather than charged for something nobody can
-  hand over. That trade is the point of the flag; flipping it to `1` is the whole change the day the
-  counts should be real, because the client already treats a 200 as authoritative and a 204 as "keep
-  the fallback".
+  page stay the hand-set marketing ones. **What it does not switch off is the store**: the webhook
+  still claims and mails a real account when there is one. So the page can advertise 8 Gold while 2
+  are on the shelf, and the third buyer is **sold to anyway** and handed over by a person — see the
+  ⚠ above; nothing refuses at the till any more. Flipping the flag to `1` is the whole change the day
+  the counts should be real, because the client already treats a 200 as authoritative and a 204 as
+  "keep the fallback". ⚠ **But it now conflicts with the always-sell rule**: a published real zero is
+  read as authoritative by `accountStock()` and the card renders its `out` state with **no CTA at
+  all**, so the listing comes off sale in the browser before a checkout that would now accept it is
+  ever attempted. Publishing counts and always selling cannot both be true — decide which.
 - **The live path is built and tested behind that flag.** `accountStock()` on the client is still the
   ONE derivation; the live map sits in front of it, and `hasOwnProperty` is what carries a genuine
   zero through where `||` would resurrect the hand-set figure. The scarce state that used to
@@ -1475,7 +1487,7 @@ user:pass sheet ──stock_import.py──► esb:stock ──► GET /api/stoc
   / `stock_reveal` actions in `ops.py`; there is no watcher. `api/stock.py` is the Vercel shell. Env
   knobs: `STOCK_PUBLIC_COUNTS` (off — see the ⚠ above), `STOCK_LOG` (the dev file), `STOCK_MAX`.
 - **Tests**: `python3 site/tests/test_stock.py` — the claim being at most once and idempotent per
-  order, the sold-out refusal at checkout, the zero-vs-gap rule, that no public payload carries a
+  order, that an empty shelf never refuses a sale, the zero-vs-gap rule, that no public payload carries a
   credential, that the outbox row is redacted, and the `user:pass` parser including its ambiguity
   error.
 
