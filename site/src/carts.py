@@ -60,9 +60,32 @@ TOKEN_TTL = int(os.environ.get("CART_TOKEN_TTL", str(7 * 86400)) or 7 * 86400)
 # The recovery discount, as a fraction. Replaces the sitewide sale rather than
 # stacking with it — see pricing.resolve_promo().
 RECOVERY_PCT = float(os.environ.get("CART_RECOVERY_PCT", "0.30") or 0.30)
+
+# ⚠ ACCOUNTS ARE DISCOUNTED DIFFERENTLY, AND IT IS A MARGIN DECISION, NOT A UI
+# ONE. A boost is labour: 30% off it costs us hours somebody was going to work
+# anyway. A ready-made account has a real acquisition cost behind it — it was
+# bought or levelled — so a percentage off is taken straight out of the margin,
+# which is the whole reason `pricing.quote()`'s account branch refuses the
+# sitewide sale and every bundle. This is the ONE discount that branch honours,
+# it is 10% rather than 30% for exactly that reason, and it is resolved
+# server-side from a single-use token like every other token offer on the site.
+# Raising it is a business call about margin per account, not a copy change.
+ACCOUNT_PCT = float(os.environ.get("CART_ACCOUNT_PCT", "0.10") or 0.10)
+
+# The SECOND mail on an account cart, measured from the moment the first one
+# went out — "another recall after one day". Boosts get one mail and stop; an
+# account is a considered purchase against a fixed shelf, so it earns one
+# reminder and no more. There is no third: see the ⚠ on `due_chase()`.
+ACCOUNT_CHASE_DELAY = int(os.environ.get("CART_ACCOUNT_CHASE_DELAY", "86400") or 86400)
+
 TOKEN_BYTES = 8                 # ~13 chars of base32 — not guessable
 
 STATUSES = ("pending", "mailed", "recovered", "expired")
+# Where a row is in its mail sequence, orthogonal to `status`. A boost cart only
+# ever reaches "first"; an account cart that has had its reminder is "chased",
+# and `due_chase()` reads that field alone, so one reminder is one reminder even
+# if the buyer re-configures afterwards.
+STAGES = ("first", "chased")
 
 _CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+\.[^@\s]{2,}$")
@@ -134,12 +157,44 @@ def clean_cart(body, now=None, country=""):
         "unranked": bool(body.get("unranked")),
         "booster": _s(body.get("booster"), 40),
         "bundle": _s(body.get("bundle"), 60),
+        # ⚠ On `service: "account"` this IS the price — `pricing.account_pick()`
+        # resolves the listing from it and refuses the quote without it, so a
+        # cart captured without it is a row the recovery mail can only ever
+        # report as unpriceable. That is exactly what every account checkout did
+        # before this field existed: captured, swept, found unpriceable and
+        # retired, so the one product with a fixed shelf was the one product
+        # nobody was ever chased about.
+        "account": _s(body.get("account"), 40),
+        # ⚠ And the buyer's currency is a PRICE INPUT on that product — a listing
+        # carries one row per market and `D.account_price()` picks one rather
+        # than converting. Store what they were reading, or the mail quotes a
+        # European buyer the dollar row.
+        "cur": _s(body.get("cur"), 8).lower(),
         "country": _s(country, 4).upper(),
         "session": _s(body.get("session"), 40),
+        "stage": "first",
         "mailed_at": 0,
+        "chased_at": 0,
         "recovered_at": 0,
         "order_id": "",
     }
+
+
+def is_account(row):
+    """Is this cart the accounts shop rather than a boost? The two are mailed
+    differently, discounted differently and chased differently, and this is the
+    one test that decides which — never the presence of a game name, which every
+    cart carries."""
+    return (row or {}).get("service") == "account" and bool((row or {}).get("account"))
+
+
+def pct_for(row):
+    """The discount THIS cart's token is worth. 10% on an account, 30% on a
+    boost — see the ⚠ on `ACCOUNT_PCT`. Every caller that resolves a recovery
+    token reads it through here (`recovery.py`, `payments.process_checkout()`,
+    `process_resolve()`), so the rate the mail quotes, the rate the page prices
+    at and the rate Stripe charges cannot disagree."""
+    return ACCOUNT_PCT if is_account(row) else RECOVERY_PCT
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -318,6 +373,52 @@ def due(now=None, delay=None, limit=200):
     return out
 
 
+def due_chase(now=None, delay=None, limit=200):
+    """Account carts ready for their SECOND mail — the one-day recall.
+
+    Accounts only, and deliberately: a boost cart gets one mail and stops. The
+    row must have had its first mail (`status == "mailed"`), must still be on
+    stage `first`, and the delay is measured from `mailed_at` rather than from
+    capture — the first mail is what the reminder is a reminder *of*, and a
+    sweep that fell behind must not fire both within a minute of each other.
+
+    ⚠ There is no third mail and nothing here should grow one. Two messages to
+    somebody who typed an address into a checkout form and left is the whole
+    budget; a third is a spam complaint against the domain the order
+    confirmations go out on.
+
+    Same two guards `due()` has, for the same reasons: nothing past the token's
+    own lifetime (a reminder about a dead discount is worse than silence), and
+    nobody who has since bought — that check retires the row as it goes."""
+    now = _int(now or time.time())
+    delay = ACCOUNT_CHASE_DELAY if delay is None else delay
+    out = []
+    for r in read():
+        if r.get("status") != "mailed" or r.get("stage", "first") != "first":
+            continue
+        if not is_account(r):
+            continue
+        mailed = _int(r.get("mailed_at"))
+        if not mailed or now - mailed < delay:
+            continue
+        if now - _int(r.get("at")) > TOKEN_TTL:
+            continue
+        if has_ordered(r.get("email")):
+            mark(r["token"], status="recovered", recovered_at=now)
+            continue
+        out.append(r)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def mark_chased(token, now=None):
+    """Flip a row out of `due_chase()`'s set. Called BEFORE the mail goes out —
+    same rule `recovery.send_one()` follows for the first one: losing a reminder
+    is a missed upsell, sending it four times is a complaint."""
+    return mark(token, stage="chased", chased_at=_int(now or time.time()))
+
+
 def redeemable(token, now=None):
     """The row a recovery token still entitles to a discount, or None.
 
@@ -353,6 +454,13 @@ def _display_price(row):
         now_q, off_q = recovery.price_pair(row)
         if not now_q:
             return 0, 0
+        # ⚠ Accounts are the one product priced in cents, so this one is rounded
+        # to the cent rather than to the whole unit every boost figure uses.
+        # `_int($77.99)` is $77, which understates the shelf on every row and
+        # reports an offer the buyer was never shown.
+        if now_q.get("cents"):
+            return round(float(now_q.get("total") or 0), 2), \
+                   round(float(off_q.get("total") or 0), 2)
         return _int(now_q.get("total")), _int(off_q.get("total"))
     except Exception:                                          # noqa: BLE001
         return 0, 0
@@ -367,6 +475,17 @@ def _climb(row):
         return "%d %s%s" % (n, noun, "" if n == 1 else "s")
     if svc == "coaching":
         return "coaching"
+    if svc == "account":
+        # The listing's own name, not a climb — an account order has no ranks,
+        # and "→" between two empty strings is what this printed before.
+        try:
+            import data as _D
+            acc = _D.account(row.get("account"))
+            if acc:
+                return acc["name"]
+        except Exception:                                      # noqa: BLE001
+            pass
+        return "account"
     a, b = row.get("from") or "", row.get("to") or ""
     return ("%s → %s" % (a, b)).strip(" →") or (row.get("game") or "—")
 
@@ -385,15 +504,41 @@ def summary(days=30, now=None):
     by_status = {s: 0 for s in STATUSES}
     by_game, by_country = {}, {}
     recovered_value = potential_value = 0
+    # The accounts shop is reported separately, and it is not decoration. It is
+    # a different product with a different discount (10% against 30%), a second
+    # mail the boosts never get, and a fixed shelf behind it — folding the two
+    # together would average a margin figure against a labour one and hide the
+    # only funnel the reminder can be judged on.
+    acc = {"total": 0, "mailed": 0, "chased": 0, "recovered": 0,
+           "recovered_value": 0.0, "potential_value": 0.0}
+    by_listing = {}
     recent = []
     for r in sorted(rows, key=lambda r: -_int(r.get("at"))):
         st = r.get("status", "pending")
         by_status[st] = by_status.get(st, 0) + 1
 
         normal, offer = _display_price(r)
+        acct = is_account(r)
         potential_value += normal
         if st == "recovered":
             recovered_value += normal
+
+        if acct:
+            acc["total"] += 1
+            if st in ("mailed", "recovered"):
+                acc["mailed"] += 1
+            if r.get("stage") == "chased":
+                acc["chased"] += 1
+            acc["potential_value"] += normal
+            if st == "recovered":
+                acc["recovered"] += 1
+                acc["recovered_value"] += normal
+            name = _climb(r)
+            ls = by_listing.setdefault(name, {"listing": name, "count": 0,
+                                              "recovered": 0})
+            ls["count"] += 1
+            if st == "recovered":
+                ls["recovered"] += 1
 
         g = r.get("game") or "—"
         gs = by_game.setdefault(g, {"game": g, "count": 0, "recovered": 0})
@@ -421,6 +566,11 @@ def summary(days=30, now=None):
                 "country": c,
                 "value": normal,
                 "offer": offer,
+                "product": "account" if acct else "boost",
+                "account": r.get("account", ""),
+                "stage": r.get("stage", "first"),
+                "chased_at": _int(r.get("chased_at")),
+                "pct": pct_for(r),
                 "order_id": r.get("order_id", ""),
                 "session": r.get("session", ""),
                 "syn": 1 if r.get("syn") else 0,
@@ -434,6 +584,15 @@ def summary(days=30, now=None):
     # rate down.
     mailed_or_recovered = mailed + recovered
     rate = round(100.0 * recovered / mailed_or_recovered, 1) if mailed_or_recovered else 0.0
+
+    acc_mailed = acc["mailed"]
+    acc["recovery_rate"] = (round(100.0 * acc["recovered"] / acc_mailed, 1)
+                            if acc_mailed else 0.0)
+    acc["recovered_value"] = round(acc["recovered_value"], 2)
+    acc["potential_value"] = round(acc["potential_value"], 2)
+    acc["pct"] = ACCOUNT_PCT
+    acc["chase_hours"] = ACCOUNT_CHASE_DELAY // 3600
+    acc["listings"] = sorted(by_listing.values(), key=lambda x: -x["count"])
 
     games = sorted(by_game.values(), key=lambda x: -x["count"])
     countries = sorted(
@@ -449,6 +608,7 @@ def summary(days=30, now=None):
         "recovery_rate": rate,
         "recovery_pct": RECOVERY_PCT,
         "delay_mins": DELAY_SECS // 60,
+        "accounts": acc,
         "synthetic": sum(1 for r in rows if r.get("syn")),
         "statuses": [{"status": s, "count": by_status.get(s, 0)} for s in STATUSES],
         "games": games,
@@ -541,6 +701,14 @@ def process_capture(raw, header_get, session_email=""):
         row["at"] = existing.get("at", row["at"])
         row["status"] = existing.get("status", "pending")
         row["mailed_at"] = existing.get("mailed_at", 0)
+        # ⚠ Carry the mail sequence across, or a buyer who edits the checkout
+        # form after the reminder has gone out is put back on stage `first` and
+        # chased a second time. That exact bug reached real inboxes once already
+        # through the mystery store's own re-capture path — see the ⚠ in
+        # CLAUDE.md's follow-up section. A capture may change the configuration
+        # and nothing else about where the row is in its sequence.
+        row["stage"] = existing.get("stage", "first")
+        row["chased_at"] = existing.get("chased_at", 0)
     else:
         row["token"] = new_token()
     put(row)
@@ -561,7 +729,11 @@ def process_resolve(token):
     row = redeemable(token)
     if not row:
         return 200, {"valid": False, "pct": 0}
-    return 200, {"valid": True, "pct": RECOVERY_PCT, "token": row["token"],
+    # The rate is the ROW's, never the module constant: an account cart is worth
+    # 10% and a boost 30%, and the page has to price at the one the server will
+    # charge or `build_session()`'s client_total guard refuses a valid order.
+    return 200, {"valid": True, "pct": pct_for(row), "token": row["token"],
+                 "account": row.get("account", ""), "cur": row.get("cur", ""),
                  "game": row.get("game", ""), "from": row.get("from", ""),
                  "to": row.get("to", ""), "mode": row.get("mode", ""),
                  "service": row.get("service", ""), "region": row.get("region", ""),

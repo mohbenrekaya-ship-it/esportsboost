@@ -9415,6 +9415,12 @@ def page_checkout():
       to: st.to, mode: st.mode, region: st.region, addons: st.addons || [],
       wins: st.wins, placements: st.placements, unranked: !!st.unranked,
       booster: st.booster || '', bundle: st.bundle || '',
+      // On an account order these two ARE the price — the listing is what the
+      // server re-quote resolves, and the currency picks the listing's own
+      // market row. Drop them and the cart is captured but can never be
+      // re-priced, so the recovery mail is retired instead of sent.
+      account: st.account || '',
+      cur: ((window.ESB_LOCALE && window.ESB_LOCALE.currency) || '').toLowerCase(),
       tz: (Intl.DateTimeFormat().resolvedOptions().timeZone || ''),
       lang: (navigator.language || '')
     };

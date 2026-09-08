@@ -289,7 +289,13 @@ def process_checkout(raw, base_url):
             import carts
             row = carts.redeemable(cart_token)
             if row:
-                order["recovery_pct"] = carts.RECOVERY_PCT
+                # The RATE IS THE ROW'S, not the module constant: an account
+                # cart is worth 10% and a boost 30% (see the ⚠ on
+                # `carts.ACCOUNT_PCT`). Reading the constant here would charge
+                # an account buyer 30% off the price the mail quoted them at
+                # 10% — and, since `build_session()` refuses a total the page
+                # never showed, would simply fail the checkout instead.
+                order["recovery_pct"] = carts.pct_for(row)
                 order["promo"] = row["token"]
                 order["offer_label"] = "Come back offer"
         except Exception:                                       # noqa: BLE001
@@ -301,7 +307,16 @@ def process_checkout(raw, base_url):
     # two stores are never asked to resolve each other's codes, and it only wins
     # when it is worth more than a recovery token the buyer also happens to hold
     # — never-stack, best-wins, decided here rather than in the browser.
-    bingo_token = str(order.get("bingo") or "")[:40]
+    # ⚠ AND IT DOES NOT APPLY TO AN ACCOUNT. The account branch of
+    # `pricing.quote()` takes exactly one discount — the abandoned-cart token —
+    # because that product's price is margin against a real acquisition cost
+    # rather than labour, which is why it refuses the sitewide sale and every
+    # bundle. The mystery card is a climb offer at up to 35%, it is only ever
+    # shown on a game page, and nothing about it was priced against a shelf. A
+    # buyer pasting that code onto an account order would take 35% off a
+    # listing whose whole discount budget is 10%.
+    bingo_token = ("" if order.get("service") == "account"
+                   else str(order.get("bingo") or "")[:40])
     if bingo_token:
         try:
             import mystery

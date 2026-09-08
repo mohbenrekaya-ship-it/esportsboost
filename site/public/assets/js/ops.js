@@ -3292,6 +3292,14 @@
   function cartChip(s) {
     return '<span class="ostat ostat-' + esc(s) + '">' + esc(CART_STATUS[s] || s) + "</span>";
   }
+  // A cart's product. Accounts are reported apart from boosts throughout this
+  // tab: different discount (10% against 30%), a second mail the boosts never
+  // get, and a fixed shelf behind it. One blended figure would average a margin
+  // decision against a labour one.
+  function cartProduct(r) {
+    return r.product === "account"
+      ? '<span class="chip">Account</span>' : '<span class="dim">Boost</span>';
+  }
 
   function loadCarts() {
     if (state.cartsLoading) return;
@@ -3316,6 +3324,104 @@
       state.cartsError = "Couldn't reach the server. Is it running?";
       if (state.tab === "carts") render();
     });
+  }
+
+  /* ── Account carts: the accounts shop's own abandon funnel ─────────────
+     A module rather than a column on the table above, because it answers a
+     question the blended figures cannot: the accounts shop sells off a fixed
+     shelf at a fixed price, its recovery code is 10% where a boost's is 30%,
+     and it is the only product that gets a second mail. Folding the two
+     together averages a margin decision against a labour one and hides whether
+     the one-day recall is worth sending at all.
+
+     The stage row is the whole point of the second mail existing: "Mailed" is
+     how many got the code, "Recalled" how many were still there a day later.
+     Recovered is read against MAILED, never against captured — an anonymous
+     capture nobody could mail must not drag the rate down. */
+  function panelAccountCarts(a) {
+    var ac = a.accounts || {};
+    var el = document.createElement("div");
+    el.className = "card";
+    var off = Math.round((ac.pct || 0) * 100);   // not `pct` — that is the formatter
+    var hrs = ac.chase_hours || 24;
+    el.innerHTML =
+      '<div class="card-hd"><h3>Account carts</h3></div>' +
+      '<p class="card-sub">The accounts shop on its own. A cart here is somebody who ' +
+      "reached the pay page on a ready-made account and didn't pay: after " +
+      num(a.delay_mins) + " minutes they are mailed a single-use <b>" + off +
+      "%</b> code, and if it is still unspent " + num(hrs) +
+      "h later they get one recall on the same code — never a second, better " +
+      "offer, and never a third mail.</p>";
+
+    if (!ac.total) {
+      el.insertAdjacentHTML("beforeend",
+        '<p class="empty">No account carts in this period. One lands here when a buyer ' +
+        "picks a listing, gets as far as the pay page and leaves.</p>");
+      return el;
+    }
+
+    var kr = document.createElement("div");
+    kr.className = "kpis";
+    kr.appendChild(kpi("Abandoned", num(ac.total), undefined, "", true));
+    kr.appendChild(kpi("Mailed", num(ac.mailed)));
+    kr.appendChild(kpi("Recalled", num(ac.chased)));
+    kr.appendChild(kpi("Recovered", num(ac.recovered)));
+    kr.appendChild(kpi("Recovery rate", (ac.recovery_rate || 0) + "%"));
+    // To the cent: accounts are the one product priced that way, and rounding
+    // $77.99 to $78 here understates the shelf on every row.
+    kr.appendChild(kpi("Won back", usd(ac.recovered_value, true)));
+    el.appendChild(kr);
+
+    // The sequence as a funnel: captured → mailed → recalled → recovered. Same
+    // row shape the other funnels on this console use, so it reads the same way.
+    var steps = [
+      { label: "Left the pay page", value: ac.total },
+      { label: "Mailed the " + off + "% code", value: ac.mailed },
+      { label: "Recalled after " + num(hrs) + "h", value: ac.chased },
+      { label: "Came back and paid", value: ac.recovered }
+    ];
+    var rows = steps.map(function (st) {
+      return [st.label, num(st.value),
+              ac.total ? Math.round(100 * st.value / ac.total) + "%" : "—"];
+    });
+    var listings = ac.listings || [];
+
+    var g = document.createElement("div");
+    g.className = "grid";
+    g.appendChild(card({
+      cls: "half", title: "The sequence",
+      sub: "Every step is a share of the carts captured, so the drop between two rows is the drop.",
+      chart: function (w) {
+        return barsH(w, { rows: steps, color: SERIES[0], alt: "Account cart sequence" });
+      },
+      table: { head: ["Step", "Carts", "Of captured"], num: [1, 2], rows: rows }
+    }));
+    g.appendChild(card({
+      cls: "half", title: "Which listing",
+      sub: "What people get as far as the pay page on, and how many came back for it.",
+      chart: function (w) {
+        return barsH(w, {
+          rows: listings.map(function (r) { return { label: r.listing, value: r.count }; }),
+          color: SERIES[2], alt: "Account carts by listing"
+        });
+      },
+      table: {
+        head: ["Listing", "Carts", "Recovered"], num: [1, 2],
+        rows: listings.map(function (r) { return [r.listing, num(r.count), num(r.recovered)]; })
+      }
+    }));
+    el.appendChild(g);
+
+    // ⚠ The cost of this programme is flat, not blended: every recovered
+    // account cart was sold at `pct` off a price that is margin against a real
+    // acquisition cost. Read it as `Recovered × pct`, the same way the Mystery
+    // tab's own warning reads.
+    el.insertAdjacentHTML("beforeend",
+      '<p class="card-sub">Discount given away: about ' +
+      usd(Math.round((ac.recovered_value || 0) * (ac.pct || 0) * 100) / 100, true) +
+      " across " + num(ac.recovered) + " recovered order(s) — " + off +
+      "% of a price with a real acquisition cost behind it, not a percentage of labour.</p>");
+    return el;
   }
 
   function panelCarts() {
@@ -3351,7 +3457,9 @@
     intro.innerHTML = '<span class="ico">✉</span><div><strong>Abandoned-checkout recovery.</strong> ' +
       "An email lands here when a signed-in visitor configures an order, or when anyone types their " +
       "address on checkout, and then doesn't pay. After " + num(a.delay_mins) + " minutes the sweep mails " +
-      "a single-use " + Math.round(a.recovery_pct * 100) + "% code. A paid order burns the code and marks the row " +
+      "a single-use code — " + Math.round(a.recovery_pct * 100) + "% on a boost, " +
+      Math.round(((a.accounts || {}).pct || 0) * 100) + "% on an account, which gets a second recall " +
+      num((a.accounts || {}).chase_hours || 24) + "h later. A paid order burns the code and marks the row " +
       "<em>Recovered</em>. This is the “Carts” store — distinct from the anonymous <b>Abandoned</b> tab, which has no email.</div>";
     f.appendChild(intro);
 
@@ -3406,6 +3514,8 @@
     }));
     f.appendChild(g);
 
+    f.appendChild(panelAccountCarts(a));
+
     var recent = a.recent || [];
     var el = document.createElement("div");
     el.className = "card";
@@ -3425,33 +3535,48 @@
       return f;
     }
 
-    var head = ["When", "Email", "Game", "Config", "Value", "Offer", "Status", "Age"];
+    var head = ["When", "Email", "Product", "Config", "Value", "Offer", "Status", "Mailed"];
     var html = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
       head.map(function (h, i) { return '<th class="' + (i === 4 || i === 5 ? "num" : "") + '">' + esc(h) + "</th>"; }).join("") +
       "</tr></thead><tbody>";
     recent.forEach(function (r) {
+      // The offer column is the row's OWN rate — an account cart is worth 10%
+      // and a boost 30%, so a single header figure would misdescribe half the
+      // table. The percentage rides beside the money for that reason.
+      var off = Math.round((r.pct || 0) * 100);
+      var cents = r.product === "account";      // priced to the cent, so shown to it
       html += "<tr>" +
         '<td class="dim">' + esc(ago(r.at)) + "</td>" +
         "<td>" + esc(r.email) + (r.syn ? ' <span class="chip">seeded</span>' : "") + "</td>" +
-        "<td>" + esc(r.game) + '<span class="dim"> · ' + esc(r.mode || "") + "</span></td>" +
+        "<td>" + cartProduct(r) + '<span class="dim"> · ' + esc(r.game) + "</span></td>" +
         '<td class="wrap-cell">' + esc(r.summary) + "</td>" +
-        '<td class="num">' + esc(usd(r.value)) + "</td>" +
-        '<td class="num">' + (r.offer ? esc(usd(r.offer)) : '<span class="dim">—</span>') + "</td>" +
+        '<td class="num">' + esc(usd(r.value, cents)) + "</td>" +
+        '<td class="num">' + (r.offer ? esc(usd(r.offer, cents)) +
+          ' <span class="dim">−' + off + "%</span>" : '<span class="dim">—</span>') + "</td>" +
         "<td>" + cartChip(r.status) +
           (r.order_id ? ' <span class="dim">' + esc(r.order_id) + "</span>" : "") + "</td>" +
-        '<td class="dim">' + esc(r.status === "mailed" && r.mailed_at ? "mailed " + ago(r.mailed_at) : ago(r.at)) + "</td>" +
+        '<td class="dim">' +
+          (r.mailed_at ? esc(ago(r.mailed_at)) : '<span class="dim">—</span>') +
+          (r.stage === "chased"
+            ? ' <span class="chip">recalled' + (r.chased_at ? " " + esc(ago(r.chased_at)) : "") + "</span>"
+            : "") +
+        "</td>" +
         "</tr>";
     });
     el.insertAdjacentHTML("beforeend", html + "</tbody></table></div>");
 
     el.querySelector("[data-export-carts]").addEventListener("click", function () {
-      var cols = ["when", "email", "game", "service", "mode", "config", "region", "country",
-                  "value_usd", "offer_usd", "status", "order_id", "mailed_at", "recovered_at", "seeded"];
+      var cols = ["when", "email", "product", "game", "service", "mode", "config", "region", "country",
+                  "value_usd", "offer_usd", "offer_pct", "status", "stage", "order_id",
+                  "mailed_at", "recalled_at", "recovered_at", "seeded"];
       var lines = [cols.join(",")];
       recent.forEach(function (r) {
-        lines.push([new Date(r.at * 1000).toISOString(), r.email, r.game, r.service, r.mode,
-                    r.summary, r.region, r.country, r.value, r.offer, r.status, r.order_id,
+        lines.push([new Date(r.at * 1000).toISOString(), r.email, r.product || "boost",
+                    r.game, r.service, r.mode,
+                    r.summary, r.region, r.country, r.value, r.offer,
+                    Math.round((r.pct || 0) * 100), r.status, r.stage || "first", r.order_id,
                     r.mailed_at ? new Date(r.mailed_at * 1000).toISOString() : "",
+                    r.chased_at ? new Date(r.chased_at * 1000).toISOString() : "",
                     r.recovered_at ? new Date(r.recovered_at * 1000).toISOString() : "",
                     r.syn ? "yes" : "no"]
           .map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; }).join(","));

@@ -388,6 +388,223 @@ def _h(headers=None):
     return lambda name: low.get(str(name).lower(), "")
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  the accounts shop — its own rate, its own second mail
+# ══════════════════════════════════════════════════════════════════════════
+ACC = {"game": "League of Legends", "service": "account",
+       "account": "lol-unranked-basic", "region": "Europe West",
+       "mode": "Solo", "addons": [], "cur": "usd"}
+
+
+def _acc_cart(email="acc@b.co", **over):
+    row = carts.clean_cart(dict(ACC, email=email, **over))
+    row["token"] = carts.new_token()
+    carts.put(row)
+    return row
+
+
+def test_an_account_cart_keeps_the_listing():
+    """Without the listing an account cart cannot be re-priced, so the sweep
+    retires it as unpriceable and the one product with a fixed shelf is the one
+    nobody is ever chased about. That is exactly what shipped before this."""
+    reset()
+    row = _acc_cart()
+    check(row["account"] == "lol-unranked-basic", "the listing id is stored")
+    check(carts.is_account(row), "and the row reads as an account, not a boost")
+    import recovery
+    now_q, off_q = recovery.price_pair(row)
+    check(now_q is not None, "an account cart PRICES — it is not swept away as unpriceable")
+    check(now_q.get("cents") is True, "and it prices to the cent, like the shop")
+    blind = carts.clean_cart(dict(ACC, email="x@b.co", account=""))
+    blind["token"] = carts.new_token()
+    check(recovery.price_pair(blind)[0] is None,
+          "a cart captured without the listing still cannot price — the field is the fix")
+
+
+def test_an_account_is_worth_ten_not_thirty():
+    reset()
+    boost = carts.clean_cart(dict(CFG, email="b@b.co"))
+    acc = carts.clean_cart(dict(ACC, email="a@b.co"))
+    check(carts.pct_for(boost) == carts.RECOVERY_PCT, "a boost cart is worth the boost rate")
+    check(carts.pct_for(acc) == carts.ACCOUNT_PCT, "an account cart is worth the account rate")
+    check(carts.ACCOUNT_PCT < carts.RECOVERY_PCT,
+          "and it is the smaller of the two — it is margin, not labour")
+
+    row = _acc_cart("res@b.co")
+    st, pl = carts.process_resolve(row["token"])
+    check(pl["valid"] and pl["pct"] == carts.ACCOUNT_PCT,
+          "GET /api/cart hands the page the ROW's rate, not the module constant")
+    check(pl["account"] == "lol-unranked-basic",
+          "and the listing, so the checkout link can hydrate the order")
+
+
+def test_the_account_price_takes_the_code_and_nothing_else():
+    """The account branch refuses the sitewide sale, every bundle and every typed
+    code. The recovery token is the one exception, and it must come off the LIST
+    price to the cent — a rounded figure here is a mail quoting a price the
+    checkout will not charge."""
+    st = dict(ACC, currency="usd")
+    plain = pricing.quote(st)
+    off = pricing.quote(dict(st, recovery_pct=carts.ACCOUNT_PCT, promo="BACK-X"))
+    check(not off["invalid"], "an account quote with a recovery pct is valid")
+    expect = round(plain["subtotal"] * (1 - carts.ACCOUNT_PCT), 2)
+    check(abs(off["total"] - expect) < 1e-9,
+          "the total is exactly %d%% off the list price" % (carts.ACCOUNT_PCT * 100))
+    check(abs(off["subtotal"] - off["discount"] - off["total"]) < 1e-9,
+          "subtotal − discount = total still holds exactly")
+    check(off["total_cents"] == int(round(off["total"] * 100)),
+          "and the charge is to the cent, not rounded to a whole unit")
+    # the public discounts are still refused
+    check(pricing.quote(dict(st, promo="SPLIT15"))["total"] == plain["total"],
+          "a typed sitewide code still buys nothing on an account")
+    check(pricing.quote(dict(st, recovery_pct=1.5))["total"] == plain["total"],
+          "and a nonsense percentage is ignored, not applied")
+
+
+def test_a_mystery_code_cannot_be_spent_on_an_account():
+    """The mystery card is a climb offer worth up to 35%; this product's whole
+    discount budget is 10%. `process_checkout()` drops the bingo token on an
+    account order, so the 35% can never reach the account branch."""
+    import payments
+    order = dict(ACC, bingo="BINGO-WHATEVER", service="account")
+    tok = ("" if order.get("service") == "account"
+           else str(order.get("bingo") or "")[:40])       # mirror process_checkout
+    check(tok == "", "a bingo token on an account order is dropped before it is resolved")
+    src = open(os.path.join(ROOT, "src", "payments.py")).read()
+    check('"" if order.get("service") == "account"' in src,
+          "and that guard is the one in payments.py, not just in this test")
+
+
+def test_the_one_day_recall():
+    reset()
+    now = int(time.time())
+    row = _acc_cart("chase@b.co")
+    carts.mark(row["token"], at=now - carts.DELAY_SECS - 5)
+    check(len(carts.due(now=now)) == 1, "the first mail is due after the 30 minutes")
+    check(len(carts.due_chase(now=now)) == 0, "and the recall is NOT — nothing has been mailed yet")
+
+    carts.mark(row["token"], status="mailed", mailed_at=now - 60)
+    check(len(carts.due(now=now)) == 0, "a mailed cart is not first-mailed again")
+    check(len(carts.due_chase(now=now)) == 0, "and a minute later the recall is still not due")
+
+    carts.mark(row["token"], mailed_at=now - carts.ACCOUNT_CHASE_DELAY - 5)
+    check(len(carts.due_chase(now=now)) == 1, "a day after the first mail the recall IS due")
+    carts.mark_chased(row["token"], now)
+    check(len(carts.due_chase(now=now)) == 0, "and it is due exactly once — there is no third mail")
+    check(carts.get(row["token"])["status"] == "mailed",
+          "the recall moves `stage`, never `status` — the row is still a mailed cart")
+
+
+def test_a_boost_is_never_recalled():
+    """One mail on a boost and that is the whole budget. The recall is the
+    accounts shop's, and widening it to every cart is a decision about volume on
+    the domain the order confirmations go out on."""
+    reset()
+    now = int(time.time())
+    row = carts.clean_cart(dict(CFG, email="boost@b.co"))
+    row["token"] = carts.new_token()
+    row["status"] = "mailed"
+    row["mailed_at"] = now - carts.ACCOUNT_CHASE_DELAY - 500
+    carts.put(row)
+    check(len(carts.due_chase(now=now)) == 0, "a week-old mailed BOOST cart is never recalled")
+
+
+def test_the_two_mails_can_never_collide():
+    """`due()` wants a pending row, `due_chase()` a mailed one on stage `first`.
+    No row can be in both sets, so a sweep that fell behind cannot fire the code
+    and its reminder within the same minute."""
+    reset()
+    now = int(time.time())
+    row = _acc_cart("both@b.co")
+    for age in (0, carts.DELAY_SECS + 1, carts.ACCOUNT_CHASE_DELAY + 1,
+                carts.ACCOUNT_CHASE_DELAY * 2):
+        for status, stage in (("pending", "first"), ("mailed", "first"),
+                              ("mailed", "chased")):
+            carts.mark(row["token"], at=now - age - carts.DELAY_SECS,
+                       mailed_at=now - age, status=status, stage=stage)
+            both = (len(carts.due(now=now)) and len(carts.due_chase(now=now)))
+            check(not both, "no row is due for both mails at once (%s/%s, %ds)"
+                  % (status, stage, age))
+
+
+def test_a_recapture_cannot_reset_the_sequence():
+    """REGRESSION, borrowed from the mystery store where it reached real inboxes:
+    a buyer who edits the checkout form after the recall has gone out must not be
+    put back on stage `first` and chased a second time."""
+    reset()
+    now = int(time.time())
+    row = _acc_cart("recap@b.co")
+    carts.mark(row["token"], status="mailed", mailed_at=now - 100)
+    carts.mark_chased(row["token"], now)
+    import json
+    carts.process_capture(json.dumps(dict(ACC, email="recap@b.co",
+                                          account="lol-iron")).encode(), _h())
+    after = carts.get(row["token"])
+    check(after["stage"] == "chased", "the re-capture leaves the row chased")
+    check(after["chased_at"] > 0, "and keeps when it was chased")
+    check(after["account"] == "lol-iron", "but the configuration still tracks the live order")
+    check(len(carts.due_chase(now=now + carts.ACCOUNT_CHASE_DELAY * 3)) == 0,
+          "so it is never recalled twice")
+
+
+def test_the_recall_never_offers_a_better_rate():
+    """A second mail quoting a bigger number teaches the reader that the first
+    deadline was theatre. Both messages are the same token at the same rate."""
+    reset()
+    import recovery
+    row = _acc_cart("copy@b.co")
+    now_q, off_q = recovery.price_pair(row)
+    first = recovery._copy(row, now_q, off_q, chase=False)
+    again = recovery._copy(row, now_q, off_q, chase=True)
+    pct = int(round(carts.ACCOUNT_PCT * 100))
+    check(("%d%%" % pct) in first["subject"] and ("%d%%" % pct) in again["subject"],
+          "both mails quote the same %d%%" % pct)
+    for bad in ("35%", "30%", "20%", "last chance", "final offer"):
+        check(bad.lower() not in (again["subject"] + again["text_lede"]).lower(),
+              "the recall does not say %r" % bad)
+    body = recovery._text(row, now_q, off_q, "https://x.test", chase=True)
+    check(row["token"] in body, "and it carries the SAME code, not a new one")
+    check("account=lol-unranked-basic" in body,
+          "the link carries the listing, so a phone that never configured it still lands right")
+
+
+def test_the_account_mail_quotes_the_shop_to_the_cent():
+    reset()
+    import recovery
+    row = _acc_cart("cents@b.co", cur="eur")
+    now_q, off_q = recovery.price_pair(row)
+    body = recovery._text(row, now_q, off_q, "https://x.test")
+    shown = recovery._money(row, off_q, off_q["total"])
+    check("." in shown and shown[0] == "\u20ac",
+          "an account is quoted to the cent, in the currency the buyer was reading (%s)" % shown)
+    check(shown in body, "and that exact figure is the one in the mail")
+    check(abs(off_q["total"] - round(now_q["subtotal"] * (1 - carts.ACCOUNT_PCT), 2)) < 1e-9,
+          "struck against the LIST price, never against an already-reduced one")
+
+
+def test_summary_reports_accounts_apart():
+    reset()
+    now = int(time.time())
+    _acc_cart("s1@b.co")
+    r2 = _acc_cart("s2@b.co")
+    carts.mark(r2["token"], status="mailed", mailed_at=now - 10, stage="chased")
+    carts.clean_cart(dict(CFG, email="s3@b.co"))
+    b = carts.clean_cart(dict(CFG, email="s3@b.co"))
+    b["token"] = carts.new_token()
+    carts.put(b)
+    s = carts.summary(days=30)
+    a = s["accounts"]
+    check(a["total"] == 2, "the module counts account carts only (%d)" % a["total"])
+    check(s["total"] == 3, "while the tab's own total still counts everything")
+    check(a["chased"] == 1, "and reports how many got the one-day recall")
+    check(a["pct"] == carts.ACCOUNT_PCT and a["chase_hours"] == carts.ACCOUNT_CHASE_DELAY // 3600,
+          "the panel reads the rate and the delay, so the copy cannot go stale")
+    check(any(r["product"] == "account" for r in s["recent"]),
+          "and every row says which product it is")
+    check(all(r["summary"] != "" for r in s["recent"]),
+          "an account row is named by its listing, not by an empty climb")
+
+
 def main():
     for fn in (test_clean_cart, test_token_shape, test_put_is_in_place,
                test_one_open_cart_per_address, test_capture_keeps_original_clock,
@@ -398,7 +615,18 @@ def main():
                test_sweep_requires_a_secret,
                test_a_customer_who_bought_is_never_chased,
                test_followup_is_off_unless_switched_on,
-               test_a_broken_followup_never_takes_the_cart_sweep_down, test_summary):
+               test_a_broken_followup_never_takes_the_cart_sweep_down, test_summary,
+               # the accounts shop
+               test_an_account_cart_keeps_the_listing,
+               test_an_account_is_worth_ten_not_thirty,
+               test_the_account_price_takes_the_code_and_nothing_else,
+               test_a_mystery_code_cannot_be_spent_on_an_account,
+               test_the_one_day_recall, test_a_boost_is_never_recalled,
+               test_the_two_mails_can_never_collide,
+               test_a_recapture_cannot_reset_the_sequence,
+               test_the_recall_never_offers_a_better_rate,
+               test_the_account_mail_quotes_the_shop_to_the_cent,
+               test_summary_reports_accounts_apart):
         print("\n" + fn.__name__)
         fn()
     try:

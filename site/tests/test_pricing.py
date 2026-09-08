@@ -914,12 +914,31 @@ def test_account_pricing():
     check(qn["total"] == flat and qn["addons"] == 0,
           "queue, add-ons, promo and bundle cannot move an account's price "
           "(%r vs %r)" % (qn["total"], flat))
-    # …and a forged server-side offer cannot either. `recovery_pct` is the field
-    # process_checkout() strips, but quote() must not honour it here even if one
-    # arrives: the only reduction an account carries is its own `was`.
-    qf = pricing.quote(dict(base, recovery_pct=0.99, offer_label="x"))
-    check(qf["total"] == flat,
-          "a recovery/mystery percentage cannot discount an account (got %r)" % qf["total"])
+    # …and there is now EXACTLY ONE reduction that can, which is the
+    # abandoned-cart recovery token (see the ⚠ in the account branch and on
+    # `carts.ACCOUNT_PCT`). The field it arrives in is the one
+    # `process_checkout()` strips unconditionally and re-derives from a
+    # single-use token, so the only way to reach it is to have abandoned a
+    # checkout on this product and been mailed about it.
+    import carts
+    qf = pricing.quote(dict(base, recovery_pct=carts.ACCOUNT_PCT, promo="BACK-X"))
+    check(abs(qf["total"] - round(flat * (1 - carts.ACCOUNT_PCT), 2)) < 1e-9,
+          "the abandoned-cart token is the one discount an account takes (got %r)"
+          % qf["total"])
+    check(abs(qf["subtotal"] - qf["discount"] - qf["total"]) < 1e-9,
+          "and subtotal − discount = total still holds exactly, to the cent")
+    # ⚠ 10%, not the boosts' 30% and not the mystery card's 35%: an account's
+    # price is margin against a real acquisition cost rather than labour. The
+    # rate is the carts store's, so this cannot drift from what is issued.
+    check(carts.ACCOUNT_PCT < carts.RECOVERY_PCT,
+          "the account rate is the smaller one — %g%% against %g%%"
+          % (carts.ACCOUNT_PCT * 100, carts.RECOVERY_PCT * 100))
+    # A percentage outside (0, 1) is still ignored rather than applied, so a
+    # nonsense value can neither zero the price nor invert it.
+    check(pricing.quote(dict(base, recovery_pct=1.4))["total"] == flat,
+          "a nonsense percentage buys nothing")
+    check(pricing.quote(dict(base, recovery_pct="lots"))["total"] == flat,
+          "and a non-numeric one is ignored, not crashed on")
 
     # Sold out and unknown both refuse, and both have to.
     out = [x for x in D.ACCOUNTS if not x["stock"]]

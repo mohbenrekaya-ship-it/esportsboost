@@ -460,6 +460,13 @@
             addons: state.addons || [], wins: state.wins,
             placements: state.placements, unranked: !!state.unranked,
             booster: state.booster || "", bundle: state.bundle || "",
+            /* On service:"account" these two ARE the price — the listing is
+               what pricing.account_pick() resolves and the currency picks the
+               listing's own market row rather than converting. Without them a
+               stored account cart cannot be re-priced at send time, and the
+               sweep retires it as unpriceable instead of mailing it. */
+            account: state.account || "",
+            cur: ((window.ESB_LOCALE && window.ESB_LOCALE.currency) || "").toLowerCase(),
             tz: (Intl.DateTimeFormat().resolvedOptions().timeZone || ""),
             lang: (navigator.language || "")
           })
@@ -862,6 +869,22 @@
       var aTotal = accountPrice(acc, aSv);
       var aWas = accountWas(acc);
       var aSub = aWas > aTotal ? aWas : aTotal;
+
+      /* The ONE discount this product takes: an abandoned-cart recovery token.
+         Mirrors pricing.py's account branch — read off the STATE first and the
+         global only as a fallback, the same rule resolvePromo() follows, so a
+         hypothetical quote can still be asked for. Deliberately NOT
+         window.ESB_BINGO: the mystery card is a climb offer worth up to 35% and
+         this product's whole discount budget is 10%, so
+         payments.process_checkout() ignores a bingo token on an account order
+         and this has to agree — a page quoting a total the server will not
+         charge is refused outright by the client_total guard. Taken off the
+         LIST price, never off an already-reduced one. */
+      var aRec = (s.recoveryPct !== undefined && s.recoveryPct !== null)
+        ? { pct: s.recoveryPct, token: s.promo, label: s.offerLabel }
+        : window.ESB_RECOVERY;
+      var aPct = (aRec && aRec.pct > 0 && aRec.pct < 1) ? aRec.pct : 0;
+      if (aPct) aTotal = Math.round(aSub * (1 - aPct) * 100) / 100;
       var aOff = Math.round((aSub - aTotal) * 100) / 100;
       return {
         invalid: false, total: aTotal, base: aSub, addons: 0,
@@ -880,7 +903,9 @@
         price: usd(aTotal, true, true),
         wasPrice: aOff ? usd(aSub, true, true) : "",
         discountPrice: aOff ? "−" + usd(aOff, true, true) : "",
-        promoCode: "", promoLabel: aOff ? T(D.accountOfferLabel || "Offer price") : "",
+        promoCode: aPct ? ((aRec && aRec.token) || "BACK") : "",
+        promoLabel: aPct ? T((aRec && aRec.label) || "Come back offer")
+                         : (aOff ? T(D.accountOfferLabel || "Offer price") : ""),
         promoEnds: "",
         summary: acc.name + " · " + aSv.code,
         days: 0, eta: T(D.accountEta || "Instant Delivery")

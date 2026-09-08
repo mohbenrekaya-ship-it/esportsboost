@@ -68,6 +68,12 @@ ACCOUNT_ETA = "Instant Delivery"
 # reduction this product carries, so the receipt says what the money is.
 ACCOUNT_OFFER_LABEL = "Offer price"
 
+# The label on the ONE discount an account order will accept — the
+# abandoned-cart recovery token. Kept apart from ACCOUNT_OFFER_LABEL because
+# they are two different claims about the same row: one says the listing is on
+# offer to everybody, the other says this buyer was sent a code.
+ACCOUNT_RECOVERY_LABEL = "Come back offer"
+
 # `days` on an account order. Zero, and it has to be: the ETA is not a number of
 # days, and every reader of `days` treats it as one — the demo card's "N days
 # left", the follow-up mail's per-hour figure (play_hours() returns 0 below 1, so
@@ -407,6 +413,35 @@ def quote(state):
         total = D.account_price(acc, region, cur)
         was = D.account_was(acc, cur)
         subtotal = was if was > total else total
+
+        # ⚠ THE ONE DISCOUNT THIS PRODUCT TAKES: an abandoned-cart recovery
+        # token. Everything above still holds — no sitewide sale, no bundle and
+        # no typed code out of `D.PROMOS` — because all of those are public and
+        # this is not: `recovery_pct` is never read from the request body
+        # (`payments.process_checkout()` pops it unconditionally) and is
+        # re-derived from a single-use token checked against the carts store. So
+        # the only way to reach this line is to have abandoned a checkout on
+        # this product and been mailed about it.
+        #
+        # It is 10% where a boost is 30%, and that is a margin decision, not a
+        # UI one — see the ⚠ on `carts.ACCOUNT_PCT`. The reduction rides in
+        # `subtotal`/`discount` like every other one on the site, so the checkout
+        # receipt, the mail and the order row read one number and
+        # `subtotal − discount = total` still holds exactly, to the cent.
+        try:
+            rec = float(state.get("recovery_pct") or 0)
+        except (TypeError, ValueError):
+            rec = 0.0
+        rec = rec if 0 < rec < 1 else 0.0
+        promo_code = promo_label = ""
+        if rec:
+            # Taken off the LIST price, never off an already-reduced one: a
+            # percentage struck against a figure that was itself discounted
+            # states a reduction the arithmetic never made.
+            total = round(subtotal * (1 - rec), 2)
+            promo_code = str(state.get("promo") or "")[:40]
+            promo_label = str(state.get("offer_label")
+                              or ACCOUNT_RECOVERY_LABEL)[:40]
         discount = round(subtotal - total, 2)
         return dict(
             invalid=False, total=total, total_cents=int(round(total * 100)),
@@ -414,8 +449,9 @@ def quote(state):
             # or rounded to a whole unit anywhere downstream. See data.py.
             cents=True, fixed=True,
             subtotal=subtotal, discount=discount,
-            promo_code="", promo_label=ACCOUNT_OFFER_LABEL if discount else "",
-            promo_pct=0, promo_ends="",
+            promo_code=promo_code,
+            promo_label=promo_label or (ACCOUNT_OFFER_LABEL if discount else ""),
+            promo_pct=rec, promo_ends="",
             base=subtotal, addons=0, days=ACCOUNT_DAYS,
             # The shard is named in the shop's own code (EUW / NA / EUNE / OCE),
             # which is what the card, the checkout summary and the credentials
