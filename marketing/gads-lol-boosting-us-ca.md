@@ -248,3 +248,47 @@ more traffic.
    **Presence**, AI Max off.
 4. Then flip from Paused to Enabled.
 5. After ~a week, read the search terms report and add negatives.
+
+
+===============================================================
+# STATUS 2026-09-08 — ALL FOUR AD GROUPS BUILT, ADS STILL OWED
+===============================================================
+Campaign 24218765186 is still **PAUSED**, EUR 0.00 spent, 0 impressions.
+
+## All four ad groups now exist, with all 34 keywords
+| Ad group | Keywords | Ad |
+| --- | --- | --- |
+| Elo boost (generic) | 10 | ✅ the responsive search ad |
+| Rank & division targets | 12 | ❌ none |
+| Duo queue | 6 | ❌ none |
+| Wins & placements | 6 | ❌ none |
+
+Verified in the console: **1 – 34 of 34** keywords, all phrase match, and
+"Search term matching: Using only your keywords and match types" on every group.
+"Ad group 1" was renamed **Elo boost (generic)**.
+
+## ⚠ THE REAUTH IS ON THE AD'S FINAL URL, NOT ON THE AD GROUP
+This is the thing worth knowing before anyone tries to finish it.
+
+Saving an ad group that contains an ad triggers Google's
+`nav/transaction/reauth?type=AD_FINAL_URL` challenge — on this account a
+**passkey** ("your device will ask for your fingerprint, face, or screen lock"),
+which is the owner's to answer and nobody else's. It blocked the work on
+2026-09-05 and blocked it again today.
+
+**Saving an ad group with keywords and NO ad does not trigger it.** That is how
+the three groups above got built: create, paste the keywords, delete the ad
+Google pre-fills, save. The three missing ads are all that is left behind the
+lock.
+
+## What finishing looks like
+Per empty ad group: open it → Ads → new responsive search ad → final URL
+`https://www.esportsboost.com/games/league-of-legends` → the 15 headlines and 4
+descriptions from this file → save → **Touch ID once**. Google carries the copy
+across from an existing ad group automatically, so it is a name and a save, not
+19 fields typed three times — but the save is what asks for the fingerprint.
+
+⚠ **A campaign whose ad groups have no ads serves nothing from them.** Enabling
+it today would run on `Elo boost (generic)` alone — the 24 keywords in the other
+three groups would sit idle, not quietly broaden the reach. Either finish the
+three ads or enable knowing only the generic group is live.
