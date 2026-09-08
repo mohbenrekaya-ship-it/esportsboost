@@ -6589,7 +6589,12 @@ def ac_tier_card(a, region):
         ("users" if D.account_kind(a) == "unranked" else "shield-check",
          "spec", spec_row),
         ("check", "ok", "<span>%s</span>" % esc("Full email access")),
-        ("check", "ok", "<span>%s</span>" % esc("Hand-levelled, never botted")),
+        # ⚠ This row used to read "Hand-levelled, never botted" — a claim about
+        # how the account was played, which we do not source and cannot stand
+        # behind (see the ⚠ on D.ACCOUNT_TRUST). It states the PAYOFF of the row
+        # above it instead: owning the inbox is abstract, and being able to
+        # change the password is the thing the buyer actually pictures.
+        ("check", "ok", "<span>%s</span>" % esc("Password changeable")),
         ("warn", "caution", "<span>%s</span>" % esc(a["note"])),
     ]
     rows = "".join(
@@ -6806,10 +6811,11 @@ def ac_why():
     <div class="ac-head">
       <div class="ac-head-l">
         {sec_kicker("02", "Why ours")}
-        <h2 class="ac-h2">Hand-levelled, never botted.</h2>
+        <h2 class="ac-h2">Covered for a year.</h2>
       </div>
-      <p class="ac-head-p">Three things decide whether a bought account is worth having: who
-      played it, whether you can lock it to yourself, and what happens if it goes wrong.</p>
+      <p class="ac-head-p">Three things decide whether a bought account is worth having: what
+      state it arrives in, whether you can lock it to yourself, and what happens if it goes
+      wrong.</p>
     </div>
     <div class="ac-trusts">{cards}</div>
   </div>
