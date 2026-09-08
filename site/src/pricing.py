@@ -398,8 +398,13 @@ def quote(state):
         # carries one row per market and `account_price()` picks one, it never
         # converts. An unknown currency falls back to the dollar row rather than
         # to whichever is first.
+        #
+        # ⚠ So is the SHARD, since 2026-09-08 — the two European shards are 5
+        # cheaper in every currency. `region` here is `account_pick()`'s CLAMPED
+        # one, never the body's, which is what stops a request naming a shard
+        # this shop does not sell on from buying at a price nobody advertises.
         cur = state.get("currency")
-        total = D.account_price(acc, cur)
+        total = D.account_price(acc, region, cur)
         was = D.account_was(acc, cur)
         subtotal = was if was > total else total
         discount = round(subtotal - total, 2)

@@ -1207,13 +1207,28 @@ resolver and `build.py`, `quote()` and `payments.build_session()` all read the c
   service, and `app.js`'s `render()` formats every figure in the checkout breakdown at the quote's own
   precision for the same reason. `test_account_shown_equals_charged_to_the_cent()` walks every listing
   × shard × currency.
-- **A shard changes STOCK, never price.** `ACCOUNT_SERVERS` carries only `share` (supply relative to
-  EUW), which the server-card counts and the "Low stock" badge are drawn from — that and the region
-  lock are the whole reason step 1 exists. ⚠ There was a `delta` field and it came off with the
-  per-currency table, because the two cannot coexist without answering "a delta in *which*
-  currency?". If a shard ever needs its own price it goes in as another row of the listing's `price`
-  table, not as a number added to whichever currency was picked. `region` names the shard in the League ladder's own words, asserted at import, and
-  the code the cards print is `REGION_SHORT`'s — never a second table.
+- ⚠ **A shard changes STOCK *and* PRICE — the two European ones are `ACCOUNT_EU_CUT` (5) cheaper**,
+  the business's call (2026-09-08). `ACCOUNT_SERVERS` carries `share` (supply relative to EUW, which
+  the server-card counts and the "Low stock" badge are drawn from) **and `delta`**, and the delta is
+  **a table, one row per currency** — €5, £5 and $5, not €5 converted three ways, because the price
+  it moves is a hand-set table for the same reason. That question, "a delta in *which* currency?", is
+  why the field came off when the per-currency table went in; answering it is the whole cost of
+  putting it back. **Every caller that renders or charges a price passes the region**
+  (`account_price(a, region, currency)`, `account_price_table(a, region)`), and `account_floor()` is
+  a minimum over (listing, **shard**) pairs — a "from" price taken off the reference shard alone is
+  one the shop beats on the server most of its traffic lands on. Three properties are asserted at
+  import: every shard's delta covers every currency, no delta takes a listing to zero, and **every
+  listing on a shard moves by the same amount** — which is what keeps `account_badge()`'s "Cheapest"
+  one computation for the whole board rather than one per shard. `region` names the shard in the
+  League ladder's own words, asserted at import, and the code the cards print is `REGION_SHORT`'s —
+  never a second table.
+- **The client re-prices the cards when the server changes, and it is the same derivation.**
+  `paintCard()` used to leave the money alone on purpose; it now rewrites each `.money` span's
+  `data-<code>` **rows** (never a finished string) from `accountPriceTable()` and calls
+  `window.esbMoneyRefresh()` — i18n.js's own `reformatStaticMoney()`, exposed for this — so the
+  two-size price stays split and a French reader still gets "39,90 €". Leave a card holding the
+  reference shard's figure and the server's re-quote refuses the order on the `client_total` guard:
+  the safe half of the failure, and still a dead checkout on a valid order.
 - ⚠ **A higher rank must not cost less than a lower one.** This is the board's version of
   `test_bundle_rules()`'s "a bigger climb must never cost less than a smaller one it contains", and
   it matters for the same reason: the price column's whole argument, which the FAQ states outright,

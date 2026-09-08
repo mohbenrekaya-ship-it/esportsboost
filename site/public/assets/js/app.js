@@ -763,8 +763,13 @@
   /* ⚠ The buyer's currency is a PRICE INPUT here: a listing carries one row
      per market and this picks one, it never converts. Mirrors
      `D.account_price()`; an unknown currency falls back to the base row rather
-     than to whichever key happens to be first. The shard is NOT an input — a
-     shard changes stock, not price. */
+     than to whichever key happens to be first.
+
+     ⚠ SO IS THE SHARD, since 2026-09-08: the two European shards are 5 cheaper
+     in every currency, carried on the server row as its own per-currency
+     `delta` table. Pass the shard wherever a price is quoted — a figure taken
+     without one is the reference shard's, and the server re-quote would refuse
+     the order on the `client_total` guard. */
   function accountCur() {
     var base = D.accountBaseCur || "usd";
     return ((window.ESB_LOCALE || {}).currency || base).toLowerCase();
@@ -774,7 +779,17 @@
     var base = D.accountBaseCur || "usd", v = table[accountCur()];
     return typeof v === "number" ? v : (table[base] || 0);
   }
-  function accountPrice(acc) { return accountRow(acc && acc.price); }
+  /* The listing's whole table on one shard — the shape the card's `.money`
+     rows carry, mirroring `D.account_price_table()`. Built rather than stored,
+     so a delta can never be applied to one currency and forgotten on another. */
+  function accountPriceTable(acc, sv) {
+    var t = (acc && acc.price) || {}, d = (sv && sv.delta) || {}, out = {}, c;
+    for (c in t) if (Object.prototype.hasOwnProperty.call(t, c)) {
+      out[c] = Math.round((t[c] + (typeof d[c] === "number" ? d[c] : 0)) * 100) / 100;
+    }
+    return out;
+  }
+  function accountPrice(acc, sv) { return accountRow(accountPriceTable(acc, sv)); }
   function accountWas(acc) { return acc && acc.was ? accountRow(acc.was) : 0; }
   /* Units of one listing on one shard — the ONE stock derivation on the
      client, mirroring data.py's `account_stock()`.
@@ -844,7 +859,7 @@
           promoCode: "", promoLabel: "", promoEnds: ""
         };
       }
-      var aTotal = accountPrice(acc);
+      var aTotal = accountPrice(acc, aSv);
       var aWas = accountWas(acc);
       var aSub = aWas > aTotal ? aWas : aTotal;
       var aOff = Math.round((aSub - aTotal) * 100) / 100;
@@ -3476,11 +3491,24 @@
          with `ac_tier_card()` — a state the DOM has no CTA for hides them all. */
       var state = units ? "ok" : "out";
 
-      /* ⚠ The money is NOT rewritten here. A shard changes stock, not price,
-         and a currency switch is handled by i18n.js's reformatStaticMoney(),
-         which picks the listing's own `data-<code>` row off the span. Writing
-         a figure here would be a second place the price is decided, and the
-         two would disagree the first time one of them was changed. */
+      /* ⚠ THE MONEY MOVES WITH THE SHARD (2026-09-08): the two European ones
+         are 5 cheaper, so a card left holding the server-rendered figure would
+         advertise EUW's price over an NA order — and the server's re-quote
+         would then refuse it on the `client_total` guard, which is a dead
+         checkout on a valid order.
+
+         What is written is the `data-<code>` ROWS, not a finished string: the
+         price is still decided in exactly one place per currency, and the text
+         is rendered by i18n.js's own formatter through esbMoneyRefresh(), so a
+         two-size price stays split and a French reader still gets "39,90 €".
+         Writing textContent here would be the second decision this comment
+         used to warn about. */
+      var table = accountPriceTable(acc, sv);
+      each("[data-ac-price] .money, [data-ac-price].money", el, function (m) {
+        for (var c in table) if (Object.prototype.hasOwnProperty.call(table, c)) {
+          m.setAttribute("data-" + c, table[c].toFixed(2));
+        }
+      });
       setText(el.querySelector("[data-ac-code]"), sv.code);
       setText(el.querySelector("[data-ac-shard-name]"), sv.region);
 
@@ -3493,7 +3521,8 @@
       el.classList.toggle("is-out", state === "out");
 
       // The CTA is a real link, so the shard rides in it: a visitor who picked
-      // EUNE and middle-clicked Buy must not land on a checkout quoting EUW.
+      // EUNE and middle-clicked Buy must not land on a checkout quoting EUW —
+      // and since 2026-09-08 that is a price difference, not only a stock one.
       var href = "/checkout.html?account=" + encodeURIComponent(acc.id || el.getAttribute("data-ac-id"))
         + "&region=" + encodeURIComponent(sv.region);
       each("[data-ac-cta]", el, function (a) {
@@ -3527,6 +3556,10 @@
         c.hidden = !(st.kind === "all" || c.getAttribute("data-ac-kind") === st.kind);
         if (!c.hidden) paintCard(c, sv);
       });
+      /* One render pass after every card has its shard's rows, so the shop
+         cannot show two shards' prices for a frame. i18n.js owns the actual
+         formatting — see the ⚠ in paintCard(). */
+      if (window.esbMoneyRefresh) window.esbMoneyRefresh();
 
       var shown = visible().length;
       var total = pages(shown);

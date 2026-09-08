@@ -3983,6 +3983,12 @@
   /* ── currency application ─────────────────────────────────────────────── */
   // Re-format static server-rendered prices. EUR symbol placement depends on
   // language, so this runs on both currency and language changes.
+  /* Re-render every static `.money` span from its own `data-<code>` rows.
+     Exposed because the accounts shop rewrites those rows when the shard
+     changes (the two European ones are 5 cheaper) and must not re-implement
+     the formatting: where the currency mark sits, whether a price is split
+     into two sizes and whether a row is a fixed figure or a converted one are
+     all decided here, once. */
   function reformatStaticMoney() {
     Array.prototype.forEach.call(document.querySelectorAll(".money[data-usd]"), function (el) {
       var n = parseFloat(el.getAttribute("data-usd"));
@@ -4021,6 +4027,8 @@
      decimal separator (symbol included wherever it falls) and `cents` is the
      separator plus the fraction plus anything after it, so main + cents is
      always exactly esbMoney(n, true). */
+  window.esbMoneyRefresh = reformatStaticMoney;
+
   window.esbMoneyParts = function (n, fixed) {
     var cur = locale.currency, rate = fixed ? 1 : (window.ESB_RATES[cur] || 1);
     var f = formatter(cur, locale.lang, true), mark = CUR_MARK[cur];

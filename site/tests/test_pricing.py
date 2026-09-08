@@ -852,7 +852,7 @@ def test_account_pricing():
                 q = pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
                                    "account": a["id"], "region": r,
                                    "currency": cur})
-                want = a["price"][cur]
+                want = D.account_price(a, r, cur)
                 if q["invalid"] or q["total"] != want:
                     bad.append("%s/%s/%s %r != %r" % (a["id"], r, cur, q["total"], want))
                 # subtotal − discount == total, exactly.
@@ -861,17 +861,40 @@ def test_account_pricing():
     check(not bad, "every listing quotes its own row on every shard and currency "
                    "(%r)" % bad[:3])
 
-    # ⚠ A shard changes STOCK, never price — there is no per-shard price and no
-    # `delta` field. The failure to catch is a card quoting one shard under
-    # another's name.
+    # ⚠ A shard changes STOCK **and**, since 2026-09-08, PRICE: the two European
+    # ones are cheaper. The failure to catch is a card quoting one shard under
+    # another's name — which is now a wrong figure rather than only a wrong
+    # label, so every shard must carry a delta table covering every currency.
     ref = D.ACCOUNT_REGIONS[0]
-    check(not any("delta" in s for s in D.ACCOUNT_SERVERS),
-          "no shard carries a price delta")
-    check(all(len({pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
-                                  "account": a["id"], "region": s["region"],
-                                  "currency": "eur"})["total"]
-                   for s in D.ACCOUNT_SERVERS}) == 1 for a in D.ACCOUNTS),
-          "one price list, identical on all four shards")
+    check(all(set(sv.get("delta", {})) == D.ACCOUNT_CURRENCIES
+              for sv in D.ACCOUNT_SERVERS),
+          "every shard carries a delta row for every currency")
+    # ⚠ THE SHARD IS A PRICE INPUT (2026-09-08): the two European shards are
+    # `ACCOUNT_EU_CUT` cheaper in every currency, and the quote has to carry it
+    # — the page advertises it, so a quote that does not is a checkout the
+    # `client_total` guard refuses. The delta is read off the shard table
+    # rather than typed, so re-tuning the cut is one number in data.py.
+    off = []
+    for cur in sorted(D.ACCOUNT_CURRENCIES):
+        for a in D.ACCOUNTS:
+            for sv in D.ACCOUNT_SERVERS:
+                got = pricing.quote({"game": D.ACCOUNT_GAME, "service": "account",
+                                     "account": a["id"], "region": sv["region"],
+                                     "currency": cur})["total"]
+                want = round(a["price"][cur] + sv["delta"][cur], 2)
+                if got != want:
+                    off.append("%s/%s %s: %r != %r"
+                               % (a["id"], sv["region"], cur.upper(), got, want))
+    check(not off, "every listing quotes its shard's own price, in every "
+                   "currency (%s)" % (off[:3] or "all 132 agree"))
+    # …and the cut is really on the two European shards and nowhere else, which
+    # is the business's rule rather than an emergent property of the table.
+    eu = {"Europe West", "EU Nordic & East"}
+    check(all(all(v == (-D.ACCOUNT_EU_CUT if s["region"] in eu else 0)
+                  for v in s["delta"].values())
+              for s in D.ACCOUNT_SERVERS),
+          "the %g cut is on the two European shards and no other"
+          % D.ACCOUNT_EU_CUT)
     # ⚠ And the currency IS an input: at least one listing must differ between
     # markets, or the per-currency table is doing nothing and somebody has
     # quietly re-derived it from a rate.
@@ -883,7 +906,7 @@ def test_account_pricing():
             "region": ref}
     # Nothing the boost engine owns may move it. Duo, every add-on at once, the
     # sitewide code and a bundle index are all thrown at one listing.
-    flat = D.account_price(a)
+    flat = D.account_price(a, ref)
     noisy = dict(base, mode="Duo queue", addons=[x["id"] for x in D.ADDONS],
                  promo=next(iter(D.PROMOS), ""), bundle=0, wins=5, placements=5,
                  unranked=True, coach=3, pack=2)
@@ -917,7 +940,7 @@ def test_account_pricing():
         if any(r not in D.ACCOUNT_REGIONS for r in LOL["regions"] + ["Korea"]) else "Korea"
     _acc, shard = pricing.account_pick(dict(base, region=missing))
     qs = pricing.quote(dict(base, region=missing))
-    check(shard == ref and qs["total"] == D.account_price(a),
+    check(shard == ref and qs["total"] == D.account_price(a, ref),
           "an unsold shard clamps to the reference shard (got %r)" % shard)
 
     # `days` is 0, and the ETA is the delivery promise rather than a day count.
@@ -1014,8 +1037,10 @@ def test_account_shown_equals_charged_to_the_cent():
                 want = account_display_cents(q["total"], cur)
                 if amount != want:
                     bad.append("%s/%s %s: %r != %r" % (a["id"], r, cur, amount, want))
-                # …and it is the listing's own row for that market, to the cent.
-                if amount != int(round(a["price"][cur] * 100)):
+                # …and it is the listing's own row for that market ON THIS
+                # SHARD, to the cent — the two European shards are 5 cheaper,
+                # so the raw table is no longer the figure anybody is charged.
+                if amount != int(round(D.account_price(a, r, cur) * 100)):
                     bad.append("%s/%s %s: charged %r, table says %r"
                                % (a["id"], r, cur, amount, a["price"][cur]))
     check(not bad, "every market is charged its own row, to the cent (%r)" % bad[:3])
@@ -1098,9 +1123,13 @@ def test_account_client_mirror():
           "the shard table ships in the shop's own order")
     check(all(s["share"] == D.ACCOUNT_SERVERS[i]["share"]
               and s["code"] == D.account_code(s["region"])
-              and "delta" not in s
+              # ⚠ The delta ships now, one row per currency: paintCard() re-prices
+              # every card when the server changes, and a client without it would
+              # leave the reference shard's figure over a shard that charges 5
+              # less — the server would then refuse the order on `client_total`.
+              and s.get("delta") == D.ACCOUNT_SERVERS[i]["delta"]
               for i, s in enumerate(svs)),
-          "every share and code matches the server's, and no shard prices")
+          "every share, code and price delta matches the server's")
     check(d.get("accountEta") == pricing.ACCOUNT_ETA,
           "the delivery promise is shipped from pricing.py, not typed twice")
     check(d.get("accountOfferLabel") == pricing.ACCOUNT_OFFER_LABEL,

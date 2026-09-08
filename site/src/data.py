@@ -758,19 +758,35 @@ ACCOUNT_DISCLAIMER = (
 # `share` is this shard's supply relative to EUW; `delta` is what it adds to
 # every listing's price. Both are hand-set business figures.
 #
-# ⚠ EVERY DELTA IS ZERO — the business's call: one price list, the same on all
-# four shards. The field stays because the price model is built on it (both
-# `account_price()` and its app.js mirror add it, and the checkout re-quote
-# reads the shard for exactly that reason), so putting a shard back on its own
-# price is one number here and nothing else. What the shard still changes is
-# STOCK, through `share`, which is what the server cards' counts and the
-# "Low stock" badge are drawn from — and the region lock, which is the real
-# reason step 1 exists at all.
+# ⚠ A DELTA IS A TABLE, ONE ENTRY PER CURRENCY — never one figure converted,
+# for the same reason `price` is a table: these markets are set by hand and
+# there is no rate between them. That question — "a discount in *which*
+# currency?" — is why the delta field came off when the per-currency price
+# table went in, and answering it is the whole cost of putting it back.
+#
+# ⚠ THE TWO EUROPEAN SHARDS ARE 5 CHEAPER, in each currency — the business's
+# call (2026-09-08). It is 5 of each unit, not €5 converted three ways: €5,
+# £5 and $5, which is how the price rows themselves are set. Europe West is
+# the shard every European visitor is defaulted onto by `geo.py`, so this
+# reaches most of the traffic the shop takes.
+#
+# What a delta does NOT touch: stock (that is `share`), the "Cheapest" badge
+# (`account_badge()` needs the deltas to be EQUAL ACROSS LISTINGS within a
+# shard, which a flat cut keeps — see the ⚠ there), and the region lock, which
+# is the real reason step 1 exists at all.
+ACCOUNT_EU_CUT = 5.0
+
+# Flat, per currency. The keys must be exactly ACCOUNT_CURRENCIES — asserted
+# below, because a currency missing a row here would silently be charged the
+# undiscounted price on a shard advertising the cut.
+_AC_EU_DELTA = dict(usd=-ACCOUNT_EU_CUT, eur=-ACCOUNT_EU_CUT, gbp=-ACCOUNT_EU_CUT)
+_AC_NO_DELTA = dict(usd=0.0, eur=0.0, gbp=0.0)
+
 ACCOUNT_SERVERS = [
-    dict(region="Europe West", share=1.00),
-    dict(region="North America", share=0.72),
-    dict(region="EU Nordic & East", share=0.38),
-    dict(region="Oceania", share=0.32),
+    dict(region="Europe West", share=1.00, delta=_AC_EU_DELTA),
+    dict(region="North America", share=0.72, delta=_AC_NO_DELTA),
+    dict(region="EU Nordic & East", share=0.38, delta=_AC_EU_DELTA),
+    dict(region="Oceania", share=0.32, delta=_AC_NO_DELTA),
 ]
 
 # ⚠ The currencies the price table must cover, and it MUST equal
@@ -1059,13 +1075,39 @@ def account_cur(currency=""):
     return cur if cur in ACCOUNT_CURRENCIES else ACCOUNT_BASE_CUR
 
 
-def account_price(a, currency=""):
-    """What this listing costs in one currency — a row of its own table, never
-    a conversion. Mirrored by pricing.account_price() (which is what the server
-    actually charges) and by `accountPrice()` in app.js.
+def account_delta(region, currency=""):
+    """What this shard adds to every listing's price, in one currency.
 
-    The shard is not an input: the price list is the same on all four."""
-    return float(a["price"][account_cur(currency)])
+    Zero on a shard with no delta and on a region this shop does not sell on —
+    an unknown region is never an error here, because `account_pick()` has
+    already clamped the one that reaches a charge."""
+    sv = next((x for x in ACCOUNT_SERVERS if x["region"] == region), None)
+    return float((sv or {}).get("delta", {}).get(account_cur(currency), 0.0))
+
+
+def account_price(a, region="", currency=""):
+    """What this listing costs on one shard in one currency — a row of its own
+    table plus that shard's delta, never a conversion. Mirrored by
+    pricing.account_price() (what the server actually charges) and by
+    `accountPrice()` in app.js.
+
+    ⚠ THE SHARD IS A PRICE INPUT AGAIN (2026-09-08): the two European shards
+    are 5 cheaper. Every caller that renders or charges a price has to pass the
+    region it is talking about, or it quotes the reference shard's figure on a
+    shard that does not charge it. `account_pick()` clamps the region before
+    this is ever reached on a charge, which is what stops a body naming an
+    unsold shard from buying at a made-up price."""
+    return round(float(a["price"][account_cur(currency)])
+                 + account_delta(region, currency), 2)
+
+
+def account_price_table(a, region=""):
+    """The listing's whole price table on one shard — one row per currency, the
+    shape `money_multi()` ships into the DOM and `accountPriceTable()` mirrors.
+
+    Built rather than stored, so a delta cannot be applied to one currency and
+    forgotten on another."""
+    return {c: account_price(a, region, c) for c in ACCOUNT_CURRENCIES}
 
 
 def account_was(a, currency=""):
@@ -1076,17 +1118,21 @@ def account_was(a, currency=""):
 
 def account_floor(currency=""):
     """The cheapest account anyone can actually buy, in one currency — what the
-    hero and the nav quote as "from $NN". Reads stock, so a sold-out cheap
-    listing can never advertise a price nobody can pay."""
-    live = [a for a in ACCOUNTS
-            if any(account_stock(a, s["region"]) for s in ACCOUNT_SERVERS)]
-    return min((account_price(a, currency) for a in live), default=0)
+    hero and the nav quote as "from $NN".
+
+    It reads stock, so a sold-out cheap listing can never advertise a price
+    nobody can pay — and it is a minimum over (listing, SHARD) pairs, not over
+    listings, because the two European shards charge 5 less. A figure taken off
+    the reference shard alone would be a "from" price the shop beats."""
+    return min((account_price(a, s["region"], currency)
+                for a in ACCOUNTS for s in ACCOUNT_SERVERS
+                if account_stock(a, s["region"])), default=0)
 
 
 def account_shard_floor(region, currency=""):
     """The same, on one shard — the "from $NN" on a server card."""
     live = [a for a in ACCOUNTS if account_stock(a, region)]
-    return min((account_price(a, currency) for a in live), default=0)
+    return min((account_price(a, region, currency) for a in live), default=0)
 
 
 def account_tier_color(a):
@@ -1149,6 +1195,27 @@ assert len({a["shape"] for a in ACCOUNTS}) == len(ACCOUNTS), \
     "two listings draw the same rank mark"
 assert not any(a["badge"] == "Cheapest" for a in ACCOUNTS), \
     "'Cheapest' is computed by account_badge(), never authored — see the ⚠ there"
+# ⚠ A SHARD DELTA IS A TABLE, and every currency needs a row: a code missing
+# here would be charged the undiscounted figure on a shard whose own card
+# advertises the cut, which is the display-says-one-thing-charge-says-another
+# failure `test_account_shown_equals_charged_to_the_cent()` exists to stop.
+for _sv in ACCOUNT_SERVERS:
+    assert set(_sv["delta"]) == ACCOUNT_CURRENCIES, \
+        "shard %s deltas %s, needs exactly %s" % (
+            _sv["region"], sorted(_sv["delta"]), sorted(ACCOUNT_CURRENCIES))
+    # A delta that takes any listing to zero or below would put a free account
+    # on the board — and, on the checkout re-quote, a Stripe session for 0.
+    for _a in ACCOUNTS:
+        assert all(account_price(_a, _sv["region"], _c) > 0
+                   for _c in ACCOUNT_CURRENCIES), \
+            "shard %s prices %s at or below zero" % (_sv["region"], _a["id"])
+# `account_badge()` computes "Cheapest" ONCE for the whole board rather than per
+# shard, which is only sound while every listing on a shard moves by the same
+# delta. A per-listing delta would need that badge computed per shard too.
+for _sv in ACCOUNT_SERVERS:
+    assert len({round(account_price(_a, _sv["region"]) - _a["price"][ACCOUNT_BASE_CUR], 2)
+                for _a in ACCOUNTS}) == 1, \
+        "shard %s moves its listings by different amounts — see account_badge()" % _sv["region"]
 # Neither half of the filter may be empty, or the bar offers a control that
 # returns nothing. Both halves non-empty also means neither can return all 11.
 assert accounts_of_kind("unranked") and accounts_of_kind("ranked"), \

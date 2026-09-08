@@ -6537,7 +6537,11 @@ def ac_tier_card(a, region):
     crawled; the query is untrusted and the server re-resolves both the listing
     and the shard before it charges anything (`pricing.account_pick`)."""
     units = D.account_stock(a, region)
-    price = D.account_price(a)
+    # ⚠ The shard is a PRICE INPUT (the two European shards are 5 cheaper), so
+    # every figure on this card is quoted for the shard it is drawn for — never
+    # for the reference one. `paintCard()` in app.js re-writes the same rows
+    # when the visitor changes server; the two derivations must agree.
+    price = D.account_price(a, region)
     was = D.account_was(a)
     # `account_badge()` is the one reader — "Cheapest" is computed there, so a
     # re-price can never leave the claim on a card that is not.
@@ -6559,7 +6563,7 @@ def ac_tier_card(a, region):
     badge = (f'<span class="ac-badge{" is-low" if low_badge else ""}">{esc(label)}</span>'
              if label else "")
     struck = (f'<span class="ac-was" data-ac-was{"" if was > price else " hidden"}>'
-              f'{money_multi(a["was"] if a.get("was") else a["price"])}</span>')
+              f'{money_multi(a["was"] if a.get("was") else D.account_price_table(a, region))}</span>')
 
     # Four spec rows, two green ticks and one amber caution — the mix is the
     # point. See the ⚠ in the section header.
@@ -6656,7 +6660,7 @@ def ac_tier_card(a, region):
       <ul class="ac-fts">{rows}</ul>
       <div class="ac-card-foot">
         {struck}
-        <span class="ac-price" data-ac-price>{money_parts_multi(a["price"])}</span>
+        <span class="ac-price" data-ac-price>{money_parts_multi(D.account_price_table(a, region))}</span>
         {stock}
         <div class="ac-card-cta">{ctas}</div>
       </div>
@@ -6944,8 +6948,14 @@ def page_accounts():
                    # The dollar row. Schema.org needs one currency and this is
                    # the base; the other markets are their own rows, not a
                    # conversion of this one, so there is no rate to express.
-                   "lowPrice": "%.2f" % min((D.account_price(a) for a in live), default=0),
-                   "highPrice": "%.2f" % max((D.account_price(a) for a in live), default=0),
+                   # Across every (listing, SHARD) pair that is actually on
+                   # sale — the European shards are 5 cheaper, so a range taken
+                   # off the reference shard alone would publish a low price the
+                   # shop beats on its own default server.
+                   "lowPrice": "%.2f" % min((D.account_price(a, s["region"])
+                                             for a in live for s in D.ACCOUNT_SERVERS), default=0),
+                   "highPrice": "%.2f" % max((D.account_price(a, s["region"])
+                                              for a in live for s in D.ACCOUNT_SERVERS), default=0),
                    "offerCount": len(live),
                    "availability": "https://schema.org/InStock"},
     }
@@ -10361,10 +10371,17 @@ def client_data():
                                "tier": a["tier"], "kind": D.account_kind(a)}
                      for a in D.ACCOUNTS},
         # The shards, in the order the picker draws them. `code` is
-        # REGION_SHORT's — the client never derives a second one. There is no
-        # `delta`: a shard changes stock, never price.
+        # REGION_SHORT's — the client never derives a second one.
+        #
+        # ⚠ `delta` is a TABLE, one row per currency, because the price it moves
+        # is one: the two European shards are 5 cheaper in each market. It ships
+        # because `paintCard()` re-prices every card when the server changes and
+        # would otherwise leave the reference shard's figure over a shard that
+        # charges something else — the server would then refuse the order on the
+        # `client_total` guard, which is the safe half of the failure and still
+        # a dead checkout.
         "accountServers": [{"region": s["region"], "code": D.account_code(s["region"]),
-                            "share": s["share"]}
+                            "share": s["share"], "delta": s["delta"]}
                            for s in D.ACCOUNT_SERVERS],
         "accountBaseCur": D.ACCOUNT_BASE_CUR,
         "accountOfferLabel": pricing.ACCOUNT_OFFER_LABEL,
