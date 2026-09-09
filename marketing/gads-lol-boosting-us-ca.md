@@ -73,7 +73,7 @@ Solo Or Duo Queue Boosting
 Live Price Before You Pay
 Money Back Until It Starts
 Pick Your Booster, No Fee
-Bundles Up To 37% Off
+Iron To Master, Any Climb
 Gold, Plat & Diamond Boost
 Net Wins & Placements Too
 Pro-Rated If We Stop Early
@@ -87,7 +87,7 @@ Price Fixed At Checkout
 League of Legends elo boost. Solo or duo queue, live price before you pay. From $4.
 Full money back until a booster claims it. Pro-rated refund if the order stops early.
 Name the booster you want at no extra fee. Divisions, net wins and placements.
-Bundle a multi-tier climb and save up to 37%. Secure checkout, price fixed at checkout.
+Every division from Iron to Master. Secure checkout, and the price is fixed when you pay.
 
 ## Sitelinks
 Safety & Guarantee   -> /guarantee
@@ -160,7 +160,7 @@ Nothing here is typed from memory. Re-derive after any re-price — the last one
 | Claim | Source | Value today |
 | --- | --- | --- |
 | "From $4" | the H1 on the live page, `from_price()` over every rung | $4 |
-| "Up to 37% off" | `pricing.bundle_pct()` over the LoL bundles | 19%–37% |
+| "Iron to Master" | the LoL ladder in `data.py` (`tiers`) | Iron … Master |
 | "Money back until it starts" | `D.GUARANTEE["cases"][0]` | 100% back before a booster claims it |
 | "Pro-rated if we stop early" | `D.GUARANTEE["cases"][1]` | refunded at the rate paid |
 | "Pick your booster, no fee" | `pricing.py` charges nothing for a named booster | $0 |
