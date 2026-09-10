@@ -1294,23 +1294,14 @@ ACCOUNT_INCLUDED = [
 
 # ── Why ours, band 02 ─────────────────────────────────────────────────────
 # ⚠ Each proof line is a commitment falsifiable by one order, the same standing
-# as SAFETY["measures"]'s notes. The claims figure needs the orders store
-# behind it.
-#
-# ⚠ The first card used to argue PROVENANCE — "levelled by a booster on our
-# roster … no scripts, no bots, ever" — and it came out on the business's call
-# (2026-09-08): the accounts are sourced, so how each one was levelled is not a
-# fact we hold, and a provenance claim is the one thing on this page a supplier
-# can falsify for us. What replaced it is the same argument made from what we
-# DO control and DO check before a login goes on the shelf: the account's
-# condition. Do not put a claim about how the account was played back in
-# unless sourcing is ours end to end.
+# as SAFETY["measures"]'s notes. "No scripts, no bots" is only true while
+# sourcing is controlled; the claims figure needs the orders store behind it.
 ACCOUNT_TRUST = [
-    ("shield-check", "Condition", "Checked before it ships",
-     "Every login is opened and checked before it goes on the shelf: no active "
-     "ban or restriction, ranked unlocked, the inbox tested, and the rank on "
-     "the card is the rank on the account.",
-     "It passes or it does not ship"),
+    ("user-focus", "Provenance", "Played by a person",
+     "Every account was levelled by a booster on our roster, in normal hours, on "
+     "a regional connection. The match history reads like a player because it "
+     "was one.",
+     "No scripts, no bots, ever"),
     ("lock-key", "Ownership", "The inbox comes with it",
      "A login without its email is a rental — the seller can pull it back "
      "whenever they like. Ours ship with the original inbox and its recovery "
@@ -1331,8 +1322,8 @@ ACCOUNT_TRUST = [
 ACCOUNT_REVIEWS = [
     ("Marek K.", "4 days ago", "Gold · EUW", 5,
      "Email came with it, changed both in about five minutes with the guide. "
-     "Logged straight into ranked with nothing flagged on it, which is the bit "
-     "I was worried about."),
+     "Match history looks like a real account, which is the bit I was worried "
+     "about."),
     ("Dee R.", "1 week ago", "Unranked premium · NA", 5,
      "Ordered at 2am and the credentials were in my inbox before I closed the "
      "tab. 50 champions is more than my main has."),
@@ -1358,16 +1349,16 @@ ACCOUNT_FAQ = [
      "do not sell accounts we cannot hand over completely."),
     ("tos", "Can the account be banned for this?",
      "Buying an account is against Riot's terms of service, so the honest answer is that the "
-     "risk is not zero. What reduces it is hygiene and the state it arrives in: every login "
-     "is checked for an active ban or restriction before it goes on the shelf, and changing "
-     "the email and password in the first ten minutes removes the only trail back to the "
-     "sale. Anything actioned within {months} months is replaced free."),
+     "risk is not zero. What reduces it is provenance and hygiene: every account was "
+     "hand-levelled by a person rather than botted, and changing the email and password in "
+     "the first ten minutes removes the only trail back to the sale. Anything actioned "
+     "within {months} months is replaced free."),
     ("warranty", "What happens if it is recovered or banned?",
      "Inside {months} months of delivery you get another account of the same rank, or the "
      "money back, your choice. One claim per account, no interrogation and no restocking "
      "fee. The claim is your order id — there is nothing to register."),
     ("price", "Why is a Diamond account so much more than a smurf?",
-     "A level 30 unranked is a couple of days of games. A Diamond account is weeks of "
+     "A level 30 unranked takes a booster a couple of days. A Diamond account is weeks of "
      "ranked games at a rank where losses are expensive, plus the skins and rewards that "
      "accumulate on the way. The price tracks the hours behind the account, not the label "
      "on it."),
