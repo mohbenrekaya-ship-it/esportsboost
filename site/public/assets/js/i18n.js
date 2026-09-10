@@ -2097,7 +2097,6 @@
 
       "Random BE/Skins": "BE/skins aléatoires",
       "Ranked ready": "Prêt pour le classé",
-      "Ranked at 20 champions": "Classé dès 20 champions",
       "No champions": "Aucun champion",
 
       "{}+ champions": "{}+ champions",
@@ -3847,7 +3846,6 @@
 
       "Random BE/Skins": "Zufällige BE/Skins",
       "Ranked ready": "Ranked-bereit",
-      "Ranked at 20 champions": "Ranked ab 20 Champions",
       "No champions": "Keine Champions",
 
       "{}+ champions": "{}+ Champions",

@@ -902,7 +902,7 @@ ACCOUNT_DELIVERY = [
 # amber caution — the handoff's rule is that six identical green ticks read as
 # marketing and the amber line is what makes the rest credible.
 #
-# ⚠ Two unranked listings now say "Ranked ready" there — a POSITIVE sentence in
+# ⚠ All three unranked listings now say "Ranked ready" there — a POSITIVE sentence in
 # the row the handoff designed as a caution — and it keeps the amber mark
 # anyway, on the owner's call: the glyph stays in the same place on every card
 # in the rail. So on those two the mark is punctuation rather than a warning.
@@ -936,12 +936,15 @@ ACCOUNTS = [
          shape="ring3", price=dict(usd=44.90, eur=34.90, gbp=34.90),
          be=(30000, 60000), stock=14,
          badge="", season=False,
-         # ⚠ NOT "Ranked ready", and it must not become it: Riot requires 20
-         # champions OWNED to queue ranked, and this listing unlocks none. The
-         # essence covers it easily, but the buyer has to spend it first, so the
-         # row states the one step between them and a ranked queue. If this ever
-         # ships with a champion pool, it earns the other row.
-         note="Ranked at 20 champions",),
+         # ⚠ "Ranked ready" on a listing that unlocks NO champions, which is
+         # the owner's explicit call (2026-09-10) after being told the rest of
+         # this comment. Riot requires 20 champions OWNED to queue ranked, so at
+         # handover this account cannot — the 30–60K essence buys the 20 in a
+         # few minutes, but the buyer has to spend it first. The row said
+         # "Ranked at 20 champions" for one revision. Recorded rather than
+         # argued again: it is a standing decision, not an oversight, and the
+         # support ticket it produces is "I cannot queue ranked".
+         note="Ranked ready",),
     dict(id="lol-iron", name="Iron", tier="Iron",
          shape="diamond", price=dict(usd=64.90, eur=49.90, gbp=49.90),
          be=0, stock=18,
