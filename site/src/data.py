@@ -99,8 +99,8 @@ def company_registration():
     return "Registered in %s, company number %s" % (c["registry"], c["number"])
 
 
-PER_DIVISION = 23.62  # per-win / per-placement base; belongs in server-side pricing config
-PER_STEP = 6.36       # per single division rung on the ladder (see subdivide() below)
+PER_DIVISION = 20.08  # per-win / per-placement base; belongs in server-side pricing config
+PER_STEP = 5.41       # per single division rung on the ladder (see subdivide() below)
 
 
 class Ladder(list):
@@ -168,18 +168,18 @@ GAMES = [
                           "Diamond", "Master"],
                          ["IV", "III", "II", "I"],
                          apex=("Master",)),
-        prices={"Iron": 5.45, "Bronze": 7.27, "Silver": 8.18, "Gold": 10.9,
-                "Platinum": 17.26, "Emerald": 27.26, "Diamond": 43.61, "Master": 54.51},
+        prices={"Iron": 4.63, "Bronze": 6.18, "Silver": 6.95, "Gold": 9.27,
+                "Platinum": 14.67, "Emerald": 23.17, "Diamond": 37.07, "Master": 46.33},
         # Per-tier price of one net win (flat within a tier), keyed on the rank
         # the player is currently at. Present → the wins service prices off this
         # table instead of the shared per/climb formula, the same way `prices`
         # overrides the division formula. Mirrored in app.js as winPrices.
-        win_prices={"Iron": 2.73, "Bronze": 2.73, "Silver": 3.63, "Gold": 4.54,
-                    "Platinum": 7.27, "Emerald": 11.81, "Diamond": 18.17, "Master": 36.34},
+        win_prices={"Iron": 2.32, "Bronze": 2.32, "Silver": 3.09, "Gold": 3.86,
+                    "Platinum": 6.18, "Emerald": 10.04, "Diamond": 15.44, "Master": 30.89},
         # Per-tier price of one placement game, same shape as win_prices. Unranked
         # has no rank to read, so it prices at the ladder floor (Iron → 3).
-        placement_prices={"Iron": 2.73, "Bronze": 2.73, "Silver": 3.63, "Gold": 4.54,
-                          "Platinum": 7.27, "Emerald": 11.81, "Diamond": 18.17, "Master": 36.34},
+        placement_prices={"Iron": 2.32, "Bronze": 2.32, "Silver": 3.09, "Gold": 3.86,
+                          "Platinum": 6.18, "Emerald": 10.04, "Diamond": 15.44, "Master": 30.89},
         services="Elo boost · placements · net wins · duo · coaching",
         regions=["North America", "Europe West", "EU Nordic & East", "Oceania"],
         blurb="Solo/duo and flex, across NA and EU. Your booster plays your account inside your "
@@ -201,14 +201,14 @@ GAMES = [
         ladder=subdivide(["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond",
                           "Ascendant", "Immortal"],
                          ["1", "2", "3"], apex=("Immortal",)),
-        prices={"Iron": 3.63, "Bronze": 3.63, "Silver": 4.54, "Gold": 6.36,
-                "Platinum": 8.18, "Diamond": 16.35, "Ascendant": 31.8, "Immortal": 90.85},
+        prices={"Iron": 3.09, "Bronze": 3.09, "Silver": 3.86, "Gold": 5.41,
+                "Platinum": 6.95, "Diamond": 13.9, "Ascendant": 27.03, "Immortal": 77.22},
         # Per-tier price of one net win (flat within a tier), same shape as LoL's.
-        win_prices={"Iron": 2.73, "Bronze": 2.73, "Silver": 3.63, "Gold": 4.54,
-                    "Platinum": 5.45, "Diamond": 9.09, "Ascendant": 13.63, "Immortal": 19.99},
+        win_prices={"Iron": 2.32, "Bronze": 2.32, "Silver": 3.09, "Gold": 3.86,
+                    "Platinum": 4.63, "Diamond": 7.73, "Ascendant": 11.59, "Immortal": 16.99},
         # Placements share the win table; unranked prices at the floor (Iron → 3).
-        placement_prices={"Iron": 2.73, "Bronze": 2.73, "Silver": 3.63, "Gold": 4.54,
-                          "Platinum": 5.45, "Diamond": 9.09, "Ascendant": 13.63, "Immortal": 19.99},
+        placement_prices={"Iron": 2.32, "Bronze": 2.32, "Silver": 3.09, "Gold": 3.86,
+                          "Platinum": 4.63, "Diamond": 7.73, "Ascendant": 11.59, "Immortal": 16.99},
         services="Rank boost · placements · unrated wins · duo · coaching",
         regions=["North America", "Europe", "Asia", "Latin America"],
         # Same shape as League's: what is covered, then what actually happens to
@@ -319,6 +319,40 @@ GAMES = [
         note="Each playlist has its own rank; the quote covers one playlist per order.",
     ),
 ]
+
+# ── the hero's one-line sub, per ladder ───────────────────────────────────
+# The game hero was ported from the "Ladder card" handoff as a two-column
+# layout whose left column carried a four-to-five-line paragraph; centred on the
+# accounts shop's pattern it needs ONE line under the H1, the job `ac-hero-p`
+# does there ("Ranked ready, full email access, no grind").
+#
+# These are the first clause of each `blurb` rather than new claims — the blurb
+# stays, in full, as the paragraph the proof bands still read against. Written
+# short because the line is centred at 62ch and has to survive French and German,
+# both of which run longer. Every slug must have one; asserted below, because a
+# game added without one would render a hero with a hole in it.
+GAME_SUBS = {
+    "league-of-legends": "Solo, duo and flex — across NA and EU.",
+    "valorant": "Competitive and unrated — across NA and EU.",
+    "marvel-rivals": "Role-locked or flexible, hero pool respected.",
+    "teamfight-tactics": "Current-set comp knowledge, not last patch's.",
+    "overwatch-2": "Per-role SR, open queue or role queue.",
+    "rocket-league": "1v1, 2v2 and 3v3 playlists, and tournament wins.",
+    "dota-2": "MMR by bracket, calibration, behaviour-score safe.",
+    "apex-legends": "RP climbs, badges and kill thresholds.",
+    "counter-strike-2": "Premier CS Rating and Faceit levels.",
+}
+
+
+def game_sub(g):
+    """The hero's one-line sub for this ladder."""
+    return GAME_SUBS[g["slug"]]
+
+
+assert all(g["slug"] in GAME_SUBS for g in GAMES), \
+    "every game needs a GAME_SUBS line — the hero renders it under the H1: %s" % \
+    [g["slug"] for g in GAMES if g["slug"] not in GAME_SUBS]
+
 
 # Short region codes — full names read best in the game-page region SELECT, but
 # the homepage Best Sellers band draws its regions as CHIPS, which truncate at
@@ -1417,50 +1451,50 @@ BUNDLES = {
     # expensive order and a three-tier one would land on Master. None targets
     # Master (LP/leaderboard-gated — the top-rank rule above).
     "League of Legends": [
-        ("Iron", "Gold", 61),         # 3 tiers · full $89  · cheapest normal $62
-        ("Bronze", "Platinum", 79),   # 3 tiers · full $115 · cheapest normal $80
-        ("Silver", "Emerald", 118),   # 3 tiers · full $164 · cheapest normal $119
-        ("Platinum", "Diamond", 129),  # 2 tiers · full $204 · cheapest normal $130
-        ("Bronze", "Diamond", 249),   # 5 tiers · full $320 · cheapest normal $253
-        ("Iron", "Diamond", 277),     # 6 tiers · full $343 · cheapest normal $278
+        ("Iron", "Gold", 51),         # 3 tiers · full $89  · cheapest normal $62
+        ("Bronze", "Platinum", 67),   # 3 tiers · full $115 · cheapest normal $80
+        ("Silver", "Emerald", 100),   # 3 tiers · full $164 · cheapest normal $119
+        ("Platinum", "Diamond", 109),  # 2 tiers · full $204 · cheapest normal $130
+        ("Bronze", "Diamond", 211),   # 5 tiers · full $320 · cheapest normal $253
+        ("Iron", "Diamond", 235),     # 6 tiers · full $343 · cheapest normal $278
     ],
     "Valorant": [
-        ("Iron", "Silver", 18), ("Bronze", "Gold", 21), ("Silver", "Platinum", 26),
-        ("Gold", "Platinum", 14), ("Platinum", "Diamond", 22), ("Diamond", "Ascendant", 42),
+        ("Iron", "Silver", 15), ("Bronze", "Gold", 17), ("Silver", "Platinum", 22),
+        ("Gold", "Platinum", 11), ("Platinum", "Diamond", 18), ("Diamond", "Ascendant", 35),
     ],
     "Teamfight Tactics": [
-        ("Iron", "Silver", 34), ("Bronze", "Gold", 35), ("Silver", "Platinum", 38),
-        ("Gold", "Platinum", 21), ("Platinum", "Emerald", 24), ("Emerald", "Diamond", 24),
+        ("Iron", "Silver", 28), ("Bronze", "Gold", 29), ("Silver", "Platinum", 32),
+        ("Gold", "Platinum", 17), ("Platinum", "Emerald", 20), ("Emerald", "Diamond", 20),
     ],
     "Marvel Rivals": [
-        ("Bronze", "Gold", 30), ("Silver", "Platinum", 29), ("Gold", "Diamond", 32),
-        ("Platinum", "Diamond", 17), ("Diamond", "Grandmaster", 18),
-        ("Grandmaster", "Celestial", 19),
+        ("Bronze", "Gold", 25), ("Silver", "Platinum", 24), ("Gold", "Diamond", 27),
+        ("Platinum", "Diamond", 14), ("Diamond", "Grandmaster", 15),
+        ("Grandmaster", "Celestial", 16),
     ],
     "Overwatch 2": [
-        ("Bronze", "Gold", 47), ("Silver", "Platinum", 51), ("Gold", "Diamond", 58),
-        ("Platinum", "Diamond", 32), ("Diamond", "Master", 36),
-        ("Master", "Grandmaster", 39),
+        ("Bronze", "Gold", 39), ("Silver", "Platinum", 43), ("Gold", "Diamond", 49),
+        ("Platinum", "Diamond", 27), ("Diamond", "Master", 30),
+        ("Master", "Grandmaster", 33),
     ],
     "Rocket League": [
-        ("Bronze", "Gold", 29), ("Silver", "Platinum", 30), ("Gold", "Diamond", 34),
-        ("Platinum", "Diamond", 18), ("Diamond", "Champion", 20),
-        ("Champion", "Grand Champ", 21),
+        ("Bronze", "Gold", 24), ("Silver", "Platinum", 25), ("Gold", "Diamond", 28),
+        ("Platinum", "Diamond", 15), ("Diamond", "Champion", 17),
+        ("Champion", "Grand Champ", 17),
     ],
     "Dota 2": [
-        ("Herald", "Crusader", 65), ("Guardian", "Archon", 70), ("Crusader", "Legend", 81),
-        ("Archon", "Legend", 45), ("Legend", "Ancient", 50), ("Ancient", "Divine", 54),
+        ("Herald", "Crusader", 55), ("Guardian", "Archon", 59), ("Crusader", "Legend", 68),
+        ("Archon", "Legend", 38), ("Legend", "Ancient", 42), ("Ancient", "Divine", 45),
     ],
     "Apex Legends": [
-        ("Rookie", "Silver", 45), ("Bronze", "Gold", 48), ("Silver", "Platinum", 53),
-        ("Gold", "Platinum", 29), ("Platinum", "Diamond", 32), ("Diamond", "Master", 34),
+        ("Rookie", "Silver", 38), ("Bronze", "Gold", 40), ("Silver", "Platinum", 45),
+        ("Gold", "Platinum", 24), ("Platinum", "Diamond", 27), ("Diamond", "Master", 28),
     ],
     # Flat rating ladder — every rung is its own tier, so a bundle names two exact
     # CS Rating checkpoints rather than "any division of". bundle_strip() reads the
     # divmap and drops the "from any division" line for exactly this case.
     "Counter-Strike 2": [
-        ("5k", "13k", 14), ("10k", "15k", 14), ("13k", "17k", 13),
-        ("15k", "19k", 13), ("17k", "21k", 14), ("19k", "25k", 14),
+        ("5k", "13k", 11), ("10k", "15k", 11), ("13k", "17k", 11),
+        ("15k", "19k", 11), ("17k", "21k", 11), ("19k", "25k", 11),
     ],
 }
 
@@ -2913,12 +2947,13 @@ CATALOG_FAQ = [
      "cross-title bundle, because a discount spanning two boosters would be paying one of "
      "them less."),
     # `{oneof}` is the "and the bundle is the deeper cut" clause. build.py only
-    # writes it when the cheapest bundle actually beats the sitewide code —
-    # re-tune either and the sentence stops asserting it rather than going stale.
+    # The bundle half of this answer came off with the bundles (2026-09-09); the
+    # never-stack rule it states is still the one resolve_promo() enforces for a
+    # typed code, a recovery token and a mystery card alike.
     ("sale", "Do prices change during a sale?",
-     "{code} takes {pct} off the whole catalogue with nothing to type. Each game page also "
-     "carries bundle climbs at {lo} to {hi} off, and a bundle replaces the code rather than "
-     "adding to it — there is only ever one discount on an order{oneof}."),
+     "{code} takes {pct} off the whole catalogue with nothing to type — every title, every "
+     "service, nothing to enter. There is only ever one discount on an order: a code you type "
+     "replaces it rather than adding to it, so you always pay the better of the two, never both."),
 ]
 
 FAQ = [
@@ -2930,7 +2965,7 @@ FAQ = [
      "one-click link to follow it. Set a password later if you want one, or never."),
     ("Is my account safe?",
      "Your booster connects through a VPN in your region, appears offline, and plays inside "
-     "the hours you set. We never ask for a Riot/Steam/Blizzard recovery email, never change "
+     "your normal hours. We never ask for a Riot/Steam/Blizzard recovery email, never change "
      "your password, and never queue with other customers' accounts."),
     ("What if I want to play while the boost is running?",
      "Pause it from the dashboard. The account is free within minutes and the timer stops. "

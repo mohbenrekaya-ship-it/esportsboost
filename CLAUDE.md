@@ -103,6 +103,29 @@ browser ──beacon──► /api/collect ──► analytics.py (store) ──
 
 ### The pricing formula lives in one Python module + one JS mirror — keep them identical
 
+⚠ **ALL BOOSTING PRICES WERE CUT 15% ON 2026-09-09** (the owner's call), on top of the 21% cut of
+2026-08-30. What moved: `PER_DIVISION` (23.62 → 20.08), `PER_STEP` (6.36 → 5.41), and every value in
+League's and Valorant's `prices` / `win_prices` / `placement_prices` tables — those two are the only
+ladders with per-tier tables; the other seven derive from the globals × their own `factor`, so they
+fell with them. **`BUNDLES`' flat prices fell too, rounded DOWN**: the invariant is that a bundle
+never costs more than the cheapest normal order in its from-tier, both sides move together, and
+flooring the bundle can only keep it true — `test_bundle_never_costs_more()` still passes for League.
+**Accounts and coaching were NOT touched**: accounts are a hand-set per-currency table (see the ⚠ on
+`price` in data.py) and coaching is `rate × hours`, and neither is a boost.
+
+Two things a re-price always drags with it, both hit this time:
+- ⚠ **A dictionary key that carries a figure goes stale silently** — the sentence just renders in
+  English. The catalogue's "why do titles differ" answer names the cheapest and dearest single
+  division, so its key changed ("$3 on Valorant and $8 on Counter-Strike 2" → "$3 on Rocket League
+  and $7 on Counter-Strike 2") and the `fr`/`de` values had to change with it. There is no test:
+  the check is to scan the built pages for every price-bearing key in `i18n.js`.
+- ⚠ **`serve.py` must be RESTARTED**, not just rebuilt. It imports the price tables once at boot, so
+  a running process quotes the OLD prices to `/api/checkout` while the browser holds the new ones,
+  and every checkout dies on the `client_total` guard with a message that tells the buyer to refresh
+  — the one thing that cannot fix it. The tell is `[checkout] price mismatch: shown=53 server=62` on
+  stderr. In production a deploy replaces the functions, so this is a local-only trap.
+
+
 `quote()` in [site/src/pricing.py](site/src/pricing.py) is the **authoritative** formula (Python):
 `build.py` imports it for static `from $NN` cards, and `serve.py` calls it to compute the amount a
 customer is actually charged — the browser never sends a price. `quote()` in
@@ -206,7 +229,8 @@ reuse these rather than inventing new hooks:
 | `data-configurator` (+ `data-game`) | Marks a wizard; the optional game pins the page to one game and fires `view_item` |
 | `data-out="price\|eta\|summary\|summaryUpper\|game\|mode\|region\|free\|headline\|was\|discount\|saveAmt\|saveLine\|saveWith\|configLine\|steps\|stepsWord\|promoCode\|promoLabel\|promoEnds\|fromRank\|toRank"` | Text nodes rewritten on every render. `fromRank`/`toRank` are the whole rank names ("Gold IV") — `data-tiername` is the tier alone. Three shapes of the same saving: `discount` is the signed receipt figure (`−$16`), `saveAmt` the bare amount for a pill, `saveLine`/`saveWith` the sentences |
 | `data-sel="game\|from\|to\|fromTier\|toTier\|region"` | `<select>` bound to state; ladder/tier/region options are refilled per game. The `*Tier` pair moves one endpoint's tier while keeping its division numeral, then clamps through the same rule as every other rank control |
-| `data-service` / `data-panel` | Tab + panel pair for division / wins / placements |
+| `data-service` / `data-panel` | Tab + panel pair for division / wins / placements / coaching. The triggers are the **step-1 service cards** (`.ob-svc`), not a tab rail — they keep `role="tab"` + `data-service`, which is the whole contract app.js selects on |
+| `data-ob-step="pick\|build"` / `data-ob-change` | The order card's two steps and the button back to step 1. Both ship visible; `initOrderStep()` hides one. `data-ob-view` on `<html>` mirrors the step for CSS (the sticky bar and its reserve) and is a **different attribute on purpose** |
 | `data-mode`, `data-addon`, `data-stepper` (`data-step`, `data-min`, `data-max`) | Radios, checkboxes, ± counters |
 | `data-tiergrid="from\|to"` | Tier buttons for one end, built by JS. Out-of-range tiers render `disabled` |
 | `data-regions` | Region chips, built by JS from the game's region list |
@@ -732,6 +756,108 @@ sentence-case control typography are declared on `.hero-a` in `site.css` and not
 
 Things that are load-bearing here:
 
+- **The order card is TWO STEPS, and step 1 is the product** (`service_cards()` → `.ob-svcs`, the
+  step machine is `initOrderStep()` / `obStep()` in app.js). The four services were a row of 12.5px
+  grey words that measured **351px inside a 305px box** at 375px — **Coaching was clipped off the
+  right edge** and Placements nearly was — on a page whose paid search buys "lol placement matches
+  boost" and "buy lol wins", so the two ad groups that name a product landed on a screen where that
+  product was half off-screen and a *different* one was already configured. Block 7 of the MOBILE
+  PASS had already tried to buy it back with tighter padding and a scroll fade and was still 46px
+  short. It is now the shape `ac_step_server()` / `ac_step_tiers()` give the accounts shop: pick the
+  product on its own screen, then configure it. Load-bearing:
+  - **They are still the tabs.** `role="tab"` + `data-service` is the entire app.js contract
+    (`pageServices()`, the selected-state pass, the keyboard handler), so the redesign changed no
+    wiring — the click handler only gained an `obStep("build")` call. **The service clamp still
+    reads the DOM**, so a game with no coaching still ships three cards and clamps to them.
+  - **Both steps ship VISIBLE and JS hides one.** Same no-JS contract as the accounts shop: with
+    scripting off the card is one complete, priced configurator and a crawler reads all four panels.
+    `initOrderStep()` is the enhancement, and it returns immediately on a card without the steps.
+  - **The figure on each card is `service_floor()` — quoted, never typed**: the cheapest order that
+    tab can actually produce (one rung / one unit / the cheapest coach × pack, unranked included).
+    `from_price()` now delegates to it, so the H1's "from $4" and the Division card under it are ONE
+    derivation rather than two that happened to agree.
+  - **The sticky bar is hidden on step 1**, and its reserve with it. `.mobile-bar` quotes a total and
+    offers Checkout; on step 1 that is a price for a product nobody has picked and a way past the
+    step. `obStep()` stamps `data-ob-view` on `<html>` (**deliberately not `data-ob-step`** — the
+    first version stamped the attribute it also selected on, which set `hidden` on `<html>` and
+    blanked the page) and nudges a resize so `initBarReserve()` re-measures `--mb-h`. Because that
+    variable is *cleared* rather than zeroed, the `var()` fallback would otherwise leave 146px of
+    dead space under step 1, which is why the two `body.has-bar*` selectors are restated.
+  - **"Change" returns to step 1 with the current pick still lit**, and scrolls the card back into
+    view — the card can sit above the viewport once someone is down in the add-ons, and a Change
+    that appears to do nothing is worse than no Change. Applying a bundle advances to step 2, since
+    a bundle is a division climb and has already answered the question.
+  - **New copy**: each card carries a one-line blurb (`SERVICES` in build.py), in `fr` and `de`. A
+    visitor who searched "buy lol wins" has to be able to tell Net wins from Placements without
+    buying one to find out.
+  - **Step 2 is TWO COLUMNS: the form left, the money right, and the money stays on screen.**
+    (`.ob-grid` → `.ob-main` + `.ob-side`, the aside sticky at `top: 96px`.) It was one 860px stack
+    with the total at the bottom, so the figure every control moves was the one thing off screen
+    while you moved it. Same shape as `/checkout.html`, deliberately — a buyer meets it twice.
+    The aside is `.ob-sum` and `.ob-cta` **re-laid out, not re-authored**: every `data-out` /
+    `data-when-service` / `data-hide-service` pair in it was already correct for all four products,
+    so coaching still swaps "Delivered in" for "First session" and the CTA for "Book 3 hours" with no
+    new hooks. Two things that were only visible once it moved: `.ob-sum` carries `align-items: end`
+    from its old two-up layout, which in a column pins every child to the right edge, and `.ob-sum-r`
+    carried `text-align: right` for the same reason — both are reset in the aside.
+  - **The climb is the aside's HEADLINE** (`.ob-climb`): the two ranks set in the display face at
+    23px, each in **its own tier colour** off `D.tier_color()`, with an ember arrow between — so
+    Iron → Gold reads grey-to-gold and a Diamond order reads blue, from the same table the ladder
+    strip, the live feed and the checkout row read. It replaced one 12px grey line ("Iron I → Gold II
+    · Solo") for the thing the whole card configures. Under it, the scale of the climb: the figure in
+    its own `<b data-out="steps">` and the word in its own `data-out="stepsWord"`, which `render()`
+    writes through `T()` — the ladder strip's "11 divisions to climb" is built the same way and it is
+    the only shape that survives translation.
+    Four things are load-bearing:
+    - **One span carries two hooks and they do not collide** — `data-rankcolor` sets `--tier` and
+      writes no text, `data-out="fromRank"` writes the text and no colour.
+    - **It is the WHOLE rank name**, deliberately not `data-tiername` + `data-mark`: a mark is the
+      division numeral and falls back to the first two letters of the tier when a rank has none,
+      which is right in a 26px square and renders **"Master MA"** beside a spelled-out name.
+    - **`--tier` is lifted toward the text colour before it is used as type.** Iron's `#8e8f94` is a
+      mid grey drawn for a 26px mark on a dark ground; at 23px display weight it reads as disabled
+      text. The `color-mix` keeps the hue saying which tier it is while the contrast stays legible,
+      and the raw `var(--tier)` is the no-`color-mix` fallback.
+    - **The pair wraps rather than overflowing.** Marvel Rivals' "Celestial III → One Above All" is
+      the longest climb on any ladder and goes to two lines in the 370px aside; nothing clips.
+    Wins, placements and coaching have no rank pair and fall back to `data-out="summary"` through
+    `data-when-service="units"`, which `paint()` reads as "anything but division".
+    ⚠ Two options were built and rejected with this one, and both are worth not re-proposing: rank
+    PLATES (tier-tinted boxes) and emblem BADGES. The badges repeat the winged-orb emblems already on
+    screen 200px to the left in the rank plates; this treatment is the one that adds a read without
+    repeating one, and it depends on no `color-mix`, no track width and no two boxes staying the same
+    size, so it holds at any width and in any language.
+  - **The card header is ONE row** — `.ob-head` ("Build your boost" + the live pill) is hidden on both
+    steps and the pill moved into `.ob-bar`, so step 2 opens with "✓ Division boost · Live pricing ·
+    Change" instead of the card naming itself twice above the first control. The pill drops below
+    620px, where the product name and the way back both matter more.
+  - **The rating and the payment marks sit under the CTA** (`.ob-assure`, now in the aside), not at
+    the foot of the card a full column away from the button they reassure. `ob_included()` went the
+    other way, into the add-ons block — it is the always-on half of that same list.
+  - **Queue and server live in the ASIDE, above the total** (`.ob-opts`), not at the foot of the form
+    column where they were a 2-up row of the smallest controls on the page. They are the two choices
+    that MOVE the number they now sit against — duo is +55%, and the shard decides who can take the
+    order — and the aside is the one thing that stays on screen while the form scrolls. Both are 44px
+    and the queue reads `mode_seg(pct=True)`, so the "+55%" is read off `pricing.DUO_MULT` in its own
+    `.seg-pct` span rather than typed into a translatable node.
+    They carry **their own `data-hide-service="coaching"`** — the wrapper that used to hide them along
+    with the add-ons stayed in the left column, and coaching has its own server select in its panel.
+    ⚠ The overrides need the `.ob ` prefix for the same specificity reason the add-on block does.
+    On the phone the aside stacks under the form, so the order is ranks → add-ons → queue/server →
+    price → CTA. That leaves the upsell before the button and the button last, which is the right
+    sequence; the only wrinkle is that changing the queue after picking add-ons swaps the
+    mode-conditional row, which app.js already handles by dropping it from `state.addons`.
+  - ⚠ **The aside's CTA must stay LAID OUT at every width — `.mobile-bar` depends on it.**
+    `initStickyBar()` reveals the bar only once `.ob-cta`'s bottom edge passes above the viewport
+    top, and a `display: none` element reports a zero rect that never crosses. Hiding it on the phone
+    (on the reasoning that the bar already carries a price and a button) left the phone with **no
+    price and no button at all**, because the bar it was deferring to could never appear. The bar
+    *shadows* that button rather than replacing it, and the two are never on screen together by
+    construction. The same trap is waiting for `.co-cta` on checkout.
+  - **Section labels are sentence case inside step 2 only.** `.ob-lab` and `.ob-plate-lab` are 9.5px
+    tracked mono caps; six of them down a form read as machine output. They are restyled under
+    `.ob-main` so the mono label survives everywhere else it is used.
+
 - **The card is generic, not LoL-only.** `rank_plate()`, `ladder_strip()` and `wizard()` read
   `tiers`/`divmap`/`prices` out of `data.py`, so all nine game pages get it and a new game needs no
   code. Tier mark colours come from `TIER_COLORS` with a positional ramp fallback — an unnamed tier
@@ -741,19 +867,61 @@ Things that are load-bearing here:
   drift apart. The handoff calls this out as the bug it was fixing — keep the property if pricing
   is re-tuned.
 - **Duo's "+55%" is read off `pricing.DUO_MULT`**, so the label can't drift from the formula.
-- **The CTA has to clear the fold at 1440×900** (the one measurement the handoff carries from the
-  mock). It currently lands at **881–895 across the nine games** — the framed rank plates cost ~59px
-  a side and that is where the old ~833–883 slack went. Anything added to the card comes out of what
-  is left, which on Dota 2 and Rocket League is single digits. Measure every game, don't eyeball one:
-  the ladders whose tier captions wrap to two lines are the tall ones.
-  Two things were given back to pay for the plates, and both should survive a re-tune: `.ob-sum`
-  spans its left column across both grid rows, so the block is as tall as its taller *column*
-  rather than the left column plus the availability line (~24px, and it is also how the
-  configurator handoff draws that stack); and `.ob-track` is 26px rather than the handoff's 30,
-  because the tallest thing in it is the 16px target dot 1px off the bottom.
+- ⚠ **THE FOLD RULE IS RETIRED, and that was a deliberate business call (2026-09-09).** The handoff's
+  one hard measurement was that the card's CTA clear the fold at 1440×900, and the CRO audit lists
+  "the configurator stays above the fold on every game page" as a finding this build answers. The
+  hero is now **centred on the accounts shop's pattern** (see the next bullet) and the card sits
+  *under* the copy rather than beside it, so the CTA lands around **1075px** and is below the fold by
+  construction — exactly as the accounts shop's tier cards are. What is above the fold is **step 1**:
+  the H1, one line, three promises and the four priced product cards, ending at ~560px on desktop and
+  putting the first product at **458px on a 375px phone** (it was 750px, behind a five-line
+  paragraph). The owner's reasoning: /accounts is the page that converts, and this is its shape.
+  **Do not "restore" the fold rule without reopening that decision** — and if the card is ever put
+  back in a column, the measurement harness is described in the bullet below.
+- **The hero is `.gh-*`, a centred band, and it is FOUR THINGS.** H1 ("Buy <Game> boosting") → **one
+  line** (`D.GAME_SUBS`, asserted per slug at import) → the four product cards → one row of promises.
+  That is the whole first section, 559px on desktop and identical across all nine ladders and three
+  languages.
+  - **Everything between the visitor and the products was cut** (2026-09-09, the owner: "change the
+    first section to something very simple"): the visible breadcrumb, a kicker that repeated the H1,
+    the "STEP 1 OF 2" label, a question that repeated the H1 again, the hero stat row, and — on step 1
+    only — **the card's own panel**, so the product cards sit straight on the hero ground. The panel,
+    the card head, the inclusions strip and the trust/payment row all come back on step 2, where a
+    form does need a container and those lines are about an order that now exists.
+    ⚠ **The visible crumbs went with it**; the `BreadcrumbList` JSON-LD is untouched, so breadcrumb
+    rich results are unaffected, but there is no longer an on-page way up to `/games`.
+  - **The chips are `GUARANTEES_INLINE` verbatim** — signed-off, already translated, the same three
+    the home hero states — and they sit UNDER the products now, as one quiet row rather than three
+    chips competing with the headline. Deliberately **not** a price: each card carries its own
+    "from $N".
+  - **Four across on desktop, a compact row on the phone.** The desktop card is stacked with its
+    price row pinned by `margin-top: auto`, so the four align however long each blurb runs (168px on
+    every ladder). Stacked at 375px that shape leaves a hole in each card and costs ~440px of screen,
+    so below 1000px it reverts to the two-column row — name and blurb left, price and arrow right,
+    82px — which puts **all four products inside the first screen**.
+  - **The bundle strip is gone from the hero and from the site** — see the ⚠ on the bundle section
+    below. `gh_bundles()` survives, unmounted, as the one line that puts it back.
+  - ⚠ **`class="hero-copy"` is now used by nothing.** Its ≤1000px reflow block is dead except that
+    `.hero-a .crumbs { order: 1 }` reached the new hero while it still had crumbs and sent them to the
+    bottom of it; the crumbs are gone, so the reset came out with them. `.ac-hero` still resets
+    against that block.
 - **Availability lives in the card, not the hero stat row.** "N of M boosters free now" sits beside
   the delivery estimate, where it argues for ordering now; the hero's third stat is boosts delivered.
   Putting a roster count in both places is how the two conflicting numbers got shipped last time.
+- **The add-ons are the form's second block, given weight on purpose** (`.ob-addons`, and every
+  `.opt` override under `.ob .ob-main`). They were three 6px-padded lines with a clipped 11px note at
+  the foot of the column — the least prominent thing on the page and the only part of it that is pure
+  margin on an order already happening, with a FREE option the buyer has to notice to take. They are
+  now a framed block of 48–74px rows with a 20px box, a 15px price and an unclipped note. It is CSS
+  only: no `data-addon` / `data-addon-price` / `data-when-mode` hook moved.
+  ⚠ **Every selector carries a redundant-looking `.ob ` prefix** — the rules it overrides are
+  `.ob .opt …`, which TIE with `.ob-main .opt …` and sit ~350 lines later, so they win on source
+  order. The first version of this block changed nothing but the panel border.
+- **The order card's CTA is "Rank up", not "Continue to checkout"** (the owner's call, 2026-09-09) —
+  it names the outcome rather than the till. `.mb-cta` says the same, because the sticky bar shadows
+  that button and two names for one action is how a bar stops reading as the same button. Coaching
+  still overrides both with `data-out="bookLabel"` ("Book 3 hours"). `fr`/`de`: "Monter de rang" /
+  "Aufsteigen".
 - **The card shows three add-on rows, and it is three in both queues.** Four ship in the DOM:
   **"Watch your booster play"**, Priority order, and a **mode-conditional pair** — Solo is offered
   "Solo only queue", Duo "Play on your schedule" — of which one is always `hidden`. Emitting both is
@@ -761,8 +929,9 @@ Things that are load-bearing here:
   keeps the row count, and so the card's height, the same whichever queue is picked. **Three is the
   budget, not a preference**: a fourth row costs ~51px and puts the CTA under the fold at 1440×900 on
   six of the nine ladders (measured — see the fold note below). Both inclusions are therefore flagged
-  `incl` in data.py and render in **no** picker; they are stated instead, by `ob_included()` under
-  the card's CTA (free of the fold budget, which is the whole reason it sits there) and by checkout's
+  `incl` in data.py and render in **no** picker; they are stated instead, by `ob_included()` — which
+  now sits inside the add-ons block on the game pages, as the always-on half of that list, having
+  been below the CTA only because of the retired fold budget — and by checkout's
   green strip. `addons_block(paid_only=True)` is checkout's upsell only — a ticked, disabled row is
   not a "last chance to add", but the free-but-optional row **is** kept there, because an untaken
   free option is the strongest thing that block can offer.
@@ -820,6 +989,10 @@ Things that are load-bearing here:
   the row height deterministic in every language, game and currency; the copy is then written short
   enough that nothing reaches the ellipsis. **Shorten the sentence, don't remove the guard** — and
   keep new notes inside ~62 characters. Checkout deliberately still wraps: no fold budget there.
+  ⚠ **Step 2 of the game-page card now releases it** (`.ob .ob-main .opt .note`): the guard existed
+  to protect the CTA's fold clearance, and that budget was retired with the centred hero, so the
+  half of the sentence saying what you actually get is no longer clipped. The rule still stands
+  everywhere else the picker is drawn.
 - **The free-but-optional row is drawn as the offer it is, and the hierarchy is bought without
   height.** `.opt-freeopt` gets a green tint, a green border, a bold name and a **"FREE" flag**; the
   4px of padding it gains is taken back off the two paid rows below it, so the block's total height
@@ -939,7 +1112,22 @@ authoritative for the whole site, not adopt the handoff's separate PER_TIER mode
   division treatment (outline vs the plate's filled pip) and a select that needed JS width
   measurement to sit beside its mark. The unit plate labels itself "Current rank" at every width —
   it has no second plate beside it for "You are" to be read against.
-- **The bundle strip** (`bundle_strip(g)` in the hero, `D.BUNDLES` / `bundle_climbs()`) is the
+- ⚠ **BUNDLES ARE OFF THE STOREFRONT (2026-09-09, the owner's call), and the ENGINE IS STILL LIVE.**
+  Nothing on the site advertises or applies one: `page_game()` no longer calls `gh_bundles()`, no page
+  renders a `[data-bundle]`, and the `/games/` sale answer states the sitewide code alone. Multi-tier
+  climbs now take the ordinary sitewide sale, so the realised discount on those orders went from
+  19–37% to 15%.
+  **What was deliberately NOT removed**: `D.BUNDLES`, `pricing.quote()`'s bundle branch and its app.js
+  mirror, `state.bundle`, the checkout payload field, the orders/carts plumbing and every
+  `test_bundle_*` assertion. A saved order or an old link still carrying a bundle therefore prices
+  correctly rather than failing checkout's `client_total` guard, and putting the offer back for a sale
+  is re-adding one call in `page_game()`. Everything below still describes live code.
+  ⚠ **Two outward claims had to move with it**: the `/games/` FAQ (done — and its `fr`/`de` keys were
+  re-written with it, since a changed English key silently falls back to English) and the **Google Ads
+  RSA**, which still carries "Bundles Up To 37% Off" and a matching description in
+  `marketing/gads-lol-boosting-us-ca.md`. **That one is in the Ads account, not in this repo** — it is
+  a false claim on a live ad until someone edits it there.
+- **The bundle strip** (`bundle_strip(g)`, unmounted; `D.BUNDLES` / `bundle_climbs()`) is the
   handoff's "Save big on bundles": each card is a multi-tier climb at a **flat hand-set price**
   (`(ft, tt, price)` in `D.BUNDLES`, whole USD) that **replaces the sitewide sale** on a matching
   climb. **The price is the stored figure; the `−N%` pill and the struck price are derived from it**
@@ -1316,6 +1504,9 @@ Checkout is one static page for all five products, so the account variants ride 
 whole-text-node rule, same as the mode-conditional add-ons. What changes, and why each one is not
 cosmetic:
 
+- ⚠ **Superseded 2026-09-09: Server, Preferred hours and the booster note are gone from checkout for
+  EVERY product, not just accounts** — see the note under "The checkout page". The reasoning below is
+  kept because it is still why an account never had them.
 - **The Server select and Preferred hours are hidden.** The shard was chosen in step 1 of the shop
   and `quote()` clamps it, so an editable Server control there is a control that *appears* to work
   and does not — and since the shard now carries a price delta, moving it would silently re-price the
@@ -1567,6 +1758,33 @@ Load-bearing:
   reader announces the new total after an input change. "Save" is its own translatable node.
 
 ## The checkout page
+
+⚠ **IT IS EMAIL → PAY, ON EVERY PRODUCT (the owner's call, 2026-09-09: "same as accs").** The form
+column carries the email field, the payment strip, the rating, the optional "email me when it is
+claimed" tick and the button — nothing else. **Server, Preferred hours and "anything the booster
+should know" were removed.** Server had moved into the game page's order panel earlier the same day,
+so asking twice was duplication; the note box was optional and rarely acted on.
+
+⚠ **PREFERRED HOURS WAS A CLAIM, NOT JUST A FIELD, and removing it changed five sentences.** Five
+places said the booster plays **"the hours you set"** — which needs a control behind it — and they
+now say **"your normal hours"**, which is an ops behaviour and is what `SAFETY["measures"]` already
+said: `gp_safety()`'s prose, the game-page FAQ's login answer, `GUARANTEE`'s "Is my account safe?",
+the solo/duo explainer, and the ladder foot's "Played in your preferred hours" (now "…your normal
+hours", an existing key). **Each English string is also a dictionary key**, so all five were changed
+in `i18n.js` alongside their `fr` ("tes horaires habituels") and `de` ("zu deinen üblichen Zeiten")
+values — a changed English key silently falls back to English otherwise. **Do not put "hours you
+set" back into any copy without putting the control back with it.**
+
+The state degrades safely: the payload builder still reads `#k-hours` and `#k-notes` behind a null
+guard, so `metadata[hours]` and `metadata[notes]` arrive **empty** rather than carrying an invented
+value, and `region` was never read from that select — it rides on the order state — so the shard
+still reaches Stripe and the orders store untouched. Restoring the fields is a markup change and
+nothing else.
+
+**What was deliberately KEPT**: the "Last chance to add" upsell. The accounts checkout has no upsell
+because that product has no add-ons, not because upsells were rejected — and this is the only
+post-configuration prompt for them, on the page where intent is highest.
+
 
 `page_checkout()` is the **"LoL Checkout"** handoff (`design_handoff_lol_checkout`), ported the same
 way as the order card above: high-fidelity, with its tokens and measurements declared locally on
@@ -2558,8 +2776,9 @@ checkout email typed ─┴─► POST /api/cart ─► carts store ─┤
   recovery mail breaks that, so it now says "and to send you your cart if you don't finish." Every
   mail carries a one-click unsubscribe (`/api/cart/unsubscribe` → row `expired`).
 - **`/ops` "Carts" tab** (a sibling of Orders) shows capture/recovery totals, the status split, the
-  per-game breakdown and the rows, CSV-exportable. It is **distinct from the "Abandoned" tab**, which
-  is the anonymous analytics view with no email. Read-only; `ops.py`'s `carts` action → `carts.summary()`.
+  per-game breakdown, the **Account carts** module (below) and the rows, CSV-exportable. It is
+  **distinct from the "Abandoned" tab**, which is the anonymous analytics view with no email.
+  Read-only; `ops.py`'s `carts` action → `carts.summary()`.
 - **Still placeholder-adjacent:** this only helps once real signed-in traffic and real checkouts
   exist. At today's volume it captures very few people — the typed-email path on checkout is the main
   source until sign-in adoption grows.
@@ -2568,7 +2787,71 @@ checkout email typed ─┴─► POST /api/cart ─► carts store ─┤
   unsubscribe one exists because every recovery mail carries that link and it 404'd in
   production while working locally, which is a dead opt-out on the domain the order
   confirmations go out on. Env knobs: `CART_SWEEP_SECRET`
-  (required), `CART_RECOVERY_PCT` (0.30), `CART_DELAY_SECS` (1800), `CART_TOKEN_TTL` (604800).
+  (required), `CART_RECOVERY_PCT` (0.30), `CART_DELAY_SECS` (1800), `CART_TOKEN_TTL` (604800),
+  `CART_ACCOUNT_PCT` (0.10), `CART_ACCOUNT_CHASE_DELAY` (86400).
+
+### Account carts — the accounts shop's own sequence, at its own rate
+
+The same store, the same token, the same cron. What is different is the product, and every
+difference below is a consequence of that rather than a preference. Before this, an account checkout
+*was* captured and then thrown away: `clean_cart()` kept no listing, so `recovery.price_pair()` could
+not price the row, and the sweep retired every one of them as `unpriceable`. **The one product with
+a fixed shelf was the one product nobody was ever chased about.**
+
+```
+left the pay page ──30 min──► the 10% code ──24h──► one recall, same code ──► nothing more
+```
+
+- ⚠ **10%, where a boost is 30%, and it is a margin decision.** A boost is labour — a discount on it
+  costs hours somebody was going to work anyway. A ready-made account was bought or levelled, so a
+  percentage comes straight out of the margin. That is the same reasoning `pricing.quote()`'s account
+  branch uses to refuse the sitewide sale, every bundle and every typed code, and it is why the rate
+  is smaller here. `carts.pct_for()` is the ONE resolver — the mail, the resolve endpoint, the client
+  quote and `payments.process_checkout()` all read it, so the rate quoted, the rate priced and the
+  rate charged cannot disagree.
+- ⚠ **This is the ONE discount the account branch honours**, and the ⚠ in `pricing.py` says so. It is
+  reachable only through `recovery_pct`, which `process_checkout()` pops unconditionally and
+  re-derives from a single-use token — so the only way to a discounted account is to have abandoned a
+  checkout on one and been mailed about it. **The mystery card is explicitly excluded**: it is worth
+  up to 35%, it is only ever offered on a game page, and this product's whole budget is 10%, so
+  `process_checkout()` drops a `bingo` token on an account order and `app.js`'s account branch reads
+  `ESB_RECOVERY` only. The two sides must agree or the `client_total` guard refuses a valid order.
+- **The second mail is the accounts shop's alone.** `due_chase()` returns account rows only; a boost
+  is mailed once and stops. Two messages to somebody who typed an address into a checkout form is the
+  budget, and **there is no third** — do not grow one here.
+- **It measures from the first mail, not from capture** (`mailed_at`, not `at`), so a sweep that fell
+  behind cannot fire the code and its reminder in the same minute. They cannot collide by
+  construction anyway: `due()` wants a `pending` row and `due_chase()` a `mailed` one on stage
+  `first`, and no row is both. `test_the_two_mails_can_never_collide()` walks it.
+- **The recall never raises the rate and never mints a second code.** Same token, same percentage,
+  less time left on it — and `_left()` derives "how long" from `TOKEN_TTL` rather than typing "24
+  hours", which is simply false on a reminder sent one day into a seven-day window. A second mail
+  quoting a better number teaches the reader the first deadline was theatre.
+- **`stage` is what the recall reads, and a re-capture may not touch it.** `process_capture()` carries
+  `stage`/`chased_at` across exactly as it carries the token and the clock. Without that, a buyer who
+  edits the checkout form after the recall is put back on stage `first` and chased again — the bug
+  that reached real inboxes through the mystery store's own re-capture path.
+- **The row stores the listing AND the currency** (`account`, `cur`), because both are price inputs
+  on this product: `account_pick()` resolves the listing and `D.account_price()` picks the buyer's
+  market row rather than converting. `app.js`'s `captureCart()` and checkout's own capture both send
+  them. **The mail's link carries them too** (`/checkout?cart=…&account=…&region=…`), because unlike a
+  boost the configuration is *not* in that browser — an account is picked in the shop, two steps
+  earlier, and somebody opening the mail on their phone would otherwise land on a checkout pricing
+  whatever that device last configured. `accountFromQuery()` hydrates it through `normalize()` and
+  strips both markers, leaving `cart=` for the discount resolve.
+- **Every figure is to the cent, in the buyer's own currency.** Accounts are the one product priced
+  that way, so `recovery._money()` reads `cents` and `fixed` off the QUOTE — never a guess about the
+  service — and the struck figure is the **list** price, never an already-reduced one.
+- **`/ops` → Carts → "Account carts"** is the module: abandoned → mailed → recalled → recovered as a
+  funnel, the per-listing split, and the rate read against **mailed** rather than captured. It is a
+  module rather than a column because one blended figure would average a margin decision against a
+  labour one and hide whether the recall is worth sending at all. ⚠ Its cost is **flat, not blended**
+  — read it as `Recovered × 10%`, the same warning the Mystery tab carries.
+- **`tools/rehearse_account_carts.py`** drives the whole thing on a fake clock against throwaway
+  stores with a captured transport: both mails at the right minutes, what each says, and every guard
+  (a boost is never recalled, a buyer who paid is never chased, an unsubscribe sticks, a re-capture
+  cannot reset the sequence). No socket is opened. Run it before touching the cron — it is the only
+  way to see a time-based sequence whole, and it caught a real defect the first time it ran.
 
 ## The mystery discount — `mystery.py` + the modal on every game page
 

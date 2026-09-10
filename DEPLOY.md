@@ -285,7 +285,9 @@ a payment can burn the token) — plus two of its own:
    | --- | --- | --- |
    | `CART_SWEEP_SECRET` | a long random string (16+ chars) | **Required.** Protects `/api/sweep`. Without it the sweep is `503` and **no recovery mail is ever sent** — an unprotected sweep endpoint would let anyone make the site send mail on demand. |
    | `CRON_SECRET` | **the same value** as `CART_SWEEP_SECRET` | Vercel Cron sends `Authorization: Bearer $CRON_SECRET`; the sweep accepts that as its secret, so setting the two equal makes native cron authenticate itself. |
-   | `CART_RECOVERY_PCT` | `0.30` | Optional. The discount, as a fraction. Defaults to 30%. |
+   | `CART_RECOVERY_PCT` | `0.30` | Optional. The discount on a **boost** cart, as a fraction. Defaults to 30%. |
+   | `CART_ACCOUNT_PCT` | `0.10` | Optional. The discount on an **accounts shop** cart. Defaults to 10% — smaller on purpose: an account's price is margin against a real acquisition cost, not labour. |
+   | `CART_ACCOUNT_CHASE_DELAY` | `86400` | Optional. How long after the first mail an account cart gets its one recall. Defaults to 24 hours. Accounts only; a boost is mailed once and never chased. |
    | `CART_DELAY_SECS` | `1800` | Optional. How long after capture a cart becomes mailable. Defaults to 30 minutes. |
    | `CART_TOKEN_TTL` | `604800` | Optional. How long a recovery code works. Defaults to 7 days. |
    | `CARTS_MAX` | `5000` | Optional. Caps the stored cart list. |

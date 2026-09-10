@@ -158,8 +158,84 @@ def quote(game, frm, to, mode="Solo"):
 
 
 def from_price(g):
-    """`FROM $NN` — a one-division climb off the second tier."""
-    return quote(g["name"], g["ladder"][1], g["ladder"][2])["total"]
+    """`FROM $NN` — the cheapest single division on this ladder.
+
+    Delegates to `service_floor()` so the H1's "from $4", the games catalogue's
+    tile, the header menu and the Division service card are four readings of ONE
+    derivation. It used to be its own arithmetic — a one-division climb off the
+    second tier — which happens to be the cheapest rung on all nine ladders
+    today and would stop being so the moment a `prices` table is re-tuned, at
+    which point the hero and the card beneath it would quote two different
+    "from" prices in one viewport.
+    """
+    return service_floor(g, "division")
+
+
+# Cache: service_floor() quotes every rung of every ladder and the whole
+# coach × pack grid, and the service cards ask for the same nine games' worth
+# of figures once per game page. Keyed (slug, service).
+_SVC_FLOOR = {}
+
+
+def service_floor(g, service):
+    """The cheapest real order of one SERVICE on this ladder, in whole USD.
+
+    The number under each service card, and it is QUOTED, never typed — the
+    same rule `ladder_strip()`'s "cheapest single division" and
+    `catalogue_floor()` follow, and for the same reason: a card advertising
+    "from $3" beside an engine that cannot produce $3 is the one claim on the
+    page a visitor disproves by clicking it. So each one is the minimum over
+    what the buyer can actually configure on that tab:
+
+      division    one rung, taken over every adjacent pair on the ladder
+      wins        ONE net win, over every rank it can be bought at
+      placements  ONE placement game, unranked included — that is the floor on
+                  a game whose placement table prices the bottom tier lowest
+      coaching    the cheapest coach × pack in the grid, which is a booking and
+                  reads no rank at all
+
+    Solo, no add-ons, no bundle: every one of those only ever adds. `unit_count`
+    clamps to UNIT_MIN, so a single unit IS the smallest order, not an
+    extrapolation from one.
+    """
+    key = (g["slug"], service)
+    if key in _SVC_FLOOR:
+        return _SVC_FLOOR[key]
+
+    def q(**kw):
+        st = {"game": g["name"], "mode": "Solo", "addons": []}
+        st.update(kw)
+        return pricing.quote(st)
+
+    totals = []
+    if service == "coaching":
+        for ci in range(len(D.COACHES)):
+            for pi in range(len(D.COACH_PACKS)):
+                r = q(service="coaching", coach=ci, pack=pi)
+                if not r["invalid"]:
+                    totals.append(r["total"])
+    elif service == "division":
+        lad = g["ladder"]
+        for i in range(len(lad) - 1):
+            r = q(service="division", **{"from": lad[i], "to": lad[i + 1]})
+            if not r["invalid"]:
+                totals.append(r["total"])
+    else:
+        # One unit at every rank, and — on placements — the unranked floor too,
+        # which is a real order the tab offers and is priced at the ladder's
+        # bottom tier rather than off a rank it has not got.
+        states = [{"from": r} for r in g["ladder"]]
+        if service == "placements":
+            states.append({"from": g["ladder"][0], "unranked": True})
+        for st in states:
+            r = q(service=service, wins=1, placements=1, **st)
+            if not r["invalid"]:
+                totals.append(r["total"])
+
+    # A service with nothing quotable has no floor to state; the caller drops
+    # the figure rather than printing a zero.
+    _SVC_FLOOR[key] = min(totals) if totals else 0
+    return _SVC_FLOOR[key]
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1498,7 +1574,7 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
       </span>
     </div>
     <a class="btn btn-primary mb-cta" href="/checkout.html" data-continue>
-      <span data-hide-service="coaching">Checkout</span><span data-when-service="coaching" data-out="bookLabel" hidden></span>{_ico("arrow", 15, "ico", stroke=True)}
+      <span data-hide-service="coaching">Rank up</span><span data-when-service="coaching" data-out="bookLabel" hidden></span>{_ico("arrow", 15, "ico", stroke=True)}
     </a>
   </div>
   <div class="mb-assure">
@@ -4237,7 +4313,7 @@ def ladder_strip(g):
         <div class="ob-tiercaps" data-tier-caps aria-hidden="true"></div>
         <div class="ob-ladder-foot">
           <span><b data-out="steps">—</b> <span data-out="stepsWord">divisions</span> to climb</span>
-          <span class="ob-ladder-hours">{_ico("clock-countdown", 14, "ob-ico", stroke=True)}Played in your preferred hours</span>
+          <span class="ob-ladder-hours">{_ico("clock-countdown", 14, "ob-ico", stroke=True)}Played in your normal hours</span>
         </div>
       </div>"""
 
@@ -4463,6 +4539,72 @@ def unit_grid(kind, label, note):
       </div>"""
 
 
+# (id, name, what it is). The blurb is one line and is the whole reason step 1
+# is a screen rather than a control: a visitor who searched "buy lol wins" has
+# to be able to tell "Net wins" from "Placements" without buying one to find
+# out. Both are new copy — see the i18n note in service_cards().
+SERVICES = [
+    ("division", "Division boost", "Climb from where you are to the rank you want."),
+    ("wins", "Net wins", "One win above your losses, at your current rank."),
+    ("placements", "Placements", "Your placement games, played by a booster."),
+    ("coaching", "Coaching", "Live sessions with a coach. Your account stays yours."),
+]
+
+
+def service_cards(g):
+    """The four products as priced cards, where the card carried a tab rail.
+
+    WHY THIS IS NOT A ROW OF TABS. Four services sat in one horizontally
+    scrolling row of 12.5px grey words, and on a 375px phone that row measured
+    351px of tabs inside a 305px box: "Coaching" was clipped off the right edge
+    and "Placements" nearly was. The mobile pass had already tried to buy that
+    back with tighter padding and a scroll fade (see block 7 of MOBILE PASS) and
+    it was still short by 46px. Meanwhile paid search buys clicks on "lol
+    placement matches boost" and "buy lol wins" — so the two ad groups that
+    name a product landed the visitor on a page where that product was a small
+    grey word half off-screen, defaulted to a different one. A card is the same
+    control with the weight the choice actually carries, and it is the pattern
+    `ac_step_server()` already uses for the one other place this site asks a
+    buyer to pick a product before configuring it.
+
+    Three things are load-bearing:
+
+    · **They are still the tabs.** `role="tab"` + `data-service` is the whole
+      app.js contract (`pageServices()`, the selected-state pass and the
+      keyboard handler all select on exactly that pair), so this is a
+      presentation change with no JS change behind it — and a game with no
+      coaching still renders three, because the list is filtered here the way
+      the tab row filtered it.
+
+    · **The figure is `service_floor()`, quoted, never typed.** It is the
+      cheapest order the tab can actually produce; see that function.
+
+    · **Every string is a whole text node.** "Division boost" / "Net wins" /
+      "Placements" / "Coaching" and "from" are all existing dictionary keys, so
+      the cards ship translated on day one — and the price rides in its own
+      `money()` span so it follows the currency switcher like every other
+      figure on the page. Interpolating the number into the sentence would
+      un-translate the sentence, which is the rule the whole card follows.
+    """
+    out = []
+    for i, (sid, label, blurb) in enumerate(SERVICES):
+        if sid == "coaching" and not offers_coaching(g):
+            continue
+        floor = service_floor(g, sid)
+        # A service the engine cannot price states no figure rather than "$0".
+        price = ('<span class="ob-svc-p"><i>from</i> %s</span>' % money(floor)) if floor else ""
+        out.append(
+            '<button type="button" class="ob-svc" role="tab" data-service="%s" aria-selected="%s">'
+            '<span class="ob-svc-n">%s</span>'
+            '<span class="ob-svc-d">%s</span>'
+            '<span class="ob-svc-f">%s<span class="ob-svc-go" aria-hidden="true">%s</span></span>'
+            '</button>'
+            % (sid, "true" if i == 0 else "false", esc(label), esc(blurb), price,
+               _ico("arrow", 12, "ico", stroke=True)))
+    return ('<div class="ob-svcs" role="tablist" aria-label="Service" data-count="%d">%s</div>'
+            % (len(out), "".join(out)))
+
+
 def wizard(game=None):
     """The order card on the game pages — the "Ladder card" from the LoL boost
     hero handoff, ported onto Ashfall's tokens and this build's data contract.
@@ -4509,12 +4651,61 @@ def wizard(game=None):
         <button type="button" class="ob-named-x" data-booster-clear>Change</button>
       </div>
 
-      <div class="tabs ob-tabs" role="tablist" aria-label="Service">
-        <button class="tab" role="tab" data-service="division" aria-selected="true">Division boost</button>
-        <button class="tab" role="tab" data-service="wins" aria-selected="false">Net wins</button>
-        <button class="tab" role="tab" data-service="placements" aria-selected="false">Placements</button>
-        {'<button class="tab" role="tab" data-service="coaching" aria-selected="false">Coaching</button>' if offers_coaching(g) else ''}
+      <!-- STEP 1 — the service. Its own screen, the way the accounts shop asks
+           for a shard before it shows a board: the four products were a row of
+           small words and the two ad groups that name one ("buy lol wins",
+           "lol placement matches boost") landed on a page with a DIFFERENT
+           product already configured. Both steps ship VISIBLE and
+           `initOrderStep()` hides this one's sibling — so with no JS the card
+           is still one complete, priced configurator and a crawler reads the
+           whole thing, which is the same trade `ac_step_server()` makes. -->
+      <div class="ob-step" data-ob-step="pick">
+        <div class="ob-step-head">
+          <span class="ob-step-k"><i class="ob-dash" aria-hidden="true"></i><span>Step 1 of 2</span></span>
+          <span class="ob-step-h">What do you want boosted?</span>
+        </div>
+        {service_cards(g)}
       </div>
+
+      <div class="ob-step" data-ob-step="build">
+        <!-- Every service name ships in the DOM with one shown, per the
+             whole-text-node rule: a label written in by JS arrives
+             untranslated. `data-when-service` is the existing hook that picks
+             one, so this bar needs no new render key. -->
+        <div class="ob-bar">
+          <span class="ob-bar-l">
+            <span class="ob-bar-tick">{_ico("check", 13, "ico", stroke=True)}</span>
+            <span class="ob-bar-n">
+              <span data-when-service="division">Division boost</span>
+              <span data-when-service="wins" hidden>Net wins</span>
+              <span data-when-service="placements" hidden>Placements</span>
+              {'<span data-when-service="coaching" hidden>Coaching</span>' if offers_coaching(g) else ''}
+            </span>
+          </span>
+          <span class="ob-bar-r">
+            <!-- The live-pricing pill moves here from `.ob-head`, which is
+                 hidden on both steps in the centred hero: "Build your boost"
+                 directly above "Division boost" was the card saying its own
+                 name twice, in two rows of chrome above the first control. -->
+            <span class="ob-livepill"><span class="ob-livedot" aria-hidden="true"></span>Live pricing</span>
+            <button type="button" class="ob-change" data-ob-change>
+              {_ico("arrow-left", 12, "ico", stroke=True)}<span>Change</span>
+            </button>
+          </span>
+        </div>
+
+      <!-- STEP 2 IS TWO COLUMNS: the choices on the left, the money on the
+           right, and the money STAYS ON SCREEN while you make them. It used to
+           be one 860px stack with the total at the bottom, so the number every
+           control changes was the one thing you could not see while changing
+           it. Same shape as `/checkout.html` (`.co`: form left, summary right),
+           which is deliberate — a buyer meets this layout twice.
+           The aside re-uses `.ob-sum`'s EXISTING hooks rather than authoring new
+           ones: every `data-out` / `data-when-service` / `data-hide-service`
+           combination in it is already correct for all four products, and this
+           is a re-layout, not a new contract. -->
+      <div class="ob-grid">
+      <div class="ob-main">
 
       <div data-panel="division">
         <div class="ob-ranks">
@@ -4560,10 +4751,32 @@ def wizard(game=None):
       <!-- Shared queue/server/add-ons. Hidden on Coaching, which is a booking
            with no queue and no add-ons and carries its own server select. -->
       <div data-hide-service="coaching">
-      <div class="ob-two">
+      <div class="ob-cell ob-addons">
+        <span class="ob-lab">Add-ons</span>
+        {addons_block(money=True, game=g["name"])}
+        <!-- The always-on inclusions, stated under the options they belong
+             with. They used to sit below the CTA at the foot of the whole card,
+             which was the fold budget's doing — and that budget is retired. -->
+        {ob_included(g)}
+      </div>
+      </div>
+
+      </div><!-- /.ob-main -->
+
+      <aside class="ob-side">
+      <div class="ob-side-in">
+
+      <!-- Queue and server sit in the aside, above the total, because they are
+           the two choices that MOVE it — duo is +55% and the shard decides who
+           can take the order — and the aside is the one thing on this page that
+           stays on screen while you scroll the form. They kept their own
+           `data-hide-service="coaching"`: the wrapper that used to hide them
+           along with the add-ons is still in the left column, and coaching
+           carries its own server select inside its panel. -->
+      <div class="ob-opts" data-hide-service="coaching">
         <div class="ob-cell">
           <span class="ob-lab">How it's played</span>
-          {mode_seg("w-mode", icons=True)}
+          {mode_seg("w-mode", icons=True, pct=True)}
         </div>
         <div class="ob-cell">
           <label class="ob-lab" for="w-region">Server</label>
@@ -4575,17 +4788,55 @@ def wizard(game=None):
         </div>
       </div>
 
-      <div class="ob-cell">
-        <span class="ob-lab">Add-ons</span>
-        {addons_block(money=True, game=g["name"])}
-      </div>
-      </div>
-
-      <div class="ob-div"></div>
-
       <div class="ob-sum" aria-live="polite">
         <div class="ob-sum-l">
-          <span class="ob-lab ob-lab-cfg" data-out="configLine">—</span>
+          <!-- THE CLIMB IS DRAWN, NOT SPELLED. It was `data-out="summary"` — one
+               12px grey line reading "Iron I → Gold II · Solo" — for the thing
+               the whole card exists to configure. It is now the same object the
+               checkout climb row and the closing band's card draw: each end is
+               a tinted `data-mark` (the division numeral, coloured off
+               `D.tier_color()`) PAIRED with its `data-tiername` (the tier), so
+               the row names both ranks. A mark on its own is only the numeral,
+               which is how an Iron IV → Gold IV order once rendered "IV → IV".
+               Wins, placements and coaching have no rank pair, so they fall
+               back to `summary` through `data-when-service="units"` — which
+               `paint()` reads as "anything but division". Division ships
+               VISIBLE and the fallback hidden, because division is the default
+               service: the reverse would flash the wrong one before paint. -->
+          <div class="ob-climb">
+            <div class="ob-climb-pair" data-when-service="division">
+              <!-- `data-rankcolor` on the PLATE, not on the numeral: it sets
+                   `--tier` and writes no text, which is what lets the whole
+                   plate take the rank's own colour while `data-mark` inside
+                   still writes the division. So an Iron→Gold order renders a
+                   grey plate beside a gold one, off the same `D.tier_color()`
+                   table every other rank on the site reads. -->
+              <!-- THE CLIMB IS THE STATEMENT, and it carries no chrome at all —
+                   no plate, no emblem, no box. Each rank is set in the display
+                   face at 23px in ITS OWN TIER COLOUR, so an Iron → Gold order
+                   reads grey-to-gold and a Diamond order blue.
+                   ONE span carries two hooks and they do not collide:
+                   `data-rankcolor` sets `--tier` and writes no text, `data-out`
+                   writes the text and no colour. The text is the WHOLE rank
+                   name (`fromRank`/`toRank`) — deliberately not `data-tiername`
+                   + `data-mark`, because a mark is the division numeral and
+                   falls back to the first two letters of the tier when a rank
+                   has none, which renders "Master MA" beside a spelled-out
+                   name.
+                   The sub-line's figure rides in its own `<b>` and its word in
+                   its own node, which `render()` writes through `T()` — the
+                   ladder strip's "11 divisions to climb" is built the same way,
+                   and it is the only shape that survives translation. -->
+              <span class="ob-climb-r" data-rankcolor="from" data-out="fromRank">—</span>
+              <span class="ob-climb-arrow" aria-hidden="true">{_ico("arrow", 15, "ico", stroke=True)}</span>
+              <span class="ob-climb-r is-to" data-rankcolor="to" data-out="toRank">—</span>
+            </div>
+            <span class="ob-climb-sub" data-when-service="division">
+              <b data-out="steps">—</b> <span data-out="stepsWord">divisions</span>
+              <i aria-hidden="true">·</i> <span data-out="mode">—</span>
+            </span>
+            <span class="ob-climb-sub" data-when-service="units" data-out="summary" hidden>—</span>
+          </div>
           <span class="price-pair">
             <span class="quote-was" data-when-discount data-out="was" hidden></span>
             <span class="quote-price" data-out="price">—</span>
@@ -4605,15 +4856,24 @@ def wizard(game=None):
       </div>
 
       <a class="btn btn-primary btn-block ob-cta" href="/checkout.html" data-continue>
-        <span data-hide-service="coaching">Continue to checkout</span><span data-when-service="coaching" data-out="bookLabel" hidden>Book</span>
+        <span data-hide-service="coaching">Rank up</span><span data-when-service="coaching" data-out="bookLabel" hidden>Book</span>
         {_ico("arrow", 15, "ico", stroke=True)}
       </a>
 
-      {ob_included(g)}
-
+      <!-- Under the button, where a rating does its work. It sat at the foot of
+           the whole card, below the inclusions strip and a full column away
+           from the thing it is meant to reassure. `pay_glyphs()` comes with it
+           for the same reason — "secure checkout" belongs beside the checkout
+           button, not under the form. -->
       <div class="ob-assure">
         {ob_trust()}
         {pay_glyphs()}
+      </div>
+
+      </div><!-- /.ob-side-in -->
+      </aside>
+      </div><!-- /.ob-grid -->
+
       </div>
     </div>"""
 
@@ -5307,20 +5567,11 @@ def gc_faq_items():
     """
     facts = gc_facts()
     code, promo = D.auto_promo()
-    # The third element of a BUNDLES tuple is the hand-set FLAT PRICE in whole
-    # USD, not a discount fraction — reading it as one published "bundle climbs
-    # at 1500% to 30500% off" here and, worse, asserted it verbatim in the
-    # FAQPage JSON-LD. The reduction is derived from that price against the full
-    # climb by pricing.bundle_pct(), which is what the strip's own −N% pill
-    # reads, so the answer and the nine game pages now state one number.
-    discs = [pricing.bundle_pct(g, b) for g in D.GAMES for b in D.bundle_climbs(g)]
-    discs = [d for d in discs if d > 0]
-    lo, hi = (min(discs), max(discs)) if discs else (0, 0)
-    # Only assert "the larger of the two" while it is arithmetically true. If a
-    # sitewide code is ever raised past the cheapest bundle, the sentence stops
-    # making the claim instead of quietly becoming false.
+    # This answer used to quote the bundle range beside the sitewide code. The
+    # bundles came off the storefront on 2026-09-09, so it states one discount —
+    # which is also the only one an order can now get, since a typed code, a
+    # recovery token and a mystery card all REPLACE rather than stack.
     pct = (promo or {}).get("pct", 0)
-    oneof = ", and it is the larger of the two" if discs and lo >= pct else ""
     # `usd()`, not `money()`: an answer is one escaped text node and the same
     # string is asserted verbatim in the FAQPage JSON-LD, so a `.money` span
     # would print as markup here and ship as markup to search engines. The cost
@@ -5331,8 +5582,6 @@ def gc_faq_items():
         "cheap": facts["cheap"]["name"], "cp": usd(from_price(facts["cheap"])),
         "dear": facts["dear"]["name"], "dp": usd(from_price(facts["dear"])),
         "code": code or "The sitewide code", "pct": "%g%%" % round(pct * 100, 2),
-        "lo": "%g%%" % round(lo * 100), "hi": "%g%%" % round(hi * 100),
-        "oneof": oneof,
     }
     return [(fid, q.format(**fills), a.format(**fills)) for fid, q, a in D.CATALOG_FAQ]
 
@@ -5646,7 +5895,7 @@ def gp_safety(g):
           <p class="gp-p">{esc(pub)} flags accounts on patterns, not accusations: a login from the
           other side of the world, a sudden change in hours, a win rate that doesn't look human. So
           we don't produce any of those patterns. Your booster connects through an enterprise VPN in
-          your region, plays inside the hours you set, and keeps your settings.</p>
+          your region, plays inside your normal hours, and keeps your settings.</p>
           <div class="gp-disclaimer">
             {_ico("warn", 18, "gp-disc-ico")}
             <span>{esc(disclaimer)}</span>
@@ -5748,7 +5997,7 @@ def gp_faq_items(g):
     return [
         ("Do you need my account login?",
          "For solo, yes — your booster signs in and plays, through a VPN in your region and inside "
-         "the hours you set. For duo, no: they queue beside you from their own account and never "
+         "your normal hours. For duo, no: they queue beside you from their own account and never "
          "see your login at all. Either way we never ask for your email password or your 2FA codes."),
         ("Can I play while the order is running?",
          "Pause it first, from the order page. Pausing is free and resumes the same night if a slot "
@@ -6146,6 +6395,43 @@ def gp_accounts_strip(g):
     </section>"""
 
 
+def gh_chips(g):
+    """The three promises under the game hero's H1 — `.ac-assure`'s job on the
+    accounts shop. It is `GUARANTEES_INLINE` verbatim: signed-off copy, already
+    translated, and the same three the home hero states, so the two cannot
+    drift. Deliberately NOT a price — the service cards below carry "from $N"
+    per product, the way the accounts server cards carry theirs."""
+    return '<div class="gh-chips">%s</div>' % "".join(
+        f'<span class="gh-chip">'
+        f'{_ico(ico, 15, "ico", evenodd=(ico in _GTEE_EVENODD))}<span>{esc(txt)}</span></span>'
+        for ico, txt in GUARANTEES_INLINE)
+
+
+def gh_bundles(g):
+    """The bundle strip, as its own band under the hero.
+
+    ⚠ NOT MOUNTED. Bundles came off the storefront on 2026-09-09 (the owner's
+    call): multi-tier climbs now take the sitewide sale like every other order,
+    and nothing on the site advertises a bundle. **The engine is deliberately
+    intact** — `D.BUNDLES`, `pricing.quote()`'s bundle branch, its app.js mirror
+    and the checkout guard all still work, so a saved order or an old link that
+    still carries one prices correctly instead of failing the `client_total`
+    guard, and putting the offer back is re-adding the call in `page_game()`.
+    This function and `bundle_strip()` are kept for that, the way the dead
+    `data-ticks` hook is kept. If bundles are ever dropped for good, this is the
+    thread to pull.
+
+    It used to sit in the hero's left column; that column is gone. It is kept
+    OUT of the card because a bundle only exists for a division climb, and a
+    strip of flat-price climbs inside step 1 would advertise six prices for one
+    of the four products before the visitor has chosen any of them. A game with
+    no BUNDLES entry renders nothing, exactly as before."""
+    strip = bundle_strip(g)
+    if not strip.strip():
+        return ""
+    return '<section class="gh-band"><div class="wrap">%s</div></section>' % strip
+
+
 def page_game(g):
     # money(), not usd(): this is the largest price on the page and the first
     # one a visitor reads, so it has to follow the currency switcher like every
@@ -6153,7 +6439,6 @@ def page_game(g):
     # finding this build exists to answer. The .money span nests inside
     # .grad-text safely — the gradient is clipped to ALL descendant text and the
     # child inherits `color: transparent`, so the fill still shows through.
-    fp = money(from_price(g))
     # This game's own boosters, capped: the board is 50 and League alone has 22,
     # which is a page of table inside a section that only has to establish that
     # real people cover this ladder. The full list is /boosters/.
@@ -6176,46 +6461,6 @@ def page_game(g):
     }
     product.update(rating_ld())
 
-    # Hero stat row and the booster column are both pure claims about the
-    # business. Each cell appears only if its number is real; with none of them
-    # the row and the column vanish and the section falls back to one column.
-    #
-    # "Boosters free now" used to be the third cell here. It moved into the order
-    # card, next to the delivery estimate, where availability is an argument for
-    # ordering now rather than a statistic — and the promo bar's roster count and
-    # this row's no longer state two different numbers in one viewport.
-    # Each cell carries a full label and a short one; the phone shows the short
-    # (the handoff abbreviates to "TRUSTPILOT / TO CLAIM / DELIVERED", and the
-    # delivered figure to "92.4k"), CSS picks which. Both are in the DOM because
-    # i18n.js matches whole text nodes.
-    def _short_count(s):
-        """"92,400" → "92.4k". Left alone if it isn't a plain number."""
-        try:
-            n = int(str(s).replace(",", ""))
-        except ValueError:
-            return s
-        if n < 10000:
-            return str(s)
-        return ("%.1fk" % (n / 1000.0)).replace(".0k", "k")
-
-    cells = [c for c in (
-        (f'<div class="stat"><span class="stat-v"><b>{esc(D.STATS["trustpilot"].split("/")[0].strip())}</b>'
-         f'<i>/ {esc(D.STATS["trustpilot"].split("/")[-1].strip())}</i></span>'
-         f'<span class="stat-k"><span class="stat-k-full">Trustpilot</span>'
-         f'<span class="stat-k-sm">Trustpilot</span></span></div>')
-        if D.STATS["trustpilot"] else "",
-        (f'<div class="stat"><span class="stat-v"><b>{esc(D.STATS["median_claim"].split(" ")[0])}</b>'
-         f'<i>{esc(" ".join(D.STATS["median_claim"].split(" ")[1:]))}</i></span>'
-         f'<span class="stat-k"><span class="stat-k-full">Booster time to claim</span>'
-         f'<span class="stat-k-sm">To claim</span></span></div>') if D.STATS["median_claim"] else "",
-        (f'<div class="stat"><span class="stat-v">'
-         f'<b class="stat-n-full">{esc(D.STATS["clients"])}</b>'
-         f'<b class="stat-n-sm">{esc(_short_count(D.STATS["clients"]))}</b></span>'
-         f'<span class="stat-k"><span class="stat-k-full">Clients served</span>'
-         f'<span class="stat-k-sm">Clients</span></span></div>') if D.STATS.get("clients") else "",
-    ) if c]
-    stat_row = ('<div class="stat-row">%s</div>' % "".join(cells)) if cells else ""
-
     ld = [
         product,
         faq_ld(faq),
@@ -6231,22 +6476,34 @@ def page_game(g):
     # for the same space and lost twice; depth now comes from a warm radial glow
     # and a faint diagonal hatch, with the game's hue kept as the low corner
     # wash so the nine game pages still don't look like one page.
-    body = f"""<section class="hero-a hero-a-lit" id="top" style="--game-hue:{g['hue']}">
+    # ⚠ THE HERO IS CENTRED, on the accounts shop's pattern, and it is NOT the
+    # two-column "Ladder card" the handoff drew. What it replaced was a left
+    # column carrying a four-to-five-line paragraph beside a 470px configurator
+    # — at 375px that paragraph pushed the product to 1,115px, so a paid click
+    # on "lol elo boost" bought a screen with no product, no price and no
+    # button on it. Centred, the column is gone: kicker, H1, ONE line, three
+    # chips, then the card at full width.
+    #
+    # ⚠ IT GIVES UP THE ABOVE-THE-FOLD LIVE PRICE, which was a CRO-audit
+    # constraint and the whole point of the handoff's 1440x900 measurement. That
+    # was the owner's explicit call (2026-09-09): /accounts is the page that
+    # converts and this is its shape. Step 1 lands at ~560px, which is what the
+    # visitor now has to see; the CTA is below the fold exactly as the accounts
+    # tier cards are. Do not "restore" the fold rule without reopening that
+    # decision — see the note on the fold in CLAUDE.md.
+    body = f"""<section class="hero-a hero-a-lit gh-hero" id="top" style="--game-hue:{g['hue']}">
   <div class="fx hero-a-glow" aria-hidden="true"></div>
   <div class="fx hero-a-hatch" aria-hidden="true"></div>
   <div class="fx fx-grain" aria-hidden="true"></div>
-  <div class="wrap hero-a-inner">
-    <div class="hero-copy" style="max-width:none">
-      <nav class="crumbs crumbs-slash" aria-label="Breadcrumb">
-        <a href="/">Home</a> <span aria-hidden="true">/</span> <a href="/games">Games</a>
-        <span aria-hidden="true">/</span> <span class="crumbs-here">{esc(g['name'])}</span>
-      </nav>
-      <h1 class="h-lg" style="font-size:clamp(38px,5.4vw,68px)">{esc(g['name'])} boost<br><span class="grad-text">from {fp}.</span></h1>
-      <p class="lede">{esc(g['blurb'])}</p>
-      {stat_row}
-      {bundle_strip(g)}
+  <div class="wrap gh-hero-inner">
+    <div class="gh-copy">
+      <h1 class="gh-h1">Buy {esc(g['name'])} boosting</h1>
+      <p class="gh-p">{esc(D.game_sub(g))}</p>
     </div>
+
     <div id="configure">{wizard(game=g['name'])}</div>
+
+    {gh_chips(g)}
   </div>
 </section>
 
@@ -7039,7 +7296,7 @@ def page_how():
         <span class="card-kicker">Solo</span>
         <span class="card-title">The booster plays alone</span>
         <p class="card-body">Fastest and cheapest. You hand over the login, they connect through a
-        VPN in your region, appear offline, and play inside the hours you set. You keep the account
+        VPN in your region, appear offline, and play inside your normal hours. You keep the account
         and can pause or take it back at any moment from the dashboard.</p>
       </div>
       <div class="card">
@@ -9103,39 +9360,24 @@ def page_checkout():
           the password and the recovery mailbox are sent. Check it is one you can
           open.</span></p>
 
-          <div class="co-two" data-hide-service="account">
-            <div class="co-fieldset">
-              <label class="co-lab" for="k-region">Server</label>
-              <div class="co-field">
-                {_ico("globe", 15, "ico")}
-                <select class="co-select" id="k-region" data-sel="region" autocomplete="off">{regions}</select>
-                {_CARET}
-              </div>
-            </div>
-            <div class="co-fieldset">
-              <label class="co-lab" for="k-hours">Preferred hours</label>
-              <div class="co-field">
-                {_ico("clock", 15, "ico", stroke=True)}
-                <select class="co-select" id="k-hours" autocomplete="off">{hours}</select>
-                {_CARET}
-              </div>
-            </div>
-          </div>
-
-          <!-- Nothing an account buyer could write here is acted on: the shard was
-               chosen in step 1 of the shop, delivery is by machine and no booster
-               ever reads the order. A free-text box asking for champion pools over
-               a purchase that has none is a field that appears to do something and
-               does not — the same reason Server and Preferred hours are hidden
-               above. So the whole block goes on this service, label included. -->
-          <div data-hide-service="account">
-            <div class="co-lab-row co-lab-row-sp">
-              <label class="co-lab" for="k-notes">Anything the booster should know</label>
-              <span class="co-opt-lab">Optional</span>
-            </div>
-            <textarea class="co-input co-textarea" id="k-notes"
-                      placeholder="Champion pool, roles, don't touch ranked flex…"></textarea>
-          </div>
+          <!-- ⚠ SERVER, PREFERRED HOURS AND THE BOOSTER NOTE WERE REMOVED
+               (the owner's call, 2026-09-09): this page is now email → pay on
+               every product, the shape the accounts checkout already had.
+               · Server moved to the game page's order panel earlier the same
+                 day, so asking again here was duplication.
+               · The note box was optional and rarely acted on.
+               · ⚠ PREFERRED HOURS WAS A CLAIM, NOT JUST A FIELD. Four places
+                 said the booster plays "the hours YOU SET", which needs a
+                 control behind it; they now say "your normal hours", which is
+                 an ops behaviour and is what `SAFETY["measures"]` already said.
+                 Do not put "hours you set" back into any copy without putting
+                 this control back with it.
+               ⚠ This comment lives inside an f-string: no braces.
+               The payload builder still reads `#k-hours` and `#k-notes` behind
+               a null guard, so metadata[hours] and metadata[notes] arrive EMPTY
+               rather than carrying an invented value — that is the safe
+               degradation, and it is what makes restoring the fields a markup
+               change and nothing else. -->
 
           <div class="co-div"></div>
 

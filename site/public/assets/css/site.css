@@ -1541,8 +1541,13 @@ body.hd-locked {
    and heavier keeps the clean sans look but is far easier to read */
 .kicker { font-size: 12.5px; font-weight: 500; line-height: 1.45; }
 
+/* gap 15, not 16: the order card is the one element on the site with a hard
+   vertical budget (its CTA clears the fold at 1440x900 on nine ladders in three
+   languages), and across its eight stacked children a 1px rhythm change is
+   worth ~7px of that budget — which is what pays for the service cards' name
+   wrapping in French and German. `.wizard` is this card and nothing else. */
 .wizard {
-  display: flex; flex-direction: column; gap: 16px;
+  display: flex; flex-direction: column; gap: 15px;
   background: var(--glass); backdrop-filter: blur(18px);
   border: 1px solid rgba(255, 255, 255, .1); border-radius: var(--radius-lg); padding: 22px;
 }
@@ -2286,25 +2291,424 @@ body.hd-locked {
 }
 .ob-named-x:hover { color: var(--ember-lit); }
 
-/* Tabs: sentence case at 12.5px, not Ashfall's tracked mono caps. The active
-   tab's 2px rule overlaps the container's 1px border rather than sitting under
-   it, which is why the row carries a -1px bottom margin. */
-/* Four tabs now (Coaching is the fourth on games that offer it). They fit at
-   470px on desktop; below that the row scrolls horizontally rather than
-   wrapping or truncating — truncation would hide Coaching. */
-.ob-tabs {
-  margin-top: 10px; gap: 4px; border-bottom: 1px solid var(--h-line-2);
-  flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+/* ══ the game hero, centred on the accounts shop's pattern ══════════════════
+   ⚠ This REPLACES the "Ladder card" handoff's two-column hero, and it gives up
+   that handoff's one hard measurement — the CTA clearing the fold at 1440x900.
+   The owner's call (2026-09-09): /accounts is the page that converts and this
+   is its shape. What it buys is the phone, where the old left column's 4–5 line
+   paragraph pushed the product to 1,115px and a paid click landed on a screen
+   with no product, no price and no button on it.
+
+   `.gh-*` mirrors `.ac-*` deliberately — the two pages are the same object, a
+   thing you pick and then configure, and they must not read as two shops. The
+   values are `.ac`'s, so a change there is worth making here too. */
+.gh-hero { border-top: 0; }
+.gh-hero-inner { padding-block: 34px 56px; display: block; }
+.gh-copy { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.gh-h1 {
+  margin: 15px 0 0; font-family: var(--display); font-weight: 600;
+  font-size: clamp(32px, 4.6vw, 56px); line-height: 1.02; letter-spacing: -.032em;
 }
-.ob-tabs::-webkit-scrollbar { display: none; }
-.ob-tabs .tab {
-  font-family: var(--body); font-size: 12.5px; font-weight: 600;
+.gh-p {
+  margin: 15px 0 0; font-size: 19px; line-height: 1.5; color: var(--h-text-2);
+  max-width: 62ch; text-wrap: pretty;
+}
+.gh-chips {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 10px 26px; margin-top: 20px; font-size: 13.5px; color: var(--h-text-2);
+}
+.gh-chip { display: flex; align-items: center; gap: 8px; }
+.gh-chip .ico { color: var(--ember-lit); }
+
+/* THE FIRST SECTION IS FOUR THINGS: headline, one line, the products, one row
+   of promises. Everything else that used to sit here — the breadcrumb, the
+   kicker repeating the H1, the "STEP 1 OF 2" label, the question repeating the
+   H1 again, and the card's own panel around it all — was chrome between the
+   visitor and the four things they can buy. On step 1 the panel is stripped
+   entirely and the product cards sit straight on the hero; the panel comes back
+   for step 2, where a form does need a container. */
+.gh-hero-inner .wizard {
+  max-width: 860px; margin: 34px auto 0; padding: 26px 26px 22px;
+}
+.gh-hero-inner .wizard[data-step="pick"] {
+  max-width: 1240px; padding: 0; margin-top: 30px;
+  background: none; border: 0; backdrop-filter: none; gap: 0;
+}
+/* The head, the step label and the question are all redundant against an H1
+   that already says "Buy <Game> boosting". */
+.gh-hero-inner .wizard[data-step="pick"] .ob-step-head { display: none; }
+/* `.ob-head` is hidden on BOTH steps. On step 1 the H1 already says what the
+   card is for; on step 2 the bar names the product, and "Build your boost"
+   directly above "Division boost" was the card saying its own name twice in two
+   rows of chrome above the first control. The live-pricing pill it used to
+   carry moved into the bar. */
+.gh-hero-inner .wizard .ob-head { display: none; }
+/* The inclusions strip, the trust line and the payment marks belong to the
+   form, not to the product picker — they say things about an order that does
+   not exist yet on step 1. */
+.gh-hero-inner .wizard[data-step="pick"] .ob-incl,
+.gh-hero-inner .wizard[data-step="pick"] .ob-assure { display: none; }
+
+/* Four across, `.ac-sv-grid`'s shape — a card per product, sitting on the
+   ground rather than inside another card. */
+.gh-hero-inner .ob-svcs { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.gh-hero-inner .ob-svcs[data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Stacked, with the price row pinned to the bottom by `margin-top:auto` so the
+   four rows line up however long each blurb runs — the same trick
+   `promise_cards()` uses to keep its proof lines on one baseline. */
+.gh-hero-inner .ob-svc {
+  display: flex; flex-direction: column; align-items: stretch; gap: 0;
+  padding: 18px; border-radius: 14px; min-height: 168px;
+}
+.gh-hero-inner .ob-svc-n { font-size: 17px; line-height: 1.2; }
+.gh-hero-inner .ob-svc-d { margin-top: 8px; font-size: 12.5px; line-height: 1.45; }
+.gh-hero-inner .ob-svc-f {
+  margin-top: auto; padding-top: 16px; justify-content: space-between;
+}
+.gh-hero-inner .ob-svc-p { font-size: 15px; }
+.gh-hero-inner .ob-svc-go { width: 28px; height: 28px; }
+
+/* The promises, as one quiet row under the products rather than three chips
+   above them. Same three strings, same source. */
+.gh-hero-inner .gh-chips { margin-top: 26px; }
+
+/* ── STEP 1: the four services, as a list of products ──────────────────────
+   They were a row of four 12.5px grey words that measured 351px inside a 305px
+   box on a 375px phone — "Coaching" off the right edge, "Placements" nearly —
+   and block 7 of the MOBILE PASS had already tried to buy that back with
+   tighter padding and a scroll fade and was still 46px short. They are now
+   step 1 of the card, the shape `.ac-sv-grid` gives the accounts shop: the
+   product is chosen on its own screen, then configured.
+
+   ONE COLUMN, at every width. Four across a 470px column gives each card 87px
+   of content, and the longest service NAME alone measures 101px in French at
+   12px — before the line saying what the product is. A row per product fits
+   every language at a legible size with no wrapping to tune, and the fold
+   budget that made a narrow row worth fighting for is gone: step 1 no longer
+   carries the configurator underneath it. */
+.ob-svcs { display: grid; gap: 8px; }
+.ob-svc {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: 2px 12px;
+  padding: 11px 12px; border-radius: 10px; text-align: left; cursor: pointer;
+  background: rgba(255, 255, 255, .02); border: 1px solid var(--h-line-2);
+  transition: background .16s, border-color .16s, transform .16s;
+}
+.ob-svc:hover { background: rgba(255, 255, 255, .045); border-color: var(--h-line-3); }
+/* The chosen product keeps the same ember tint a ticked add-on row takes, so
+   "chosen" reads identically everywhere inside this card. It matters after the
+   fact too: `Change` returns to this screen with the current pick still lit. */
+.ob-svc[aria-selected="true"] {
+  background: rgba(255, 90, 31, .08); border-color: rgba(255, 90, 31, .32);
+}
+.ob-svc-n {
+  grid-column: 1; grid-row: 1;
+  font-family: var(--body); font-size: 13.5px; font-weight: 600; line-height: 1.2;
+  letter-spacing: 0; text-transform: none; color: var(--h-text);
+}
+.ob-svc-d {
+  grid-column: 1; grid-row: 2;
+  font-family: var(--body); font-size: 11.5px; font-weight: 400; line-height: 1.35;
+  color: var(--h-muted);
+}
+/* Price and arrow span both rows so they centre against the pair. */
+.ob-svc-f {
+  grid-column: 2; grid-row: 1 / span 2;
+  display: flex; align-items: center; gap: 10px;
+}
+/* "from" is a whole translatable text node in its own <i>, so it carries no
+   italic of its own; the figure beside it is a money() span and follows the
+   currency switcher with every other price on the page. */
+.ob-svc-p {
+  font-family: var(--body); font-size: 12px; font-weight: 600; line-height: 1.2;
+  white-space: nowrap; color: var(--h-tint);
+}
+.ob-svc-p i { font-style: normal; font-weight: 400; color: var(--h-dim); }
+.ob-svc-go {
+  display: grid; place-items: center; width: 22px; height: 22px; flex: none;
+  border-radius: 999px; border: 1px solid var(--h-line-3); color: var(--h-muted);
+}
+.ob-svc:hover .ob-svc-go, .ob-svc[aria-selected="true"] .ob-svc-go {
+  border-color: rgba(255, 90, 31, .45); color: var(--h-tint);
+}
+
+/* The step's own heading, kept a span rather than an <h2>: the card sits inside
+   the hero and the nine game pages' outline is the six numbered bands below it.
+   `.ob-dash` is the same short rule `.ac-step-k` draws before its step label. */
+.ob-step-head { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.ob-step-k {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--h-tint);
+}
+.ob-dash { width: 14px; height: 1px; background: currentColor; flex: none; }
+.ob-step-h {
+  font-family: var(--display); font-size: 19px; font-weight: 700; line-height: 1.15;
+  color: var(--h-text);
+}
+
+/* ══ STEP 2 — the form, re-laid out ════════════════════════════════════════
+   Two columns: the choices on the left, the money on the right, pinned while
+   you scroll the form. The old single stack put the total at the very bottom,
+   which meant the figure every control moves was the one thing off screen
+   while you moved it. It is the `/checkout.html` shape on purpose.
+
+   Everything here is presentation. Not one `data-*` hook changed — the aside is
+   `.ob-sum` and `.ob-cta` re-laid out, so all four products still carry their
+   own labels through the same `data-when-service` / `data-hide-service` pairs. */
+/* Wider: `.wrap` runs to 1440 and the card was leaving ~360px of it unused on
+   a desktop screen. 1240 fills the band without the form column growing past a
+   comfortable measure. */
+.gh-hero-inner .wizard[data-step="build"] { max-width: 1240px; }
+.ob-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) 370px;
+  gap: 28px; align-items: start;
+}
+.ob-main { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+/* `.wizard` is a 15px-gap flex column and these two used to be its children;
+   the columns own their own rhythm now. */
+.ob-grid > * { margin: 0; }
+
+/* ── the section labels ───────────────────────────────────────────────────
+   `.ob-lab` is 9.5px tracked mono caps — six of them stacked down a form read
+   as machine output rather than as questions. Inside step 2 they become plain
+   sentence-case headings at a legible size. Scoped to the step so the mono
+   label survives everywhere else it is used. */
+.ob-main .ob-lab {
+  font-family: var(--body); font-size: 13px; font-weight: 600;
+  letter-spacing: 0; text-transform: none; color: var(--h-text);
+}
+.ob-main .ob-cell { display: flex; flex-direction: column; gap: 9px; }
+/* "YOU ARE" / "YOU WANT" over the rank plates were the last tracked micro-caps
+   left in the column, and they sat directly above two sentence-case headings.
+   Scoped to step 2 — the plate is drawn elsewhere (the unit tabs, checkout). */
+.ob-main .ob-plate-lab {
+  font-family: var(--body); font-size: 12px; font-weight: 600;
   letter-spacing: 0; text-transform: none; color: var(--h-muted);
-  padding: 10px 13px; border-bottom: 2px solid transparent; margin-bottom: -1px;
-  white-space: nowrap; flex: none;
 }
-.ob-tabs .tab:hover { color: var(--h-text); }
-.ob-tabs .tab[aria-selected="true"] { color: var(--h-text); border-bottom-color: var(--ember); }
+.ob-main .ob-two { gap: 18px; }
+
+/* ── the two choices that move the price ──────────────────────────────────
+   Queue and server, at the top of the aside. They were a 2-up row at the foot
+   of the form column, below the ranks and above the add-ons — two of the most
+   consequential controls on the page (duo is +55%, the shard decides who can
+   take the order) drawn as the smallest. Here they sit against the total they
+   change, and they stay on screen with it.
+
+   ⚠ Every `.ob-field` / `.seg` override carries the `.ob ` prefix for the same
+   reason the add-on block does: the rules being overridden are `.ob .ob-field`
+   and `.ob .seg-opt`, which tie on specificity and sit later in the file. */
+.ob-opts { display: flex; flex-direction: column; gap: 14px; }
+.ob-opts .ob-cell { display: flex; flex-direction: column; gap: 8px; }
+/* Sentence case, matching the form column's headings rather than the tracked
+   mono the card uses elsewhere. */
+.ob .ob-opts .ob-lab {
+  font-family: var(--body); font-size: 13px; font-weight: 600;
+  letter-spacing: 0; text-transform: none; color: var(--h-text);
+}
+/* 44px: a real target, and the same height as the server field beside it so
+   the pair reads as one block. */
+.ob .ob-opts .seg-opt { min-height: 44px; font-size: 13.5px; }
+.ob .ob-opts .seg-pct { font-size: 11px; opacity: .85; }
+.ob .ob-opts .ob-field { min-height: 44px; }
+.ob .ob-opts .ob-select { font-size: 14px; }
+/* A rule under the pair separates "what you are choosing" from "what it
+   costs" without another heading. */
+.ob-opts { padding-bottom: 16px; border-bottom: 1px solid var(--h-line-2); }
+
+/* ── the aside ────────────────────────────────────────────────────────────
+   Sticky under the header's own offset. `.ob-sum` was a 2-up grid; here it is
+   one column, so its three cells stack in reading order: what you are buying,
+   what it costs, when it lands. */
+.ob-side { position: sticky; top: 96px; }
+.ob-side-in {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 20px; border-radius: 14px;
+  background: rgba(255, 255, 255, .028); border: 1px solid var(--h-line-3);
+}
+.ob-side-in .ob-sum {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 0; border: 0; background: none;
+  /* `.ob-sum` is `align-items: end` from the two-up layout it used to have; in
+     a COLUMN that pushes every child to the right edge of the aside. */
+  align-items: stretch;
+}
+/* Same story: the estimate cell was the right-hand column, so it carried
+   `text-align: right`. It is a labelled row now. */
+.ob-side-in .ob-sum-r, .ob-side-in .ob-sum-free { text-align: left; }
+.ob-side-in .ob-sum-l { display: flex; flex-direction: column; gap: 6px; }
+/* The configuration reads as a sentence above the price, not as a tracked
+   micro-caps stamp under it. */
+.ob-side-in .ob-lab-cfg {
+  font-family: var(--body); font-size: 12px; font-weight: 500; line-height: 1.45;
+  letter-spacing: 0; text-transform: none; color: var(--h-muted);
+}
+.ob-side-in .quote-price { font-size: 44px; }
+.ob-side-in .price-pair { align-items: baseline; gap: 9px; flex-wrap: wrap; }
+/* The estimate is a labelled row under the price rather than a second column
+   competing with it. */
+.ob-side-in .ob-sum-r {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding-top: 13px; border-top: 1px solid var(--h-line-2);
+}
+.ob-side-in .ob-sum-r .ob-lab {
+  font-family: var(--body); font-size: 12.5px; font-weight: 400;
+  letter-spacing: 0; text-transform: none; color: var(--h-muted);
+}
+.ob-side-in .quote-eta { font-size: 16px; text-transform: none; }
+/* Availability stays the last line before the button — it is the reason to
+   press it. Getting it BELOW the button would mean taking it out of `.ob-sum`
+   or giving that element `display: contents`, and `.ob-sum` carries
+   `aria-live="polite"`: `display: contents` drops the element's box, and with
+   it the live region in more than one engine, so a screen reader would stop
+   announcing the new total after every input. Not worth a reorder. */
+.ob-side-in .ob-sum-free { font-size: 11.5px; }
+.ob-side-in .ob-cta { margin: 0; }
+
+/* ══ STEP 2 — the add-ons, given the weight they earn ══════════════════════
+   They were three 6px-padded lines at the foot of the form with an 11px note
+   clipped to one line — the least prominent thing on the page, and the only
+   part of it that is pure margin on an order that is already happening. Two of
+   them are paid (+$14, +$11) and the first is a free option the buyer has to
+   TICK to get, so an add-on nobody notices is revenue and a promise both lost.
+
+   All CSS. Not one `data-addon` / `data-addon-price` / `data-when-mode` hook
+   moved, so the queue filter, the live per-order pricing and the free row's
+   struck reference figure all behave exactly as before.
+
+   ⚠ Every selector here carries the redundant-looking `.ob ` prefix on purpose.
+   The rules it overrides are `.ob .opt …`, which TIE with `.ob-main .opt …` on
+   specificity and sit ~350 lines further down the file, so they win on source
+   order — the first version of this block changed nothing at all except the
+   panel, and the note stayed clipped to one line at 17px checkboxes. */
+.ob-main .ob-addons {
+  padding: 16px; border-radius: 14px;
+  background: rgba(255, 255, 255, .018); border: 1px solid var(--h-line-2);
+}
+.ob .ob-main .opts { display: flex; flex-direction: column; gap: 8px; }
+.ob .ob-main .opt {
+  align-items: flex-start; gap: 13px;
+  padding: 13px 15px; border-radius: 11px;
+}
+.ob .ob-main .opt > span:not(.price) { display: flex; flex-direction: column; gap: 3px; }
+.ob .ob-main .opt > span > span[style] { font-size: 14px; line-height: 1.25; }
+/* THE ONE-LINE CLIP COMES OFF. `.ob .opt .note` is `nowrap` + ellipsis because
+   a second line cost ~14px of the card's fold budget — and that budget was
+   retired when the hero went centred (see the ⚠ above). The sentence saying
+   what you get was the half being cut. */
+.ob .ob-main .opt .note {
+  white-space: normal; overflow: visible; text-overflow: clip;
+  font-size: 12px; line-height: 1.4;
+}
+/* The figure is the decision, so it stops being 12px grey. */
+.ob .ob-main .opt .price { font-size: 15px; font-weight: 700; align-self: center; }
+.ob .ob-main .opt .opt-now { font-size: 15px; }
+.ob .ob-main .opt .opt-was { font-size: 12px; }
+/* A 17px box for a row that is now 60px tall reads as an afterthought, and it
+   is the actual target. */
+.ob .ob-main .opt input[type="checkbox"] {
+  width: 20px; height: 20px; border-radius: 6px; margin-top: 1px;
+}
+.ob .ob-main .opt input[type="checkbox"]::after { width: 12px; height: 12px; }
+/* The free row is the strongest thing this block offers and the easiest to
+   scroll past: it keeps its green (never ember — the CTA is ember, and two
+   ember blocks make two primary actions) and gains the weight to be seen. */
+.ob .ob-main .opt-freeopt { padding: 15px; }
+.ob .ob-main .opt-freeopt > span > span[style] { font-size: 15px; }
+.ob .ob-main .opt-flag { font-size: 10px; padding: 3px 7px; }
+
+/* ── the climb, as the panel's headline ───────────────────────────────────
+   It was one 12px grey line — "Iron I → Gold II · Solo" — for the thing the
+   whole card exists to configure. It is now the two ranks set in the display
+   face, each in ITS OWN TIER COLOUR off `D.tier_color()`, with an ember arrow
+   between: an Iron → Gold order reads grey-to-gold, a Diamond order blue. That
+   table is the one the ladder strip, the live feed, the rank plates and the
+   checkout climb row all read, so this can never invent a colour.
+
+   No plate, no emblem, no box — the emblems are already on screen 200px to the
+   left in the rank plates, and this is the one treatment that adds a read
+   without repeating one. It also cannot break: nothing here depends on
+   `color-mix`, on a track width, or on two boxes staying the same size, so it
+   holds at any width and in any language.
+
+   `--climb` is the tier colour with a floor under it: Iron's #8e8f94 is a mid
+   grey drawn for a 26px mark on a dark ground, and at 23px display weight it
+   reads as disabled text. The mix lifts every tier toward the panel's own text
+   colour by a fixed amount, so the hue still says which tier it is while the
+   contrast stays legible. */
+.ob-climb { display: flex; flex-direction: column; gap: 6px; }
+.ob-climb-pair { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ob-climb-r {
+  font-family: var(--display); font-size: 23px; font-weight: 700;
+  letter-spacing: -.02em; line-height: 1.05;
+  color: var(--tier, #b6afa9);
+}
+@supports (color: color-mix(in srgb, red 50%, white)) {
+  .ob-climb-r { color: color-mix(in srgb, var(--tier, #b6afa9) 78%, #f2efec); }
+}
+.ob-climb-arrow {
+  display: inline-grid; place-items: center; color: var(--ember-lit); flex: none;
+  transform: translateY(2px);
+}
+/* The scale of the climb, under it. The figure is its own `<b>` and the word
+   its own node — `render()` writes that word through `T()`, so "divisions"
+   translates and "division" is the singular the engine picks. */
+.ob-climb-sub {
+  font-family: var(--body); font-size: 12px; font-weight: 500; color: var(--h-muted);
+}
+.ob-climb-sub b { font-weight: 700; color: var(--h-text-2); }
+.ob-climb-sub i { font-style: normal; margin: 0 5px; color: var(--h-dim); }
+
+/* ── the header row ───────────────────────────────────────────────────────
+   The bar IS the card's header on step 2: what you picked, that the price is
+   live, and the way back. */
+.ob-bar-r { display: flex; align-items: center; gap: 10px; flex: none; }
+.ob-bar .ob-livepill { flex: none; }
+@media (max-width: 620px) {
+  /* The pill is the first thing to go when the row runs out of width — the
+     product name and the way back are both load-bearing, and "live pricing" is
+     demonstrated by the panel two inches below it. */
+  .ob-bar .ob-livepill { display: none; }
+}
+
+/* ── the trust row, now under the CTA ─────────────────────────────────────
+   It was a full-width strip at the foot of the card. In a 340px aside it
+   stacks: the rating, then the payment marks. */
+.ob-side-in .ob-assure {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+  margin: 0; padding-top: 14px; border-top: 1px solid var(--h-line-2);
+}
+
+/* ── STEP 2: the bar that says what step 1 answered ────────────────────────
+   `.ac-bar`'s job on this card. It is what makes the choice reversible, and a
+   step you cannot walk back is a trap rather than a step. */
+/* ONE LINE, and that is the fold budget again: a kicker row over the service
+   name made this bar ~12px taller than the four cards it stands in for, which
+   put the CTA at 909 in French on Marvel Rivals. A tick, the product, and the
+   way back is all the bar has to say. */
+.ob-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 6px 8px 6px 10px; margin-bottom: 12px; border-radius: 10px;
+  background: rgba(255, 255, 255, .022); border: 1px solid var(--h-line-2);
+}
+.ob-bar-l { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.ob-bar-tick {
+  display: grid; place-items: center; width: 19px; height: 19px; flex: none;
+  border-radius: 999px; color: var(--h-good);
+  background: rgba(143, 214, 164, .12); border: 1px solid rgba(143, 214, 164, .3);
+}
+.ob-bar-n {
+  font-family: var(--body); font-size: 12.5px; font-weight: 600; color: var(--h-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ob-change {
+  flex: none; display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 8px; border-radius: 8px; cursor: pointer;
+  background: none; border: 1px solid var(--h-line-3);
+  font-family: var(--body); font-size: 11.5px; font-weight: 600; color: var(--h-muted);
+  transition: color .16s, border-color .16s;
+}
+.ob-change:hover { color: var(--h-tint); border-color: rgba(255, 90, 31, .45); }
 
 /* rank pickers ---------------------------------------------------------- */
 /* `minmax(0,1fr)`, not `1fr`: a bare 1fr track still respects min-content, so
@@ -9311,20 +9715,105 @@ html.myd-open .mobile-bar { display: none; }
   /* 34 → 44: these are real chips with their own background, so they take the
      height rather than an overlay. */
   .bp-chip { min-height: 44px; }
-  .rvp-seg-opt, .rst-seg-opt, .ob-tabs .tab { min-height: 44px; }
+  .rvp-seg-opt, .rst-seg-opt { min-height: 44px; }
 }
 
-/* ── 7. the fourth product was off-screen with nothing saying so ────────────
-   `.ob-tabs` scrolls below 1000px and Coaching sat past the right edge of a
-   375px screen — a whole product invisible on a row that gives no sign it
-   moves. The tabs tighten (which recovers most of the overflow) and the rail
-   carries a fade while there is more to the right; `initScrollHints()` in
-   app.js sets `data-scroll-end` once the end is reached so the fade is a fact
-   about the scroller, not a permanent decoration. */
+/* ── 6a. the centred game hero on a phone ───────────────────────────────────
+   Three corrections, each of which has to BEAT a rule that still applies:
+
+   · `.hero-a .crumbs { order: 1 }` is left over from the two-column game hero's
+     ≤1000px reflow, which lifted the proof above the configurator. Nothing
+     carries `class="hero-copy"` any more — `.gh-copy` replaced it — but that
+     one selector still reaches these crumbs, and against siblings at the
+     default `order: 0` it sent them to the BOTTOM of the hero, under the
+     chips. Equal specificity, so this wins on source order, which is what the
+     appended-media-query rule at the top of this block asks for.
+   · `.gh-hero-inner .ob-svcs` sets two columns for the desktop card and would
+     hold them at 375px, where a product card is 149px wide and its name wraps
+     to two lines over a three-line blurb.
+   · `.gh-hero-inner .wizard`'s 26px padding is the desktop card's; the phone
+     wants the 16px `.wizard` already had. */
 @media (max-width: 1000px) {
-  .ob-tabs .tab { padding-inline: 9px; }
-  .ob-tabs, .ob-bundles-grid { scroll-snap-type: x proximity; }
-  .ob-tabs .tab, .ob-bundle { scroll-snap-align: start; }
+  .gh-hero-inner .ob-svcs { grid-template-columns: 1fr; gap: 8px; }
+  .gh-hero-inner .wizard { padding: 18px 16px; margin-top: 26px; }
+  .gh-hero-inner .wizard[data-step="pick"] { padding: 0; margin-top: 22px; }
+  .gh-hero-inner { padding-block: 24px 40px; }
+  .gh-p { font-size: 16.5px; margin-top: 12px; }
+  /* Back to the compact row the desktop card unpacks from: name and blurb on
+     the left, price and arrow on the right. Stacked, the desktop card's
+     168px floor and its `margin-top:auto` price row leave a hole in the middle
+     of every card and cost ~440px of a 812px screen for four products. */
+  .gh-hero-inner .ob-svc {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center; gap: 2px 12px;
+    min-height: 56px; padding: 12px; border-radius: 10px;
+  }
+  .gh-hero-inner .ob-svc-n { grid-column: 1; grid-row: 1; font-size: 14px; }
+  .gh-hero-inner .ob-svc-d { grid-column: 1; grid-row: 2; margin-top: 2px; font-size: 12px; }
+  .gh-hero-inner .ob-svc-f {
+    grid-column: 2; grid-row: 1 / span 2;
+    margin-top: 0; padding-top: 0; gap: 10px;
+  }
+  .gh-hero-inner .ob-svc-p { font-size: 13px; }
+  .gh-hero-inner .ob-svc-go { width: 24px; height: 24px; }
+  /* Three promises stacked is ~130px of hero on a 375px screen. Tighter type
+     and a smaller row gap keeps them without pushing the product down. */
+  .gh-chips { gap: 7px 18px; margin-top: 18px; font-size: 12.5px; }
+
+  /* ── step 2's two columns collapse, and the aside all but disappears ──────
+     The grid MUST be re-declared: `minmax(0,1fr) 320px` on a 375px screen
+     resolves to a 0px form column beside a 320px aside, which paints the price
+     panel straight over the rank plates.
+
+     The aside keeps ALL of its content and simply becomes the summary block at
+     the foot of the form. ⚠ It must keep its CTA laid out: `initStickyBar()`
+     reveals `.mobile-bar` only once `.ob-cta`'s bottom edge passes above the
+     viewport top, and a `display: none` anchor reports a 0 rect that never
+     crosses — hiding it here left the phone with NO price and NO button at all,
+     because the bar it was deferring to could never appear. The bar shadows
+     that button; it does not replace it. The two are never on screen together
+     by construction. */
+  .ob-grid { grid-template-columns: 1fr; gap: 18px; }
+  .ob-side { position: static; }
+  .ob-main { gap: 18px; }
+}
+
+/* ── 6b. the sticky bar has nothing to quote on step 1 ──────────────────────
+   `.mobile-bar` pins the live total and a Checkout button to the foot of every
+   game page. On step 1 the visitor has not said which of the four products they
+   are buying, so that total is a price for an order that does not exist yet —
+   and the button is a way past the step entirely. `initOrderStep()` stamps the
+   step on <html> as `data-ob-view` and nudges a resize, which is what makes `initBarReserve()`
+   re-measure `--mb-h` rather than reserving space for a bar that is not there.
+   The header sheet hides the same bar for its own reason, two rules below. */
+html[data-ob-view="pick"] .mobile-bar { display: none; }
+/* …and the reserve goes with it. `--mb-h` is CLEARED when the bar is hidden,
+   not set to 0, so the `var()` fallback takes over and the page would keep
+   146px of empty space at the foot of step 1 for a bar that is not there.
+   These restate the two `body.has-bar*` selectors at equal specificity plus the
+   root attribute, so they win on that rather than on source order. */
+html[data-ob-view="pick"] body.has-bar,
+html[data-ob-view="pick"] body.has-bar-coach { padding-bottom: 0; }
+
+/* ── 7. the fourth product was off-screen with nothing saying so ────────────
+   `.ob-tabs` scrolled below 1000px and Coaching sat past the right edge of a
+   375px screen — a whole product invisible on a row that gave no sign it moved.
+   Tightening the padding and fading the rail's right edge recovered most of the
+   46px overflow and not all of it, so the row is now a card grid that wraps
+   instead (see `.ob-svcs`) and cannot clip anything at any width. What is left
+   here is the phone's own shape for it: TWO columns, because "Division boost"
+   needs ~100px including its padding and four across a 375px screen gives 78.
+   A three-service ladder puts its last card across the full width rather than
+   leaving a half-width orphan beside a gap. */
+@media (max-width: 1000px) {
+  /* One column already, so nothing to reflow — only the phone's own sizes. A
+     card is a real tap target with its own ground, so it takes the height
+     rather than an overlay: the `.bp-chip` rule above, same reasoning. */
+  .ob-svc { min-height: 56px; padding: 12px; }
+  .ob-svc-n { font-size: 14px; }
+  .ob-svc-d { font-size: 12px; }
+  .ob-bundles-grid { scroll-snap-type: x proximity; }
+  .ob-bundle { scroll-snap-align: start; }
   [data-scrollhint]:not([data-scroll-end]) {
     -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 34px), transparent);
     mask-image: linear-gradient(90deg, #000 calc(100% - 34px), transparent);

@@ -509,7 +509,29 @@
       "Total, tax included": "Total TTC",
       "Continue": "Continuer",
       "Service": "Service",
+      // The centred game hero: H1, kicker and the one-line sub per ladder.
+      "Buy {} boosting": "Acheter un boost {}",
+      "{} boosting": "Boost {}",
+      "Solo, duo and flex — across NA and EU.": "Solo, duo et flex — sur NA et EU.",
+      "Competitive and unrated — across NA and EU.": "Compétitif et non classé — sur NA et EU.",
+      "Role-locked or flexible, hero pool respected.": "Rôle imposé ou libre, pool de héros respecté.",
+      "Current-set comp knowledge, not last patch's.": "Les compos du set actuel, pas celles du patch d’avant.",
+      "Per-role SR, open queue or role queue.": "SR par rôle, queue ouverte ou par rôle.",
+      "1v1, 2v2 and 3v3 playlists, and tournament wins.": "Playlists 1v1, 2v2 et 3v3, et victoires en tournoi.",
+      "MMR by bracket, calibration, behaviour-score safe.": "MMR par bracket, calibrage, behaviour score préservé.",
+      "RP climbs, badges and kill thresholds.": "Montées de RP, badges et seuils de kills.",
+      "Premier CS Rating and Faceit levels.": "CS Rating Premier et niveaux Faceit.",
       "Division boost": "Boost de division",
+      // Step 1 of the order card — the four products and what each one is.
+      "What do you want boosted?": "Tu veux booster quoi ?",
+      "Climb from where you are to the rank you want.":
+        "Monte de ton rang actuel jusqu’à celui que tu vises.",
+      "One win above your losses, at your current rank.":
+        "Une victoire de plus que tes défaites, à ton rang actuel.",
+      "Your placement games, played by a booster.":
+        "Tes matchs de placement, joués par un booster.",
+      "Live sessions with a coach. Your account stays yours.":
+        "Des sessions en direct avec un coach. Ton compte reste à toi.",
       "Net wins": "Victoires nettes",
       "Placements": "Placements",
       "Current rank": "Rang actuel",
@@ -526,6 +548,7 @@
       "Server": "Serveur",
       "Options": "Options",
       "Continue to checkout": "Passer au paiement",
+      "Rank up": "Monter de rang",
       "No account needed · Money-back until a booster is assigned · VPN matched to your region":
         "Sans compte · Remboursé jusqu’à l’attribution d’un booster · VPN dans ta région",
       "From": "À partir de",
@@ -777,8 +800,8 @@
       "Yes. Email, then payment. We create the order under that address and email you a one-click link to follow it. Set a password later if you want one, or never.":
         "Oui. E-mail, puis paiement. On crée la commande sous cette adresse et on t’envoie un lien en un clic pour la suivre. Tu mettras un mot de passe plus tard si tu en veux un, ou jamais.",
       "Is my account safe?": "Mon compte est-il en sécurité ?",
-      "Your booster connects through a VPN in your region, appears offline, and plays inside the hours you set. We never ask for a Riot/Steam/Blizzard recovery email, never change your password, and never queue with other customers' accounts.":
-        "Ton booster se connecte via un VPN dans ta région, apparaît hors ligne et joue pendant les horaires que tu fixes. On ne demande jamais d’e-mail de récupération Riot/Steam/Blizzard, on ne change jamais ton mot de passe et on ne lance jamais de file avec les comptes d’autres clients.",
+      "Your booster connects through a VPN in your region, appears offline, and plays inside your normal hours. We never ask for a Riot/Steam/Blizzard recovery email, never change your password, and never queue with other customers' accounts.":
+        "Ton booster se connecte via un VPN dans ta région, apparaît hors ligne et joue pendant tes horaires habituels. On ne demande jamais d’e-mail de récupération Riot/Steam/Blizzard, on ne change jamais ton mot de passe et on ne lance jamais de file avec les comptes d’autres clients.",
       "What if I want to play while the boost is running?": "Et si je veux jouer pendant le boost ?",
       "Pause it from the dashboard. The account is free within minutes and the timer stops. Resume when you're done.":
         "Mets-le en pause depuis le tableau de bord. Le compte est libre en quelques minutes et le chrono s’arrête. Tu reprends quand tu as fini.",
@@ -853,8 +876,8 @@
         "Ces neuf-là ont un tableau actif et assez de boosters pour prendre une commande vite. On accepte des demandes ponctuelles sur d’autres jeux via Discord, mais sans page ni prix instantané — si la file ne peut pas la prendre, on le dit plutôt que d’encaisser.",
       "Why is Valorant cheaper than Counter-Strike 2?":
         "Pourquoi Valorant est-il moins cher que Counter-Strike 2 ?",
-      "A division is not the same amount of work in every game. Ladders are different lengths, matches are different lengths, and one rung near the top of a ladder can cost several near the bottom of another. Each title carries its own multiplier, and it is on screen before you sign in: the cheapest single division is $3 on Valorant and $8 on Counter-Strike 2.":
-        "Une division ne représente pas le même travail dans chaque jeu. Les ladders n’ont pas la même longueur, les parties non plus, et un échelon près du sommet d’un ladder peut en coûter plusieurs en bas d’un autre. Chaque jeu a son propre multiplicateur, affiché avant toute connexion : la division la moins chère est à 3 $ sur Valorant et à 8 $ sur Counter-Strike 2.",
+      "A division is not the same amount of work in every game. Ladders are different lengths, matches are different lengths, and one rung near the top of a ladder can cost several near the bottom of another. Each title carries its own multiplier, and it is on screen before you sign in: the cheapest single division is $3 on Rocket League and $7 on Counter-Strike 2.":
+        "Une division ne représente pas le même travail dans chaque jeu. Les ladders n’ont pas la même longueur, les parties non plus, et un échelon près du sommet d’un ladder peut en coûter plusieurs en bas d’un autre. Chaque jeu a son propre multiplicateur, affiché avant toute connexion : la division la moins chère est à 3 $ sur Rocket League et à 7 $ sur Counter-Strike 2.",
       "Does one booster cover several games?": "Un booster couvre-t-il plusieurs jeux ?",
       "No. Everyone on the board plays exactly one title, and their profile carries the peak rank, the win rate, the on-time record and the orders they have delivered on it. Somebody claiming three ladders at once is somebody we did not hire.":
         "Non. Chaque personne du roster joue exactement un jeu, et son profil affiche son peak, son winrate, sa ponctualité et les commandes qu’elle y a livrées. Quelqu’un qui prétend tenir trois ladders à la fois est quelqu’un qu’on n’a pas recruté.",
@@ -862,8 +885,8 @@
       "Yes, as two orders — each gets its own booster, price and dashboard. There is no cross-title bundle, because a discount spanning two boosters would be paying one of them less.":
         "Oui, en deux commandes — chacune avec son booster, son prix et son tableau de bord. Il n’existe pas de pack multi-jeux : une remise à cheval sur deux boosters reviendrait à en payer un moins.",
       "Do prices change during a sale?": "Les prix changent-ils pendant une promo ?",
-      "SPLIT15 takes 15% off the whole catalogue with nothing to type. Each game page also carries bundle climbs at 19% to 37% off, and a bundle replaces the code rather than adding to it — there is only ever one discount on an order, and it is the larger of the two.":
-        "SPLIT15 enlève 15 % sur tout le catalogue, sans rien à saisir. Chaque page de jeu propose aussi des packs de montée à −19 % à −37 %, et un pack remplace le code au lieu de s’y ajouter — il n’y a jamais qu’une seule remise par commande, et c’est la plus avantageuse des deux.",
+      "SPLIT15 takes 15% off the whole catalogue with nothing to type — every title, every service, nothing to enter. There is only ever one discount on an order: a code you type replaces it rather than adding to it, so you always pay the better of the two, never both.":
+        "SPLIT15 enlève 15 % sur tout le catalogue, sans rien à saisir — tous les jeux, tous les services, rien à taper. Il n’y a jamais qu’une seule remise par commande : un code que tu saisis remplace la promo au lieu de s’y ajouter, donc tu paies toujours la plus avantageuse des deux, jamais les deux.",
       "Nine titles, one guarantee.": "Neuf jeux, une garantie.",
       "Refunded in full until a booster claims it, pro-rated after that, and claimed in 18 min on average.":
         "Remboursé intégralement jusqu’à la prise en charge, au prorata ensuite, et pris en charge en 18 min en moyenne.",
@@ -900,8 +923,8 @@
         "Tu vois le prix complet avant de nous dire quoi que ce soit sur toi. C’est tout l’intérêt de cette conception : le calculateur est la première chose sur chaque page, le montant affiché est celui que tu paies, et le paiement ne demande qu’un e-mail pour t’envoyer le lien de commande.",
       "Solo or duo": "Solo ou duo",
       "The booster plays alone": "Le booster joue seul",
-      "Fastest and cheapest. You hand over the login, they connect through a VPN in your region, appear offline, and play inside the hours you set. You keep the account and can pause or take it back at any moment from the dashboard.":
-        "Le plus rapide et le moins cher. Tu confies les identifiants, le booster se connecte via un VPN dans ta région, apparaît hors ligne et joue pendant les horaires que tu fixes. Le compte reste à toi : tu peux le mettre en pause ou le reprendre à tout moment depuis le tableau de bord.",
+      "Fastest and cheapest. You hand over the login, they connect through a VPN in your region, appear offline, and play inside your normal hours. You keep the account and can pause or take it back at any moment from the dashboard.":
+        "Le plus rapide et le moins cher. Tu confies les identifiants, le booster se connecte via un VPN dans ta région, apparaît hors ligne et joue pendant tes horaires habituels. Le compte reste à toi : tu peux le mettre en pause ou le reprendre à tout moment depuis le tableau de bord.",
       "You play every game": "Tu joues chaque partie",
       "Nobody logs into your account, ever. You queue with the booster, voice optional, and most of them will call rotations and review your mistakes on the way up. It costs more because it takes their time at your pace.":
         "Personne ne se connecte jamais à ton compte. Tu lances la file avec le booster, vocal en option, et la plupart appellent les rotations et corrigent tes erreurs en chemin. Ça coûte plus cher parce que ça mobilise leur temps à ton rythme.",
@@ -1417,8 +1440,8 @@
         "Elle part sur le tableau et un booster {} vérifié la prend. Si personne ne la prend sous 24 heures, la commande se rembourse toute seule.",
       "{} of them, {} only — {} or above, with a clean account history and a name you can look up. Order without naming anyone and it goes to whoever is free; name one and it waits for them.":
         "{} au total, sur {} uniquement — {} ou au-dessus, avec un compte sans sanction et un pseudo que tu peux vérifier. Commande sans désigner personne et elle part au premier dispo ; désignes-en un et elle l’attend.",
-      "{} flags accounts on patterns, not accusations: a login from the other side of the world, a sudden change in hours, a win rate that doesn't look human. So we don't produce any of those patterns. Your booster connects through an enterprise VPN in your region, plays inside the hours you set, and keeps your settings.":
-        "{} repère les comptes sur des schémas, pas sur des accusations : une connexion à l’autre bout du monde, un changement brusque d’horaires, un winrate qui n’a rien d’humain. On ne produit donc aucun de ces schémas. Ton booster se connecte via un VPN professionnel dans ta région, joue dans les horaires que tu fixes et garde tes réglages.",
+      "{} flags accounts on patterns, not accusations: a login from the other side of the world, a sudden change in hours, a win rate that doesn't look human. So we don't produce any of those patterns. Your booster connects through an enterprise VPN in your region, plays inside your normal hours, and keeps your settings.":
+        "{} repère les comptes sur des schémas, pas sur des accusations : une connexion à l’autre bout du monde, un changement brusque d’horaires, un winrate qui n’a rien d’humain. On ne produit donc aucun de ces schémas. Ton booster se connecte via un VPN professionnel dans ta région, joue dans tes horaires habituels et garde tes réglages.",
       "Boosting is against {}'s terms of service. We have never had an account actioned for any of our {} clients and we recover any that are, but nobody honest will tell you the risk is zero — and anyone who does is selling you something.":
         "Le boosting est contraire aux conditions d’utilisation de {}. Aucun compte n’a jamais été sanctionné parmi nos {} clients, et on récupère ceux qui le seraient ; mais personne d’honnête ne te dira que le risque est nul — et quiconque l’affirme a quelque chose à te vendre.",
       /* The roster sentence spells its own count, so the capture is a WORD and
@@ -1491,8 +1514,8 @@
       "If yours isn't here, Discord answers in about four minutes and you don't need an order to ask.":
         "Si la tienne n’y est pas, Discord répond en quatre minutes environ, et tu n’as pas besoin d’une commande pour poser la question.",
       "Do you need my account login?": "Avez-vous besoin de mes identifiants ?",
-      "For solo, yes — your booster signs in and plays, through a VPN in your region and inside the hours you set. For duo, no: they queue beside you from their own account and never see your login at all. Either way we never ask for your email password or your 2FA codes.":
-        "En solo, oui — ton booster se connecte et joue, via un VPN dans ta région et dans les horaires que tu fixes. En duo, non : il lance la file à côté de toi depuis son propre compte et ne voit jamais tes identifiants. Dans les deux cas, on ne demande jamais le mot de passe de ta boîte mail ni tes codes 2FA.",
+      "For solo, yes — your booster signs in and plays, through a VPN in your region and inside your normal hours. For duo, no: they queue beside you from their own account and never see your login at all. Either way we never ask for your email password or your 2FA codes.":
+        "En solo, oui — ton booster se connecte et joue, via un VPN dans ta région et dans tes horaires habituels. En duo, non : il lance la file à côté de toi depuis son propre compte et ne voit jamais tes identifiants. Dans les deux cas, on ne demande jamais le mot de passe de ta boîte mail ni tes codes 2FA.",
       "Can I play while the order is running?": "Puis-je jouer pendant la commande ?",
       "What happens if it goes past the estimate?": "Que se passe-t-il en cas de dépassement du délai ?",
       "A 15% credit applies automatically once the order runs past its window, and it shows on the order page without anyone asking. If it is badly over, we move it to a booster who is free.":
@@ -1533,7 +1556,6 @@
       "Starts at {}": "À partir de {}",
       "Apply bundle": "Appliquer le pack",
       "Applied": "Appliqué",
-      "Played in your preferred hours": "Joué à tes heures préférées",
 
       /* net wins / placements */
       "per game": "par partie",
@@ -2290,7 +2312,29 @@
       "Total, tax included": "Gesamt, inkl. MwSt.",
       "Continue": "Weiter",
       "Service": "Service",
+      // The centred game hero: H1, kicker and the one-line sub per ladder.
+      "Buy {} boosting": "{} Boosting kaufen",
+      "{} boosting": "{} Boosting",
+      "Solo, duo and flex — across NA and EU.": "Solo, Duo und Flex — auf NA und EU.",
+      "Competitive and unrated — across NA and EU.": "Wettkampf und Unranked — auf NA und EU.",
+      "Role-locked or flexible, hero pool respected.": "Rollenfest oder flexibel, Heldenpool bleibt.",
+      "Current-set comp knowledge, not last patch's.": "Comp-Wissen zum aktuellen Set, nicht zum letzten Patch.",
+      "Per-role SR, open queue or role queue.": "SR pro Rolle, offene Queue oder Rollenqueue.",
+      "1v1, 2v2 and 3v3 playlists, and tournament wins.": "1v1-, 2v2- und 3v3-Playlists und Turniersiege.",
+      "MMR by bracket, calibration, behaviour-score safe.": "MMR nach Bracket, Kalibrierung, Behaviour Score sicher.",
+      "RP climbs, badges and kill thresholds.": "RP-Aufstiege, Badges und Kill-Schwellen.",
+      "Premier CS Rating and Faceit levels.": "Premier CS Rating und Faceit-Level.",
       "Division boost": "Divisions-Boost",
+      // Step 1 of the order card — the four products and what each one is.
+      "What do you want boosted?": "Was willst du boosten?",
+      "Climb from where you are to the rank you want.":
+        "Steig von deinem Rang auf den, den du willst.",
+      "One win above your losses, at your current rank.":
+        "Ein Sieg mehr als deine Niederlagen, auf deinem Rang.",
+      "Your placement games, played by a booster.":
+        "Deine Platzierungsspiele, von einem Booster gespielt.",
+      "Live sessions with a coach. Your account stays yours.":
+        "Live-Sessions mit einem Coach. Dein Account bleibt deiner.",
       "Net wins": "Netto-Siege",
       "Placements": "Platzierungen",
       "Current rank": "Aktueller Rang",
@@ -2307,6 +2351,7 @@
       "Server": "Server",
       "Options": "Optionen",
       "Continue to checkout": "Weiter zur Kasse",
+      "Rank up": "Aufsteigen",
       "No account needed · Money-back until a booster is assigned · VPN matched to your region":
         "Kein Konto nötig · Geld zurück bis ein Booster zugewiesen ist · VPN passend zu deiner Region",
       "From": "Ab",
@@ -2539,8 +2584,8 @@
       "Yes. Email, then payment. We create the order under that address and email you a one-click link to follow it. Set a password later if you want one, or never.":
         "Ja. E-Mail, dann Zahlung. Wir erstellen die Bestellung unter dieser Adresse und mailen dir einen Ein-Klick-Link zum Verfolgen. Lege später ein Passwort fest, wenn du willst, oder nie.",
       "Is my account safe?": "Ist mein Konto sicher?",
-      "Your booster connects through a VPN in your region, appears offline, and plays inside the hours you set. We never ask for a Riot/Steam/Blizzard recovery email, never change your password, and never queue with other customers' accounts.":
-        "Dein Booster verbindet sich über ein VPN in deiner Region, erscheint offline und spielt in den von dir festgelegten Zeiten. Wir fragen nie nach einer Riot-/Steam-/Blizzard-Wiederherstellungs-E-Mail, ändern nie dein Passwort und spielen nie mit den Konten anderer Kunden.",
+      "Your booster connects through a VPN in your region, appears offline, and plays inside your normal hours. We never ask for a Riot/Steam/Blizzard recovery email, never change your password, and never queue with other customers' accounts.":
+        "Dein Booster verbindet sich über ein VPN in deiner Region, erscheint offline und spielt zu deinen üblichen Zeiten. Wir fragen nie nach einer Riot-/Steam-/Blizzard-Wiederherstellungs-E-Mail, ändern nie dein Passwort und spielen nie mit den Konten anderer Kunden.",
       "What if I want to play while the boost is running?":
         "Was, wenn ich während des Boosts spielen will?",
       "Pause it from the dashboard. The account is free within minutes and the timer stops. Resume when you're done.":
@@ -2613,8 +2658,8 @@
         "Diese neun haben ein aktives Board und genug Booster, um eine Bestellung schnell zu übernehmen. Einzelanfragen zu anderen Titeln nehmen wir über Discord an, aber es gibt dafür keine Seite und keinen Sofortpreis — wenn die Warteschlange sie nicht übernehmen kann, sagen wir das, statt das Geld zu nehmen.",
       "Why is Valorant cheaper than Counter-Strike 2?":
         "Warum ist Valorant günstiger als Counter-Strike 2?",
-      "A division is not the same amount of work in every game. Ladders are different lengths, matches are different lengths, and one rung near the top of a ladder can cost several near the bottom of another. Each title carries its own multiplier, and it is on screen before you sign in: the cheapest single division is $3 on Valorant and $8 on Counter-Strike 2.":
-        "Eine Division bedeutet nicht in jedem Spiel gleich viel Arbeit. Ladders sind unterschiedlich lang, Matches ebenso, und eine Sprosse nahe der Spitze einer Ladder kann so viel kosten wie mehrere am unteren Ende einer anderen. Jeder Titel hat seinen eigenen Multiplikator, und er steht vor der Anmeldung auf dem Bildschirm: die günstigste einzelne Division kostet 3 $ bei Valorant und 8 $ bei Counter-Strike 2.",
+      "A division is not the same amount of work in every game. Ladders are different lengths, matches are different lengths, and one rung near the top of a ladder can cost several near the bottom of another. Each title carries its own multiplier, and it is on screen before you sign in: the cheapest single division is $3 on Rocket League and $7 on Counter-Strike 2.":
+        "Eine Division bedeutet nicht in jedem Spiel gleich viel Arbeit. Ladders sind unterschiedlich lang, Matches ebenso, und eine Sprosse nahe der Spitze einer Ladder kann so viel kosten wie mehrere am unteren Ende einer anderen. Jeder Titel hat seinen eigenen Multiplikator, und er steht vor der Anmeldung auf dem Bildschirm: die günstigste einzelne Division kostet 3 $ bei Rocket League und 7 $ bei Counter-Strike 2.",
       "Does one booster cover several games?": "Deckt ein Booster mehrere Spiele ab?",
       "No. Everyone on the board plays exactly one title, and their profile carries the peak rank, the win rate, the on-time record and the orders they have delivered on it. Somebody claiming three ladders at once is somebody we did not hire.":
         "Nein. Jede Person im Kader spielt genau einen Titel, und ihr Profil zeigt Peak, Winrate, Pünktlichkeit und die dort gelieferten Bestellungen. Wer drei Ladders gleichzeitig für sich beansprucht, ist jemand, den wir nicht eingestellt haben.",
@@ -2622,8 +2667,8 @@
       "Yes, as two orders — each gets its own booster, price and dashboard. There is no cross-title bundle, because a discount spanning two boosters would be paying one of them less.":
         "Ja, als zwei Bestellungen — jede mit eigenem Booster, eigenem Preis und eigenem Dashboard. Ein titelübergreifendes Bundle gibt es nicht, denn ein Rabatt über zwei Booster hinweg hieße, einen von beiden schlechter zu bezahlen.",
       "Do prices change during a sale?": "Ändern sich die Preise während eines Sales?",
-      "SPLIT15 takes 15% off the whole catalogue with nothing to type. Each game page also carries bundle climbs at 19% to 37% off, and a bundle replaces the code rather than adding to it — there is only ever one discount on an order, and it is the larger of the two.":
-        "SPLIT15 zieht 15 % vom gesamten Katalog ab, ohne dass du etwas eingeben musst. Jede Spielseite führt außerdem Bundle-Aufstiege mit 19 % bis 37 % Rabatt, und ein Bundle ersetzt den Code, statt sich dazuzuaddieren — es gibt immer nur einen Rabatt pro Bestellung, und zwar den größeren von beiden.",
+      "SPLIT15 takes 15% off the whole catalogue with nothing to type — every title, every service, nothing to enter. There is only ever one discount on an order: a code you type replaces it rather than adding to it, so you always pay the better of the two, never both.":
+        "SPLIT15 zieht 15 % vom gesamten Katalog ab, ohne dass du etwas eingeben musst — jedes Spiel, jeder Service, nichts zu tippen. Es gibt immer nur einen Rabatt pro Bestellung: Ein Code, den du eingibst, ersetzt ihn, statt sich dazuzuaddieren — du zahlst also immer den besseren von beiden, nie beide.",
       "Nine titles, one guarantee.": "Neun Titel, eine Garantie.",
       "Refunded in full until a booster claims it, pro-rated after that, and claimed in 18 min on average.":
         "Volle Erstattung, bis ein Booster übernimmt, danach anteilig — im Schnitt in 18 Min. übernommen.",
@@ -2659,8 +2704,8 @@
         "Du siehst den vollen Preis, bevor du uns irgendetwas über dich verrätst. Genau darum ist alles so gebaut: Der Rechner ist das Erste auf jeder Seite, die angezeigte Zahl ist die, die du zahlst, und die Kasse fragt nur nach einer E-Mail, um den Bestell-Link zu schicken.",
       "Solo or duo": "Solo oder Duo",
       "The booster plays alone": "Der Booster spielt allein",
-      "Fastest and cheapest. You hand over the login, they connect through a VPN in your region, appear offline, and play inside the hours you set. You keep the account and can pause or take it back at any moment from the dashboard.":
-        "Am schnellsten und günstigsten. Du übergibst den Login, der Booster verbindet sich über ein VPN in deiner Region, erscheint offline und spielt in den von dir gesetzten Zeiten. Du behältst das Konto und kannst es jederzeit im Dashboard pausieren oder zurücknehmen.",
+      "Fastest and cheapest. You hand over the login, they connect through a VPN in your region, appear offline, and play inside your normal hours. You keep the account and can pause or take it back at any moment from the dashboard.":
+        "Am schnellsten und günstigsten. Du übergibst den Login, der Booster verbindet sich über ein VPN in deiner Region, erscheint offline und spielt zu deinen üblichen Zeiten. Du behältst das Konto und kannst es jederzeit im Dashboard pausieren oder zurücknehmen.",
       "You play every game": "Du spielst jedes Spiel",
       "Nobody logs into your account, ever. You queue with the booster, voice optional, and most of them will call rotations and review your mistakes on the way up. It costs more because it takes their time at your pace.":
         "Niemand meldet sich je bei deinem Konto an. Du spielst mit dem Booster in der Queue, Voice optional, und die meisten geben Rotationen an und besprechen deine Fehler auf dem Weg nach oben. Es kostet mehr, weil es ihre Zeit in deinem Tempo bindet.",
@@ -2740,8 +2785,8 @@
       "If yours isn't here, Discord answers in about four minutes and you don't need an order to ask.":
         "Ist deine nicht dabei: Auf Discord kommt die Antwort in etwa vier Minuten, und du brauchst keine Bestellung, um zu fragen.",
       "Do you need my account login?": "Braucht ihr meine Zugangsdaten?",
-      "For solo, yes — your booster signs in and plays, through a VPN in your region and inside the hours you set. For duo, no: they queue beside you from their own account and never see your login at all. Either way we never ask for your email password or your 2FA codes.":
-        "Bei Solo ja — dein Booster meldet sich an und spielt, über ein VPN in deiner Region und in den Zeiten, die du festlegst. Bei Duo nein: Er spielt von seinem eigenen Account aus neben dir und sieht deine Zugangsdaten nie. In beiden Fällen fragen wir nie nach dem Passwort deines E-Mail-Kontos oder deinen 2FA-Codes.",
+      "For solo, yes — your booster signs in and plays, through a VPN in your region and inside your normal hours. For duo, no: they queue beside you from their own account and never see your login at all. Either way we never ask for your email password or your 2FA codes.":
+        "Bei Solo ja — dein Booster meldet sich an und spielt, über ein VPN in deiner Region und zu deinen üblichen Zeiten. Bei Duo nein: Er spielt von seinem eigenen Account aus neben dir und sieht deine Zugangsdaten nie. In beiden Fällen fragen wir nie nach dem Passwort deines E-Mail-Kontos oder deinen 2FA-Codes.",
       "Can I play while the order is running?": "Kann ich spielen, während die Bestellung läuft?",
       "What happens if it goes past the estimate?": "Was passiert, wenn die Lieferzeit überschritten wird?",
       "A 15% credit applies automatically once the order runs past its window, and it shows on the order page without anyone asking. If it is badly over, we move it to a booster who is free.":
@@ -2778,7 +2823,6 @@
       "Starts at {}": "Ab {}",
       "Apply bundle": "Bundle anwenden",
       "Applied": "Angewendet",
-      "Played in your preferred hours": "Gespielt zu deinen Wunschzeiten",
 
       /* net wins / placements */
       "per game": "pro Spiel",
@@ -3422,8 +3466,8 @@
         "Sie geht aufs Board und ein verifizierter {}-Booster nimmt sie. Nimmt sie innerhalb von 24 Stunden niemand, erstattet sich die Bestellung von selbst.",
       "{} of them, {} only — {} or above, with a clean account history and a name you can look up. Order without naming anyone and it goes to whoever is free; name one and it waits for them.":
         "{} insgesamt, nur auf {} — {} oder höher, mit sauberem Account und einem Namen, den du nachschlagen kannst. Bestell ohne jemanden zu nennen und sie geht an den Nächsten, der frei ist; nenn einen und sie wartet auf ihn.",
-      "{} flags accounts on patterns, not accusations: a login from the other side of the world, a sudden change in hours, a win rate that doesn't look human. So we don't produce any of those patterns. Your booster connects through an enterprise VPN in your region, plays inside the hours you set, and keeps your settings.":
-        "{} greift Accounts wegen Mustern auf, nicht wegen Anschuldigungen: ein Login vom anderen Ende der Welt, plötzlich andere Spielzeiten, eine Winrate, die nicht menschlich aussieht. Also erzeugen wir keins dieser Muster. Dein Booster verbindet sich über ein Enterprise-VPN in deiner Region, spielt in den Zeiten, die du festlegst, und behält deine Einstellungen.",
+      "{} flags accounts on patterns, not accusations: a login from the other side of the world, a sudden change in hours, a win rate that doesn't look human. So we don't produce any of those patterns. Your booster connects through an enterprise VPN in your region, plays inside your normal hours, and keeps your settings.":
+        "{} greift Accounts wegen Mustern auf, nicht wegen Anschuldigungen: ein Login vom anderen Ende der Welt, plötzlich andere Spielzeiten, eine Winrate, die nicht menschlich aussieht. Also erzeugen wir keins dieser Muster. Dein Booster verbindet sich über ein Enterprise-VPN in deiner Region, spielt zu deinen üblichen Zeiten, und behält deine Einstellungen.",
       "Boosting is against {}'s terms of service. We have never had an account actioned for any of our {} clients and we recover any that are, but nobody honest will tell you the risk is zero — and anyone who does is selling you something.":
         "Boosting verstößt gegen die Nutzungsbedingungen von {}. Bei keinem unserer {} Kunden wurde je ein Account sanktioniert, und wir holen jeden zurück, bei dem es passiert — aber niemand, der ehrlich ist, sagt dir, das Risiko sei null. Wer das tut, will dir etwas verkaufen.",
       "Four": "Vier",

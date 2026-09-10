@@ -1721,6 +1721,66 @@
      follows the header's live bottom edge. The constants stay in the CSS as the
      `var()` fallbacks, which is what a no-JS page and the moment before the
      first measurement still get. */
+  /* ── the order card's two steps ───────────────────────────────────────────
+     Step 1 picks the product, step 2 configures it — the shape `initAccounts()`
+     already gives the accounts shop, and for the same reason: the four services
+     were a row of small words and the visitor who searched for one of them
+     arrived with another already configured.
+
+     THE SERVER RENDERS BOTH STEPS VISIBLE. That is deliberate and is the same
+     no-JS contract the accounts shop keeps: with scripting off the card is one
+     complete, priced configurator and a crawler reads every panel. This
+     function is the enhancement — it hides the one you are not on.
+
+     The step lives on <html> as well as on the card, because the sticky mobile
+     bar is a sibling of the whole page: it quotes a total and offers Checkout,
+     and on step 1 that is a price for an order nobody has chosen the product
+     for yet — and a way to skip the step entirely. CSS hides it, and the
+     resize nudge is what makes `initBarReserve()` re-measure the reserve it
+     publishes as `--mb-h`. */
+  var OB_STEP = "pick";
+
+  function obStep(name) {
+    var card = document.querySelector("[data-configurator]");
+    if (!card || !card.querySelector("[data-ob-step]")) return;
+    OB_STEP = name;
+    /* Scoped to the card, and the page-level flag is a DIFFERENT attribute
+       (`data-ob-view`). Stamping `data-ob-step` on <html> and then selecting on
+       it document-wide made <html> itself a step: the second call set
+       hidden on the root element and blanked the page. */
+    Array.prototype.forEach.call(card.querySelectorAll("[data-ob-step]"), function (el) {
+      el.hidden = el.getAttribute("data-ob-step") !== name;
+    });
+    card.setAttribute("data-step", name);
+    document.documentElement.setAttribute("data-ob-view", name);
+    // The bar's height changes with it; --mb-h is measured, never written down.
+    window.dispatchEvent(new Event("resize"));
+  }
+
+  function initOrderStep() {
+    var card = document.querySelector("[data-configurator]");
+    if (!card || !card.querySelector("[data-ob-step]")) return;
+    each("[data-ob-change]", function (b) {
+      b.addEventListener("click", function () {
+        obStep("pick");
+        /* Back to the question, not to wherever the page happened to be. The
+           card can sit above the viewport once someone has scrolled into the
+           add-ons, and a "Change" that appears to do nothing is worse than no
+           Change at all. 'instant' because ashfall.css sets scroll-behavior:
+           smooth globally and 'auto' means "use the CSS value". */
+        var top = card.getBoundingClientRect().top + window.scrollY - 90;
+        if (window.scrollY > top) window.scrollTo({ top: top, behavior: "instant" });
+      });
+    });
+    /* A bundle is a division climb, so applying one from the hero strip has
+       already answered step 1 — landing the visitor back on the question would
+       throw away the choice they just made. */
+    each("[data-bundle]", function (el) {
+      el.addEventListener("click", function () { obStep("build"); });
+    });
+    obStep("pick");
+  }
+
   function initBarReserve() {
     var bar = document.querySelector(".mobile-bar");
     if (!bar) return;
@@ -2073,7 +2133,14 @@
     });
 
     each("[role=tab][data-service]", function (el) {
-      el.addEventListener("click", function () { set({ service: el.getAttribute("data-service") }, "select_item"); });
+      el.addEventListener("click", function () {
+        set({ service: el.getAttribute("data-service") }, "select_item");
+        /* Step 1 is a screen, not a control: picking the product IS the
+           navigation. Keyboard arrows call click() to move the selection, so
+           this advances on those too — which is correct, the panel they are
+           selecting is on the other step. */
+        obStep("build");
+      });
       el.addEventListener("keydown", function (e) {
         var tabs = Array.prototype.slice.call(document.querySelectorAll("[role=tab][data-service]"));
         var i = tabs.indexOf(el);
@@ -2236,6 +2303,7 @@
       initBarReserve();
     }
 
+    initOrderStep();
     initHeader();
     initOrders();
     render();
@@ -4056,7 +4124,7 @@
      already fits points at nothing. */
   function initScrollHints() {
     var rails = [].slice.call(document.querySelectorAll(
-      ".ob-tabs, .ob-bundles-grid, .rvp-chips, .rst-chips, .gc-chips, .gc-svcs-grid, .gp-rv-grid, .gp-dps, .ac-fils"));
+      ".ob-bundles-grid, .rvp-chips, .rst-chips, .gc-chips, .gc-svcs-grid, .gp-rv-grid, .gp-dps, .ac-fils"));
     if (!rails.length) return;
     function sync(el) {
       var over = el.scrollWidth - el.clientWidth;
