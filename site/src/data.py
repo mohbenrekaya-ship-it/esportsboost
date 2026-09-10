@@ -898,9 +898,16 @@ ACCOUNT_DELIVERY = [
 # There is deliberately NO `level`. It came off the card on the business's
 # instruction — an unranked listing states its champion pool and nothing else
 # there — and nothing else rendered it, so nothing stores it.
-# `note` is the ONE caution row on the card — the handoff's rule is that six
-# identical green ticks read as marketing and the amber line is what makes the
-# rest credible, so every listing carries one.
+# `note` is the card's LAST row and every listing carries one. It was always an
+# amber caution — the handoff's rule is that six identical green ticks read as
+# marketing and the amber line is what makes the rest credible.
+#
+# ⚠ `note_good=True` flips that row to a green tick, and it is a deliberate
+# departure taken on the owner's call: the two unranked listings that clear
+# Riot's 20-champion floor say "Ranked ready" there instead of "Placements not
+# played". The cost is that those two cards now carry NO amber row at all, which
+# is the credibility device the handoff asks for — if a card ever reads as a
+# wall of ticks, this flag is why. Every OTHER listing keeps a real caution.
 #
 # ⚠ Every price, stock figure, level, champion count and essence figure below is
 # invented, exactly like BOOSTERS and REVIEW_DIST. Replace with the real stock
@@ -910,12 +917,12 @@ ACCOUNTS = [
          shape="ring1", price=dict(usd=29.90, eur=24.90, gbp=24.90),
          champs=20, be=0, stock=34,
          badge="", season=False,
-         note="Placements not played",),
+         note="Ranked ready", note_good=True,),
     dict(id="lol-unranked-premium", name="Unranked · Premium", tier="Unranked",
          shape="ring2", price=dict(usd=39.90, eur=34.90, gbp=34.90),
          champs=50, be=0, stock=24,
          badge="Best seller", season=False,
-         note="Placements not played",),
+         note="Ranked ready", note_good=True,),
     # The one listing sold on its ESSENCE rather than its champion pool: it
     # unlocks nothing and hands the buyer 30–60K to spend as they like. So it
     # carries a `be` RANGE and no `champs` at all — see the ⚠ above.
@@ -929,7 +936,12 @@ ACCOUNTS = [
          shape="ring3", price=dict(usd=44.90, eur=34.90, gbp=34.90),
          be=(30000, 60000), stock=14,
          badge="", season=False,
-         note="Placements not played",),
+         # ⚠ NOT "Ranked ready", and it must not become it: Riot requires 20
+         # champions OWNED to queue ranked, and this listing unlocks none. The
+         # essence covers it easily, but the buyer has to spend it first, so the
+         # row states the one step between them and a ranked queue. If this ever
+         # ships with a champion pool, it earns the other row.
+         note="Ranked at 20 champions",),
     dict(id="lol-iron", name="Iron", tier="Iron",
          shape="diamond", price=dict(usd=64.90, eur=49.90, gbp=49.90),
          be=0, stock=18,

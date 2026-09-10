@@ -6859,7 +6859,11 @@ def ac_tier_card(a, region):
          "spec", spec_row),
         ("check", "ok", "<span>%s</span>" % esc("Full email access")),
         ("check", "ok", "<span>%s</span>" % esc("Hand-levelled, never botted")),
-        ("warn", "caution", "<span>%s</span>" % esc(a["note"])),
+        # ⚠ The last row is an amber CAUTION unless the listing flags it good —
+        # see the ⚠ on `note` in data.py. A positive sentence under a warning
+        # triangle reads as a defect, so the glyph follows the claim.
+        (("check", "ok") if a.get("note_good") else ("warn", "caution"))
+        + ("<span>%s</span>" % esc(a["note"]),),
     ]
     rows = "".join(
         f'<li class="ac-ft is-{kind}">{_ico(ico, 16, "ico", stroke=True)}'
