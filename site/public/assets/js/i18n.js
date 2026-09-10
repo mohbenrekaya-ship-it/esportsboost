@@ -2096,7 +2096,7 @@
       "Ordered at 2am and the credentials were in my inbox before I closed the tab. Bigger champion pool than the account I main on.": "Commandé à 2 h du matin, les identifiants étaient dans ma boîte avant que je ferme l’onglet. Pool de champions plus large que sur mon compte principal.",
 
       "Random BE/Skins": "BE/skins aléatoires",
-      "No champions — pick your own": "Aucun champion — à toi de choisir",
+      "No champions": "Aucun champion",
 
       "{}+ champions": "{}+ champions",
 
@@ -3844,7 +3844,7 @@
       "Ordered at 2am and the credentials were in my inbox before I closed the tab. Bigger champion pool than the account I main on.": "Um 2 Uhr nachts bestellt, die Zugangsdaten waren im Postfach, bevor ich den Tab zugemacht habe. Größerer Champion-Pool als auf meinem Main.",
 
       "Random BE/Skins": "Zufällige BE/Skins",
-      "No champions — pick your own": "Keine Champions — du wählst selbst",
+      "No champions": "Keine Champions",
 
       "{}+ champions": "{}+ Champions",
 

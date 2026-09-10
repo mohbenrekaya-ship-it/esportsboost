@@ -1045,7 +1045,7 @@ def account_spec(a):
     # row above it. Without this the card would be one row short of every other
     # card on the rail.
     if not a.get("champs"):
-        return ("No champions — pick your own",)
+        return ("No champions",)
     return ("{}+ champions", a["champs"])
 
 
