@@ -6717,10 +6717,17 @@ def ac_mark(a, size=26):
 
 
 def _ac_be(n):
-    """"8k" / "124k" — blue essence as an account listing writes it. Unused
-    while every listing is random (see the ⚠ in data.py), and kept because it is
-    the one place the figure becomes a word if one ever comes back."""
-    return "%dk" % round(n / 1000.0) if n >= 1000 else str(n)
+    """"8K" / "124K" — blue essence as an account listing writes it, and the one
+    place the figure becomes a word. `n` is a figure or a `(lo, hi)` band, which
+    renders as "30–60K": the K is stated once at the end because that is how a
+    range is read aloud, and the dash is an EN DASH, never a hyphen."""
+    if isinstance(n, (tuple, list)):
+        lo, hi = int(n[0]), int(n[1])
+        # Both ends in thousands, or the row reads "30000–60K".
+        if lo >= 1000 and hi >= 1000:
+            return "%d–%dK" % (round(lo / 1000.0), round(hi / 1000.0))
+        return "%d–%d" % (lo, hi)
+    return "%dK" % round(n / 1000.0) if n >= 1000 else str(n)
 
 
 # ── Step 1 — the server ───────────────────────────────────────────────────
@@ -6827,8 +6834,9 @@ def ac_tier_card(a, region):
     # ⚠ A random listing gets ONE whole text node, not a `<b>` with the word
     # "Random" in it: French wants "BE/skins aléatoires" and German "Zufällige
     # BE/Skins", and a figure-carrier split would impose English word order on
-    # both. A listing WITH an essence figure keeps the split, because there the
-    # number is the thing that moves.
+    # both. A listing with an essence FIGURE OR BAND keeps the split, because
+    # there the number is the thing that moves and "blue essence" beside it is
+    # already a dictionary key in both languages.
     be_row = ("<span>Random BE/Skins</span>" if D.account_be_random(a)
               else f'<b>{esc(_ac_be(a["be"]))}</b> <span>blue essence</span>')
     # The third row is the MMR band on a ranked listing and the level plus the

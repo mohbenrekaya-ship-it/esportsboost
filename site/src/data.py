@@ -867,18 +867,29 @@ ACCOUNT_DELIVERY = [
 # the filter key and is derived, not typed. `shape` picks the rank mark's
 # geometry — three unranked variants share a tier and must not share a mark.
 #
-# ⚠ `be = 0` means the essence is RANDOM on that listing, not that it has none,
-# and it is 0 on ALL ELEVEN today: the stock is levelled in batches and what is
-# left over varies per account, so any figure would be one we cannot hold. The
-# card says "Random blue essence" instead. `account_be_random()` is the
-# discriminator and the card its only reader, so a listing given a real figure
-# still prints it — the field is kept for exactly that.
+# ⚠ `be` HAS THREE SHAPES and each one is a different claim:
+#   0            the essence is RANDOM, not absent — the stock is levelled in
+#                batches and the leftover varies per account, so any single
+#                figure would be one we cannot hold. The card says so.
+#   (lo, hi)     a BAND we can hold on every unit of that listing. It is a band
+#                rather than a number for the same reason the MMR row is: the
+#                figure moves per account and a point value would be false
+#                precision on ten of the eleven.
+#   an int       one exact figure. Nothing carries one today; the branch is kept
+#                because a sourced batch could.
+# `account_be_random()` and `account_be_band()` are the discriminators and the
+# tier card is their only reader.
 #
-# `champs` is on the UNRANKED listings only, where the champion pool is the
-# product — a smurf is bought to queue on, and how many champions it can pick is
-# the question. A ranked listing shows its MMR band there instead: the pool is
-# not why anybody buys Diamond. So the field is present on three listings and
-# absent on eight, and `account_spec()` reads it.
+# `champs` is on UNRANKED listings only, where the champion pool is usually the
+# product — a smurf is bought to queue on. A ranked listing shows its MMR band
+# there instead: the pool is not why anybody buys Diamond.
+#
+# ⚠ AN UNRANKED LISTING NEEDS A POOL **OR** A BAND, not both and never neither.
+# The spec row is one row and the two are alternatives: `lol-unranked-luxury`
+# unlocks NO champions and sells 30–60K essence instead, so it carries the band
+# and no `champs`, and its row says the pool is empty on purpose. A listing with
+# neither would draw a five-row card in a rail of six-row ones, which is what
+# the assert below catches.
 #
 # There is deliberately NO description. It was the old board's card paragraph;
 # the shop's card is emblem, name, six feature rows, price and CTA, and a
@@ -905,9 +916,12 @@ ACCOUNTS = [
          champs=50, be=0, stock=24,
          badge="Best seller", season=False,
          note="Placements not played",),
+    # The one listing sold on its ESSENCE rather than its champion pool: it
+    # unlocks nothing and hands the buyer 30–60K to spend as they like. So it
+    # carries a `be` RANGE and no `champs` at all — see the ⚠ above.
     dict(id="lol-unranked-luxury", name="Unranked · Luxury", tier="Unranked",
          shape="ring3", price=dict(usd=89.90, eur=79.90, gbp=79.90),
-         champs=80, be=0, stock=14,
+         be=(30000, 60000), stock=14,
          badge="", season=False,
          note="Placements not played",),
     dict(id="lol-iron", name="Iron", tier="Iron",
@@ -1024,14 +1038,36 @@ def account_spec(a):
     `<b>`-per-number split would impose English word order on the row.
     """
     mmr = account_mmr(a)
-    return (mmr,) if mmr else ("{}+ champions", a["champs"])
+    if mmr:
+        return (mmr,)
+    # An unranked listing with no pool is the essence account: it states that
+    # the pool is empty ON PURPOSE, which is the whole point of the band in the
+    # row above it. Without this the card would be one row short of every other
+    # card on the rail.
+    if not a.get("champs"):
+        return ("No champions — pick your own",)
+    return ("{}+ champions", a["champs"])
+
+
+def account_be_band(a):
+    """`(lo, hi)` when this listing states a BAND of blue essence, else None.
+
+    A band is what a batch we actually source can promise: the leftover essence
+    moves per account, so the honest claim is the range every unit clears, not a
+    point value. Kept separate from the random case because they are different
+    claims — one says "we cannot tell you", the other says "at least this much".
+    """
+    be = a.get("be")
+    return (int(be[0]), int(be[1])) if isinstance(be, (tuple, list)) and len(be) == 2 else None
 
 
 def account_be_random(a):
-    """Whether this listing's blue essence varies per account. See the ⚠ on the
-    catalogue: the unranked stock is levelled in batches and the leftover
-    essence is not a figure we can hold, so the card says so instead of
-    printing one."""
+    """Whether this listing's blue essence varies per account with no band we
+    can state. See the ⚠ on the catalogue: most of the stock is levelled in
+    batches and the leftover is not a figure we can hold, so the card says so
+    instead of printing one."""
+    if account_be_band(a):
+        return False
     return not int(a.get("be") or 0)
 
 
@@ -1215,14 +1251,21 @@ for _a in ACCOUNTS:
         "account %s has a struck price under what it charges" % _a["id"]
     assert _a["note"], "account %s has no caution row" % _a["id"]
     # A ranked listing must not carry a champion count (it has no row to show it
-    # in), and an unranked one MUST — the count is its whole spec row now, and a
-    # listing without one would draw a five-row card in a rail of six-row ones.
+    # in). An unranked one needs a pool OR an essence band — the spec row is one
+    # row and the two are alternatives, and a listing with neither would draw a
+    # five-row card in a rail of six-row ones.
     if account_kind(_a) == "unranked":
-        assert _a.get("champs"), \
-            "unranked account %s needs a champion count — it is its spec row" % _a["id"]
+        assert _a.get("champs") or account_be_band(_a), \
+            ("unranked account %s needs a champion pool or an essence band — "
+             "one of them is its spec row" % _a["id"])
     else:
         assert "champs" not in _a, \
             "account %s is ranked and should not carry a champion count" % _a["id"]
+    # A band is a claim about every unit sold, so it has to be a real one.
+    _band = account_be_band(_a)
+    if _band:
+        assert 0 < _band[0] < _band[1], \
+            "account %s states an essence band that is not a range" % _a["id"]
 # The three unranked listings share a tier and so a colour; a shared MARK would
 # make them one product on the shelf.
 assert len({a["shape"] for a in ACCOUNTS}) == len(ACCOUNTS), \
