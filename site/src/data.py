@@ -920,7 +920,13 @@ ACCOUNTS = [
     # unlocks nothing and hands the buyer 30–60K to spend as they like. So it
     # carries a `be` RANGE and no `champs` at all — see the ⚠ above.
     dict(id="lol-unranked-luxury", name="Unranked · Luxury", tier="Unranked",
-         shape="ring3", price=dict(usd=89.90, eur=79.90, gbp=79.90),
+         # ⚠ The figures the business set are the SHARD prices, not these rows:
+         # $44.90 on North America and €29.90 on Europe West. NA carries no
+         # delta so its row is the dollar figure as given, and the two European
+         # shards are ACCOUNT_EU_CUT (5) cheaper — so the euro ROW is 34.90 and
+         # renders as €29.90 where it was asked for. GBP mirrors EUR, the
+         # standing rule. Re-derive both from the shard price if the cut moves.
+         shape="ring3", price=dict(usd=44.90, eur=34.90, gbp=34.90),
          be=(30000, 60000), stock=14,
          badge="", season=False,
          note="Placements not played",),
