@@ -902,12 +902,12 @@ ACCOUNT_DELIVERY = [
 # amber caution — the handoff's rule is that six identical green ticks read as
 # marketing and the amber line is what makes the rest credible.
 #
-# ⚠ `note_good=True` flips that row to a green tick, and it is a deliberate
-# departure taken on the owner's call: the two unranked listings that clear
-# Riot's 20-champion floor say "Ranked ready" there instead of "Placements not
-# played". The cost is that those two cards now carry NO amber row at all, which
-# is the credibility device the handoff asks for — if a card ever reads as a
-# wall of ticks, this flag is why. Every OTHER listing keeps a real caution.
+# ⚠ Two unranked listings now say "Ranked ready" there — a POSITIVE sentence in
+# the row the handoff designed as a caution — and it keeps the amber mark
+# anyway, on the owner's call: the glyph stays in the same place on every card
+# in the rail. So on those two the mark is punctuation rather than a warning.
+# The alternative (a green tick on a good claim) was built and taken out; if it
+# returns it returns for the whole rail, not per listing.
 #
 # ⚠ Every price, stock figure, level, champion count and essence figure below is
 # invented, exactly like BOOSTERS and REVIEW_DIST. Replace with the real stock
@@ -917,12 +917,12 @@ ACCOUNTS = [
          shape="ring1", price=dict(usd=29.90, eur=24.90, gbp=24.90),
          champs=20, be=0, stock=34,
          badge="", season=False,
-         note="Ranked ready", note_good=True,),
+         note="Ranked ready",),
     dict(id="lol-unranked-premium", name="Unranked · Premium", tier="Unranked",
          shape="ring2", price=dict(usd=39.90, eur=34.90, gbp=34.90),
          champs=50, be=0, stock=24,
          badge="Best seller", season=False,
-         note="Ranked ready", note_good=True,),
+         note="Ranked ready",),
     # The one listing sold on its ESSENCE rather than its champion pool: it
     # unlocks nothing and hands the buyer 30–60K to spend as they like. So it
     # carries a `be` RANGE and no `champs` at all — see the ⚠ above.

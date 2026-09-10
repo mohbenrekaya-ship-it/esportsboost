@@ -6859,11 +6859,13 @@ def ac_tier_card(a, region):
          "spec", spec_row),
         ("check", "ok", "<span>%s</span>" % esc("Full email access")),
         ("check", "ok", "<span>%s</span>" % esc("Hand-levelled, never botted")),
-        # ⚠ The last row is an amber CAUTION unless the listing flags it good —
-        # see the ⚠ on `note` in data.py. A positive sentence under a warning
-        # triangle reads as a defect, so the glyph follows the claim.
-        (("check", "ok") if a.get("note_good") else ("warn", "caution"))
-        + ("<span>%s</span>" % esc(a["note"]),),
+        # ⚠ The last row keeps the amber caution glyph on EVERY listing, even
+        # where the sentence is now positive ("Ranked ready") — the owner's
+        # call: the mark stays in the same place on every card in the rail. A
+        # `note_good` flag flipped it to a green tick for one revision and was
+        # removed; if it comes back, it comes back for the whole rail or the
+        # cards stop scanning as one object.
+        ("warn", "caution", "<span>%s</span>" % esc(a["note"])),
     ]
     rows = "".join(
         f'<li class="ac-ft is-{kind}">{_ico(ico, 16, "ico", stroke=True)}'
