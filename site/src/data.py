@@ -969,7 +969,13 @@ ACCOUNTS = [
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-gold", name="Gold", tier="Gold",
-         shape="hexagon", price=dict(usd=64.90, eur=49.90, gbp=49.90),
+         # ⚠ The euro/sterling rows sit 10 under the dollar one, and they are
+         # set against SILVER rather than against this listing: Silver's euro
+         # row is 52.90, so anything under that puts a higher rank below a lower
+         # one and `test_account_prices_climb_with_rank()` reports it. 54.90
+         # clears Silver and stays under Platinum's 59.90. Re-check both
+         # neighbours if any of the three moves.
+         shape="hexagon", price=dict(usd=64.90, eur=54.90, gbp=54.90),
          be=0, stock=13,
          badge="", season=True,
          note="Previous season rewards",),
