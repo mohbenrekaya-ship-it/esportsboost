@@ -166,6 +166,19 @@ def build_session(order, base_url):
         q["total"], order.get("currency"),
         cents=bool(q.get("cents")), fixed=bool(q.get("fixed")))
 
+    # ⚠ THE FEE IS A SECOND LINE ITEM, ADDED AFTER THE `client_total` GUARD
+    # ABOVE HAS ALREADY PASSED — so the guard is checking the product total, not
+    # the amount the card is charged, and Stripe's page shows a number the site
+    # never did. That is the fee's stated purpose (see the ⚠ on
+    # pricing.SERVICE_FEE) and not an oversight in the guard: the guard's job is
+    # to stop the BROWSER moving the price, and it still does that.
+    #
+    # It rides in the same currency as the product line and is never converted.
+    # Zero means switched off, and then no line item is added at all — Stripe
+    # rejects a zero-amount line item, and an order showing "Service fee $0.00"
+    # would be worse than one showing nothing.
+    fee_cur, fee_amount = pricing.service_fee_for(order.get("currency"))
+
     params = {
         "mode": "payment",
         "success_url": base_url + "/checkout/success.html?session_id={CHECKOUT_SESSION_ID}",
@@ -178,6 +191,12 @@ def build_session(order, base_url):
         "line_items[0][price_data][product_data][description]": desc,
         # order details ride along so fulfilment (webhook) has what it needs
         "metadata[order_id]": order_id,
+        # ⚠ The fee is recorded because NOTHING ELSE RECORDS IT as a figure of
+        # its own. `order_row()` takes the stored total from Stripe's
+        # `amount_total`, which is fee-inclusive, so /ops revenue is correct but
+        # cannot tell fee from product. This is the only per-order trace of what
+        # was added at the till.
+        "metadata[fee]": ("%.2f" % pricing.SERVICE_FEE) if fee_amount else "",
         "metadata[game]": game,
         "metadata[service]": service,
         "metadata[detail]": q["summary"][:490],
@@ -229,6 +248,15 @@ def build_session(order, base_url):
         "metadata[discount]": str(q["discount"]),
         "metadata[subtotal]": str(q["subtotal"]),
     }
+    # The fee's own line item. Added only when it is positive, so SERVICE_FEE = 0
+    # leaves the session byte-for-byte what it was before the fee existed.
+    if fee_amount > 0:
+        params["line_items[1][quantity]"] = 1
+        params["line_items[1][price_data][currency]"] = fee_cur
+        params["line_items[1][price_data][unit_amount]"] = fee_amount
+        params["line_items[1][price_data][product_data][name]"] = (
+            pricing.SERVICE_FEE_LABEL)
+
     # Product-specific configuration, resolved through pricing's own clamps so
     # the metadata names what was CHARGED for, never what the body asked for. A
     # unit count or a coach that only exists in the summary sentence cannot be
