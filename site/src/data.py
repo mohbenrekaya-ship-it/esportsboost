@@ -914,12 +914,12 @@ ACCOUNT_DELIVERY = [
 # sheet before this page takes traffic.
 ACCOUNTS = [
     dict(id="lol-unranked-basic", name="Unranked · Basic", tier="Unranked",
-         shape="ring1", price=dict(usd=39.90, eur=34.90, gbp=34.90),
+         shape="ring1", price=dict(usd=29.90, eur=24.90, gbp=24.90),
          champs=20, be=0, stock=34,
          badge="", season=False,
          note="Ranked ready",),
     dict(id="lol-unranked-premium", name="Unranked · Premium", tier="Unranked",
-         shape="ring2", price=dict(usd=44.90, eur=39.90, gbp=39.90),
+         shape="ring2", price=dict(usd=39.90, eur=34.90, gbp=34.90),
          champs=50, be=0, stock=24,
          badge="Best seller", season=False,
          note="Ranked ready",),
@@ -928,20 +928,12 @@ ACCOUNTS = [
     # carries a `be` RANGE and no `champs` at all — see the ⚠ above.
     dict(id="lol-unranked-luxury", name="Unranked · Luxury", tier="Unranked",
          # ⚠ The figures the business set are the SHARD prices, not these rows:
-         # $44.90 on North America and €34.90 on Europe West. NA carries no
+         # $42.90 on North America and €29.90 on Europe West. NA carries no
          # delta so its row is the dollar figure as given, and the two European
-         # shards are ACCOUNT_EU_CUT (5) cheaper — so the euro ROW is 39.90 and
-         # renders as €34.90 where it was asked for. GBP mirrors EUR, the
+         # shards are ACCOUNT_EU_CUT (5) cheaper — so the euro ROW is 34.90 and
+         # renders as €29.90 where it was asked for. GBP mirrors EUR, the
          # standing rule. Re-derive both from the shard price if the cut moves.
-         #
-         # ⚠ The euro row was 34.90 (€29.90 EUW) until 2026-09-13. It moved with
-         # Premium's +5, NOT on its own merits: Premium's euro row went to 39.90
-         # and left Luxury cheaper than the tier below it, which breaks the rule
-         # that the three unranked listings climb in catalogue order — they sit
-         # in that order on one rail and `test_account_prices_climb_with_rank()`
-         # hard-fails on it. The dollar row did not move, so USD now ties
-         # Premium at 44.90 (a tie is allowed; an inversion is not).
-         shape="ring3", price=dict(usd=44.90, eur=39.90, gbp=39.90),
+         shape="ring3", price=dict(usd=42.90, eur=34.90, gbp=34.90),
          be=(30000, 60000), stock=14,
          badge="", season=False,
          # ⚠ "Ranked ready" on a listing that unlocks NO champions, which is
