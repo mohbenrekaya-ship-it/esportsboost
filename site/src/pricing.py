@@ -223,11 +223,22 @@ CHARGE_RATES = {"usd": 1.0, "eur": 0.92, "gbp": 0.79}
 # €2.75 / £2.36, which looks like a rounding artefact rather than a stated
 # charge, and the figure is a business decision rather than an amount of money
 # being moved between markets.
-SERVICE_FEE = float(os.environ.get("ESB_SERVICE_FEE", "2.99") or 0)
+# ⚠ 3.00 AND NOT 2.99, AND THE REASON IS ARITHMETIC RATHER THAN TASTE. Every
+# account price ends in .90 and every boost total is a whole unit, so a fee
+# ending in .99 turns $29.90 into $32.89 and $36 into $38.99 — a trailing 9 on
+# a board whose every other figure ends .90 or .00. A round 3 preserves both
+# endings: 29.90 + 3 = 32.90, 36 + 3 = 39. The owner's call (2026-09-15).
+SERVICE_FEE = float(os.environ.get("ESB_SERVICE_FEE", "3.00") or 0)
 
 # What Stripe prints beside it. The buyer reads this on the pay page and on the
 # card statement's receipt, so it names the charge rather than describing it.
-SERVICE_FEE_LABEL = "Service fee"
+#
+# ⚠ The LABEL is "Platform fee" while the constants are SERVICE_FEE* — the
+# owner's wording, chosen after the code was written. The mismatch is
+# deliberate rather than a rename half-done: this string is the only part a
+# customer ever sees, so it is the half that follows the business, and renaming
+# the constants would churn every reference for a word nobody reads.
+SERVICE_FEE_LABEL = "Platform fee"
 
 
 def service_fee_for(currency):
