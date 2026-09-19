@@ -914,12 +914,12 @@ ACCOUNT_DELIVERY = [
 # sheet before this page takes traffic.
 ACCOUNTS = [
     dict(id="lol-unranked-basic", name="Unranked · Basic", tier="Unranked",
-         shape="ring1", price=dict(usd=29.90, eur=24.90, gbp=24.90),
+         shape="ring1", price=dict(usd=49.90, eur=24.90, gbp=24.90),
          champs=20, be=0, stock=34,
          badge="", season=False,
          note="Ranked ready",),
     dict(id="lol-unranked-premium", name="Unranked · Premium", tier="Unranked",
-         shape="ring2", price=dict(usd=39.90, eur=34.90, gbp=34.90),
+         shape="ring2", price=dict(usd=59.90, eur=34.90, gbp=34.90),
          champs=50, be=0, stock=24,
          badge="Best seller", season=False,
          note="Ranked ready",),
@@ -928,12 +928,12 @@ ACCOUNTS = [
     # carries a `be` RANGE and no `champs` at all — see the ⚠ above.
     dict(id="lol-unranked-luxury", name="Unranked · Luxury", tier="Unranked",
          # ⚠ The figures the business set are the SHARD prices, not these rows:
-         # $42.90 on North America and €29.90 on Europe West. NA carries no
+         # $62.90 on North America and €29.90 on Europe West. NA carries no
          # delta so its row is the dollar figure as given, and the two European
          # shards are ACCOUNT_EU_CUT (5) cheaper — so the euro ROW is 34.90 and
          # renders as €29.90 where it was asked for. GBP mirrors EUR, the
          # standing rule. Re-derive both from the shard price if the cut moves.
-         shape="ring3", price=dict(usd=42.90, eur=34.90, gbp=34.90),
+         shape="ring3", price=dict(usd=62.90, eur=34.90, gbp=34.90),
          be=(30000, 60000), stock=14,
          badge="", season=False,
          # ⚠ "Ranked ready" on a listing that unlocks NO champions, which is
@@ -946,17 +946,17 @@ ACCOUNTS = [
          # support ticket it produces is "I cannot queue ranked".
          note="Ranked ready",),
     dict(id="lol-iron", name="Iron", tier="Iron",
-         shape="diamond", price=dict(usd=64.90, eur=49.90, gbp=49.90),
+         shape="diamond", price=dict(usd=84.90, eur=49.90, gbp=49.90),
          be=0, stock=18,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-bronze", name="Bronze", tier="Bronze",
-         shape="triangle", price=dict(usd=49.90, eur=49.90, gbp=49.90),
+         shape="triangle", price=dict(usd=69.90, eur=49.90, gbp=49.90),
          be=0, stock=16,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-silver", name="Silver", tier="Silver",
-         shape="pentagon", price=dict(usd=52.90, eur=52.90, gbp=52.90),
+         shape="pentagon", price=dict(usd=72.90, eur=52.90, gbp=52.90),
          be=0, stock=15,
          badge="", season=True,
          note="Previous season rewards",),
@@ -967,12 +967,12 @@ ACCOUNTS = [
          # one and `test_account_prices_climb_with_rank()` reports it. 54.90
          # clears Silver and stays under Platinum's 59.90. Re-check both
          # neighbours if any of the three moves.
-         shape="hexagon", price=dict(usd=64.90, eur=54.90, gbp=54.90),
+         shape="hexagon", price=dict(usd=84.90, eur=54.90, gbp=54.90),
          be=0, stock=13,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-platinum", name="Platinum", tier="Platinum",
-         shape="octagon", price=dict(usd=89.90, eur=59.90, gbp=59.90),
+         shape="octagon", price=dict(usd=109.90, eur=59.90, gbp=59.90),
          be=0,
          stock=11, badge="", season=True,
          note="Previous season rewards",),
@@ -980,17 +980,17 @@ ACCOUNTS = [
     # figure nobody chose. €74.90 sits in the Platinum→Diamond gap so the ladder
     # stays ordered; replace it with the real number.
     dict(id="lol-emerald", name="Emerald", tier="Emerald",
-         shape="kite", price=dict(usd=129.90, eur=74.90, gbp=74.90),
+         shape="kite", price=dict(usd=149.90, eur=74.90, gbp=74.90),
          be=0, stock=12,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-diamond", name="Diamond", tier="Diamond",
-         shape="facet", price=dict(usd=199.90, eur=89.90, gbp=89.90),
+         shape="facet", price=dict(usd=219.90, eur=89.90, gbp=89.90),
          be=0, stock=11,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-master", name="Master", tier="Master",
-         shape="star", price=dict(usd=289.90, eur=189.90, gbp=189.90),
+         shape="star", price=dict(usd=309.90, eur=189.90, gbp=189.90),
          be=0, stock=10,
          badge="", season=True,
          note="Previous season rewards",),
