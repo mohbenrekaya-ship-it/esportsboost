@@ -915,12 +915,12 @@ ACCOUNT_DELIVERY = [
 ACCOUNTS = [
     dict(id="lol-unranked-basic", name="Unranked · Basic", tier="Unranked",
          shape="ring1", price=dict(usd=49.90, eur=24.90, gbp=24.90),
-         champs=20, be=0, stock=34,
+         champs=20, be=0, hours=100, stock=34,
          badge="", season=False,
          note="Ranked ready",),
     dict(id="lol-unranked-premium", name="Unranked · Premium", tier="Unranked",
          shape="ring2", price=dict(usd=59.90, eur=34.90, gbp=34.90),
-         champs=50, be=0, stock=24,
+         champs=50, be=0, hours=150, stock=24,
          badge="Best seller", season=False,
          note="Ranked ready",),
     # The one listing sold on its ESSENCE rather than its champion pool: it
@@ -934,7 +934,7 @@ ACCOUNTS = [
          # renders as €29.90 where it was asked for. GBP mirrors EUR, the
          # standing rule. Re-derive both from the shard price if the cut moves.
          shape="ring3", price=dict(usd=62.90, eur=34.90, gbp=34.90),
-         be=(30000, 60000), stock=14,
+         be=(30000, 60000), hours=150, stock=14,
          badge="", season=False,
          # ⚠ "Ranked ready" on a listing that unlocks NO champions, which is
          # the owner's explicit call (2026-09-10) after being told the rest of
@@ -947,17 +947,17 @@ ACCOUNTS = [
          note="Ranked ready",),
     dict(id="lol-iron", name="Iron", tier="Iron",
          shape="diamond", price=dict(usd=84.90, eur=49.90, gbp=49.90),
-         be=0, stock=18,
+         be=0, hours=120, stock=18,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-bronze", name="Bronze", tier="Bronze",
          shape="triangle", price=dict(usd=69.90, eur=49.90, gbp=49.90),
-         be=0, stock=16,
+         be=0, hours=200, stock=16,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-silver", name="Silver", tier="Silver",
          shape="pentagon", price=dict(usd=72.90, eur=52.90, gbp=52.90),
-         be=0, stock=15,
+         be=0, hours=300, stock=15,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-gold", name="Gold", tier="Gold",
@@ -968,30 +968,30 @@ ACCOUNTS = [
          # clears Silver and stays under Platinum's 59.90. Re-check both
          # neighbours if any of the three moves.
          shape="hexagon", price=dict(usd=84.90, eur=54.90, gbp=54.90),
-         be=0, stock=13,
+         be=0, hours=450, stock=13,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-platinum", name="Platinum", tier="Platinum",
          shape="octagon", price=dict(usd=109.90, eur=59.90, gbp=59.90),
          be=0,
-         stock=11, badge="", season=True,
+         hours=650, stock=11, badge="", season=True,
          note="Previous season rewards",),
     # ⚠ NOT in the business's price list — the only listing still carrying a
     # figure nobody chose. €74.90 sits in the Platinum→Diamond gap so the ladder
     # stays ordered; replace it with the real number.
     dict(id="lol-emerald", name="Emerald", tier="Emerald",
          shape="kite", price=dict(usd=149.90, eur=74.90, gbp=74.90),
-         be=0, stock=12,
+         be=0, hours=900, stock=12,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-diamond", name="Diamond", tier="Diamond",
          shape="facet", price=dict(usd=219.90, eur=89.90, gbp=89.90),
-         be=0, stock=11,
+         be=0, hours=1300, stock=11,
          badge="", season=True,
          note="Previous season rewards",),
     dict(id="lol-master", name="Master", tier="Master",
          shape="star", price=dict(usd=309.90, eur=189.90, gbp=189.90),
-         be=0, stock=10,
+         be=0, hours=2500, stock=10,
          badge="", season=True,
          note="Previous season rewards",),
 ]
@@ -1074,6 +1074,60 @@ def account_spec(a):
     if not a.get("champs"):
         return ("No champions",)
     return ("{}+ champions", a["champs"])
+
+
+# ── The per-hour row ───────────────────────────────────────────────────────
+# The card's seventh feature row: what the account costs against the play it
+# stands in for. It is the argument `CATALOG`-style FAQ copy already makes in
+# prose — the price tracks the hours behind the account — moved to where the
+# buyer is actually comparing two listings.
+#
+# ⚠ `hours` IS AN ESTIMATE OF THE BUYER'S OWN PLAY TIME, and it is invented,
+# exactly like every price and stock figure on this page. Replace it with a real
+# figure before this page takes serious traffic.
+#
+# ⚠ IT IS DELIBERATELY NOT DERIVED FROM THE BOOSTING ENGINE, and that is worth
+# knowing before someone "fixes" it to reuse `pricing.play_hours()`: that
+# function answers how long a BOOSTER takes — about 56 hours to Gold on the
+# current ETA schedule — where a normal player takes several hundred. Quoting our
+# own ETA here would understate the buyer's time by five to ten times and produce
+# a per-hour figure that argues AGAINST the sale.
+#
+# ⚠ THE CLAIM IS COMPUTED, NEVER AUTHORED — `account_badge()`'s rule, for the
+# same reason: these prices moved four times in one day, and a typed
+# "$0.42/hour" would have gone stale three times over.
+ACCOUNT_PER_HOUR_CEIL = 1.0
+
+
+def account_hours(a):
+    """Hours of play this listing stands in for. See the ⚠ above."""
+    return int(a.get("hours") or 0)
+
+
+def account_per_hour(a, region="", currency=""):
+    """What one hour of that play costs at this listing's price on this shard.
+
+    Shard- and currency-aware for the same reason every other figure on the card
+    is: Basic is $49.90 on North America and €24.90 on Europe West, which are
+    two different per-hour rates for one account."""
+    hrs = account_hours(a)
+    if not hrs:
+        return 0.0
+    return account_price(a, region, currency) / hrs
+
+
+def account_per_hour_holds(a):
+    """Whether the under-the-ceiling claim is true on EVERY shard and in EVERY
+    currency this listing can be sold in.
+
+    All of them, not the reference shard: the row is one sentence on a card that
+    re-prices when the visitor changes server or currency, so a claim true in
+    dollars on North America and false in euros on Europe West would be a lie to
+    exactly the readers it was not checked against."""
+    if not account_hours(a):
+        return False
+    return all(account_per_hour(a, s["region"], c) < ACCOUNT_PER_HOUR_CEIL
+               for s in ACCOUNT_SERVERS for c in ACCOUNT_CURRENCIES)
 
 
 def account_be_band(a):
@@ -1277,6 +1331,20 @@ for _a in ACCOUNTS:
         _a["was"][c] > _a["price"][c] for c in ACCOUNT_CURRENCIES), \
         "account %s has a struck price under what it charges" % _a["id"]
     assert _a["note"], "account %s has no caution row" % _a["id"]
+    # ⚠ THE PER-HOUR ROW IS ON EVERY CARD OR ON NONE, so this is fatal rather
+    # than a row that quietly drops itself: every listing draws the same seven
+    # rows, and one card short is a ragged rail. It fires when a re-price lifts a
+    # listing over ACCOUNT_PER_HOUR_CEIL on ANY shard in ANY currency — which is
+    # the moment the sentence stops being true, and is exactly when somebody
+    # should be told rather than left to ship it. The fix is the `hours` estimate
+    # or the price, not the assert.
+    assert account_per_hour_holds(_a), (
+        "account %s costs %.2f/hour at worst, over the %.2f the card claims — "
+        "re-check its `hours` estimate or its price"
+        % (_a["id"],
+           max(account_per_hour(_a, _s["region"], _c)
+               for _s in ACCOUNT_SERVERS for _c in ACCOUNT_CURRENCIES),
+           ACCOUNT_PER_HOUR_CEIL))
     # A ranked listing must not carry a champion count (it has no row to show it
     # in). An unranked one needs a pool OR an essence band — the spec row is one
     # row and the two are alternatives, and a listing with neither would draw a

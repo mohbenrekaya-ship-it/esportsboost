@@ -6857,6 +6857,28 @@ def ac_tier_card(a, region):
         # `account_kind()`, so nothing is authored twice.
         ("users" if D.account_kind(a) == "unranked" else "shield-check",
          "spec", spec_row),
+        # ⚠ The per-hour row. The FIGURE is `ACCOUNT_PER_HOUR_CEIL` in every
+        # currency — the same digits, never converted, which is the `fixed` rule
+        # this product's whole price table already follows and is why it goes
+        # through `money_multi()`: i18n.js's reformatStaticMoney() then swaps
+        # $1 → €1 → £1 on a currency change as a LOOKUP, so the row needs no
+        # client-side arithmetic and cannot disagree with the price above it.
+        #
+        # Three nodes, not one sentence: the words either side stay whole
+        # translatable text nodes with the money between them, per the
+        # whole-text-node rule. French and German both keep this word order.
+        #
+        # ⚠ It is a CEILING, not the listing's own rate. Printing the exact
+        # figure would make Diamond ($0.17) read as better value than Basic
+        # ($0.50), which is true and is an argument for trading up — but it also
+        # prices the cheap end out of its own row. `account_per_hour()` is there
+        # if that call is ever reversed. data.py asserts the ceiling holds on
+        # every shard in every currency, so this sentence cannot go stale
+        # silently — a re-price that breaks it fails the build.
+        ("clock", "ok",
+         '<span>Less than</span> %s <span>per hour of play</span>'
+         % money_multi({c: D.ACCOUNT_PER_HOUR_CEIL for c in D.ACCOUNT_CURRENCIES},
+                       cents=False)),
         ("check", "ok", "<span>%s</span>" % esc("Full email access")),
         ("check", "ok", "<span>%s</span>" % esc("Hand-levelled, never botted")),
         # ⚠ The last row keeps the amber caution glyph on EVERY listing, even

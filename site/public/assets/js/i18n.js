@@ -1852,6 +1852,8 @@
       "{} accounts": "Comptes {}",
       "Level 30 and ranked, on NA, EUW, EUNE and OCE. Full email access on every one, so you change the recovery mailbox and the password the moment it lands and it is genuinely yours.":
         "Niveau 30 et classés, sur NA, EUW, EUNE et OCE. Accès complet à l’e-mail sur chacun : tu changes la boîte de récupération et le mot de passe dès la livraison, et le compte est vraiment à toi.",
+      "Less than": "Moins de",
+      "per hour of play": "par heure de jeu",
       "Full email access": "Accès complet à l’e-mail",
       "{}-day replacement": "Remplacement sous {} jours",
       "Within the hour": "Sous une heure",
@@ -3600,6 +3602,8 @@
       "{} accounts": "{}-Accounts",
       "Level 30 and ranked, on NA, EUW, EUNE and OCE. Full email access on every one, so you change the recovery mailbox and the password the moment it lands and it is genuinely yours.":
         "Level 30 und ranked, auf NA, EUW, EUNE und OCE. Bei jedem voller E-Mail-Zugang — du änderst Wiederherstellungs-Postfach und Passwort direkt bei der Lieferung, und der Account gehört wirklich dir.",
+      "Less than": "Weniger als",
+      "per hour of play": "pro Spielstunde",
       "Full email access": "Voller E-Mail-Zugang",
       "{}-day replacement": "Ersatz innerhalb von {} Tagen",
       "Within the hour": "Innerhalb einer Stunde",
