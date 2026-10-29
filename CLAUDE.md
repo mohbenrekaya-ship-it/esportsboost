@@ -3564,6 +3564,71 @@ header ◄─ 302 return_to ◄─ GET /api/auth/<provider>/callback  (Set-Cooki
   button asset (same trademark rule as `pay_marks()`).
 - **Restart the server after touching these files** — `/api/auth/*` lives in `serve.py`, no watcher.
 
+## The ad films — `site/tools/video_lib.py` + `gen_videos_lol.py`
+
+Five 9:16 ad films for League of Legends, English voice-over, rendered from code:
+scenes drawn frame by frame with PIL, ElevenLabs speech, synth music, ffmpeg →
+1080×1920 MP4 in `site/assets-out/videos/`. **Ported from the Enevie project**
+(`~/Claude/Enevie lp/outils/video_lib.py`) with the solar drawing cut out and the
+brand swapped to Ashfall; the engine — timing, music, ducking, encode — is
+unchanged, so a fix here is worth carrying back there.
+
+```bash
+python3 site/tools/gen_videos_lol.py                       # all five
+python3 site/tools/gen_videos_lol.py 1-hard-stuck          # one
+NO_VO=1 python3 site/tools/gen_videos_lol.py --preview     # contact sheets, no credits
+```
+
+It needs numpy + Pillow + imageio-ffmpeg, which this machine only has in the
+Enevie venv: `~/Claude/"Enevie lp"/outils/.venv/bin/python`. The scripts and the
+figures they are allowed to quote are in
+[marketing/video-scripts-lol-en.md](marketing/video-scripts-lol-en.md).
+
+- **A SCENE'S LENGTH IS ITS VOICE LINE.** `render()` renders the speech first and
+  gives the scene `vo_delay + speech + hold` seconds; `min_dur` is only a floor for
+  a scene with no voice. Write the line, never a duration — and never "fix" a
+  timing by padding `min_dur` past the speech, which desynchronises every `sfx`
+  hung off `ctx.vo_end`.
+- **Every price spoken is read from `pricing.quote()` at render time** (`P()` in
+  the generator), so a re-price cannot leave a film quoting a figure the checkout
+  does not charge. ⚠ The one half that does NOT follow is the voice: the line
+  spells the number out ("twenty-five dollars"), so a re-price means re-reading
+  the lines and re-rendering, exactly like the i18n keys that carry a figure.
+- ⚠ **NO FILM MAY QUOTE THE REVIEW SCORE, THE REVIEW COUNT, THE CLIENT COUNT OR
+  THE ROSTER SIZE.** They are invented placeholders (see
+  [Placeholder data](#placeholder-data--do-not-present-as-real)), and an ad is the
+  one surface where that stops being a to-do and becomes a false advertising
+  claim. `EndCard` therefore carries the three `GUARANTEES_INLINE` promises and no
+  rating — the star row and the review line were deleted from the Enevie end card
+  on the way in, deliberately. Do not add them back.
+- ⚠ **`4-watch-it-happen` sells the screen share, and `streams.py` does not
+  exist.** Nothing opens a Discord channel and nothing tells a booster to share.
+  Every order that film wins is a promise a person keeps by hand — see
+  [Watch live](#watch-live--the-boosters-screen-share--watch_panel). Arrange it
+  with ops or do not ship that one; the other four do not depend on it.
+- **Ranks are drawn from `D.tier_color()`**, never from a palette in the video
+  code, so a Gold mark in a film is the same gold as on the page. `rank_mark()` is
+  the division numeral — the publisher's emblems are IP, the same rule
+  `pay_marks()` and the site's own `_EMBLEM` follow — and `lift()` pulls a mark
+  colour toward the text colour before it is used as type, because Iron's `#8e8f94`
+  reads as disabled text at 90px. Same trick as `.ob-climb`.
+- **`ladder()` draws ONE SEGMENT PER TIER, not per rung.** League's 29 rungs across
+  a phone frame is a 32px smear and a four-rung climb reads as a blob; nine tier
+  segments read at a glance, which is also how the game page's own track is built.
+- **The voice is Will** (`VOICE_WILL`, American, young, relaxed) — the owner
+  listened to three English voices on a real script line and picked it
+  (2026-10-29). `ELEVEN_VOICE_ID` overrides; `ELEVEN_LANG` defaults to `en`,
+  because `tts_eleven()` arrived from Enevie with `'fr'` hardcoded. The key is read
+  from `~/.elevenlabs_key` and never printed, and every line is cached under
+  `site/tools/.cache/tts` by a hash of (voice, model, settings, text) — so
+  re-rendering after a VISUAL change costs nothing. Changing one word in a line
+  re-bills that line only.
+- **`NO_VO=1` renders the pictures with music only** and spends no credits; add
+  `--preview` for a contact sheet of every scene instead of an encode. Both are
+  how you iterate on a layout.
+- **The rendered MP4s and the TTS cache are gitignored.** The repo keeps the
+  recipe — the generator and the scripts — not the dish.
+
 ## CRO audit constraints
 
 `CRO-AUDIT.md` (+ `.fr.md` translation) is the audit this build answers; the README lists which

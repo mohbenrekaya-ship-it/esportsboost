@@ -88,3 +88,15 @@ stock.ndjson
 # And the import sheets themselves, which are the same secret in transit.
 *.accounts.txt
 site/stock-in/
+
+# The ad films' TTS cache (site/tools/video_lib.py). One wav per spoken line,
+# keyed by voice+text — regenerated on demand and worth nothing in git.
+site/tools/.cache/
+
+# The rendered films themselves. A 20-second 1080x1920 MP4 is ~4 MB and every
+# re-render writes a new one; the SCRIPT is the source (site/tools/gen_videos_lol.py
+# + marketing/video-scripts-lol-en.md), so the repo keeps the recipe, not the dish.
+site/assets-out/videos/*.mp4
+# mix_and_encode() writes this beside the film and deletes it on success;
+# a crashed render leaves one behind.
+site/assets-out/videos/.*.wav
