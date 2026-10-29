@@ -100,3 +100,20 @@ site/assets-out/videos/*.mp4
 # mix_and_encode() writes this beside the film and deletes it on success;
 # a crashed render leaves one behind.
 site/assets-out/videos/.*.wav
+# The renderer's own scratch directory, removed when a render completes cleanly.
+site/assets-out/videos/.*.hf-transaction-*/
+
+# The ad films (site/tools/films). The repo keeps the RECIPE — the scripts, the
+# index.html of each film and the build chain — never the output or the deps.
+site/tools/films/node_modules/
+site/tools/films/bin/
+site/tools/films/build/
+site/tools/films/*/.hyperframes/
+site/tools/films/*/node_modules/
+# Each film's assets are COPIES of _template/assets (font, logo, GSAP): five copies
+# is 10 MB of duplication, and build_film.py re-syncs any that are missing.
+site/tools/films/*/assets/
+!site/tools/films/_template/assets/
+# Generated per film by build_film.py from the voice take:
+site/tools/films/*/assets/timing.js
+site/tools/films/*/assets/bande-son.wav

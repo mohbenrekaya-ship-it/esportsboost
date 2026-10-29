@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <!-- eSports Boost film "Notifications". Timing: assets/timing.js, written by ../build_film.py — never edit it by hand.
+         THE PLACE: a phone lock screen at 2 a.m. The film moves: phone in frame -> into the screen -> the stack of
+         losses -> out of the phone as the season blurs past -> one notification that is worth waiting for -> the close.
+         SAFE ZONE (Reels/Meta): anything that must be read sits between y=180 and y=1550. -->
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/timing.js"></script>
+    <script>
+      window.__hf = window.__hf || {};
+      window.__hf.buildReady = window.__hf.buildReady || {};
+      const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+      window.W = (w, after = 0, end = false) => {
+        for (const x of VO.words) if (x.s >= after - 1e-6 && norm(x.w) === w) return end ? x.e : x.s;
+        throw new Error("word not found: " + w);
+      };
+    </script>
+    <style>
+      @font-face { font-family: "MontserratE"; src: url("assets/fonts/Montserrat.ttf") format("truetype"); font-weight: 100 900; }
+      :root {
+        --bg: #06060a; --bg-2: #08080d; --panel: #0e0e16; --hair: #262632;
+        --ink: #f4f1ec; --muted: #a8a5b2; --dim: #8b8b99;
+        --ember: #ff4a1f; --ember-lit: #ff6a3d; --amber: #ffb84c; --green: #34c77b; --red: #e0574f;
+        --grad: linear-gradient(160deg, #ff6a3d 0%, #ff4a1f 100%);
+        --grad-h: linear-gradient(90deg, #ff6a3d 0%, #ff4a1f 100%);
+        --silver: #a3adb8; --gold: #e0ac3e;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: "MontserratE", sans-serif; color: var(--ink); }
+      .layer { position: absolute; inset: 0; }
+      .abs { position: absolute; }
+      .m { overflow: hidden; padding: 14px 0 6px; margin: -14px 0 -6px; }
+
+      /* Ember haze behind everything — the site's own ground, not flat black. */
+      #haze { background: radial-gradient(760px 620px at 50% 24%, rgba(255,74,31,.20), transparent 70%),
+                          radial-gradient(900px 700px at 50% 100%, rgba(255,106,61,.10), transparent 70%), var(--bg); }
+
+      /* ——— The title, always on the first frame (platform autoplay) ——— */
+      #title { left: 70px; top: 196px; width: 940px; text-align: center; z-index: 7; }
+      #t1 { font-size: 62px; font-weight: 800; letter-spacing: .01em; color: var(--ink); }
+      #t2 { font-size: 72px; font-weight: 900; color: var(--ember); margin-top: 6px; }
+
+      /* ——— The phone ——— */
+      #phone { left: 190px; top: 452px; width: 700px; height: 1120px; z-index: 4; }
+      #shell { position: absolute; inset: 0; border-radius: 76px; background: linear-gradient(170deg, #15151d, #0a0a10);
+               border: 3px solid #2a2a36; box-shadow: 0 50px 120px rgba(0,0,0,.75), 0 0 0 10px rgba(255,255,255,.02); }
+      #screen { position: absolute; inset: 14px; border-radius: 64px; overflow: hidden;
+                background: radial-gradient(520px 420px at 50% 16%, rgba(255,74,31,.16), transparent 68%), #07070c; }
+      #notch { position: absolute; left: 50%; transform: translateX(-50%); top: 26px; width: 190px; height: 34px; border-radius: 20px; background: #05050a; }
+      #clock { position: absolute; left: 0; right: 0; top: 96px; text-align: center; }
+      #hh { font-size: 118px; font-weight: 300; letter-spacing: -.02em; color: #fff; line-height: 1; }
+      #dd { font-size: 30px; font-weight: 600; color: var(--dim); margin-top: 10px; letter-spacing: .04em; }
+
+      /* ——— Notifications ——— */
+      #feed { position: absolute; left: 34px; right: 34px; top: 296px; }
+      .note { display: flex; align-items: center; gap: 20px; background: rgba(28,28,38,.92); border: 1px solid var(--hair);
+              border-radius: 30px; padding: 22px 24px; margin-bottom: 18px; backdrop-filter: blur(8px); }
+      .ico { width: 74px; height: 74px; border-radius: 20px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+             font-size: 34px; font-weight: 900; color: #07070c; }
+      .ico.loss { background: var(--red); }
+      .ico.esb { background: var(--grad); }
+      .nt { flex: 1 1 auto; min-width: 0; }
+      .nh { font-size: 30px; font-weight: 800; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+      .nb { font-size: 40px; font-weight: 800; color: var(--ink); margin-top: 4px; white-space: nowrap; }
+      .nb .amt { color: var(--red); }
+      .ago { font-size: 28px; font-weight: 600; color: var(--dim); flex: 0 0 auto; align-self: flex-start; margin-top: 6px; }
+
+      /* the demotion card, bigger and red */
+      #demote { background: rgba(60,20,16,.94); border-color: rgba(224,87,79,.55); }
+      #demote .nb { color: #ffd9d3; }
+
+      /* ——— The season blur (shot D) ——— */
+      #season { left: 0; right: 0; top: 620px; text-align: center; z-index: 6; opacity: 0; }
+      #sNum { font-size: 250px; font-weight: 900; color: var(--ink); line-height: .92; letter-spacing: -.03em; }
+      #sLab { font-size: 54px; font-weight: 800; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+      #sRank { display: inline-flex; align-items: center; gap: 18px; margin-top: 46px; padding: 20px 40px; border-radius: 999px;
+               background: rgba(163,173,184,.12); border: 2px solid rgba(163,173,184,.42); }
+      #sRank b { font-size: 46px; font-weight: 900; color: var(--silver); }
+      #sRank span { font-size: 34px; font-weight: 700; color: var(--muted); }
+
+      /* ——— The one that matters (shots E/F) ——— */
+      #good { left: 90px; top: 760px; width: 900px; z-index: 7; opacity: 0; }
+      #goodNote { display: flex; align-items: center; gap: 24px; background: rgba(20,20,28,.96); border: 2px solid rgba(255,74,31,.5);
+                  border-radius: 36px; padding: 30px 32px; box-shadow: 0 30px 80px rgba(255,74,31,.18); }
+      #goodNote .ico { width: 86px; height: 86px; border-radius: 24px; }
+      #goodNote .nb { font-size: 44px; }
+      #card { margin-top: 28px; background: var(--panel); border: 1px solid var(--hair); border-radius: 40px; padding: 44px 46px; opacity: 0; }
+      #mark { width: 168px; height: 168px; border-radius: 50%; margin: 0 auto; border: 6px solid rgba(224,172,62,.8);
+              background: rgba(224,172,62,.14); display: flex; align-items: center; justify-content: center;
+              font-size: 74px; font-weight: 900; color: var(--gold); }
+      #rankName { text-align: center; font-size: 66px; font-weight: 900; color: var(--gold); margin-top: 22px; }
+      #meta { text-align: center; font-size: 36px; font-weight: 700; color: var(--muted); margin-top: 14px; }
+      #byline { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 26px;
+                font-size: 32px; font-weight: 700; color: var(--green); }
+
+      /* ——— The close ——— */
+      #endLogo { left: 0; right: 0; top: 690px; text-align: center; z-index: 8; opacity: 0; }
+      #endImg { width: 640px; }
+      .logo-sub { display: inline-flex; margin-top: 16px; font-size: 28px; font-weight: 800; letter-spacing: 0.15em; color: var(--muted); }
+      #cta { left: 120px; top: 1110px; width: 840px; height: 140px; z-index: 8; opacity: 0; }
+      .btn { position: relative; width: 100%; height: 100%; border-radius: 70px; background: var(--grad-h); overflow: hidden;
+        color: #06060a; font-size: 46px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 20px 44px rgba(255, 74, 31, 0.38); }
+      #ctaShine { position: absolute; top: -30%; left: 0; width: 150px; height: 160%;
+        background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.55), rgba(255,255,255,0)); }
+      #endNote { left: 0; right: 0; top: 1300px; text-align: center; font-size: 30px; font-weight: 700; color: var(--dim); z-index: 8; opacity: 0; }
+      #chev { left: 490px; top: 1400px; width: 100px; height: 90px; z-index: 8; opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="27.56" data-film data-width="1080" data-height="1920">
+      <div id="haze" class="layer"></div>
+
+      <div id="title" class="abs">
+        <div class="m"><div id="t1">Do you play</div></div>
+        <div class="m"><div id="t2">LEAGUE OF LEGENDS?</div></div>
+      </div>
+
+      <!-- The phone is deliberately dimmed and blurred behind the season block and the final
+           card; the overlap is the shot, not an accident. -->
+      <div id="phone" class="abs" data-layout-allow-overlap data-layout-allow-occlusion>
+        <div id="shell"></div>
+        <div id="screen">
+          <div id="notch"></div>
+          <div id="clock"><div id="hh">2:14</div><div id="dd">TUESDAY, RANKED SOLO</div></div>
+          <div id="feed">
+            <!-- Already on the lock screen when the film opens: the first frame needs a subject,
+                 and a night like this never starts with an empty screen. -->
+            <div class="note" id="n0" style="opacity:.5">
+              <div class="ico loss">−</div>
+              <div class="nt"><div class="nh">Ranked Solo/Duo</div><div class="nb"><span class="amt">−16 LP</span> · Defeat</div></div>
+              <div class="ago" data-layout-ignore>1h</div>
+            </div>
+            <div class="note" id="n1">
+              <div class="ico loss">−</div>
+              <div class="nt"><div class="nh">Ranked Solo/Duo</div><div class="nb"><span class="amt">−18 LP</span> · Defeat</div></div>
+              <div class="ago" data-layout-ignore>now</div>
+            </div>
+            <div class="note" id="n2">
+              <div class="ico loss">−</div>
+              <div class="nt"><div class="nh">Ranked Solo/Duo</div><div class="nb"><span class="amt">−22 LP</span> · Defeat</div></div>
+              <div class="ago" data-layout-ignore>12m</div>
+            </div>
+            <div class="note" id="demote">
+              <div class="ico loss">↓</div>
+              <div class="nt"><div class="nh">Rank update</div><div class="nb">Demoted to Silver IV</div></div>
+              <div class="ago" data-layout-ignore>now</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="season" class="abs" data-layout-allow-overlap>
+        <div id="sNum">400</div>
+        <div id="sLab">games this season</div>
+        <div><span id="sRank"><b>Silver IV</b><span>— exactly where you started</span></span></div>
+      </div>
+
+      <div id="good" class="abs" data-layout-allow-overlap>
+        <div id="goodNote">
+          <div class="ico esb">✓</div>
+          <div class="nt"><div class="nh">eSports Boost</div><div class="nb">Your order is complete</div></div>
+          <div class="ago" data-layout-ignore>now</div>
+        </div>
+        <div id="card">
+          <div id="mark">IV</div>
+          <div id="rankName">Gold IV reached</div>
+          <div id="meta">Silver IV → Gold IV · about 1 day</div>
+          <div id="byline">✓ Played by a verified booster</div>
+        </div>
+      </div>
+
+      <div id="endLogo" class="abs">
+        <img id="endImg" src="assets/logo-wide.png" alt="eSports Boost" />
+        <div class="m"><div id="endSub" class="logo-sub">PICK YOUR RANK</div></div>
+      </div>
+      <div id="cta" class="abs"><div class="btn"><span>Start my climb</span><div id="ctaShine" data-layout-allow-overflow></div></div></div>
+      <div id="endNote" class="abs">Money back until a booster takes it</div>
+      <div id="chev" class="abs"><svg id="chevIn" width="100" height="90" viewBox="0 0 60 54"><path d="M14 10l16 13 16-13M14 27l16 13 16-13" stroke="#ff4a1f" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg></div>
+
+      <audio id="bande-son" class="clip" data-start="0" data-duration="27.56" data-track-index="9" data-volume="1" src="assets/bande-son.wav"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      Promise.all(["900 100px MontserratE", "800 40px MontserratE", "300 132px MontserratE"].map((f) => document.fonts.load(f))).then(() => {
+        for (const el of document.querySelectorAll(".fit")) {
+          let fs = parseFloat(getComputedStyle(el).fontSize);
+          while (el.scrollWidth > el.clientWidth + 1 && fs > 30) { fs -= 2; el.style.fontSize = fs + "px"; }
+        }
+        const tl = gsap.timeline({ paused: true });
+        const Ls = VO.lines.map((l) => l.start), Le = VO.lines.map((l) => l.end), T = VO.total;
+        const IN = (sel, t, d = 0.42) => tl.fromTo(sel, { yPercent: 165 }, { yPercent: 0, duration: d, ease: "power3.out" }, t);
+        const POP = (sel, t, d = 0.5) => tl.fromTo(sel, { scale: 0.55, opacity: 0 }, { scale: 1, opacity: 1, duration: d, ease: "back.out(2)" }, t);
+
+        /* The notifications start off-screen below; the phone starts low and settles.
+           Everything that must be READ stays inside y 180–1550. */
+        gsap.set(["#n1", "#n2", "#demote"], { yPercent: 170, opacity: 0 });
+        gsap.set("#phone", { y: 120, scale: 0.98 });
+
+        /* ——— A. first frame: the title and the phone are ALREADY there (autoplay) ——— */
+        tl.fromTo("#phone", { y: 150, opacity: 0.6 }, { y: 120, opacity: 1, duration: 0.9, ease: "power2.out" }, 0);
+        IN("#t1", 0.1, 0.5); IN("#t2", W("league") - 0.1, 0.5);
+
+        /* ——— B. push into the screen ——— */
+        tl.to("#phone", { y: -10, scale: 1.06, duration: 1.0, ease: "power2.inOut" }, Ls[1] - 0.2);
+        tl.to("#title", { opacity: 0, y: -40, duration: 0.5, ease: "power2.in" }, Ls[1] + 0.1);
+
+        /* ——— C. the stack of losses, one per spoken amount ——— */
+        const drop = (sel, t) => tl.fromTo(sel, { yPercent: 170, opacity: 0 },
+          { yPercent: 0, opacity: 1, duration: 0.52, ease: "power3.out" }, t);
+        drop("#n1", W("minus") - 0.12);
+        drop("#n2", W("minus", W("minus") + 0.5) - 0.12);
+        drop("#demote", W("demoted") - 0.18);
+        tl.fromTo("#demote", { scale: 1 }, { scale: 1.04, duration: 0.5, yoyo: true, repeat: 1, ease: "sine.inOut" }, W("demoted") + 0.1);
+
+        /* ——— D. out of the phone: the season blurs past ——— */
+        tl.to("#phone", { y: 420, scale: 0.86, opacity: 0.25, filter: "blur(7px)", duration: 1.0, ease: "power2.inOut" }, Ls[3] - 0.25);
+        tl.to("#feed", { y: -520, duration: 1.6, ease: "power1.inOut" }, Ls[3] - 0.1);
+        tl.fromTo("#season", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, W("four") - 0.1);
+        tl.fromTo("#sNum", { textContent: 0 }, { textContent: 400, duration: 1.1, ease: "power2.out", snap: { textContent: 1 } }, W("four") - 0.05);
+        POP("#sRank", W("same") - 0.1, 0.55);
+
+        /* ——— E. the screen clears, one notification arrives ——— */
+        tl.to("#season", { opacity: 0, y: -60, duration: 0.6, ease: "power2.in" }, Ls[4] - 0.15);
+        tl.to("#phone", { y: 120, scale: 1.0, opacity: 1, filter: "blur(0px)", duration: 1.0, ease: "power2.inOut" }, Ls[4] - 0.1);
+        tl.to(["#n0", "#n1", "#n2", "#demote"], { opacity: 0, yPercent: -40, duration: 0.45, stagger: 0.05, ease: "power2.in" }, Ls[4]);
+        tl.to("#feed", { y: 0, duration: 0.01 }, Ls[4] + 0.5);
+        tl.to("#clock", { opacity: 0.25, duration: 0.5 }, Ls[4]);
+        tl.fromTo("#good", { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, W("notification") - 0.15);
+
+        /* ——— F. it opens into the rank ——— */
+        tl.to("#phone", { y: 260, opacity: 0.18, duration: 0.9, ease: "power2.inOut" }, Ls[5] - 0.2);
+        tl.to("#good", { y: -210, duration: 0.9, ease: "power2.inOut" }, Ls[5] - 0.2);
+        tl.fromTo("#card", { opacity: 0, y: 40, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "back.out(1.6)" }, W("gold") - 0.1);
+        POP("#mark", W("gold") + 0.1, 0.6);
+        tl.fromTo("#byline", { opacity: 0 }, { opacity: 1, duration: 0.45 }, W("verified") - 0.15);
+
+        /* ——— G. the close ——— */
+        const tEnd = Ls[6];
+        tl.to(["#good", "#phone"], { opacity: 0, y: -70, duration: 0.55, ease: "power2.in" }, tEnd - 0.3);
+        tl.fromTo("#endLogo", { opacity: 0, scale: 0.88 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd);
+        IN("#endSub", tEnd + 0.15);
+        tl.fromTo("#cta", { opacity: 0, y: 40, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd + 0.3);
+        tl.fromTo("#ctaShine", { x: -220 }, { x: 1000, duration: 0.8, ease: "power2.inOut" }, tEnd + 0.9);
+        tl.fromTo("#endNote", { opacity: 0 }, { opacity: 1, duration: 0.4 }, W("money") - 0.1);
+        tl.fromTo("#chev", { opacity: 0 }, { opacity: 1, duration: 0.3 }, tEnd + 0.6);
+        tl.fromTo("#chevIn", { y: -6 }, { y: 10, duration: 0.32, ease: "sine.inOut", yoyo: true,
+          repeat: Math.max(1, 2 * Math.floor((T - tEnd - 0.8) / 0.64) - 1) }, tEnd + 0.9);
+
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.paused(false).timeScale(VO.speed || 1), 0);
+        window.__timelines["main"] = film;
+      });
+    </script>
+  </body>
+</html>

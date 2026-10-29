@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <!-- eSports Boost film "One month". Timing: assets/timing.js, written by ../build_film.py.
+         THE PLACE: a month on a calendar. The film moves: the empty month -> 28 nights crossed out
+         one after another -> the rank that did not move -> the grid collapses into a single day ->
+         the nights handed back -> the close. SAFE ZONE: y=180 to y=1550. -->
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/timing.js"></script>
+    <script>
+      window.__hf = window.__hf || {};
+      window.__hf.buildReady = window.__hf.buildReady || {};
+      const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+      window.W = (w, after = 0, end = false) => {
+        for (const x of VO.words) if (x.s >= after - 1e-6 && norm(x.w) === w) return end ? x.e : x.s;
+        throw new Error("word not found: " + w);
+      };
+    </script>
+    <style>
+      @font-face { font-family: "MontserratE"; src: url("assets/fonts/Montserrat.ttf") format("truetype"); font-weight: 100 900; }
+      :root {
+        --bg: #06060a; --panel: #0e0e16; --hair: #262632;
+        --ink: #f4f1ec; --muted: #a8a5b2; --dim: #8b8b99;
+        --ember: #ff4a1f; --ember-lit: #ff6a3d; --green: #34c77b; --red: #e0574f;
+        --grad-h: linear-gradient(90deg, #ff6a3d 0%, #ff4a1f 100%);
+        --silver: #a3adb8; --gold: #e0ac3e;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: "MontserratE", sans-serif; color: var(--ink); }
+      .layer { position: absolute; inset: 0; }
+      .abs { position: absolute; }
+      .m { overflow: hidden; padding: 14px 0 6px; margin: -14px 0 -6px; }
+      #haze { background: radial-gradient(900px 700px at 50% 24%, rgba(255,74,31,.15), transparent 70%), var(--bg); }
+
+      #title { left: 70px; top: 196px; width: 940px; text-align: center; z-index: 9; }
+      #t1 { font-size: 60px; font-weight: 800; }
+      #t2 { font-size: 70px; font-weight: 900; color: var(--ember); margin-top: 4px; }
+
+      /* ——— The month ——— */
+      #cal { left: 90px; top: 560px; width: 900px; z-index: 5; }
+      #calHead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 26px; }
+      #calName { font-size: 46px; font-weight: 900; letter-spacing: .02em; }
+      #calSub { font-size: 28px; font-weight: 800; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; }
+      #grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 14px; }
+      .cell { position: relative; aspect-ratio: 1 / 1; border-radius: 22px; background: var(--panel);
+              border: 2px solid var(--hair); display: flex; align-items: center; justify-content: center;
+              font-size: 30px; font-weight: 800; color: var(--dim); }
+      .cell .x { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+                 font-size: 54px; font-weight: 900; color: var(--red); opacity: 0; }
+
+      #games { left: 0; right: 0; top: 1330px; text-align: center; z-index: 6; opacity: 0; }
+      #gNum { font-size: 170px; font-weight: 900; line-height: .95; }
+      #gLab { font-size: 38px; font-weight: 800; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+
+      /* ——— The rank that did not move ——— */
+      #same { left: 90px; top: 1360px; width: 900px; z-index: 7; opacity: 0;
+              display: flex; align-items: center; justify-content: center; gap: 30px; }
+      .chip { display: flex; align-items: center; gap: 18px; background: var(--panel); border: 2px solid rgba(163,173,184,.45);
+              border-radius: 999px; padding: 22px 36px; }
+      .chip .mk { width: 72px; height: 72px; border-radius: 50%; border: 4px solid rgba(163,173,184,.8);
+                  background: rgba(163,173,184,.14); display: flex; align-items: center; justify-content: center;
+                  font-size: 28px; font-weight: 900; color: var(--silver); }
+      .chip .nm { font-size: 40px; font-weight: 900; color: var(--silver); }
+      #sameEq { font-size: 48px; font-weight: 900; color: var(--dim); }
+
+      /* ——— One day ——— */
+      #oneDay { left: 240px; top: 600px; width: 600px; z-index: 8; opacity: 0; text-align: center; }
+      #odCell { width: 600px; height: 600px; border-radius: 60px; background: var(--panel);
+                border: 3px solid rgba(255,74,31,.55); box-shadow: 0 40px 100px rgba(255,74,31,.16);
+                display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      #odNum { font-size: 230px; font-weight: 900; color: var(--ember); line-height: .9; }
+      #odLab { font-size: 46px; font-weight: 800; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-top: 10px; }
+      #odPrice { margin-top: 44px; font-size: 76px; font-weight: 900; color: var(--ink); }
+      #odClimb { font-size: 40px; font-weight: 800; margin-top: 12px; }
+      #odClimb .s { color: var(--silver); } #odClimb .g { color: var(--gold); }
+
+      /* ——— The close ——— */
+      #endLogo { left: 0; right: 0; top: 690px; text-align: center; z-index: 9; opacity: 0; }
+      #endImg { width: 640px; }
+      .logo-sub { display: inline-flex; margin-top: 16px; font-size: 28px; font-weight: 800; letter-spacing: 0.15em; color: var(--muted); }
+      #cta { left: 120px; top: 1110px; width: 840px; height: 140px; z-index: 9; opacity: 0; }
+      .btn { position: relative; width: 100%; height: 100%; border-radius: 70px; background: var(--grad-h); overflow: hidden;
+        color: #06060a; font-size: 46px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 20px 44px rgba(255,74,31,.38); }
+      #ctaShine { position: absolute; top: -30%; left: 0; width: 150px; height: 160%;
+        background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.55), rgba(255,255,255,0)); }
+      #endNote { left: 0; right: 0; top: 1300px; text-align: center; font-size: 30px; font-weight: 700; color: var(--dim); z-index: 9; opacity: 0; }
+      #chev { left: 490px; top: 1400px; width: 100px; height: 90px; z-index: 9; opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="24.12" data-film data-width="1080" data-height="1920">
+      <div id="haze" class="layer"></div>
+
+      <div id="title" class="abs">
+        <div class="m"><div id="t1">Do you play</div></div>
+        <div class="m"><div id="t2">LEAGUE OF LEGENDS?</div></div>
+      </div>
+
+      <div id="cal" class="abs" data-layout-allow-overlap>
+        <div id="calHead"><div id="calName">Last month</div><div id="calSub">ranked solo</div></div>
+        <div id="grid"></div>
+      </div>
+
+      <div id="games" class="abs" data-layout-allow-overlap>
+        <div id="gNum">400</div>
+        <div id="gLab">games played</div>
+      </div>
+
+      <div id="same" class="abs" data-layout-allow-overlap>
+        <div class="chip"><div class="mk">IV</div><div class="nm">Silver IV</div></div>
+        <div id="sameEq">=</div>
+        <div class="chip"><div class="mk">IV</div><div class="nm">Silver IV</div></div>
+      </div>
+
+      <div id="oneDay" class="abs" data-layout-allow-overlap>
+        <div id="odCell">
+          <div id="odNum">1</div>
+          <div id="odLab">day</div>
+        </div>
+        <div id="odPrice">$25</div>
+        <div id="odClimb"><span class="s">Silver IV</span> → <span class="g">Gold IV</span></div>
+      </div>
+
+      <div id="endLogo" class="abs">
+        <img id="endImg" src="assets/logo-wide.png" alt="eSports Boost" />
+        <div class="m"><div id="endSub" class="logo-sub">YOUR NIGHTS BACK</div></div>
+      </div>
+      <div id="cta" class="abs"><div class="btn"><span>Start my climb</span><div id="ctaShine" data-layout-allow-overflow></div></div></div>
+      <div id="endNote" class="abs">Money back until a booster takes it</div>
+      <div id="chev" class="abs"><svg id="chevIn" width="100" height="90" viewBox="0 0 60 54"><path d="M14 10l16 13 16-13M14 27l16 13 16-13" stroke="#ff4a1f" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg></div>
+
+      <audio id="bande-son" class="clip" data-start="0" data-duration="24.12" data-track-index="9" data-volume="1" src="assets/bande-son.wav"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      /* 28 nights, built once and deterministically — no Math.random anywhere in a film. */
+      (function () {
+        const g = document.getElementById("grid");
+        for (let i = 1; i <= 28; i++) {
+          const c = document.createElement("div");
+          c.className = "cell"; c.id = "d" + i;
+          c.innerHTML = '<span>' + i + '</span><span class="x">✕</span>';
+          g.appendChild(c);
+        }
+      })();
+
+      Promise.all(["900 100px MontserratE", "800 40px MontserratE"].map((f) => document.fonts.load(f))).then(() => {
+        const tl = gsap.timeline({ paused: true });
+        const Ls = VO.lines.map((l) => l.start), T = VO.total;
+        const IN = (sel, t, d = 0.42) => tl.fromTo(sel, { yPercent: 165 }, { yPercent: 0, duration: d, ease: "power3.out" }, t);
+
+        gsap.set("#cal", { opacity: 0.4, y: 40, scale: 0.97 });
+        IN("#t1", 0.1, 0.5); IN("#t2", W("league") - 0.1, 0.5);
+
+        /* ——— the month comes up ——— */
+        tl.to("#cal", { opacity: 1, y: 0, scale: 1, duration: 0.9, ease: "power3.out" }, Ls[1] - 0.2);
+        tl.to("#title", { opacity: 0, y: -40, duration: 0.5, ease: "power2.in" }, Ls[1] + 0.2);
+
+        /* ——— 28 nights cross out, one after another, across the two spoken figures ——— */
+        const tNights = W("twentyeight") - 0.1, span = W("games") + 0.5 - tNights;
+        for (let i = 1; i <= 28; i++) {
+          const t = tNights + (span * (i - 1)) / 28;
+          tl.to("#d" + i + " .x", { opacity: 1, duration: 0.18, ease: "power2.out" }, t);
+          tl.to("#d" + i, { borderColor: "rgba(224,87,79,.35)", duration: 0.18 }, t);
+        }
+        tl.fromTo("#games", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, W("four") - 0.1);
+        tl.fromTo("#gNum", { textContent: 0 }, { textContent: 400, duration: 1.0, ease: "power2.out", snap: { textContent: 1 } }, W("four") - 0.05);
+
+        /* ——— and the rank did not move ——— */
+        tl.to("#games", { opacity: 0, y: -40, duration: 0.45, ease: "power2.in" }, Ls[3] - 0.15);
+        tl.fromTo("#same", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, W("finished") - 0.12);
+        tl.fromTo("#sameEq", { scale: 0.6, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.45, ease: "back.out(2)" }, W("exactly") - 0.05);
+
+        /* ——— the whole month collapses into one day ——— */
+        tl.to(["#cal", "#same"], { opacity: 0, scale: 0.9, y: -40, duration: 0.7, ease: "power2.inOut" }, Ls[4] - 0.1);
+        tl.fromTo("#oneDay", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.7, ease: "back.out(1.5)" }, W("one", 13.5) - 0.15);
+        tl.fromTo("#odPrice", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, W("twentyfive") - 0.12);
+        tl.fromTo("#odClimb", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, W("silver") - 0.12);
+
+        /* ——— the nights come back: the grid returns, clean ——— */
+        tl.to("#oneDay", { opacity: 0, y: -60, duration: 0.5, ease: "power2.in" }, Ls[6] - 0.15);
+        tl.to("#cal", { opacity: 1, scale: 1, y: 0, duration: 0.7, ease: "power3.out" }, Ls[6] - 0.1);
+        tl.to(".cell .x", { opacity: 0, duration: 0.5, stagger: 0.012, ease: "power2.out" }, Ls[6]);
+        tl.to(".cell", { borderColor: "rgba(52,199,123,.35)", duration: 0.6, stagger: 0.012 }, Ls[6]);
+        tl.to("#calName", { textContent: "Your month", duration: 0.01 }, Ls[6] + 0.3);
+
+        /* ——— the close ——— */
+        const tEnd = Ls[7];
+        tl.to("#cal", { opacity: 0, y: -60, duration: 0.5, ease: "power2.in" }, tEnd - 0.25);
+        tl.fromTo("#endLogo", { opacity: 0, scale: 0.88 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd);
+        IN("#endSub", tEnd + 0.15);
+        tl.fromTo("#cta", { opacity: 0, y: 40, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd + 0.3);
+        tl.fromTo("#ctaShine", { x: -220 }, { x: 1000, duration: 0.8, ease: "power2.inOut" }, tEnd + 0.9);
+        tl.fromTo("#endNote", { opacity: 0 }, { opacity: 1, duration: 0.4 }, tEnd + 0.7);
+        tl.fromTo("#chev", { opacity: 0 }, { opacity: 1, duration: 0.3 }, tEnd + 0.6);
+        tl.fromTo("#chevIn", { y: -6 }, { y: 10, duration: 0.32, ease: "sine.inOut", yoyo: true,
+          repeat: Math.max(1, 2 * Math.floor((T - tEnd - 0.8) / 0.64) - 1) }, tEnd + 0.9);
+
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.paused(false).timeScale(VO.speed || 1), 0);
+        window.__timelines["main"] = film;
+      });
+    </script>
+  </body>
+</html>

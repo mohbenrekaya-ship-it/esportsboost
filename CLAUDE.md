@@ -3564,70 +3564,82 @@ header ◄─ 302 return_to ◄─ GET /api/auth/<provider>/callback  (Set-Cooki
   button asset (same trademark rule as `pay_marks()`).
 - **Restart the server after touching these files** — `/api/auth/*` lives in `serve.py`, no watcher.
 
-## The ad films — `site/tools/video_lib.py` + `gen_videos_lol.py`
+## The ad films — `site/tools/films/`
 
-Five 9:16 ad films for League of Legends, English voice-over, rendered from code:
-scenes drawn frame by frame with PIL, ElevenLabs speech, synth music, ffmpeg →
-1080×1920 MP4 in `site/assets-out/videos/`. **Ported from the Enevie project**
-(`~/Claude/Enevie lp/outils/video_lib.py`) with the solar drawing cut out and the
-brand swapped to Ashfall; the engine — timing, music, ducking, encode — is
-unchanged, so a fix here is worth carrying back there.
+Five 9:16 ad films for League of Legends, English voice-over, rendered from code.
+**This is the Enevie pipeline ported over** (`~/Claude/Enevie lp/outils/hyperframes/`): a
+HyperFrames project per film — HTML + CSS + GSAP, seekable — rendered to MP4 by the
+`hyperframes` CLI, against ONE ElevenLabs take timed to the word.
 
 ```bash
-python3 site/tools/gen_videos_lol.py                       # all five
-python3 site/tools/gen_videos_lol.py 1-hard-stuck          # one
-NO_VO=1 python3 site/tools/gen_videos_lol.py --preview     # contact sheets, no credits
+cd site/tools/films
+V=~/Claude/"Enevie lp"/outils/.venv/bin/python
+$V build_film.py <name> --new        # once: project from _template + the take
+$V build_film.py <name>              # timing.js + the soundtrack, after any script/sfx edit
+cd <name> && npx hyperframes check   # must be 0 errors AND 0 warnings
+npx hyperframes snapshot --at 0.4,2.2,…   # then LOOK at the contact sheet
+cd .. && $V build_film.py <name> --render
 ```
 
-It needs numpy + Pillow + imageio-ffmpeg, which this machine only has in the
-Enevie venv: `~/Claude/"Enevie lp"/outils/.venv/bin/python`. The scripts and the
-figures they are allowed to quote are in
-[marketing/video-scripts-lol-en.md](marketing/video-scripts-lol-en.md).
+The films: `notifications` (a phone at 2 a.m.), `scoreboard` (you vs the grind),
+`order-screen` (the product's own screen), `one-month` (a calendar), `myths` (true/false
+cards). Scripts in [marketing/video-scripts-lol-en.md](marketing/video-scripts-lol-en.md),
+lines in `films/scripts.py`.
 
-- **A SCENE'S LENGTH IS ITS VOICE LINE.** `render()` renders the speech first and
-  gives the scene `vo_delay + speech + hold` seconds; `min_dur` is only a floor for
-  a scene with no voice. Write the line, never a duration — and never "fix" a
-  timing by padding `min_dur` past the speech, which desynchronises every `sfx`
-  hung off `ctx.vo_end`.
-- **Every price spoken is read from `pricing.quote()` at render time** (`P()` in
-  the generator), so a re-price cannot leave a film quoting a figure the checkout
-  does not charge. ⚠ The one half that does NOT follow is the voice: the line
-  spells the number out ("twenty-five dollars"), so a re-price means re-reading
-  the lines and re-rendering, exactly like the i18n keys that carry a figure.
-- ⚠ **NO FILM MAY QUOTE THE REVIEW SCORE, THE REVIEW COUNT, THE CLIENT COUNT OR
-  THE ROSTER SIZE.** They are invented placeholders (see
-  [Placeholder data](#placeholder-data--do-not-present-as-real)), and an ad is the
-  one surface where that stops being a to-do and becomes a false advertising
-  claim. `EndCard` therefore carries the three `GUARANTEES_INLINE` promises and no
-  rating — the star row and the review line were deleted from the Enevie end card
-  on the way in, deliberately. Do not add them back.
-- ⚠ **`4-watch-it-happen` sells the screen share, and `streams.py` does not
-  exist.** Nothing opens a Discord channel and nothing tells a booster to share.
-  Every order that film wins is a promise a person keeps by hand — see
-  [Watch live](#watch-live--the-boosters-screen-share--watch_panel). Arrange it
-  with ops or do not ship that one; the other four do not depend on it.
-- **Ranks are drawn from `D.tier_color()`**, never from a palette in the video
-  code, so a Gold mark in a film is the same gold as on the page. `rank_mark()` is
-  the division numeral — the publisher's emblems are IP, the same rule
-  `pay_marks()` and the site's own `_EMBLEM` follow — and `lift()` pulls a mark
-  colour toward the text colour before it is used as type, because Iron's `#8e8f94`
-  reads as disabled text at 90px. Same trick as `.ob-climb`.
-- **`ladder()` draws ONE SEGMENT PER TIER, not per rung.** League's 29 rungs across
-  a phone frame is a 32px smear and a four-rung climb reads as a blob; nine tier
-  segments read at a glance, which is also how the game page's own track is built.
-- **The voice is Will** (`VOICE_WILL`, American, young, relaxed) — the owner
-  listened to three English voices on a real script line and picked it
-  (2026-10-29). `ELEVEN_VOICE_ID` overrides; `ELEVEN_LANG` defaults to `en`,
-  because `tts_eleven()` arrived from Enevie with `'fr'` hardcoded. The key is read
-  from `~/.elevenlabs_key` and never printed, and every line is cached under
-  `site/tools/.cache/tts` by a hash of (voice, model, settings, text) — so
-  re-rendering after a VISUAL change costs nothing. Changing one word in a line
-  re-bills that line only.
-- **`NO_VO=1` renders the pictures with music only** and spends no credits; add
-  `--preview` for a contact sheet of every scene instead of an encode. Both are
-  how you iterate on a layout.
-- **The rendered MP4s and the TTS cache are gitignored.** The repo keeps the
-  recipe — the generator and the scripts — not the dish.
+### What this replaced, and why
+
+The first five films were built with `site/tools/video_lib.py` — PIL, one scene per
+voice line, one TTS call per line. The owner rejected them on two counts, and both are
+structural rather than cosmetic:
+
+- **They all looked the same**: five variations of big type centred on black. A format
+  here is a PLACE now, and a film MOVES between places. One scene held from start to
+  finish is refused (the Enevie brief's rule 2).
+- **The delivery was chopped**: a take per line, each trimmed of silence and padded with
+  a hold. The Enevie notes date that judgement — a retouched take (speed 0.85, silences
+  closed up) was *"catastrophique"*. One take, natural speed, nothing cut.
+
+`gen_videos_lol.py` is gone. **`video_lib.py` stays** — `films/voice.py` imports it for
+the synth music and the sound effects, which are the same library.
+
+### Load-bearing
+
+- **ONE take for the whole film, timed to the word.** `voice.py` calls the
+  `with-timestamps` endpoint once and rebuilds words from the character times;
+  `W("gold")` is when that word is spoken. ⚠ **Never hardcode a second for anything the
+  voice drives** — use `W(...)` or `Ls[i]`. A re-record shifts every beat otherwise.
+- **The mix is the owner's, validated on 28 Oct**: music at `0.45` (≈ −7 dB under the
+  voice), voice 0.95, cues 0.75, slow duck release. Do not "balance" it again.
+- ⚠ **No sound on transitions.** Enevie's rule 3: no whoosh, ever. Small cues only on
+  what appears (pop, tap, ding, check, sparkle, soft boom), a light riser at 0. The old
+  PIL engine added a whoosh at every scene change, which is exactly what it forbids.
+- **8–12 shots of 2–3 s**, camera moves 0.8–1 s on soft curves. 15–20 shots of 1.5 s
+  read as "too fast" to him.
+- **Frame 0 is the thumbnail.** A title and a visual have to be on screen at 0 s. ⚠ A
+  GSAP `fromTo` applies its "from" state immediately, so an opacity tween on the title
+  blanks that frame even when it starts at 0.05 — animate `y`, not opacity.
+- **Reels safe zone: y 180–1550.** Below that is the platform's own UI.
+- **Prices are read from `pricing.py` and CHECKED against the spoken line**
+  (`check_prices()`). A re-price fails the build rather than shipping a film that says a
+  figure the checkout does not charge — the voice spells numbers out, so it cannot be
+  patched; the line is rewritten and the take re-recorded.
+- ⚠ **No film may quote the review score, the review count, the client count or the
+  roster size** — invented placeholders, and an ad is where that becomes a false claim.
+  The end card carries `GUARANTEES_INLINE` and no rating.
+- **Ranks use the site's own tier colours**, so a Gold in a film is the page's Gold.
+- **`check` must end at 0 errors AND 0 warnings**, then snapshot and *read* the frames:
+  a passing check does not show how it looks. Known intentional markers:
+  `data-layout-allow-overlap` (a dimmed layer behind a foreground block),
+  `data-layout-allow-overflow` (the CTA shine sweep), `data-layout-ignore` (lock-screen
+  timestamps, which are texture).
+- **The voice is Will**, `eleven_v4`, `language_code: en`. Each take is cached by a hash
+  of (voice, model, settings, text), so re-rendering after a VISUAL change costs nothing.
+- **Node, ffmpeg and ffprobe**: `~/.local/node/bin` plus `films/bin` (the npm static
+  builds, installed in this project rather than borrowed from the Enevie folder — a
+  symlink across projects breaks the day that folder moves). numpy/Pillow/imageio-ffmpeg
+  come from the Enevie venv; this machine has no other.
+- **Rendered MP4s, `node_modules`, `build/` and each film's generated `timing.js` /
+  `bande-son.wav` are gitignored.** The repo keeps the recipe, not the dish.
 
 ## CRO audit constraints
 

@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <!-- eSports Boost film "You vs the grind". Timing: assets/timing.js, written by ../build_film.py.
+         THE PLACE: a post-game scoreboard. The film moves: the board builds -> three stat rows are
+         won by the grind -> the final score -> a Master player drops onto your side and the score
+         flips -> the price -> the close. SAFE ZONE: read-anything stays between y=180 and y=1550. -->
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/timing.js"></script>
+    <script>
+      window.__hf = window.__hf || {};
+      window.__hf.buildReady = window.__hf.buildReady || {};
+      const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+      window.W = (w, after = 0, end = false) => {
+        for (const x of VO.words) if (x.s >= after - 1e-6 && norm(x.w) === w) return end ? x.e : x.s;
+        throw new Error("word not found: " + w);
+      };
+    </script>
+    <style>
+      @font-face { font-family: "MontserratE"; src: url("assets/fonts/Montserrat.ttf") format("truetype"); font-weight: 100 900; }
+      :root {
+        --bg: #06060a; --panel: #0e0e16; --hair: #262632;
+        --ink: #f4f1ec; --muted: #a8a5b2; --dim: #8b8b99;
+        --ember: #ff4a1f; --ember-lit: #ff6a3d; --amber: #ffb84c; --green: #34c77b; --red: #e0574f;
+        --grad-h: linear-gradient(90deg, #ff6a3d 0%, #ff4a1f 100%);
+        --silver: #a3adb8; --gold: #e0ac3e; --master: #a56fd0;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: "MontserratE", sans-serif; color: var(--ink); }
+      .layer { position: absolute; inset: 0; }
+      .abs { position: absolute; }
+      .m { overflow: hidden; padding: 14px 0 6px; margin: -14px 0 -6px; }
+      #haze { background: radial-gradient(900px 700px at 50% 20%, rgba(255,74,31,.17), transparent 70%),
+                          radial-gradient(700px 600px at 50% 95%, rgba(165,111,208,.10), transparent 70%), var(--bg); }
+
+      #title { left: 70px; top: 196px; width: 940px; text-align: center; z-index: 7; }
+      #t1 { font-size: 60px; font-weight: 800; }
+      #t2 { font-size: 70px; font-weight: 900; color: var(--ember); margin-top: 4px; }
+
+      /* ——— The board ——— */
+      #board { left: 70px; top: 520px; width: 940px; z-index: 5; opacity: 0; }
+      #bhead { display: flex; align-items: stretch; gap: 16px; }
+      .side { flex: 1 1 0; background: var(--panel); border: 2px solid var(--hair); border-radius: 32px; padding: 26px 20px; text-align: center; }
+      .side .who { font-size: 46px; font-weight: 900; letter-spacing: .02em; }
+      .side .sub { font-size: 28px; font-weight: 700; color: var(--dim); margin-top: 8px; letter-spacing: .08em; text-transform: uppercase; }
+      #sideYou .who { color: var(--ink); }
+      #sideGrind .who { color: var(--red); }
+      #vs { align-self: center; font-size: 40px; font-weight: 900; color: var(--dim); padding: 0 6px; }
+
+      .row { display: flex; align-items: center; gap: 16px; margin-top: 18px; opacity: 0; }
+      .cell { flex: 1 1 0; background: rgba(14,14,22,.9); border: 2px solid var(--hair); border-radius: 26px;
+              padding: 22px 18px; text-align: center; font-size: 44px; font-weight: 900; }
+      .cell.lose { color: var(--muted); }
+      .cell.win { color: var(--red); border-color: rgba(224,87,79,.5); background: rgba(60,20,16,.6); }
+      .lab { flex: 0 0 300px; text-align: center; font-size: 28px; font-weight: 800; color: var(--dim);
+             letter-spacing: .09em; text-transform: uppercase; }
+
+      #score { left: 70px; top: 1180px; width: 940px; text-align: center; z-index: 6; opacity: 0; }
+      #scoreNum { font-size: 150px; font-weight: 900; letter-spacing: .02em; }
+      #scoreNum .you { color: var(--muted); }
+      #scoreNum .gr { color: var(--red); }
+      #scoreLab { font-size: 34px; font-weight: 800; color: var(--dim); letter-spacing: .12em; text-transform: uppercase; margin-top: 2px; }
+
+      /* ——— The booster joins your side ——— */
+      #joiner { left: 70px; top: 1380px; width: 940px; z-index: 7; opacity: 0; }
+      #jcard { display: flex; align-items: center; gap: 26px; background: var(--panel);
+               border: 2px solid rgba(165,111,208,.55); border-radius: 34px; padding: 28px 32px;
+               box-shadow: 0 26px 70px rgba(165,111,208,.18); }
+      #jmark { width: 104px; height: 104px; border-radius: 50%; flex: 0 0 auto; border: 5px solid rgba(165,111,208,.85);
+               background: rgba(165,111,208,.16); display: flex; align-items: center; justify-content: center;
+               font-size: 36px; font-weight: 900; color: var(--master); }
+      #jtxt .a { font-size: 28px; font-weight: 800; color: var(--dim); letter-spacing: .09em; text-transform: uppercase; }
+      #jtxt .b { font-size: 46px; font-weight: 900; margin-top: 6px; }
+
+      /* ——— The price ——— */
+      #price { left: 140px; top: 1330px; width: 800px; z-index: 7; opacity: 0;
+               background: var(--panel); border: 1px solid var(--hair); border-radius: 36px; padding: 36px 40px; text-align: center; }
+      #pClimb { font-size: 44px; font-weight: 800; color: var(--ink); }
+      #pClimb .s { color: var(--silver); } #pClimb .g { color: var(--gold); }
+      #pAmt { font-size: 120px; font-weight: 900; color: var(--ember); line-height: 1.05; margin-top: 6px; }
+      #pEta { font-size: 34px; font-weight: 700; color: var(--muted); }
+
+      /* ——— The close ——— */
+      #endLogo { left: 0; right: 0; top: 690px; text-align: center; z-index: 8; opacity: 0; }
+      #endImg { width: 640px; }
+      .logo-sub { display: inline-flex; margin-top: 16px; font-size: 28px; font-weight: 800; letter-spacing: 0.15em; color: var(--muted); }
+      #cta { left: 120px; top: 1110px; width: 840px; height: 140px; z-index: 8; opacity: 0; }
+      .btn { position: relative; width: 100%; height: 100%; border-radius: 70px; background: var(--grad-h); overflow: hidden;
+        color: #06060a; font-size: 46px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 20px 44px rgba(255,74,31,.38); }
+      #ctaShine { position: absolute; top: -30%; left: 0; width: 150px; height: 160%;
+        background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.55), rgba(255,255,255,0)); }
+      #endNote { left: 0; right: 0; top: 1300px; text-align: center; font-size: 30px; font-weight: 700; color: var(--dim); z-index: 8; opacity: 0; }
+      #chev { left: 490px; top: 1400px; width: 100px; height: 90px; z-index: 8; opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="27.64" data-film data-width="1080" data-height="1920">
+      <div id="haze" class="layer"></div>
+
+      <div id="title" class="abs">
+        <div class="m"><div id="t1">Do you play</div></div>
+        <div class="m"><div id="t2">LEAGUE OF LEGENDS?</div></div>
+      </div>
+
+      <div id="board" class="abs" data-layout-allow-overlap>
+        <div id="bhead">
+          <div class="side" id="sideYou"><div class="who">YOU</div><div class="sub">Silver IV</div></div>
+          <div id="vs">vs</div>
+          <div class="side" id="sideGrind"><div class="who">THE GRIND</div><div class="sub">undefeated</div></div>
+        </div>
+        <div class="row" id="r1"><div class="cell lose">300 h</div><div class="lab">time played</div><div class="cell win">won</div></div>
+        <div class="row" id="r2"><div class="cell lose">49%</div><div class="lab">win rate</div><div class="cell win">won</div></div>
+        <div class="row" id="r3"><div class="cell lose">March</div><div class="lab">last rank up</div><div class="cell win">won</div></div>
+      </div>
+
+      <div id="score" class="abs">
+        <div id="scoreNum"><span class="you">0</span> — <span class="gr">3</span></div>
+        <div id="scoreLab">every season</div>
+      </div>
+
+      <div id="joiner" class="abs" data-layout-allow-overlap>
+        <div id="jcard">
+          <div id="jmark">M</div>
+          <div id="jtxt"><div class="a">Now on your side</div><div class="b">A Master player</div></div>
+        </div>
+      </div>
+
+      <div id="price" class="abs" data-layout-allow-overlap>
+        <div id="pClimb"><span class="s">Silver IV</span> → <span class="g">Gold IV</span></div>
+        <div id="pAmt">$25</div>
+        <div id="pEta">about 1 day</div>
+      </div>
+
+      <div id="endLogo" class="abs">
+        <img id="endImg" src="assets/logo-wide.png" alt="eSports Boost" />
+        <div class="m"><div id="endSub" class="logo-sub">PICK YOUR RANK, WE CLIMB IT</div></div>
+      </div>
+      <div id="cta" class="abs"><div class="btn"><span>Start my climb</span><div id="ctaShine" data-layout-allow-overflow></div></div></div>
+      <div id="endNote" class="abs">Money back until a booster takes it</div>
+      <div id="chev" class="abs"><svg id="chevIn" width="100" height="90" viewBox="0 0 60 54"><path d="M14 10l16 13 16-13M14 27l16 13 16-13" stroke="#ff4a1f" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg></div>
+
+      <audio id="bande-son" class="clip" data-start="0" data-duration="27.64" data-track-index="9" data-volume="1" src="assets/bande-son.wav"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      Promise.all(["900 100px MontserratE", "800 40px MontserratE"].map((f) => document.fonts.load(f))).then(() => {
+        const tl = gsap.timeline({ paused: true });
+        const Ls = VO.lines.map((l) => l.start), T = VO.total;
+        const IN = (sel, t, d = 0.42) => tl.fromTo(sel, { yPercent: 165 }, { yPercent: 0, duration: d, ease: "power3.out" }, t);
+        const POP = (sel, t, d = 0.5) => tl.fromTo(sel, { scale: 0.55, opacity: 0 }, { scale: 1, opacity: 1, duration: d, ease: "back.out(2)" }, t);
+
+        /* The board is already on the first frame, dim, behind the title: autoplay needs a subject. */
+        gsap.set("#board", { opacity: 0.35, y: 40, scale: 0.96 });
+        IN("#t1", 0.1, 0.5); IN("#t2", W("league") - 0.1, 0.5);
+
+        /* ——— the board comes up and the two sides land ——— */
+        tl.to("#board", { opacity: 1, y: 0, scale: 1, duration: 0.9, ease: "power3.out" }, Ls[1] - 0.2);
+        tl.to("#title", { opacity: 0, y: -40, duration: 0.5, ease: "power2.in" }, Ls[1] + 0.2);
+        POP("#sideYou", W("you", 5.5) - 0.1, 0.55);
+        POP("#sideGrind", W("grind") - 0.1, 0.55);
+
+        /* ——— three rows, each won by the grind, on the figure that is spoken ——— */
+        const row = (sel, t) => {
+          tl.fromTo(sel, { opacity: 0, x: -40 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, t);
+          tl.fromTo(sel + " .cell.win", { scale: 0.8 }, { scale: 1, duration: 0.45, ease: "back.out(2.2)" }, t + 0.25);
+        };
+        row("#r1", W("three") - 0.12);
+        row("#r2", W("fortynine") - 0.12);
+        row("#r3", W("same") - 0.12);
+
+        /* ——— the score, and the board slides up to make room ——— */
+        tl.fromTo("#score", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, W("wins") - 0.15);
+        tl.fromTo("#scoreNum", { scale: 0.8 }, { scale: 1, duration: 0.5, ease: "back.out(2)" }, W("wins") - 0.1);
+
+        /* ——— a Master player drops onto your side; the score flips ——— */
+        tl.to("#board", { y: -230, duration: 0.9, ease: "power2.inOut" }, Ls[5] - 0.2);
+        tl.to("#score", { y: -230, duration: 0.9, ease: "power2.inOut" }, Ls[5] - 0.2);
+        tl.fromTo("#joiner", { opacity: 0, y: 70 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, W("master") - 0.15);
+        POP("#jmark", W("master") + 0.1, 0.55);
+        tl.to("#sideYou", { borderColor: "rgba(165,111,208,.6)", duration: 0.5 }, W("side") - 0.1);
+        tl.to("#scoreNum .you", { color: "#a56fd0", duration: 0.5 }, W("side") - 0.1);
+        tl.to("#sideGrind .who", { color: "#8b8b99", duration: 0.5 }, W("side") - 0.1);
+
+        /* ——— the price takes the card's place ——— */
+        tl.to("#joiner", { opacity: 0, y: -60, duration: 0.5, ease: "power2.in" }, Ls[6] - 0.25);
+        tl.fromTo("#price", { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, Ls[6] - 0.1);
+        POP("#pAmt", W("twentyfive") - 0.12, 0.5);
+
+        /* ——— the close ——— */
+        const tEnd = Ls[7];
+        tl.to(["#board", "#score", "#price"], { opacity: 0, y: -70, duration: 0.55, ease: "power2.in" }, tEnd - 0.3);
+        tl.fromTo("#endLogo", { opacity: 0, scale: 0.88 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd);
+        IN("#endSub", tEnd + 0.15);
+        tl.fromTo("#cta", { opacity: 0, y: 40, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd + 0.3);
+        tl.fromTo("#ctaShine", { x: -220 }, { x: 1000, duration: 0.8, ease: "power2.inOut" }, tEnd + 0.9);
+        tl.fromTo("#endNote", { opacity: 0 }, { opacity: 1, duration: 0.4 }, tEnd + 0.7);
+        tl.fromTo("#chev", { opacity: 0 }, { opacity: 1, duration: 0.3 }, tEnd + 0.6);
+        tl.fromTo("#chevIn", { y: -6 }, { y: 10, duration: 0.32, ease: "sine.inOut", yoyo: true,
+          repeat: Math.max(1, 2 * Math.floor((T - tEnd - 0.8) / 0.64) - 1) }, tEnd + 0.9);
+
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.paused(false).timeScale(VO.speed || 1), 0);
+        window.__timelines["main"] = film;
+      });
+    </script>
+  </body>
+</html>

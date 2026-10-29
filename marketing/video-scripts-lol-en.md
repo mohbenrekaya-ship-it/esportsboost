@@ -1,144 +1,76 @@
 # 5 video ads — League of Legends, English, 9:16
 
-Same engine as the Enevie films (`outils/video_lib.py` ported to `site/tools/video_lib.py`):
-1080×1920, 30 fps, ElevenLabs voice-over, synth music, ffmpeg. Each scene's length is set by
-its voice line, so the timings below are estimates, not cuts.
+Built with the Enevie pipeline ported into `site/tools/films/`: a HyperFrames project per
+film (HTML + CSS + GSAP) rendered to 1080×1920 MP4, against **one ElevenLabs take timed to
+the word**. The spoken lines live in `films/scripts.py`; this file is what the films are
+allowed to claim and why each one looks the way it does.
 
-**Every video follows the same three beats, in this order** (the brief):
+## The rule the first attempt broke
 
-1. **Hook** — "Do you play League of Legends?" (or "…or something similar?")
-2. **Identify** — you are stuck in your rank and you want out
-3. **Offer** — eSports Boost, with one real number and one real promise, then the CTA
+The first five films were five variations of **big type centred on black**, and that is
+one idea shown five times. A format here is a **place** — a lock screen, a scoreboard, the
+product's own screen, a calendar, a deck of cards — and the film **moves between places**.
+One scene held from start to finish is refused.
 
-## The figures these scripts are allowed to use
+The three beats never change: **"Do you play League of Legends, or something similar?"** →
+the player who is stuck → eSports Boost.
 
-All read from `site/src/pricing.py` + `data.py` on 2026-10-29, sale already applied:
+## The five
+
+| # | Film | The place | The angle |
+| --- | --- | --- | --- |
+| 1 | `notifications` | a phone at 2 a.m. | the lock screen filling with LP losses, then the one notification worth waiting for |
+| 2 | `scoreboard` | a post-game scoreboard | you vs the grind: it wins three rows out of three, until a Master player joins your side |
+| 3 | `order-screen` | the product's own screen | how it actually works: pick two ranks, see the price before you pay, watch the climb |
+| 4 | `one-month` | a month on a calendar | 28 nights crossed out for nothing, against one day |
+| 5 | `myths` | three cards turned over | two things people believe are false — and the third is **true**, said in amber |
+
+Film 5 is the one that argues against itself on purpose: boosting *is* against the game's
+terms, the card says TRUE, and the film answers with the VPN and the play window rather
+than selling past it. Same standard as the three FAQ answers on the site that argue
+against the sale.
+
+## The figures these films may use
+
+Read from `site/src/pricing.py` at build time, and **checked against the spoken line** —
+`check_prices()` fails the build if a price moves, because the voice spells numbers out
+("twenty-five dollars") and cannot be patched. A re-price means rewriting the line in
+`scripts.py` and re-recording.
 
 | Claim | Value | Source |
 | --- | --- | --- |
 | One division | **from $4** | `service_floor()` |
-| Bronze IV → Silver IV | **$21** (list $25) | `quote()` |
-| Silver IV → Gold IV | **$25** (list $30) | `quote()` |
-| Gold IV → Platinum IV | **$36** (list $42) | `quote()` |
-| Emerald IV → Diamond IV | **$91** (list $107) | `quote()` |
-| One net win | **$3** | `quote()` |
+| Silver IV → Gold IV | **$25** | `quote()` |
+| Gold IV → Platinum IV | **$36** | `quote()` |
 | Delivery, one division | **about 1 day** | `eta_text()` |
-| Duo queue | **+55%** | `DUO_MULT` |
-| Watch your booster play | **free** | `ADDONS['stream']`, `pct=0` |
-| Money-back until a booster is assigned | policy | `GUARANTEES_INLINE` |
-| Pause it anytime · VPN matched to your region | policy | `GUARANTEES_INLINE` |
+| Watch your booster play | **free** | `ADDONS['stream']` |
+| Money back until a booster is assigned · Pause anytime · VPN matched to your region | policy | `GUARANTEES_INLINE` |
 
-⚠ **Not usable in an ad, and not used below:** the review score and count, the client count,
-the booster count and every booster's rank — all invented placeholders (see
-*Placeholder data* in CLAUDE.md). An ad is the one surface where an invented statistic becomes
-a legal problem rather than a to-do.
+⚠ **Never used, in any film:** the review score, the review count, the client count, the
+booster count and every booster's rank — invented placeholders (see *Placeholder data* in
+CLAUDE.md). An ad is the one surface where that stops being a to-do and becomes a false
+advertising claim. The end card carries the three signed-off guarantees and no rating.
 
-**The sale is now "Winter sale · ends 31 Jan"** (it read "Summer sale · ends 30 Sep" a month
-after its own window closed, on every page). The code is still `SPLIT15`, so the ads, the
-catalogue FAQ and anything already printed stay true. The scripts below say "15% off right now"
-and never name a window, which is what keeps them usable after 31 Jan.
+**The sale** is "Winter sale · SPLIT15 · ends 31 Jan" on the site; no film names a window,
+so none of them goes stale on 1 February.
 
-⚠ **"Watch your booster play" is sold and the Discord side is not built** (`streams.py` does not
-exist). Video 4 is built entirely on that promise: either ops opens the channel by hand for
-every order it brings in, or that video does not ship.
+## Production rules carried over from the Enevie brief
 
----
+1. **8–12 shots of 2–3 s**, camera moves and transitions 0.8–1 s on soft curves. No whip,
+   no flash, no brutal zoom — 15–20 shots of 1.5 s reads as too fast.
+2. **The film moves from place to place.** A single scene, however well shot, is refused.
+3. ⚠ **No sound on a transition** — no whoosh, ever. Small cues only on the elements that
+   appear (pop, tap, ding, check, sparkle, soft boom), plus a light riser at 0 s.
+4. **Every on-screen word means something.** No decorative labels.
+5. **Frame 0 is the thumbnail**: a title and a visual are already on screen at 0 s.
+6. **Reels safe zone**: anything to be read sits between y=180 and y=1550.
+7. **The close**: logo, gradient button, chevrons pointing down at the platform's own
+   button, ~2.7 s of hold after the last word.
 
-## 1 — "Hard stuck" (typo-choc, ~22 s)
+## Still open
 
-The Enevie `2-typo-choc` shape: one full-bleed colour per line, giant type, no illustration.
-Cheapest to produce, hardest hook. Cuts, not fades.
-
-| # | On screen | Voice-over |
-| --- | --- | --- |
-| 1 | `DO YOU PLAY` / `LEAGUE OF LEGENDS?` (dark + ember) | "Do you play League of Legends, or something similar?" |
-| 2 | `SAME RANK` / `SINCE LAST` / `SEASON?` (ember) | "And you're still in the same rank you were last season?" |
-| 3 | `IT'S NOT` / `YOUR AIM.` / `IT'S THE 400` / `GAMES.` (dark) | "It's not your aim. It's the four hundred games it takes." |
-| 4 | `WE PLAY THEM` / `FOR YOU` (ember grad) | "So we play them for you." |
-| 5 | `SILVER → GOLD` / `$25` (dark + gold tier colour) | "Silver to Gold: twenty-five dollars. Usually done in about a day." |
-| 6 | `MONEY BACK` / `UNTIL A BOOSTER` / `TAKES IT` | "Money back until a booster takes the order." |
-| 7 | End card: logo, `esportsboost.com`, CTA button | "Link's right there." |
-
----
-
-## 2 — "The climb" (illustrated, ~26 s)
-
-The ladder strip from the game page, animated: tier marks in their real colours
-(`tier_color()`), the ring on the current rank, the dot on the target, the span filling in.
-
-| # | On screen | Voice-over |
-| --- | --- | --- |
-| 1 | Rank plate, Silver IV, dim | "Do you play League of Legends, or something similar?" |
-| 2 | The ladder strip, ring stuck on Silver IV, LP bar bouncing 40→60→30 | "This is you. Same two divisions, over and over." |
-| 3 | Calendar: 7 nights ticking, the ring doesn't move | "Because climbing out takes nights you don't have." |
-| 4 | The span fills Silver → Gold, mark turns gold | "A booster does it in about a day." |
-| 5 | Three chips: `Pause anytime` · `VPN in your region` · `Nobody sees your name` | "Paused whenever you like. On a VPN in your region. Your name never shows." |
-| 6 | Price plate `$25` + `Silver IV → Gold IV` | "Twenty-five dollars for the climb." |
-| 7 | End card | "eSports Boost. Link below." |
-
----
-
-## 3 — "Which one are you?" (quiz, ~27 s)
-
-The Enevie `3-quiz-eligibilite` shape — a cursor that taps the answers, so the viewer picks
-their own rank and the price lands on theirs.
-
-| # | On screen | Voice-over |
-| --- | --- | --- |
-| 1 | Card: `Do you play League of Legends?` + Yes / No, cursor taps **Yes** | "Do you play League of Legends, or something similar?" |
-| 2 | Card: `Stuck in your rank right now?` cursor taps **Yes** | "Are you stuck in your rank right now?" |
-| 3 | Four rank tiles — Iron, Bronze, Silver, Gold — cursor taps **Silver** | "Pick the one you're sitting in." |
-| 4 | The tile expands: `Silver IV → Gold IV` · `$25` · `about 1 day` | "Silver to Gold is twenty-five dollars, and about a day." |
-| 5 | Grid of the other prices: `Bronze → Silver $21` · `Gold → Plat $36` · `one division from $4` | "Every rank has its own price. One division starts at four dollars." |
-| 6 | `MONEY BACK UNTIL A BOOSTER TAKES IT` | "And it's refundable until a booster takes it." |
-| 7 | End card | "Find your rank on the site." |
-
----
-
-## 4 — "Watch it happen" (~25 s) ⚠ see the warning above
-
-The objection this one answers is "how do I know anyone is even playing?". It is the only
-video that needs a feature ops has to honour by hand today.
-
-| # | On screen | Voice-over |
-| --- | --- | --- |
-| 1 | Dark, ember, `DO YOU PLAY LEAGUE?` | "Do you play League of Legends, or something similar?" |
-| 2 | `STUCK IN GOLD` + a flat LP line | "Stuck in the same rank, and tired of grinding for it?" |
-| 3 | Objection card: `"So I just… hand it over and hope?"` | "The usual problem with paying someone: you hand it over and hope." |
-| 4 | Dashboard mock: live rank, LP chart climbing, match rows landing | "Here you watch it. Live rank, every game, as it happens." |
-| 5 | `WATCH YOUR BOOSTER PLAY` + `FREE` flag (green) | "And you can watch your booster's screen while they play. That's free." |
-| 6 | `Gold IV → Platinum IV` · `$36` | "Gold to Platinum: thirty-six dollars." |
-| 7 | End card | "eSports Boost." |
-
----
-
-## 5 — "Less than a skin" (~24 s)
-
-The money angle. Compares a rank to a thing the viewer already buys — no competitor named,
-no price claimed for anyone else.
-
-| # | On screen | Voice-over |
-| --- | --- | --- |
-| 1 | `DO YOU PLAY` / `LEAGUE OF LEGENDS?` | "Do you play League of Legends, or something similar?" |
-| 2 | `YOU'VE BEEN` / `HARD STUCK` / `FOR MONTHS` | "Been hard stuck for months, and the climb isn't happening?" |
-| 3 | A skin splash tile, price pill `$22` | "You'll spend twenty-two on a skin without thinking about it." |
-| 4 | Beside it: rank plate Silver → Gold, price pill `$25` | "A whole rank is twenty-five." |
-| 5 | `ONE DIVISION` / `FROM $4` | "One division starts at four dollars. One win, three." |
-| 6 | `15% OFF RIGHT NOW` (ember) | "Fifteen percent off right now, applied at checkout." |
-| 7 | End card | "Pick your rank. Link below." |
-
----
-
-## Production notes
-
-- **Voice**: ElevenLabs, `eleven_multilingual_v2`, `language_code: "en"` — `tts_eleven()` has
-  `'fr'` hardcoded and gains a `ELEVEN_LANG` switch in the port. Render 3 sample lines in 3
-  voices and pick one before the 5 videos go out, the way the Enevie voices were sampled.
-- **Palette**: Ashfall, not Enevie's green. `--ember #ff4a1f`, `--bg #06060a`, amber, and the
-  **tier colours from `D.tier_color()`** so a Gold mark in a video is the same gold as on site.
-- **Logo**: `site/assets-out/google-ads/logo-4x1-1200x300-transparent-dark-bg-only.png`, already
-  exported and transparent on dark.
-- **Font**: the engine needs a variable TTF. `Montserrat.ttf` is in the Enevie tooling and reads
-  right for a gaming brand; the site's own Chakra Petch would be closer to the brand if a TTF
-  is dropped into `site/tools/fonts/`.
-- **Music**: `mood='electro'` from the synth library — original, no licence, no takedown.
+⚠ **`streams.py` does not exist**, so "watch your booster play" is a promise a person
+keeps by hand. Film 3 shows the live dashboard and says you watch the climb — which the
+order page already does — but it does **not** sell the screen share. The film that did was
+dropped for exactly that reason. Build the seam or keep the promise manually before any
+film goes further than this.

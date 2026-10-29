@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <!-- eSports Boost film "True or false". Timing: assets/timing.js, written by ../build_film.py.
+         THE PLACE: three cards on a table, turned over one at a time. The film moves card to card,
+         and the THIRD ONE IS TRUE: boosting is against the game's terms and the film says so in
+         amber rather than selling past it. That card is the reason the other two are believed.
+         SAFE ZONE: y=180 to y=1550. -->
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/timing.js"></script>
+    <script>
+      window.__hf = window.__hf || {};
+      window.__hf.buildReady = window.__hf.buildReady || {};
+      const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+      window.W = (w, after = 0, end = false) => {
+        for (const x of VO.words) if (x.s >= after - 1e-6 && norm(x.w) === w) return end ? x.e : x.s;
+        throw new Error("word not found: " + w);
+      };
+    </script>
+    <style>
+      @font-face { font-family: "MontserratE"; src: url("assets/fonts/Montserrat.ttf") format("truetype"); font-weight: 100 900; }
+      :root {
+        --bg: #06060a; --panel: #0e0e16; --panel2: #13131d; --hair: #262632;
+        --ink: #f4f1ec; --muted: #a8a5b2; --dim: #8b8b99;
+        --ember: #ff4a1f; --ember-lit: #ff6a3d; --amber: #ffb84c; --green: #34c77b; --red: #e0574f;
+        --grad-h: linear-gradient(90deg, #ff6a3d 0%, #ff4a1f 100%);
+        --silver: #a3adb8; --gold: #e0ac3e;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: "MontserratE", sans-serif; color: var(--ink); }
+      .layer { position: absolute; inset: 0; }
+      .abs { position: absolute; }
+      .m { overflow: hidden; padding: 14px 0 6px; margin: -14px 0 -6px; }
+      #haze { background: radial-gradient(900px 720px at 50% 30%, rgba(255,74,31,.16), transparent 70%), var(--bg); }
+
+      #title { left: 70px; top: 196px; width: 940px; text-align: center; z-index: 9; }
+      #t1 { font-size: 60px; font-weight: 800; }
+      #t2 { font-size: 70px; font-weight: 900; color: var(--ember); margin-top: 4px; }
+
+      #lead { left: 90px; top: 430px; width: 900px; text-align: center; z-index: 8; opacity: 0;
+              font-size: 46px; font-weight: 800; color: var(--muted); }
+      #lead2 { left: 90px; top: 570px; width: 900px; text-align: center; z-index: 8; opacity: 0;
+               font-size: 62px; font-weight: 900; color: var(--ink); }
+      #rail { left: 0; right: 0; top: 1300px; text-align: center; z-index: 8; opacity: 0; }
+      .pip { display: inline-block; width: 74px; height: 10px; border-radius: 6px; background: var(--hair); margin: 0 9px; }
+
+      /* ——— The three cards ——— */
+      /* ⚠ ONE CARD AT A TIME, ALL THREE IN THE SAME SLOT. Stacked down the frame they
+         overlapped — card 3 sat on card 2's facts — and each one then held the screen for
+         nearly four seconds with nothing moving. A card now arrives, is read, and leaves. */
+      .card { position: absolute; left: 90px; top: 700px; width: 900px; border-radius: 40px; background: var(--panel);
+              border: 2px solid var(--hair); padding: 44px 46px; opacity: 0; }
+      .num { font-size: 28px; font-weight: 900; color: var(--dim); letter-spacing: .14em; }
+      .claim { font-size: 46px; font-weight: 900; margin-top: 10px; line-height: 1.16; }
+      .verdict { display: inline-flex; align-items: center; margin-top: 22px; font-size: 40px; font-weight: 900;
+                 letter-spacing: .1em; border-radius: 999px; padding: 12px 30px; opacity: 0; }
+      .verdict.f { color: var(--green); background: rgba(52,199,123,.14); border: 2px solid rgba(52,199,123,.55); }
+      .verdict.t { color: var(--amber); background: rgba(255,184,76,.13); border: 2px solid rgba(255,184,76,.55); }
+      .facts { margin-top: 24px; }
+      .fact { display: flex; align-items: center; gap: 16px; font-size: 36px; font-weight: 700; color: var(--muted); margin-top: 14px; }
+      .fact .b { width: 34px; height: 34px; border-radius: 50%; flex: 0 0 auto; display: flex; align-items: center;
+                 justify-content: center; font-size: 22px; font-weight: 900; color: #06060a; background: var(--green); }
+      .fact.amb .b { background: var(--amber); }
+      .price { font-size: 56px; font-weight: 900; color: var(--ember); }
+
+      /* ——— The close ——— */
+      #endLogo { left: 0; right: 0; top: 690px; text-align: center; z-index: 9; opacity: 0; }
+      #endImg { width: 640px; }
+      .logo-sub { display: inline-flex; margin-top: 16px; font-size: 28px; font-weight: 800; letter-spacing: 0.15em; color: var(--muted); }
+      #cta { left: 120px; top: 1110px; width: 840px; height: 140px; z-index: 9; opacity: 0; }
+      .btn { position: relative; width: 100%; height: 100%; border-radius: 70px; background: var(--grad-h); overflow: hidden;
+        color: #06060a; font-size: 46px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 20px 44px rgba(255,74,31,.38); }
+      #ctaShine { position: absolute; top: -30%; left: 0; width: 150px; height: 160%;
+        background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.55), rgba(255,255,255,0)); }
+      #endNote { left: 0; right: 0; top: 1300px; text-align: center; font-size: 30px; font-weight: 700; color: var(--dim); z-index: 9; opacity: 0; }
+      #chev { left: 490px; top: 1400px; width: 100px; height: 90px; z-index: 9; opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="38.36" data-film data-width="1080" data-height="1920">
+      <div id="haze" class="layer"></div>
+
+      <div id="title" class="abs">
+        <div class="m"><div id="t1">Do you play</div></div>
+        <div class="m"><div id="t2">LEAGUE OF LEGENDS?</div></div>
+      </div>
+
+      <div id="lead" class="abs">Three things people believe about boosting</div>
+      <div id="lead2" class="abs">Two of them are wrong.</div>
+
+      <!-- Three of three: the cards share a slot, so the rail is what says where you are. -->
+      <div id="rail" class="abs"><span class="pip" id="p1"></span><span class="pip" id="p2"></span><span class="pip" id="p3"></span></div>
+
+      <div class="card" id="c1" data-layout-allow-overlap>
+        <div class="num">01</div>
+        <div class="claim">“Someone keeps your account.”</div>
+        <div class="verdict f" id="v1">FALSE</div>
+        <div class="facts" id="f1">
+          <div class="fact"><span class="b">✓</span>Pause it whenever you like</div>
+          <div class="fact"><span class="b">✓</span>Your name never shows</div>
+        </div>
+      </div>
+
+      <div class="card" id="c2" data-layout-allow-overlap>
+        <div class="num">02</div>
+        <div class="claim">“It costs a fortune.”</div>
+        <div class="verdict f" id="v2">FALSE</div>
+        <div class="facts" id="f2">
+          <div class="fact"><span class="b">✓</span>One division from <span class="price">&nbsp;$4</span></div>
+          <div class="fact"><span class="b">✓</span>A whole rank, <span class="price">&nbsp;$25</span></div>
+        </div>
+      </div>
+
+      <div class="card" id="c3" data-layout-allow-overlap>
+        <div class="num">03</div>
+        <div class="claim">“It's against the rules.”</div>
+        <div class="verdict t" id="v3">TRUE</div>
+        <div class="facts" id="f3">
+          <div class="fact amb"><span class="b">!</span>Played on a VPN in your region</div>
+          <div class="fact amb"><span class="b">!</span>In your normal hours</div>
+        </div>
+      </div>
+
+      <div id="endLogo" class="abs">
+        <img id="endImg" src="assets/logo-wide.png" alt="eSports Boost" />
+        <div class="m"><div id="endSub" class="logo-sub">NO SURPRISES</div></div>
+      </div>
+      <div id="cta" class="abs"><div class="btn"><span>Start my climb</span><div id="ctaShine" data-layout-allow-overflow></div></div></div>
+      <div id="endNote" class="abs">Money back until a booster takes it</div>
+      <div id="chev" class="abs"><svg id="chevIn" width="100" height="90" viewBox="0 0 60 54"><path d="M14 10l16 13 16-13M14 27l16 13 16-13" stroke="#ff4a1f" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg></div>
+
+      <audio id="bande-son" class="clip" data-start="0" data-duration="38.36" data-track-index="9" data-volume="1" src="assets/bande-son.wav"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      Promise.all(["900 100px MontserratE", "800 40px MontserratE"].map((f) => document.fonts.load(f))).then(() => {
+        const tl = gsap.timeline({ paused: true });
+        const Ls = VO.lines.map((l) => l.start), T = VO.total;
+        const IN = (sel, t, d = 0.42) => tl.fromTo(sel, { yPercent: 165 }, { yPercent: 0, duration: d, ease: "power3.out" }, t);
+
+        /* The title is on the FIRST FRAME, not masked in: frame 0 is the thumbnail on a
+           social player, and an empty one is a scroll. */
+        gsap.set("#title", { opacity: 1 });
+        gsap.set([".card"], { opacity: 0 });
+        /* y only, never opacity: a fromTo sets its "from" state immediately, so an opacity
+           tween here would blank the thumbnail frame the player shows before anyone presses play. */
+        gsap.set("#t2", { opacity: 0.35 });
+        tl.fromTo("#t1", { y: 16 }, { y: 0, duration: 0.45, ease: "power3.out" }, 0.05);
+        tl.to("#t2", { opacity: 1, duration: 0.4, ease: "power2.out" }, W("league") - 0.1);
+
+        tl.to("#title", { opacity: 0, y: -40, duration: 0.5, ease: "power2.in" }, Ls[1] - 0.1);
+        tl.fromTo("#lead", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, Ls[1] - 0.05);
+        tl.fromTo("#rail", { opacity: 0 }, { opacity: 1, duration: 0.4 }, W("three") + 0.1);
+        const pip = (sel, t, on) => tl.to(sel, { backgroundColor: on ? "#ff4a1f" : "#262632", duration: 0.35 }, t);
+        pip("#p1", W("three") + 0.15, false); pip("#p2", W("things") + 0.15, false); pip("#p3", W("people") + 0.15, false);
+
+        /* The second half of the line carries the three seconds before the first card:
+           the cards cannot be shown face down here — they share one slot. */
+        tl.fromTo("#lead2", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, W("two") - 0.15);
+        tl.to(["#lead", "#lead2"], { opacity: 0, y: -30, duration: 0.45, ease: "power2.in" }, W("one", 7.9) - 0.5);
+
+        /* Each card: in on the claim, the verdict stamps, the facts rise, out before the next.
+           Nothing is left holding the frame — the previous check found two dead stretches of
+           nearly four seconds here. */
+        const show = (card, verdict, facts, tIn, tVerdict, tFacts, tOut, accent, pipSel) => {
+          tl.to(card, { opacity: 1, y: 0, rotation: 0, scale: 1, duration: 0.5, ease: "power3.out" }, tIn);
+          tl.to(card, { borderColor: accent, duration: 0.45 }, tVerdict - 0.1);
+          tl.fromTo(verdict, { opacity: 0, scale: 0.6, rotation: -8 },
+            { opacity: 1, scale: 1, rotation: 0, duration: 0.5, ease: "back.out(2.2)" }, tVerdict);
+          tl.set(facts, { opacity: 1 }, 0);
+          /* One fact, one spoken word. A stagger would have dropped both in the first half
+             second and left the rest of the line with nothing moving. */
+          tl.fromTo(facts + " .fact:nth-of-type(1)", { opacity: 0, x: -22 },
+            { opacity: 1, x: 0, duration: 0.45, ease: "power2.out" }, tFacts[0]);
+          tl.fromTo(facts + " .fact:nth-of-type(2)", { opacity: 0, x: -22 },
+            { opacity: 1, x: 0, duration: 0.45, ease: "power2.out" }, tFacts[1]);
+          pip(pipSel, tIn, true);
+          if (tOut) tl.to(card, { opacity: 0, y: -70, scale: 0.97, duration: 0.38, ease: "power2.in" }, tOut);
+        };
+
+        show("#c1", "#v1", "#f1", W("one", 7.9) - 0.25, W("false") - 0.12,
+             [W("pause") - 0.15, W("name") - 0.15], W("two", 15.0) - 0.68, "rgba(52,199,123,.55)", "#p1");
+        show("#c2", "#v2", "#f2", W("two", 15.0) - 0.25, W("false", 17.0) - 0.12,
+             [W("one", 18.4) - 0.15, W("whole") - 0.15], W("three", 22.8) - 0.68, "rgba(52,199,123,.55)", "#p2");
+        show("#c3", "#v3", "#f3", W("three", 22.8) - 0.25, W("true") - 0.12,
+             [W("vpn") - 0.3, W("normal") - 0.15], null, "rgba(255,184,76,.6)", "#p3");
+        /* the honest card is the one that gets the extra beat */
+        tl.to("#c3", { scale: 1.03, duration: 0.8, ease: "power2.out" }, W("true") - 0.05);
+        tl.to("#c3", { y: -16, duration: 1.2, ease: "sine.inOut" }, W("vpn") - 0.2);
+
+        /* ——— the close ——— */
+        const tEnd = Ls[8];
+        tl.to([".card"], { opacity: 0, y: -60, duration: 0.55, stagger: 0.04, ease: "power2.in" }, tEnd - 0.35);
+        tl.fromTo("#endLogo", { opacity: 0, scale: 0.88 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd);
+        IN("#endSub", tEnd + 0.15);
+        tl.fromTo("#cta", { opacity: 0, y: 40, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd + 0.3);
+        tl.fromTo("#ctaShine", { x: -220 }, { x: 1000, duration: 0.8, ease: "power2.inOut" }, tEnd + 0.9);
+        tl.fromTo("#endNote", { opacity: 0 }, { opacity: 1, duration: 0.4 }, W("money") - 0.1);
+        tl.fromTo("#chev", { opacity: 0 }, { opacity: 1, duration: 0.3 }, tEnd + 0.6);
+        tl.fromTo("#chevIn", { y: -6 }, { y: 10, duration: 0.32, ease: "sine.inOut", yoyo: true,
+          repeat: Math.max(1, 2 * Math.floor((T - tEnd - 0.8) / 0.64) - 1) }, tEnd + 0.9);
+
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.paused(false).timeScale(VO.speed || 1), 0);
+        window.__timelines["main"] = film;
+      });
+    </script>
+  </body>
+</html>
