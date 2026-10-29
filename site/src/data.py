@@ -2280,7 +2280,13 @@ SPOTLIGHT = dict(
 # replaces the auto promo when it is worth more, and is otherwise ignored, so a
 # buyer can never make their price worse by entering one.
 PROMOS = {
-    "SPLIT15": dict(pct=0.15, label="Summer sale", auto=True, ends="30 Sep"),
+    # ⚠ The label and the date are PUBLIC COPY and they go stale on their own:
+    # this read "Summer sale … ends 30 Sep" on 29 Oct, a month after its own
+    # window closed, on every page of the site. Both are dictionary KEYS in
+    # i18n.js ("Winter sale" and the whole string "ends 31 Jan", built by
+    # PROMO below), so changing either without changing fr/de there ships the
+    # bar in English to French and German readers. There is no test for it.
+    "SPLIT15": dict(pct=0.15, label="Winter sale", auto=True, ends="31 Jan"),
     # Affiliate and win-back codes go here, e.g.
     # "COMEBACK20": dict(pct=0.20, label="Welcome back", auto=False, ends=""),
 }

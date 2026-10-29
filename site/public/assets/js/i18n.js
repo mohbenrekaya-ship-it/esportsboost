@@ -323,8 +323,8 @@
       /* site header — design_handoff_site_header */
       "Currency": "Devise",
       "Language": "Langue",
-      "Summer sale": "Promo d’été",
-      "ends 30 Sep": "jusqu’au 30 septembre",
+      "Winter sale": "Promo d’hiver",
+      "ends 31 Jan": "jusqu’au 31 janvier",
       "Copied": "Copié",
       "verified boosters": "boosters vérifiés",
       "Games": "Jeux",
@@ -2128,8 +2128,8 @@
       /* site header — design_handoff_site_header */
       "Currency": "Währung",
       "Language": "Sprache",
-      "Summer sale": "Sommer-Sale",
-      "ends 30 Sep": "bis 30. Sep.",
+      "Winter sale": "Winter-Sale",
+      "ends 31 Jan": "bis 31. Jan.",
       "Copied": "Kopiert",
       "verified boosters": "verifizierte Booster",
       "Games": "Spiele",
