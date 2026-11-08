@@ -175,6 +175,10 @@ def dashboard_data(days=30, game=None, synthetic=False, start=None, end=None,
     payload = insights.compute(events, days=days, game=game, synthetic=synthetic,
                                start=start, end=end, tzoff=tzoff, source=source)
     payload["meta"]["store"] = analytics.store_name()
+    # A real round trip, not an env-var check. Both append() and read() swallow
+    # StoreError by design, so without this a broken store and an empty one are
+    # the same screen: "upstash store, 0 events", no error anywhere.
+    payload["meta"]["health"] = analytics.store_health()
     return payload
 
 

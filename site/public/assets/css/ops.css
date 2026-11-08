@@ -759,3 +759,23 @@ textarea.ta {
 .tr-step.zero b { color: var(--ink-3); font-weight: 500; }
 .tr-arrow { font-style: normal; font-size: 11px; color: var(--hair-2, var(--hair)); }
 .tr-val { margin-left: 6px; font-size: 12px; font-weight: 650; color: var(--good, var(--accent)); }
+
+/* ── Store health ───────────────────────────────────────────────────────────
+   append() and read() both swallow StoreError on purpose, so a store that is
+   configured but unreachable renders exactly like an empty one. These two are
+   the only places the difference is visible; keep them loud. The banner carries
+   a `display`, so it needs the [hidden] guard the rest of this file needs. */
+.banner.storebad {
+  border-color: #7f2d2d;
+  background: linear-gradient(180deg, #2a1414, #1d1010);
+  color: #ffd9d9;
+}
+.banner.storebad code {
+  font-family: var(--mono, ui-monospace, Menlo, monospace);
+  font-size: 11.5px;
+  color: #ffb3b3;
+  word-break: break-word;
+}
+.banner[hidden] { display: none; }
+.store-bad { color: #ff6b6b; }
+.dot.dot-bad { background: #ff5a5a; box-shadow: 0 0 0 3px rgba(255, 90, 90, 0.16); }

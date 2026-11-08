@@ -4712,9 +4712,34 @@
     // Store chip — one compact line in the sidebar foot (store + events held).
     var meta = document.querySelector("[data-meta]");
     if (meta) {
+      var h = d.meta.health || {};
+      // A store that is configured but cannot be reached reads as "0 events"
+      // everywhere else, because append() and read() both swallow StoreError.
+      // The chip is the one place that can say which of the two you have.
+      var bad = h.configured && !h.ok;
       meta.innerHTML =
-        '<span class="dot"></span>' + esc(d.meta.store) + " store" +
-        ' · <b>' + esc(num(d.meta.stored)) + "</b> events";
+        '<span class="dot' + (bad ? " dot-bad" : "") + '"></span>' +
+        esc(d.meta.store) + " store" +
+        ' · <b>' + esc(num(d.meta.stored)) + "</b> events" +
+        (bad ? ' · <b class="store-bad">unreachable</b>' : "");
+    }
+
+    // The store is configured and broken: say so loudly and say WHY. An empty
+    // dashboard with no error is how a dead analytics pipe goes unnoticed for
+    // a month of ad spend.
+    var sb = document.querySelector("[data-storebanner]");
+    if (sb) {
+      var hh = d.meta.health || {};
+      var broken = hh.configured && !hh.ok;
+      sb.hidden = !broken;
+      if (broken) {
+        sb.innerHTML =
+          "<b>The analytics store is not working — these numbers are not your traffic.</b><br>" +
+          (hh.readable
+            ? "Reads succeed but <b>writes are failing</b>, so nothing the site collects is being kept. "
+            : "The store cannot be reached at all, so nothing is being collected or read. ") +
+          "Upstash said: <code>" + esc(hh.error || "(no detail)") + "</code>";
+      }
     }
 
     // Topbar reflects the section you are in.

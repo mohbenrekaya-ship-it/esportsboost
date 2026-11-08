@@ -10548,6 +10548,7 @@ def page_ops():
         <span class="refresh-ico" aria-hidden="true"></span></button>
     </header>
 
+    <div class="banner storebad" data-storebanner hidden></div>
     <div class="banner synthetic" data-synthetic hidden></div>
 
     <div class="content" data-panels></div>

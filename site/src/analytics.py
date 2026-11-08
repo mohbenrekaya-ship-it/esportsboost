@@ -111,6 +111,55 @@ def store_name():
     return "upstash" if upstash_config()[0] else "file"
 
 
+def store_health():
+    """Actually talk to the store and report what happened.
+
+    `store_name()` only reads an environment variable, and both `append()` and
+    `read()` swallow StoreError on purpose — a dropped analytics event must
+    never 500 a page the customer is looking at, and a dashboard that explodes
+    on a bad token is worse than one that renders empty. The cost of those two
+    decisions is that a BROKEN store and an EMPTY one are indistinguishable:
+    both render as "upstash store, 0 events", with no error anywhere.
+
+    This is the one place that tells them apart. It does a real round trip —
+    length of the event list, then a write and a delete against a throwaway key
+    carrying its own TTL, so a read-only token (the failure that looks most like
+    an empty store) is reported as exactly that, and nothing is ever written to
+    the event list itself.
+
+    Never raises: it is called while building the dashboard payload.
+    """
+    url, _token = upstash_config()
+    out = {"store": store_name(), "configured": bool(url),
+           "ok": False, "readable": False, "writable": False,
+           "events": 0, "error": ""}
+    if not url:
+        # The file store: readable and writable if the path behaves.
+        try:
+            n = len(read(limit=MAX_EVENTS))
+            out.update(ok=True, readable=True, writable=True, events=n)
+        except Exception as e:                                # noqa: BLE001
+            out["error"] = str(e)[:200]
+        return out
+    try:
+        res = _upstash([["LLEN", LIST_KEY]])
+        out["readable"] = True
+        out["events"] = int(res[0] or 0) if res else 0
+    except StoreError as e:
+        out["error"] = str(e)[:200]
+        return out
+    probe = LIST_KEY + ":health"
+    try:
+        _upstash([["SET", probe, str(int(time.time())), "EX", "60"],
+                  ["DEL", probe]])
+        out["writable"] = True
+    except StoreError as e:
+        out["error"] = "read ok, WRITE FAILED: " + str(e)[:180]
+        return out
+    out["ok"] = True
+    return out
+
+
 def log_path():
     return os.environ.get("ANALYTICS_LOG", "").strip() or os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "analytics.ndjson")
