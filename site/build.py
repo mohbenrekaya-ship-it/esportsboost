@@ -97,6 +97,31 @@ def _gads_head():
 META_PIXEL_ID = os.environ.get("META_PIXEL_ID", "1145104387855719").strip()
 
 
+# Meta's domain verification. A <meta> in the STATIC head, which is Meta's own
+# constraint: it refuses a tag written in by JS or placed outside <head>, so
+# this cannot move into app.js or below the body. It is not a secret either —
+# it is a public proof of control, like a DNS TXT record.
+#
+# Verifying the domain is what unlocks Aggregated Event Measurement's event
+# priority, which decides WHICH single event is attributed for iOS traffic.
+# Without it that choice is Meta's rather than ours, and a PageView can win
+# over a Purchase on the same visitor.
+#
+# ⚠ Meta verifies the ROOT domain (esportsboost.com) and fetches its home
+# page. This site serves a 308 from the apex to www, so the tag has to be on
+# both — which it is, because it rides in layout() on every page.
+META_DOMAIN_VERIFICATION = os.environ.get(
+    "META_DOMAIN_VERIFICATION", "gh1u4k1pwymqaczoecg5zlu5k09uuc").strip()
+
+
+def _meta_domain_verify():
+    """The domain-verification <meta>, or "" when unset."""
+    if not META_DOMAIN_VERIFICATION:
+        return ""
+    return ('<meta name="facebook-domain-verification" content="%s">\n'
+            % esc(META_DOMAIN_VERIFICATION))
+
+
 def _meta_pixel_head():
     """Meta's base pixel for the <head> — one per page, beside the Google tag.
     Empty string when unconfigured. `fbq` is left global, so a later
@@ -1697,7 +1722,7 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
 <head>
 <script>document.documentElement.classList.remove('no-js')</script>
 <meta charset="utf-8">
-{_gads_head()}{_meta_pixel_head()}
+{_gads_head()}{_meta_pixel_head()}{_meta_domain_verify()}
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title>
 <meta name="description" content="{esc(desc)}">
