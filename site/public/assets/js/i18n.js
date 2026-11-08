@@ -115,7 +115,20 @@
      pick, and `curPinned` outranks every line of this forever after. */
   var LANG_CUR = { fr: "EUR", de: "EUR" };
 
+  /* ⚠ THE BUSINESS'S CALL (2026-11-08): the storefront opens in DOLLARS for
+     everybody, whatever the location says. DEFAULT_CURRENCY is the whole
+     override — set it to "" and the ladder below resolves by location again,
+     exactly as it did before. The ladder is deliberately left intact rather
+     than deleted, because every rung of it records a decision (see the
+     comments) and re-deriving them from scratch is the expensive part.
+
+     It is still only a DEFAULT. `curPinned` is unchanged and outranks this:
+     a visitor who picks EUR or GBP in the switcher keeps it, here and on
+     every later visit. The switcher still offers all three. */
+  var DEFAULT_CURRENCY = "USD";
+
   function defaultCurrency(lang) {
+    if (DEFAULT_CURRENCY) return DEFAULT_CURRENCY;
     var tz = zone(), reg = uiRegion();
     // The order matters, and every step earns its place:
     //  0. The edge's own answer, when there is one. This branch is the exact

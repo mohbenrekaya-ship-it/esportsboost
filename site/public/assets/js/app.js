@@ -103,7 +103,20 @@
      before ESB_LOCALE is published, and two copies of that reasoning would
      disagree the day one of them was edited. i18n.js ships on every page
      layout() renders, so the fallback below is inert. */
+  /* ⚠ THE BUSINESS'S CALL (2026-11-08): every order form opens on NORTH
+     AMERICA, whatever the visitor's location says. DEFAULT_SERVER_AREA is the
+     whole override — set it to "" and the estate is resolved from
+     window.esbGeo again, exactly as it was.
+
+     Still only a DEFAULT, and `regionPicked` is untouched: a visitor who
+     touches the Server control keeps their shard, on this game and on every
+     other, and all nine ladders still offer their full region list one tap
+     away. geo.py is left alone — it has no production caller for this, and
+     /ops still reports where traffic actually came from. */
+  var DEFAULT_SERVER_AREA = "NA";
+
   function serverArea() {
+    if (DEFAULT_SERVER_AREA) return DEFAULT_SERVER_AREA;
     return (window.esbGeo && window.esbGeo.area()) || "EU";
   }
 
