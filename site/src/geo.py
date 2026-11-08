@@ -166,20 +166,28 @@ EU_COUNTRIES = frozenset(
 # `currency_for()`, and it is a country map for the same reason: a location is
 # a market, where a browser's language list is only what the machine is set to.
 #
-# ⚠ It is deliberately NARROW — one entry, France. Every country listed here is
-# a claim that our translation of that language is the one its readers expect,
-# and only French and German are written at all (see the register-and-voice
-# rules in CLAUDE.md). Adding Germany, Belgium, Austria or Switzerland is one
-# line each; it is a business call, not a technical one, because a Belgian
-# quoted in the French of France and a Swiss reader handed `du` are both
-# decisions somebody owns.
+# ⚠ IT IS EMPTY, AND THAT IS THE BUSINESS'S CALL (2026-11-08): every visitor on
+# earth opens the site in ENGLISH. Paid traffic is running on the United States,
+# and a table that can hand somebody French is a table that can hand it to the
+# wrong person — a US buyer behind a European VPN, a traveller, a roaming SIM.
+# English for everyone is one fewer thing that can be wrong on an ad click.
 #
-# It sets a DEFAULT only. A visitor who opens the language dropdown pins their
-# pick, and that pin outranks this forever after — same contract as the
-# currency's `curPinned` and the server's `regionPicked`.
-LANG_COUNTRIES = {
-    "FR": "fr",
-}
+# ⚠ WHAT THIS DOES *NOT* DO, and must not be "completed" into doing:
+#   · The French and German dictionaries are untouched and the switcher still
+#     offers all three. This removes a DEFAULT, not a language.
+#   · A visitor who opens the dropdown and picks one still pins it, and that pin
+#     outranks this forever after — same contract as `curPinned` and
+#     `regionPicked`. Somebody who chose French yesterday still gets French.
+#   · The CURRENCY is a separate ladder and is deliberately unchanged: the EU is
+#     still quoted euros and the UK pounds, because that is what the shop can
+#     actually charge. Language and money were never the same question.
+#
+# Putting a market back is one line here — `{"FR": "fr"}` restores exactly what
+# this replaced — but every country added is a claim that our translation of
+# that language is the one its readers expect, which is a business call and not
+# a technical one. `langZones` in build.py is derived from this map, so an entry
+# added here reaches the timezone fallback for free.
+LANG_COUNTRIES = {}
 
 
 def language_for(code):
