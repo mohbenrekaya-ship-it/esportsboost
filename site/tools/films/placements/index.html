@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <!-- eSports Boost film "Placements". Timing: assets/timing.js, written by ../build_film.py.
+         THE PLACE: the placement tracker at the start of a season. The film moves: ten empty
+         slots -> four losses and the rank they drop you into -> the same slots won, and the
+         rank they open -> what it costs. SAFE ZONE: y=180 to y=1550. -->
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/timing.js"></script>
+    <script>
+      window.__hf = window.__hf || {};
+      window.__hf.buildReady = window.__hf.buildReady || {};
+      const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+      window.W = (w, after = 0, end = false) => {
+        for (const x of VO.words) if (x.s >= after - 1e-6 && norm(x.w) === w) return end ? x.e : x.s;
+        throw new Error("word not found: " + w);
+      };
+    </script>
+    <style>
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-400-latin.woff2") format("woff2"); font-weight: 400; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-500-latin.woff2") format("woff2"); font-weight: 500; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-600-latin.woff2") format("woff2"); font-weight: 600; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-700-latin.woff2") format("woff2"); font-weight: 700; font-display: block; }
+      :root {
+        --bg: #06060a; --panel: #0e0e16; --panel2: #13131d; --hair: #262632;
+        --ink: #f4f1ec; --muted: #a8a5b2; --dim: #8b8b99;
+        --ember: #ff4a1f; --ember-lit: #ff6a3d; --amber: #ffb84c; --green: #34c77b; --red: #e0574f;
+        --grad-h: linear-gradient(90deg, #ff6a3d 0%, #ff4a1f 100%);
+        --silver: #a3adb8; --gold: #e0ac3e; --plat: #4fb0aa;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: "Inter", sans-serif; color: var(--ink); }
+      .layer { position: absolute; inset: 0; }
+      .abs { position: absolute; }
+      .m { overflow: hidden; padding: 14px 0 6px; margin: -14px 0 -6px; }
+      #haze { background: radial-gradient(900px 700px at 50% 26%, rgba(255,74,31,.16), transparent 70%), var(--bg); }
+
+      #title { left: 70px; top: 196px; width: 940px; text-align: center; z-index: 9; }
+      #t1 { font-size: 60px; font-weight: 600; }
+      #t2 { font-size: 70px; font-weight: 700; color: var(--ember); margin-top: 4px; }
+
+      /* ——— The tracker ——— */
+      #track { left: 90px; top: 560px; width: 900px; z-index: 5;
+               background: var(--panel); border: 1px solid var(--hair); border-radius: 40px; padding: 40px 40px 44px; }
+      #thead { display: flex; align-items: baseline; justify-content: space-between; }
+      #tname { font-size: 42px; font-weight: 700; }
+      #tcount { font-size: 30px; font-weight: 600; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
+      #slots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-top: 34px; }
+      /* Three layers per slot — empty, lost, won — cross-faded. Never rewritten by a
+         callback: the renderer SEEKS, and a .call() that edits text does not survive that. */
+      .slot { position: relative; aspect-ratio: 1 / 1; }
+      .face { position: absolute; inset: 0; border-radius: 22px; display: flex; align-items: center;
+              justify-content: center; font-size: 46px; font-weight: 700; }
+      .face.e { background: var(--panel2); border: 2px solid var(--hair); color: var(--dim); }
+      .face.l { background: rgba(60,20,16,.75); border: 2px solid rgba(224,87,79,.55); color: #ffd9d3; opacity: 0; }
+      .face.w { background: rgba(12,42,28,.8); border: 2px solid rgba(52,199,123,.55); color: #c8f6dd; opacity: 0; }
+
+      /* ——— Where it drops you / where it opens ——— */
+      #verdict { left: 90px; top: 1180px; width: 900px; z-index: 7; text-align: center; opacity: 0; }
+      #vLost, #vWon { position: absolute; left: 0; right: 0; top: 0; }
+      #vWon { opacity: 0; }
+      .vChip { display: inline-flex; align-items: center; gap: 20px; border-radius: 999px; padding: 22px 42px;
+               background: var(--panel); border: 2px solid var(--hair); }
+      #vWon .vChip { border-color: rgba(79,176,170,.55); }
+      .vMark { width: 76px; height: 76px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+               font-size: 30px; font-weight: 700; }
+      .vMark.s { background: rgba(163,173,184,.15); border: 4px solid rgba(163,173,184,.8); color: var(--silver); }
+      .vMark.p { background: rgba(79,176,170,.16); border: 4px solid rgba(79,176,170,.85); color: var(--plat); }
+      .vName { font-size: 46px; font-weight: 700; }
+      .vName.s { color: var(--silver); } .vName.p { color: var(--plat); }
+      .vSub { font-size: 34px; font-weight: 500; color: var(--muted); margin-top: 20px; }
+
+      /* ——— The offer ——— */
+      #offer { left: 90px; top: 1150px; width: 900px; z-index: 8; opacity: 0;
+               background: var(--panel); border: 1px solid var(--hair); border-radius: 40px; padding: 40px 44px; }
+      #oTop { font-size: 44px; font-weight: 700; }
+      #oBy { font-size: 34px; font-weight: 500; color: var(--muted); margin-top: 12px; }
+      #oRow { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 32px;
+              border-top: 1px solid var(--hair); padding-top: 30px; }
+      #oAmt { font-size: 110px; font-weight: 700; color: var(--ember); line-height: 1; }
+      #oEta { font-size: 34px; font-weight: 600; color: var(--ink); text-align: right; }
+      #oEta span { display: block; font-size: 28px; font-weight: 600; color: var(--dim);
+                   letter-spacing: .09em; text-transform: uppercase; margin-bottom: 8px; }
+
+      /* ——— The close ——— */
+      #endLogo { left: 0; right: 0; top: 690px; text-align: center; z-index: 9; opacity: 0; }
+      #lockup { display: inline-flex; align-items: center; gap: 22px; }
+      #shard { width: 46px; height: 102px; flex: none; background: linear-gradient(#ffb046, #ff3d0f);
+               clip-path: polygon(0 0, 100% 18%, 62% 100%, 18% 62%); }
+      #wordmark { font-size: 78px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: #f2efec; }
+      #wordmark b { font-weight: 700; color: #ff5a1f; }
+      .logo-sub { display: inline-flex; margin-top: 16px; font-size: 28px; font-weight: 600; letter-spacing: 0.15em; color: var(--muted); }
+      #cta { left: 120px; top: 1110px; width: 840px; height: 140px; z-index: 9; opacity: 0; }
+      .btn { position: relative; width: 100%; height: 100%; border-radius: 70px; background: var(--grad-h); overflow: hidden;
+        color: #06060a; font-size: 46px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 20px 44px rgba(255,74,31,.38); }
+      #ctaShine { position: absolute; top: -30%; left: 0; width: 150px; height: 160%;
+        background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.55), rgba(255,255,255,0)); }
+      #endNote { left: 0; right: 0; top: 1300px; text-align: center; font-size: 30px; font-weight: 600; color: var(--dim); z-index: 9; opacity: 0; }
+      #chev { left: 490px; top: 1400px; width: 100px; height: 90px; z-index: 9; opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="24.92" data-film data-width="1080" data-height="1920">
+      <div id="haze" class="layer"></div>
+
+      <div id="title" class="abs">
+        <div class="m"><div id="t1">Do you play</div></div>
+        <div class="m"><div id="t2">LEAGUE OF LEGENDS?</div></div>
+      </div>
+
+      <div id="track" class="abs" data-layout-allow-overlap>
+        <div id="thead"><div id="tname">Placements</div><div id="tcount">season start</div></div>
+        <div id="slots">
+          <div class="slot" data-layout-allow-occlusion data-layout-allow-overlap id="s1"><span class="face e" data-layout-allow-occlusion>1</span><span class="face l" data-layout-allow-occlusion>L</span><span class="face w" data-layout-allow-occlusion>W</span></div>
+          <div class="slot" data-layout-allow-occlusion data-layout-allow-overlap id="s2"><span class="face e" data-layout-allow-occlusion>2</span><span class="face l" data-layout-allow-occlusion>L</span><span class="face w" data-layout-allow-occlusion>W</span></div>
+          <div class="slot" data-layout-allow-occlusion data-layout-allow-overlap id="s3"><span class="face e" data-layout-allow-occlusion>3</span><span class="face l" data-layout-allow-occlusion>L</span><span class="face w" data-layout-allow-occlusion>W</span></div>
+          <div class="slot" data-layout-allow-occlusion data-layout-allow-overlap id="s4"><span class="face e" data-layout-allow-occlusion>4</span><span class="face l" data-layout-allow-occlusion>L</span><span class="face w" data-layout-allow-occlusion>W</span></div>
+          <div class="slot" data-layout-allow-occlusion data-layout-allow-overlap id="s5"><span class="face e" data-layout-allow-occlusion>5</span><span class="face l" data-layout-allow-occlusion>L</span><span class="face w" data-layout-allow-occlusion>W</span></div>
+        </div>
+      </div>
+
+      <div id="verdict" class="abs" data-layout-allow-overlap data-layout-allow-occlusion style="height:220px">
+        <div id="vLost"><span class="vChip"><span class="vMark s">II</span><span class="vName s">Silver II</span></span>
+          <div class="vSub">and you climb back until March</div></div>
+        <div id="vWon"><span class="vChip"><span class="vMark p">IV</span><span class="vName p">Platinum IV</span></span>
+          <div class="vSub">and the season opens there</div></div>
+      </div>
+
+      <div id="offer" class="abs" data-layout-allow-overlap>
+        <div id="oTop">5 placement games</div>
+        <div id="oBy">Played by a Master player, on your account</div>
+        <div id="oRow">
+          <div id="oAmt">$16</div>
+          <div id="oEta"><span>Delivered in</span>about 1 day</div>
+        </div>
+      </div>
+
+      <div id="endLogo" class="abs">
+        <div id="lockup"><span id="shard"></span><span id="wordmark">esports<b>boost</b></span></div>
+        <div class="m"><div id="endSub" class="logo-sub">START WHERE YOU MEANT TO</div></div>
+      </div>
+      <div id="cta" class="abs"><div class="btn"><span>Start my climb</span><div id="ctaShine" data-layout-allow-overflow></div></div></div>
+      <div id="endNote" class="abs">Money back until a booster takes it</div>
+      <div id="chev" class="abs"><svg id="chevIn" width="100" height="90" viewBox="0 0 60 54"><path d="M14 10l16 13 16-13M14 27l16 13 16-13" stroke="#ff4a1f" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg></div>
+
+      <audio id="bande-son" class="clip" data-start="0" data-duration="24.92" data-track-index="9" data-volume="1" src="assets/bande-son.wav"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      Promise.all(["700 100px Inter", "400 40px Inter"].map((f) => document.fonts.load(f))).then(() => {
+        const tl = gsap.timeline({ paused: true });
+        const Ls = VO.lines.map((l) => l.start), T = VO.total;
+        const IN = (sel, t, d = 0.42) => tl.fromTo(sel, { yPercent: 165 }, { yPercent: 0, duration: d, ease: "power3.out" }, t);
+        const POP = (sel, t, d = 0.5) => tl.fromTo(sel, { scale: 0.55, opacity: 0 }, { scale: 1, opacity: 1, duration: d, ease: "back.out(2)" }, t);
+        const S = ["#s1", "#s2", "#s3", "#s4", "#s5"];
+
+        gsap.set("#track", { opacity: 0.4, y: 40, scale: 0.97 });
+        IN("#t1", 0.1, 0.5); IN("#t2", W("league") - 0.1, 0.5);
+
+        /* ——— the tracker comes up ——— */
+        tl.to("#track", { opacity: 1, y: 0, scale: 1, duration: 0.9, ease: "power3.out" }, Ls[1] - 0.2);
+        tl.to("#title", { opacity: 0, y: -40, duration: 0.5, ease: "power2.in" }, Ls[1] + 0.2);
+        /* The five slots arrive ACROSS the line rather than all at once — otherwise the
+           three seconds of "decide where you sit for months" are a still frame. */
+        gsap.set(".slot", { opacity: 0, y: 26 });
+        const tSlots = W("placements") - 0.1, slotSpan = W("months") + 0.35 - tSlots;
+        S.forEach((sel, i) => tl.to(sel, { opacity: 1, y: 0, duration: 0.42, ease: "back.out(1.7)" },
+                                    tSlots + (slotSpan * i) / 5));
+
+        /* ——— four of them lost, one per beat, and the rank that lands ——— */
+        const flip = (sel, face, t) => {
+          tl.to(sel, { scale: 1.08, duration: 0.18, ease: "power2.out" }, t);
+          tl.to(sel, { scale: 1, duration: 0.22, ease: "power2.in" }, t + 0.18);
+          tl.to(sel + " .face." + face, { opacity: 1, duration: 0.22, ease: "power2.out" }, t + 0.1);
+        };
+        const tLose = W("lose") - 0.05;
+        [0, 0.26, 0.52, 0.78].forEach((d, i) => flip(S[i], "l", tLose + d));
+        tl.fromTo("#verdict", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, W("march") - 0.3);
+
+        /* ——— the same five, won: the W layer rises over the L ——— */
+        const tWin = W("win") - 0.05;
+        [0, 0.22, 0.44, 0.66, 0.88].forEach((d, i) => flip(S[i], "w", tWin + d));
+        /* The two verdicts REPLACE each other — one leaves upward as the other rises.
+           Cross-fading them in place put "Platinum IV" on top of "Silver II" for half a
+           second, which reads as a double exposure rather than a change. */
+        tl.to("#vLost", { opacity: 0, y: -46, duration: 0.42, ease: "power2.in" }, W("opens") - 0.16);
+        tl.fromTo("#vWon", { opacity: 0, y: 46 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, W("opens") + 0.04);
+        tl.fromTo("#vWon .vChip", { scale: 0.94 }, { scale: 1, duration: 0.5, ease: "back.out(2)" }, W("opens") + 0.08);
+
+        /* ——— what it costs ——— */
+        tl.to(["#verdict"], { opacity: 0, y: -50, duration: 0.4, ease: "power2.in" }, Ls[4] - 0.5);
+        tl.to("#track", { y: -170, scale: 0.94, duration: 0.9, ease: "power2.inOut" }, Ls[4] - 0.15);
+        tl.fromTo("#offer", { opacity: 0, y: 70 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, W("five", 13.0) - 0.15);
+        POP("#oAmt", W("sixteen") - 0.12, 0.5);
+        tl.fromTo("#oEta", { opacity: 0, x: 24 }, { opacity: 1, x: 0, duration: 0.45, ease: "power2.out" }, W("usually") - 0.1);
+
+        /* ——— the close ——— */
+        const tEnd = Ls[6];
+        tl.to(["#track", "#offer"], { opacity: 0, y: -70, duration: 0.55, ease: "power2.in" }, tEnd - 0.3);
+        tl.fromTo("#endLogo", { opacity: 0, scale: 0.88 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd);
+        IN("#endSub", tEnd + 0.15);
+        tl.fromTo("#cta", { opacity: 0, y: 40, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd + 0.3);
+        tl.fromTo("#ctaShine", { x: -220 }, { x: 1000, duration: 0.8, ease: "power2.inOut" }, tEnd + 0.9);
+        tl.fromTo("#endNote", { opacity: 0 }, { opacity: 1, duration: 0.4 }, tEnd + 0.7);
+        tl.fromTo("#chev", { opacity: 0 }, { opacity: 1, duration: 0.3 }, tEnd + 0.6);
+        tl.fromTo("#chevIn", { y: -6 }, { y: 10, duration: 0.32, ease: "sine.inOut", yoyo: true,
+          repeat: Math.max(1, 2 * Math.floor((T - tEnd - 0.8) / 0.64) - 1) }, tEnd + 0.9);
+
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.paused(false).timeScale(VO.speed || 1), 0);
+        window.__timelines["main"] = film;
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <!-- eSports Boost film "Five wins". Timing: assets/timing.js, written by ../build_film.py.
+         THE PLACE: the LP bar. The film moves: the thesis -> 80 LP and a promo series -> the
+         two losses that empty the bar -> five wins putting it back -> what a win costs.
+         No gsap .call() anywhere: the renderer SEEKS frame by frame, so every state ships
+         in the DOM and is tweened or opacity-flipped, never rewritten. SAFE ZONE: 180-1550. -->
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/timing.js"></script>
+    <script>
+      window.__hf = window.__hf || {};
+      window.__hf.buildReady = window.__hf.buildReady || {};
+      const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+      window.W = (w, after = 0, end = false) => {
+        for (const x of VO.words) if (x.s >= after - 1e-6 && norm(x.w) === w) return end ? x.e : x.s;
+        throw new Error("word not found: " + w);
+      };
+    </script>
+    <style>
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-400-latin.woff2") format("woff2"); font-weight: 400; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-500-latin.woff2") format("woff2"); font-weight: 500; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-600-latin.woff2") format("woff2"); font-weight: 600; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-700-latin.woff2") format("woff2"); font-weight: 700; font-display: block; }
+      :root {
+        --bg: #06060a; --panel: #0e0e16; --panel2: #13131d; --hair: #262632;
+        --ink: #f4f1ec; --muted: #a8a5b2; --dim: #8b8b99;
+        --ember: #ff4a1f; --green: #34c77b; --red: #e0574f;
+        --grad-h: linear-gradient(90deg, #ff6a3d 0%, #ff4a1f 100%);
+        --gold: #e0ac3e;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: "Inter", sans-serif; color: var(--ink); }
+      .layer { position: absolute; inset: 0; }
+      .abs { position: absolute; }
+      .m { overflow: hidden; padding: 14px 0 6px; margin: -14px 0 -6px; }
+      #haze { background: radial-gradient(900px 700px at 50% 30%, rgba(255,74,31,.15), transparent 70%), var(--bg); }
+
+      #title { left: 70px; top: 230px; width: 940px; text-align: center; z-index: 9; }
+      #t1 { font-size: 60px; font-weight: 600; }
+      #t2 { font-size: 70px; font-weight: 700; color: var(--ember); margin-top: 4px; }
+
+      /* --- The thesis --- */
+      #thesis { left: 90px; top: 1010px; width: 900px; z-index: 6; text-align: center; }
+      #th1 { position: relative; display: inline-block; font-size: 52px; font-weight: 600; color: var(--muted); }
+      #strike { position: absolute; left: -8px; right: -8px; top: 50%; height: 5px; border-radius: 3px;
+                background: var(--red); transform-origin: 0% 50%; }
+      #th2 { font-size: 62px; font-weight: 700; line-height: 1.18; margin-top: 30px; }
+      #th2 b { color: var(--ember); }
+
+      /* --- The LP card --- */
+      #lp { left: 90px; top: 580px; width: 900px; z-index: 5;
+            background: var(--panel); border: 1px solid var(--hair); border-radius: 44px; padding: 48px; }
+      #lhead { display: flex; align-items: center; justify-content: space-between; }
+      #lrank { display: flex; align-items: center; gap: 22px; font-size: 44px; font-weight: 700; }
+      #lmark { width: 86px; height: 86px; border-radius: 50%; border: 4px solid rgba(224,172,62,.85);
+               background: rgba(224,172,62,.16); display: flex; align-items: center; justify-content: center;
+               font-size: 33px; font-weight: 700; color: var(--gold); }
+      #lval { position: relative; width: 320px; height: 62px; flex: none; }
+      #lval span { position: absolute; right: 0; top: 0; font-size: 50px; line-height: 62px; font-weight: 700; white-space: nowrap; }
+      #v80 { color: var(--ink); }
+      #v0 { color: var(--red); opacity: 0; }
+      #v5 { color: var(--green); opacity: 0; }
+      #bar { position: relative; height: 40px; border-radius: 20px; background: var(--panel2);
+             border: 2px solid var(--hair); margin-top: 40px; overflow: hidden; }
+      #fill { position: absolute; left: 0; top: 0; bottom: 0; width: 80%; background: var(--grad-h); }
+      #scale { display: flex; justify-content: space-between; margin-top: 16px; font-size: 32px; font-weight: 600; color: var(--dim); }
+
+      /* --- The promo series --- */
+      #promo { left: 90px; top: 1040px; width: 900px; z-index: 6; opacity: 0;
+               background: var(--panel); border: 2px solid var(--hair); border-radius: 40px; padding: 40px 40px 44px; }
+      #ptitle { font-size: 32px; font-weight: 600; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; }
+      #pboxes { display: flex; gap: 20px; margin-top: 26px; }
+      .pb { position: relative; flex: 1; height: 142px; }
+      .pf { position: absolute; inset: 0; border-radius: 24px; display: flex; align-items: center; justify-content: center;
+            font-size: 50px; font-weight: 700; }
+      .pf.e { background: var(--panel2); border: 2px solid var(--hair); color: var(--dim); }
+      .pf.w { background: rgba(12,42,28,.95); border: 2px solid rgba(52,199,123,.55); color: #c8f6dd; opacity: 0; }
+      .pf.l { background: rgba(60,20,16,.95); border: 2px solid rgba(224,87,79,.6); color: #ffd9d3; opacity: 0; }
+
+      /* --- Five wins --- */
+      #wins { left: 90px; top: 1040px; width: 900px; z-index: 7; opacity: 0; }
+      #wtitle { font-size: 36px; font-weight: 600; color: var(--muted); text-align: center; line-height: 1.35; }
+      #wrow { display: flex; gap: 20px; margin-top: 30px; }
+      .wp { position: relative; flex: 1; height: 132px; }
+      .wf { position: absolute; inset: 0; border-radius: 24px; display: flex; align-items: center; justify-content: center;
+            font-size: 42px; font-weight: 700; }
+      .wf.e { background: var(--panel2); border: 2px solid var(--hair); color: var(--dim); }
+      .wf.on { background: rgba(12,42,28,.95); border: 2px solid rgba(52,199,123,.6); color: #c8f6dd; opacity: 0; }
+      #wsub { margin-top: 30px; text-align: center; font-size: 40px; font-weight: 700; opacity: 0; }
+      #wsub b { color: var(--green); }
+
+      #price { left: 140px; top: 1150px; width: 800px; z-index: 8; opacity: 0; text-align: center;
+               background: var(--panel); border: 1px solid var(--hair); border-radius: 36px; padding: 36px 40px; }
+      #pAmt { font-size: 118px; font-weight: 700; color: var(--ember); line-height: 1.04; }
+      #pPer { font-size: 38px; font-weight: 600; color: var(--ink); }
+      #pNote { font-size: 32px; font-weight: 500; color: var(--muted); margin-top: 12px; }
+
+      /* --- The close --- */
+      #endLogo { left: 0; right: 0; top: 690px; text-align: center; z-index: 9; opacity: 0; }
+      #lockup { display: inline-flex; align-items: center; gap: 22px; }
+      #shard { width: 46px; height: 102px; flex: none; background: linear-gradient(#ffb046, #ff3d0f);
+               clip-path: polygon(0 0, 100% 18%, 62% 100%, 18% 62%); }
+      #wordmark { font-size: 78px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: #f2efec; }
+      #wordmark b { font-weight: 700; color: #ff5a1f; }
+      .logo-sub { display: inline-flex; margin-top: 16px; font-size: 28px; font-weight: 600; letter-spacing: 0.15em; color: var(--muted); }
+      #cta { left: 120px; top: 1110px; width: 840px; height: 140px; z-index: 9; opacity: 0; }
+      .btn { position: relative; width: 100%; height: 100%; border-radius: 70px; background: var(--grad-h); overflow: hidden;
+        color: #06060a; font-size: 46px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 20px 44px rgba(255,74,31,.38); }
+      #ctaShine { position: absolute; top: -30%; left: 0; width: 150px; height: 160%;
+        background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.55), rgba(255,255,255,0)); }
+      #endNote { left: 0; right: 0; top: 1300px; text-align: center; font-size: 30px; font-weight: 600; color: var(--dim); z-index: 9; opacity: 0; }
+      #chev { left: 490px; top: 1400px; width: 100px; height: 90px; z-index: 9; opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="24.68" data-film data-width="1080" data-height="1920">
+      <div id="haze" class="layer"></div>
+
+      <div id="title" class="abs">
+        <div class="m"><div id="t1">Do you play</div></div>
+        <div class="m"><div id="t2">LEAGUE OF LEGENDS?</div></div>
+      </div>
+
+      <div id="thesis" class="abs" data-layout-allow-overlap>
+        <div><span id="th1">You don't need a new rank<div id="strike" data-layout-allow-occlusion></div></span></div>
+        <div id="th2">You need to stop losing<br />the same <b>five games</b></div>
+      </div>
+
+      <div id="lp" class="abs" data-layout-allow-overlap>
+        <div id="lhead">
+          <div id="lrank"><span id="lmark">IV</span>Gold IV</div>
+          <div id="lval">
+            <span id="v80" data-layout-allow-occlusion>80 LP</span>
+            <span id="v0" data-layout-allow-occlusion>0 LP</span>
+            <span id="v5" data-layout-allow-occlusion>+5 wins</span>
+          </div>
+        </div>
+        <div id="bar"><div id="fill"></div></div>
+        <div id="scale"><span>0</span><span>100 LP &middot; promotion</span></div>
+      </div>
+
+      <div id="promo" class="abs" data-layout-allow-overlap>
+        <div id="ptitle">Promotion series</div>
+        <div id="pboxes">
+          <div class="pb" id="b1"><span class="pf e" data-layout-allow-occlusion>1</span><span class="pf w" data-layout-allow-occlusion>W</span></div>
+          <div class="pb" id="b2"><span class="pf e" data-layout-allow-occlusion>2</span><span class="pf l" data-layout-allow-occlusion>L</span></div>
+          <div class="pb" id="b3"><span class="pf e" data-layout-allow-occlusion>3</span><span class="pf l" data-layout-allow-occlusion>L</span></div>
+        </div>
+      </div>
+
+      <div id="wins" class="abs" data-layout-allow-overlap>
+        <div id="wtitle">A booster plays until you're five wins up &mdash; then stops.</div>
+        <div id="wrow">
+          <div class="wp" id="w1"><span class="wf e" data-layout-allow-occlusion>+1</span><span class="wf on" data-layout-allow-occlusion>+1</span></div>
+          <div class="wp" id="w2"><span class="wf e" data-layout-allow-occlusion>+2</span><span class="wf on" data-layout-allow-occlusion>+2</span></div>
+          <div class="wp" id="w3"><span class="wf e" data-layout-allow-occlusion>+3</span><span class="wf on" data-layout-allow-occlusion>+3</span></div>
+          <div class="wp" id="w4"><span class="wf e" data-layout-allow-occlusion>+4</span><span class="wf on" data-layout-allow-occlusion>+4</span></div>
+          <div class="wp" id="w5"><span class="wf e" data-layout-allow-occlusion>+5</span><span class="wf on" data-layout-allow-occlusion>+5</span></div>
+        </div>
+        <div id="wsub">Not a rank. <b>Just the wins.</b></div>
+      </div>
+
+      <div id="price" class="abs" data-layout-allow-overlap>
+        <div id="pAmt">$3</div>
+        <div id="pPer">a win</div>
+        <div id="pNote">Yours by tomorrow</div>
+      </div>
+
+      <div id="endLogo" class="abs">
+        <div id="lockup"><span id="shard"></span><span id="wordmark">esports<b>boost</b></span></div>
+        <div class="m"><div id="endSub" class="logo-sub">JUST THE WINS</div></div>
+      </div>
+      <div id="cta" class="abs"><div class="btn"><span>Start my climb</span><div id="ctaShine" data-layout-allow-overflow></div></div></div>
+      <div id="endNote" class="abs">Money back until a booster takes it</div>
+      <div id="chev" class="abs"><svg id="chevIn" width="100" height="90" viewBox="0 0 60 54"><path d="M14 10l16 13 16-13M14 27l16 13 16-13" stroke="#ff4a1f" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg></div>
+
+      <audio id="bande-son" class="clip" data-start="0" data-duration="24.68" data-track-index="9" data-volume="1" src="assets/bande-son.wav"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      Promise.all(["700 100px Inter", "400 40px Inter"].map((f) => document.fonts.load(f))).then(() => {
+        const tl = gsap.timeline({ paused: true });
+        const Ls = VO.lines.map((l) => l.start), T = VO.total;
+        const IN = (sel, t, d = 0.42) => tl.fromTo(sel, { yPercent: 165 }, { yPercent: 0, duration: d, ease: "power3.out" }, t);
+        const POP = (sel, t, d = 0.5) => tl.fromTo(sel, { scale: 0.55, opacity: 0 }, { scale: 1, opacity: 1, duration: d, ease: "back.out(2)" }, t);
+
+        gsap.set("#thesis", { opacity: 0 });
+        gsap.set("#lp", { opacity: 0.35, y: 40, scale: 0.97 });
+        gsap.set("#strike", { scaleX: 0 });
+        IN("#t1", 0.1, 0.5); IN("#t2", W("league") - 0.1, 0.5);
+
+        /* --- the thesis: the rank is not the problem, the five games are --- */
+        tl.to("#title", { opacity: 0, y: -50, duration: 0.5, ease: "power2.in" }, Ls[1] - 0.3);
+        tl.to("#thesis", { opacity: 1, duration: 0.01 }, Ls[1] - 0.3);
+        tl.fromTo("#th1", { opacity: 0, y: 36 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, Ls[1] - 0.15);
+        tl.to("#strike", { scaleX: 1, duration: 0.34, ease: "power2.out" }, W("rank") + 0.18);
+        tl.fromTo("#th2", { opacity: 0, y: 44 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, W("stop") - 0.18);
+
+        /* --- the LP card, and the bar filling to 80 --- */
+        tl.to("#thesis", { opacity: 0, y: -60, duration: 0.5, ease: "power2.in" }, Ls[2] - 0.45);
+        tl.to("#lp", { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power3.out" }, Ls[2] - 0.25);
+        tl.fromTo("#v80", { scale: 1 }, { scale: 1.12, duration: 0.2, ease: "power2.out",
+          yoyo: true, repeat: 1, transformOrigin: "100% 50%" }, W("eighty") + 0.02);
+
+        /* --- the promo series, and the two games that end it --- */
+        tl.fromTo("#promo", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, W("promo") - 0.2);
+        const face = (sel, cls, t) => {
+          tl.to(sel, { scale: 1.06, duration: 0.16, ease: "power2.out" }, t);
+          tl.to(sel, { scale: 1, duration: 0.2, ease: "power2.in" }, t + 0.16);
+          tl.to(sel + " .pf.e", { opacity: 0, duration: 0.14, ease: "power2.in" }, t + 0.06);
+          tl.to(sel + " .pf." + cls, { opacity: 1, duration: 0.2, ease: "power2.out" }, t + 0.1);
+        };
+        face("#b1", "w", W("series") + 0.1);
+        face("#b2", "l", W("lose") - 0.05);
+        face("#b3", "l", W("two", 9.1) + 0.12);
+        /* back to square one: the bar empties and the readout goes with it */
+        tl.to("#fill", { width: "0%", duration: 0.6, ease: "power2.inOut" }, W("square") - 0.2);
+        tl.to("#v80", { opacity: 0, duration: 0.28 }, W("square") - 0.15);
+        tl.to("#v0", { opacity: 1, duration: 0.28 }, W("square") - 0.1);
+
+        /* --- five wins, counted off, and the bar put back --- */
+        tl.to("#promo", { opacity: 0, y: -50, duration: 0.45, ease: "power2.in" }, Ls[3] - 0.35);
+        tl.fromTo("#wins", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, W("net") - 0.1);
+        const tW = W("five", 13.0) - 0.08, spanW = 1.4;
+        ["#w1", "#w2", "#w3", "#w4", "#w5"].forEach((sel, i) => {
+          const t = tW + (spanW * i) / 5;
+          tl.to(sel + " .wf.e", { opacity: 0, duration: 0.14, ease: "power2.in" }, t);
+          tl.to(sel + " .wf.on", { opacity: 1, duration: 0.2, ease: "power2.out" }, t + 0.04);
+          tl.to(sel, { scale: 1.07, duration: 0.15, ease: "power2.out" }, t);
+          tl.to(sel, { scale: 1, duration: 0.19, ease: "power2.in" }, t + 0.15);
+          tl.to("#fill", { width: 16 * (i + 1) + "%", duration: 0.26, ease: "power2.out" }, t);
+        });
+        tl.to("#v0", { opacity: 0, duration: 0.26 }, W("stops") - 0.05);
+        tl.to("#v5", { opacity: 1, duration: 0.3 }, W("stops") + 0.02);
+        tl.fromTo("#wsub", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, W("just") - 0.12);
+
+        /* --- what a win costs --- */
+        tl.to("#wins", { opacity: 0, y: -50, duration: 0.45, ease: "power2.in" }, Ls[5] - 0.45);
+        tl.to("#lp", { y: -70, scale: 0.96, duration: 0.8, ease: "power2.inOut" }, Ls[5] - 0.4);
+        tl.fromTo("#price", { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, W("three") - 0.2);
+        POP("#pAmt", W("three") - 0.05, 0.5);
+        tl.fromTo("#pNote", { opacity: 0 }, { opacity: 1, duration: 0.4 }, W("yours") - 0.12);
+
+        /* --- the close --- */
+        const tEnd = Ls[6];
+        tl.to(["#lp", "#price"], { opacity: 0, y: -70, duration: 0.55, ease: "power2.in" }, tEnd - 0.35);
+        tl.fromTo("#endLogo", { opacity: 0, scale: 0.88 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd);
+        IN("#endSub", tEnd + 0.15);
+        tl.fromTo("#cta", { opacity: 0, y: 40, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd + 0.3);
+        tl.fromTo("#ctaShine", { x: -220 }, { x: 1000, duration: 0.8, ease: "power2.inOut" }, tEnd + 0.9);
+        tl.fromTo("#endNote", { opacity: 0 }, { opacity: 1, duration: 0.4 }, tEnd + 0.7);
+        tl.fromTo("#chev", { opacity: 0 }, { opacity: 1, duration: 0.3 }, tEnd + 0.6);
+        tl.fromTo("#chevIn", { y: -6 }, { y: 10, duration: 0.32, ease: "sine.inOut", yoyo: true,
+          repeat: Math.max(1, 2 * Math.floor((T - tEnd - 0.8) / 0.64) - 1) }, tEnd + 0.9);
+
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.paused(false).timeScale(VO.speed || 1), 0);
+        window.__timelines["main"] = film;
+      });
+    </script>
+  </body>
+</html>

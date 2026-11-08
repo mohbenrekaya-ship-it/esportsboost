@@ -9,7 +9,7 @@ def cues(W, L, lines, total):
         ('riser', 0.0, 0.28),
         ('tap', W('three') + 0.15, 0.4), ('tap', W('things') + 0.15, 0.4), ('tap', W('people') + 0.15, 0.4),
         ('check', W('false') - 0.12, 0.65),          # card 1: false
-        ('check', W('false', 17.0) - 0.12, 0.65),    # card 2: false
+        ('check', W('false', 15.5) - 0.12, 0.65),    # card 2: false
         ('boom', W('true') - 0.12, 0.42),            # card 3: true, stated softly
         ('pop', L[8] + 0.3, 0.6),
     ]

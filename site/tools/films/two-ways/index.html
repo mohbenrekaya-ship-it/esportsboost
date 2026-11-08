@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <!-- eSports Boost film "Two ways out". Timing: assets/timing.js.
+         THE PLACE: two lanes. Above them the queue that got you stuck; below them the
+         one handset both lanes share. No .call(): the renderer seeks, so every state
+         ships in the DOM and is flipped or slid. SAFE ZONE: y 180-1550. -->
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/timing.js"></script>
+    <script>
+      window.__hf = window.__hf || {};
+      window.__hf.buildReady = window.__hf.buildReady || {};
+      const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+      window.W = (w, after = 0, end = false) => {
+        for (const x of VO.words) if (x.s >= after - 1e-6 && norm(x.w) === w) return end ? x.e : x.s;
+        throw new Error("word not found: " + w);
+      };
+    </script>
+    <style>
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-400-latin.woff2") format("woff2"); font-weight: 400; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-500-latin.woff2") format("woff2"); font-weight: 500; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-600-latin.woff2") format("woff2"); font-weight: 600; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-700-latin.woff2") format("woff2"); font-weight: 700; font-display: block; }
+      :root {
+        --bg: #06060a; --panel: #0e0e16; --panel2: #13131d; --hair: #262632;
+        --ink: #f4f1ec; --muted: #a8a5b2; --dim: #8b8b99;
+        --ember: #ff4a1f; --green: #34c77b; --red: #e0574f; --master: #a56fd0; --night: #8fa3e6;
+        --grad-h: linear-gradient(90deg, #ff6a3d 0%, #ff4a1f 100%);
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: "Inter", sans-serif; color: var(--ink); }
+      .layer { position: absolute; inset: 0; }
+      .abs { position: absolute; }
+      .m { overflow: hidden; padding: 14px 0 6px; margin: -14px 0 -6px; }
+      #haze { background: radial-gradient(880px 660px at 50% 24%, rgba(255,74,31,.15), transparent 70%),
+                          radial-gradient(760px 560px at 50% 90%, rgba(143,163,230,.10), transparent 70%), var(--bg); }
+
+      #title { left: 60px; top: 190px; width: 960px; text-align: center; z-index: 9; }
+      #t1 { font-size: 56px; font-weight: 600; }
+      #t2 { font-size: 64px; font-weight: 700; color: var(--ember); margin-top: 2px; }
+      #t3 { font-size: 44px; font-weight: 500; color: var(--muted); margin-top: 8px; }
+
+      /* --- The queue that got you stuck --- */
+      #queue { left: 90px; top: 680px; width: 900px; z-index: 5;
+               background: var(--panel); border: 1px solid var(--hair); border-radius: 34px; padding: 30px 32px 34px; }
+      #qHead { font-size: 32px; font-weight: 600; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; }
+      #qRow { display: flex; gap: 14px; margin-top: 22px; }
+      .slot { flex: 1; height: 170px; border-radius: 24px; background: var(--panel2); border: 2px solid var(--hair);
+              display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; opacity: .16; }
+      .slot .f { width: 58px; height: 58px; border-radius: 50%; background: #2a2a3a; }
+      .slot .n { font-size: 32px; font-weight: 600; color: var(--dim); }
+      #sYou { border-color: rgba(255,74,31,.5); background: rgba(30,16,12,.85); }
+      #sYou .f { background: rgba(255,74,31,.4); } #sYou .n { color: var(--ink); font-weight: 700; }
+      #qFoot { margin-top: 24px; text-align: center; font-size: 33px; font-weight: 700; color: #ffd9d3; opacity: 0; }
+
+      /* --- The two lanes --- */
+      #lanes { left: 90px; top: 790px; width: 900px; z-index: 6; opacity: 0; display: flex; gap: 22px; }
+      .lane { flex: 1; background: var(--panel); border: 2px solid var(--hair); border-radius: 34px;
+              padding: 30px 24px 32px; text-align: center; opacity: 0; }
+      .lIco { width: 96px; height: 96px; border-radius: 50%; margin: 0 auto;
+              display: flex; align-items: center; justify-content: center; }
+      .lTag { margin-top: 20px; font-size: 32px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+      .lTxt { margin-top: 14px; font-size: 33px; font-weight: 600; color: var(--muted); line-height: 1.35; }
+      .lBul { margin-top: 20px; text-align: left; }
+      .bul { display: flex; align-items: flex-start; gap: 12px; font-size: 32px; font-weight: 500;
+             color: var(--dim); margin-top: 12px; line-height: 1.3; }
+      .bul b { width: 28px; height: 28px; border-radius: 50%; flex: none; margin-top: 2px; display: flex;
+               align-items: center; justify-content: center; font-size: 17px; font-weight: 700;
+               color: #06060a; background: var(--green); }
+      #lDuo .lIco { background: rgba(255,74,31,.15); border: 3px solid rgba(255,74,31,.7); }
+      #lDuo .lTag { color: var(--ember); }
+      #lSolo .lIco { background: rgba(143,163,230,.15); border: 3px solid rgba(143,163,230,.7); }
+      #lSolo .lTag { color: var(--night); }
+      .pair { display: flex; gap: 8px; }
+      .dot { width: 28px; height: 28px; border-radius: 50%; background: #ff6a3d; }
+      .dot.b { background: #a56fd0; }
+      #moon { width: 56px; height: 56px; border-radius: 50%;
+              background: radial-gradient(circle at 34% 32%, #cfd8f5, #8b9ad6); }
+
+      /* --- The one handset both lanes share --- */
+      #phone { left: 340px; top: 1030px; width: 400px; z-index: 8; opacity: 0; }
+      #handset { position: relative; border-radius: 46px; background: #0b0b12; border: 5px solid #2b2b38;
+                 padding: 20px 16px; box-shadow: 0 30px 70px rgba(0,0,0,.6); }
+      #notch { width: 120px; height: 10px; border-radius: 999px; background: #22222e; margin: 0 auto 14px; }
+      #screen { border-radius: 28px; background: linear-gradient(180deg, #141420, #0d0d15);
+                border: 2px solid #23232f; padding: 18px 16px 20px; }
+      #live { display: inline-flex; align-items: center; gap: 10px; font-size: 29px; font-weight: 700;
+              letter-spacing: .1em; color: #c8f6dd; background: rgba(12,42,28,.95);
+              border: 2px solid rgba(52,199,123,.6); border-radius: 999px; padding: 8px 18px; }
+      #liveDot { width: 12px; height: 12px; border-radius: 50%; background: var(--green); }
+      #view { margin-top: 16px; height: 168px; border-radius: 20px; border: 2px solid #23232f;
+              background: radial-gradient(230px 145px at 40% 30%, rgba(165,111,208,.28), transparent 70%),
+                          linear-gradient(180deg, #16161f, #101018); position: relative; overflow: hidden; }
+      .blob { position: absolute; border-radius: 50%; }
+      #bName { margin-top: 16px; font-size: 30px; font-weight: 700; color: var(--master); }
+      #bLine { margin-top: 6px; font-size: 29px; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; }
+      #cap { margin-top: 18px; text-align: center; font-size: 34px; font-weight: 700; opacity: 0; }
+      #cap i { font-style: normal; color: var(--green); }
+
+      /* --- The close --- */
+      #endLogo { left: 0; right: 0; top: 690px; text-align: center; z-index: 9; opacity: 0; }
+      #lockup { display: inline-flex; align-items: center; gap: 22px; }
+      #shard { width: 46px; height: 102px; flex: none; background: linear-gradient(#ffb046, #ff3d0f);
+               clip-path: polygon(0 0, 100% 18%, 62% 100%, 18% 62%); }
+      #wordmark { font-size: 78px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: #f2efec; }
+      #wordmark b { font-weight: 700; color: #ff5a1f; }
+      .logo-sub { display: inline-flex; margin-top: 16px; font-size: 30px; font-weight: 600; letter-spacing: 0.15em; color: var(--muted); }
+      #cta { left: 120px; top: 1110px; width: 840px; height: 140px; z-index: 9; opacity: 0; }
+      .btn { position: relative; width: 100%; height: 100%; border-radius: 70px; background: var(--grad-h); overflow: hidden;
+        color: #06060a; font-size: 46px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 20px 44px rgba(255,74,31,.38); }
+      #ctaShine { position: absolute; top: -30%; left: 0; width: 150px; height: 160%;
+        background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.55), rgba(255,255,255,0)); }
+      #endNote { left: 0; right: 0; top: 1278px; text-align: center; z-index: 9; opacity: 0; }
+      #enSub { font-size: 30px; font-weight: 600; color: var(--dim); }
+      #enMain { margin-top: 14px; font-size: 38px; font-weight: 700; color: var(--ink); opacity: 0; }
+      #chev { left: 490px; top: 1400px; width: 100px; height: 90px; z-index: 9; opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="37.88" data-film data-width="1080" data-height="1920">
+      <div id="haze" class="layer"></div>
+
+      <div id="title" class="abs">
+        <div class="m" data-layout-allow-overflow data-layout-allow-occlusion><div id="t1">Do you play</div></div>
+        <div class="m" data-layout-allow-overflow data-layout-allow-occlusion><div id="t2">LEAGUE &middot; VALORANT</div></div>
+        <div class="m" data-layout-allow-overflow data-layout-allow-occlusion><div id="t3">or any other ranked game?</div></div>
+      </div>
+
+      <div id="queue" class="abs" data-layout-allow-overlap>
+        <div id="qHead">Your ranked queue</div>
+        <div id="qRow">
+          <div class="slot" id="sYou"><span class="f"></span><span class="n">You</span></div>
+          <div class="slot" id="s2"><span class="f"></span><span class="n">Stranger</span></div>
+          <div class="slot" id="s3"><span class="f"></span><span class="n">Stranger</span></div>
+          <div class="slot" id="s4"><span class="f"></span><span class="n">Stranger</span></div>
+          <div class="slot" id="s5"><span class="f"></span><span class="n">Stranger</span></div>
+        </div>
+        <div id="qFoot">Four strangers and a coin flip</div>
+      </div>
+
+      <div id="lanes" class="abs" data-layout-allow-overlap>
+        <div class="lane" id="lDuo">
+          <div class="lIco"><span class="pair"><span class="dot"></span><span class="dot b"></span></span></div>
+          <div class="lTag">Duo</div>
+          <div class="lTxt">A Master on your team</div>
+          <div class="lBul">
+            <div class="bul" id="d1"><b>&#10003;</b>Every game</div>
+            <div class="bul" id="d2"><b>&#10003;</b>Your hands on the keyboard</div>
+          </div>
+        </div>
+        <div class="lane" id="lSolo">
+          <div class="lIco"><span id="moon"></span></div>
+          <div class="lTag">Solo</div>
+          <div class="lTxt">You close the laptop</div>
+          <div class="lBul">
+            <div class="bul" id="s1b"><b>&#10003;</b>We climb it</div>
+            <div class="bul" id="s2b"><b>&#10003;</b>While you sleep</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="phone" class="abs" data-layout-allow-overlap>
+        <div id="handset">
+          <div id="notch"></div>
+          <div id="screen">
+            <span id="live"><i id="liveDot"></i>LIVE</span>
+            <div id="view">
+              <span class="blob" style="left:38px;top:30px;width:54px;height:54px;background:rgba(165,111,208,.55)"></span>
+              <span class="blob" style="left:140px;top:88px;width:38px;height:38px;background:rgba(255,74,31,.5)"></span>
+              <span class="blob" style="left:224px;top:38px;width:30px;height:30px;background:rgba(52,199,123,.5)"></span>
+              <span class="blob" style="left:258px;top:106px;width:46px;height:46px;background:rgba(79,176,170,.45)"></span>
+            </div>
+            <div id="bName">Your booster, in game</div>
+            <div id="bLine">15 / 3 / 6 &middot; 31 min</div>
+          </div>
+        </div>
+        <div id="cap">Either lane, <i>watch it live</i></div>
+      </div>
+
+      <div id="endLogo" class="abs">
+        <div id="lockup"><span id="shard"></span><span id="wordmark">esports<b>boost</b></span></div>
+        <div class="m"><div id="endSub" class="logo-sub">PICK YOUR RANK</div></div>
+      </div>
+      <div id="cta" class="abs"><div class="btn"><span>Get your rank today</span><div id="ctaShine" data-layout-allow-overflow></div></div></div>
+      <div id="endNote" class="abs"><div id="enSub">Money back until a booster takes it</div><div id="enMain">Click the link below</div></div>
+      <div id="chev" class="abs"><svg id="chevIn" width="100" height="90" viewBox="0 0 60 54"><path d="M14 10l16 13 16-13M14 27l16 13 16-13" stroke="#ff4a1f" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg></div>
+
+      <audio id="bande-son" class="clip" data-start="0" data-duration="37.88" data-track-index="9" data-volume="1" src="assets/bande-son.wav"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      Promise.all(["700 100px Inter", "400 40px Inter"].map((f) => document.fonts.load(f))).then(() => {
+        const tl = gsap.timeline({ paused: true });
+        const Ls = VO.lines.map((l) => l.start), T = VO.total;
+        const IN = (sel, t, d = 0.42) => tl.fromTo(sel, { yPercent: 165 }, { yPercent: 0, duration: d, ease: "power3.out" }, t);
+        const LIT = (sel, t) => tl.fromTo(sel, { opacity: 0.16, y: 16 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, t);
+        const BUL = (sel, t) => tl.fromTo(sel, { opacity: 0, x: -18 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, t);
+
+        gsap.set("#queue", { opacity: 0.3, y: 44, scale: 0.97 });
+        gsap.set(["#lanes", "#phone", "#cap"], { opacity: 0 });
+        gsap.set([".bul"], { opacity: 0 });
+        IN("#t1", 0.1, 0.5); IN("#t2", W("league") - 0.1, 0.5); IN("#t3", W("valorant") + 0.3, 0.5);
+
+        /* --- four strangers and a coin flip --- */
+        tl.to("#title", { opacity: 0, y: -46, duration: 0.5, ease: "power2.in" }, Ls[1] - 0.25);
+        tl.to("#queue", { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: "power3.out" }, Ls[1] - 0.2);
+        LIT("#sYou", W("stuck") - 0.15);
+        LIT("#s2", W("four") - 0.1);
+        LIT("#s3", W("four") + 0.22);
+        LIT("#s4", W("four") + 0.44);
+        LIT("#s5", W("four") + 0.66);
+        tl.fromTo("#qFoot", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, W("coin") - 0.15);
+
+        /* --- the queue lifts, the two lanes take the middle --- */
+        tl.to("#queue", { y: -400, scale: 0.88, opacity: 0.4, duration: 0.85, ease: "power2.inOut" }, W("two") - 0.4);
+        tl.to("#lanes", { opacity: 1, duration: 0.01 }, W("two") - 0.2);
+        tl.fromTo("#lDuo", { opacity: 0, y: 56 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, W("duo") - 0.3);
+        tl.fromTo("#lDuo .lIco", { scale: 1 }, { scale: 1.12, duration: 0.3, ease: "power2.out", yoyo: true, repeat: 1 }, W("master") - 0.1);
+        BUL("#d1", W("game", 13.5) - 0.1);
+        BUL("#d2", W("hands") - 0.1);
+        tl.fromTo("#lSolo", { opacity: 0, y: 56 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, W("solo") - 0.3);
+        BUL("#s1b", W("laptop") - 0.1);
+        BUL("#s2b", W("sleep") - 0.1);
+        tl.fromTo("#moon", { scale: 0.6, opacity: 0.4 }, { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(1.8)" }, W("sleep") + 0.05);
+
+        /* --- the one handset both lanes share --- */
+        /* the queue has done its job by now, and leaving it up puts its foot
+           underneath the Duo lane once both blocks lift for the handset */
+        tl.to("#queue", { opacity: 0, duration: 0.5, ease: "power2.in" }, W("part") - 0.4);
+        tl.to("#lanes", { y: -300, scale: 0.9, duration: 0.85, ease: "power2.inOut" }, W("part") - 0.3);
+        tl.fromTo("#phone", { opacity: 0, y: 70, scale: 0.94 },
+          { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "power3.out" }, W("watch", 22.0) - 0.35);
+        tl.fromTo("#liveDot", { opacity: 1 }, { opacity: 0.25, duration: 0.5, ease: "sine.inOut", yoyo: true, repeat: 9 }, W("watch", 22.0) - 0.1);
+        tl.fromTo("#cap", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, W("live", 24.0) - 0.2);
+
+        /* --- the close --- */
+        const tEnd = Ls[7], tCta = Ls[8];
+        tl.to(["#queue", "#lanes", "#phone"], { opacity: 0, duration: 0.5, ease: "power2.in" }, tEnd - 0.25);
+        tl.fromTo("#endLogo", { opacity: 0, scale: 0.88 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd);
+        IN("#endSub", tEnd + 0.15);
+        tl.fromTo("#cta", { opacity: 0, y: 40, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tCta - 0.3);
+        tl.fromTo("#ctaShine", { x: -220 }, { x: 1000, duration: 0.8, ease: "power2.inOut" }, tCta + 0.55);
+        tl.fromTo("#endNote", { opacity: 0 }, { opacity: 1, duration: 0.45 }, tEnd + 1.25);
+        tl.fromTo("#enMain", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, tCta + 0.15);
+        tl.fromTo("#chev", { opacity: 0 }, { opacity: 1, duration: 0.3 }, tCta + 0.45);
+        tl.fromTo("#chevIn", { y: -6 }, { y: 10, duration: 0.32, ease: "sine.inOut", yoyo: true,
+          repeat: Math.max(1, 2 * Math.floor((T - tCta - 1.0) / 0.64) - 1) }, tCta + 0.75);
+
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.paused(false).timeScale(VO.speed || 1), 0);
+        window.__timelines["main"] = film;
+      });
+    </script>
+  </body>
+</html>

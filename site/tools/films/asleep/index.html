@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <!-- eSports Boost film "While you sleep". Timing: assets/timing.js (../build_film.py).
+         THE PLACE: one phone on a nightstand, through one night. The film moves by
+         changing what is ON the screen: 23:40 and the rank you're stuck at -> the four
+         games -> asleep -> 02:10 and the booster's game, live -> 07:10 and the new rank.
+         The three faces are stacked and REPLACE each other (out before in); nothing is
+         rewritten by a .call(), because the renderer seeks. SAFE ZONE: y 180-1550. -->
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/timing.js"></script>
+    <script>
+      window.__hf = window.__hf || {};
+      window.__hf.buildReady = window.__hf.buildReady || {};
+      const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+      window.W = (w, after = 0, end = false) => {
+        for (const x of VO.words) if (x.s >= after - 1e-6 && norm(x.w) === w) return end ? x.e : x.s;
+        throw new Error("word not found: " + w);
+      };
+    </script>
+    <style>
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-400-latin.woff2") format("woff2"); font-weight: 400; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-500-latin.woff2") format("woff2"); font-weight: 500; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-600-latin.woff2") format("woff2"); font-weight: 600; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-700-latin.woff2") format("woff2"); font-weight: 700; font-display: block; }
+      :root {
+        --bg: #05060b; --panel: #0e0f18; --panel2: #13141f; --hair: #26283a;
+        --ink: #f4f1ec; --muted: #a8a5b2; --dim: #888ba0;
+        --ember: #ff4a1f; --green: #34c77b; --red: #e0574f; --night: #6f86d6;
+        --grad-h: linear-gradient(90deg, #ff6a3d 0%, #ff4a1f 100%);
+        --gold: #e0ac3e; --silver: #9aa3b2;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: "Inter", sans-serif; color: var(--ink); }
+      .layer { position: absolute; inset: 0; }
+      .abs { position: absolute; }
+      .m { overflow: hidden; padding: 14px 0 6px; margin: -14px 0 -6px; }
+      #haze { background: radial-gradient(880px 660px at 50% 24%, rgba(111,134,214,.16), transparent 70%),
+                          radial-gradient(760px 560px at 50% 92%, rgba(255,74,31,.10), transparent 70%), var(--bg); }
+
+      #title { left: 60px; top: 190px; width: 960px; text-align: center; z-index: 9; }
+      #t1 { font-size: 56px; font-weight: 600; }
+      #t2 { font-size: 64px; font-weight: 700; color: var(--ember); margin-top: 2px; }
+      #t3 { font-size: 44px; font-weight: 500; color: var(--muted); margin-top: 8px; }
+
+      /* --- The phone --- */
+      #phone { left: 240px; top: 360px; width: 600px; z-index: 5; }
+      #handset { position: relative; border-radius: 62px; background: #0a0b12; border: 6px solid #2a2c3e;
+                 padding: 26px 20px; box-shadow: 0 40px 90px rgba(0,0,0,.65); }
+      #notch { width: 150px; height: 11px; border-radius: 999px; background: #22243a; margin: 0 auto 18px; }
+      #screen { position: relative; height: 840px; border-radius: 38px; overflow: hidden;
+                background: linear-gradient(180deg, #141629, #0c0d16); border: 2px solid #23253a; }
+      .face { position: absolute; inset: 0; padding: 30px 26px; }
+      .clk { font-size: 104px; font-weight: 700; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+      .day { margin-top: 8px; font-size: 30px; font-weight: 600; color: var(--dim); }
+
+      #fNight { opacity: 1; }
+      #nCard { margin-top: 40px; background: var(--panel); border: 2px solid var(--hair); border-radius: 28px; padding: 24px; }
+      .rrow { display: flex; align-items: center; gap: 18px; }
+      .rmark { width: 64px; height: 64px; border-radius: 50%; flex: none; display: flex; align-items: center;
+               justify-content: center; font-size: 28px; font-weight: 700; }
+      .rname { flex: 1; font-size: 38px; font-weight: 700; }
+      .rlp { font-size: 30px; font-weight: 700; color: var(--dim); font-variant-numeric: tabular-nums; }
+      #nMark { border: 4px solid rgba(154,163,178,.8); background: rgba(154,163,178,.14); color: var(--silver); }
+      #nBar { position: relative; height: 18px; border-radius: 10px; background: #1a1c2a; margin-top: 20px; overflow: hidden; }
+      #nFill { position: absolute; left: 0; top: 0; bottom: 0; width: 32%; background: linear-gradient(90deg, #6f86d6, #8b9ad6); }
+      #nLab { margin-top: 32px; font-size: 29px; font-weight: 600; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
+      #pills { display: flex; gap: 12px; margin-top: 16px; }
+      .pill { position: relative; flex: 1; height: 74px; border-radius: 20px; }
+      .pf { position: absolute; inset: 0; border-radius: 20px; display: flex; align-items: center;
+            justify-content: center; font-size: 32px; font-weight: 700; }
+      .pf.e { background: var(--panel2); border: 2px solid var(--hair); color: var(--dim); }
+      .pf.w { background: rgba(12,42,28,.95); border: 2px solid rgba(52,199,123,.55); color: #c8f6dd; opacity: 0; }
+      .pf.l { background: rgba(60,20,16,.95); border: 2px solid rgba(224,87,79,.6); color: #ffd9d3; opacity: 0; }
+      #afk { margin-top: 18px; display: inline-flex; align-items: center; font-size: 28px; font-weight: 700;
+             letter-spacing: .1em; color: #ffd9d3; background: rgba(60,20,16,.94);
+             border: 2px solid rgba(224,87,79,.6); border-radius: 999px; padding: 9px 22px; opacity: 0; }
+      #dim { position: absolute; inset: 0; background: rgba(5,6,11,.74); opacity: 0;
+             display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
+      #moon { width: 92px; height: 92px; border-radius: 50%; background: radial-gradient(circle at 34% 32%, #cfd8f5, #8b9ad6);
+              box-shadow: 0 0 60px rgba(143,163,230,.45); }
+      #asleepTxt { font-size: 34px; font-weight: 700; color: #cfd8f5; letter-spacing: .06em; }
+      #vpn { position: absolute; left: 26px; right: 26px; bottom: 26px; display: flex; align-items: center;
+             justify-content: center; gap: 12px; font-size: 28px; font-weight: 600; color: #c8f6dd;
+             background: rgba(12,42,28,.9); border: 2px solid rgba(52,199,123,.5); border-radius: 999px;
+             padding: 12px 18px; opacity: 0; z-index: 3; }
+
+      #fLive { opacity: 0; }
+      #live { display: inline-flex; align-items: center; gap: 12px; font-size: 29px; font-weight: 700;
+              letter-spacing: .1em; color: #c8f6dd; background: rgba(12,42,28,.95);
+              border: 2px solid rgba(52,199,123,.6); border-radius: 999px; padding: 9px 20px; margin-top: 34px; }
+      #liveDot { width: 13px; height: 13px; border-radius: 50%; background: var(--green); }
+      #view { margin-top: 22px; height: 300px; border-radius: 26px; border: 2px solid #23253a;
+              background: radial-gradient(320px 200px at 38% 32%, rgba(111,134,214,.3), transparent 70%),
+                          linear-gradient(180deg, #171a2c, #0f111c); position: relative; overflow: hidden; }
+      .blob { position: absolute; border-radius: 50%; }
+      #bName { margin-top: 24px; font-size: 32px; font-weight: 700; color: var(--night); }
+      #bLine { margin-top: 8px; font-size: 29px; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; }
+
+      #fMorn { opacity: 0; }
+      #mCard { margin-top: 40px; background: var(--panel); border: 2px solid rgba(224,172,62,.4); border-radius: 28px; padding: 24px; }
+      #mMark { border: 4px solid rgba(224,172,62,.85); background: rgba(224,172,62,.16); color: var(--gold); }
+      #mUp { font-size: 30px; font-weight: 700; color: var(--green); }
+      #mNote { margin-top: 34px; font-size: 32px; font-weight: 600; color: var(--muted); line-height: 1.4; }
+      #mLab { margin-top: 48px; font-size: 29px; font-weight: 600; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; opacity: 0; }
+      #mPills { display: flex; gap: 10px; margin-top: 16px; opacity: 0; }
+      .mp { flex: 1; height: 66px; border-radius: 18px; display: flex; align-items: center;
+            justify-content: center; font-size: 29px; font-weight: 700; }
+      .mp.w { background: rgba(12,42,28,.95); border: 2px solid rgba(52,199,123,.55); color: #c8f6dd; }
+      .mp.l { background: rgba(60,20,16,.95); border: 2px solid rgba(224,87,79,.5); color: #ffd9d3; }
+      #mWatch { margin-top: 26px; font-size: 30px; font-weight: 600; color: var(--green); opacity: 0; }
+      #mNote b { color: var(--ink); }
+
+      #cap { left: 90px; top: 1352px; width: 900px; text-align: center; z-index: 7; opacity: 0;
+             font-size: 38px; font-weight: 700; }
+      #cap i { font-style: normal; color: var(--green); }
+
+      /* --- The close --- */
+      #endLogo { left: 0; right: 0; top: 690px; text-align: center; z-index: 9; opacity: 0; }
+      #lockup { display: inline-flex; align-items: center; gap: 22px; }
+      #shard { width: 46px; height: 102px; flex: none; background: linear-gradient(#ffb046, #ff3d0f);
+               clip-path: polygon(0 0, 100% 18%, 62% 100%, 18% 62%); }
+      #wordmark { font-size: 78px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: #f2efec; }
+      #wordmark b { font-weight: 700; color: #ff5a1f; }
+      .logo-sub { display: inline-flex; margin-top: 16px; font-size: 30px; font-weight: 600; letter-spacing: 0.15em; color: var(--muted); }
+      #cta { left: 120px; top: 1110px; width: 840px; height: 140px; z-index: 9; opacity: 0; }
+      .btn { position: relative; width: 100%; height: 100%; border-radius: 70px; background: var(--grad-h); overflow: hidden;
+        color: #06060a; font-size: 46px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 20px 44px rgba(255,74,31,.38); }
+      #ctaShine { position: absolute; top: -30%; left: 0; width: 150px; height: 160%;
+        background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.55), rgba(255,255,255,0)); }
+      #endNote { left: 0; right: 0; top: 1278px; text-align: center; z-index: 9; opacity: 0; }
+      #enSub { font-size: 30px; font-weight: 600; color: var(--dim); }
+      #enMain { margin-top: 14px; font-size: 38px; font-weight: 700; color: var(--ink); opacity: 0; }
+      #chev { left: 490px; top: 1400px; width: 100px; height: 90px; z-index: 9; opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="33.88" data-film data-width="1080" data-height="1920">
+      <div id="haze" class="layer"></div>
+
+      <div id="title" class="abs">
+        <div class="m" data-layout-allow-overflow data-layout-allow-occlusion><div id="t1">Do you play</div></div>
+        <div class="m" data-layout-allow-overflow data-layout-allow-occlusion><div id="t2">LEAGUE &middot; VALORANT</div></div>
+        <div class="m" data-layout-allow-overflow data-layout-allow-occlusion><div id="t3">or any other ranked game?</div></div>
+      </div>
+
+      <div id="phone" class="abs" data-layout-allow-overlap>
+        <div id="handset">
+          <div id="notch"></div>
+          <div id="screen" data-layout-allow-overlap>
+
+            <div class="face" id="fNight" data-layout-allow-occlusion>
+              <div class="clk">23:40</div>
+              <div class="day">Tuesday night</div>
+              <div id="nCard">
+                <div class="rrow"><span class="rmark" id="nMark">II</span><span class="rname">Silver II</span><span class="rlp">32 LP</span></div>
+                <div id="nBar"><div id="nFill"></div></div>
+              </div>
+              <div id="nLab">Tonight</div>
+              <div id="pills">
+                <div class="pill" id="g1"><span class="pf e" data-layout-allow-occlusion>1</span><span class="pf w" data-layout-allow-occlusion>W</span></div>
+                <div class="pill" id="g2"><span class="pf e" data-layout-allow-occlusion>2</span><span class="pf l" data-layout-allow-occlusion>L</span></div>
+                <div class="pill" id="g3"><span class="pf e" data-layout-allow-occlusion>3</span><span class="pf l" data-layout-allow-occlusion>L</span></div>
+                <div class="pill" id="g4"><span class="pf e" data-layout-allow-occlusion>4</span><span class="pf l" data-layout-allow-occlusion>L</span></div>
+              </div>
+              <div id="afk">SOMEONE WENT AFK</div>
+              <div id="dim" data-layout-allow-occlusion><div id="moon"></div><div id="asleepTxt">Asleep</div></div>
+              <div id="vpn" data-layout-allow-occlusion>VPN &middot; your own region</div>
+            </div>
+
+            <div class="face" id="fLive" data-layout-allow-occlusion>
+              <div class="clk">02:10</div>
+              <div class="day">You woke up</div>
+              <span id="live"><i id="liveDot"></i>LIVE</span>
+              <div id="view">
+                <span class="blob" style="left:56px;top:54px;width:70px;height:70px;background:rgba(111,134,214,.6)"></span>
+                <span class="blob" style="left:200px;top:150px;width:50px;height:50px;background:rgba(255,74,31,.5)"></span>
+                <span class="blob" style="left:316px;top:72px;width:40px;height:40px;background:rgba(52,199,123,.5)"></span>
+                <span class="blob" style="left:364px;top:194px;width:58px;height:58px;background:rgba(224,172,62,.42)"></span>
+              </div>
+              <div id="bName">Your booster, in game</div>
+              <div id="bLine">9 / 1 / 6 &middot; 21 min</div>
+            </div>
+
+            <div class="face" id="fMorn" data-layout-allow-occlusion>
+              <div class="clk">07:10</div>
+              <div class="day">Wednesday</div>
+              <div id="mCard">
+                <div class="rrow"><span class="rmark" id="mMark">IV</span><span class="rname">Gold IV</span><span class="rlp" id="mUp">&#9650; 4</span></div>
+              </div>
+              <div id="mNote"><b>While you were asleep.</b></div>
+              <div id="mLab">Last night</div>
+              <div id="mPills">
+                <span class="mp w">W</span><span class="mp w">W</span><span class="mp l">L</span>
+                <span class="mp w">W</span><span class="mp w">W</span><span class="mp w">W</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <div id="cap" class="abs">Watch it happen <i>live</i>, from your phone</div>
+
+      <div id="endLogo" class="abs">
+        <div id="lockup"><span id="shard"></span><span id="wordmark">esports<b>boost</b></span></div>
+        <div class="m"><div id="endSub" class="logo-sub">SLEEP THROUGH THE CLIMB</div></div>
+      </div>
+      <div id="cta" class="abs"><div class="btn"><span>Get your rank today</span><div id="ctaShine" data-layout-allow-overflow></div></div></div>
+      <div id="endNote" class="abs"><div id="enSub">Money back until a booster takes it</div><div id="enMain">Click the link below</div></div>
+      <div id="chev" class="abs"><svg id="chevIn" width="100" height="90" viewBox="0 0 60 54"><path d="M14 10l16 13 16-13M14 27l16 13 16-13" stroke="#ff4a1f" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg></div>
+
+      <audio id="bande-son" class="clip" data-start="0" data-duration="33.88" data-track-index="9" data-volume="1" src="assets/bande-son.wav"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      Promise.all(["700 100px Inter", "400 40px Inter"].map((f) => document.fonts.load(f))).then(() => {
+        const tl = gsap.timeline({ paused: true });
+        const Ls = VO.lines.map((l) => l.start), T = VO.total;
+        const IN = (sel, t, d = 0.42) => tl.fromTo(sel, { yPercent: 165 }, { yPercent: 0, duration: d, ease: "power3.out" }, t);
+
+        /* Frame 0 is the thumbnail: the phone is already there, dimmed. */
+        gsap.set("#phone", { opacity: 0.32, y: 40, scale: 0.97 });
+        gsap.set("#cap", { opacity: 0 });
+        IN("#t1", 0.1, 0.5); IN("#t2", W("league") - 0.1, 0.5); IN("#t3", W("valorant") + 0.3, 0.5);
+
+        /* --- 23:40, and the rank you are stuck at --- */
+        tl.to("#title", { opacity: 0, y: -46, duration: 0.5, ease: "power2.in" }, Ls[1] - 0.25);
+        tl.to("#phone", { opacity: 1, y: 0, scale: 1, duration: 0.85, ease: "power3.out" }, Ls[1] - 0.2);
+        tl.fromTo("#nCard", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, W("rank") - 0.2);
+        tl.fromTo("#nFill", { width: "0%" }, { width: "32%", duration: 0.7, ease: "power2.out" }, W("rank") + 0.05);
+
+        /* --- four games a night, three of them lost --- */
+        tl.fromTo(["#nLab", "#pills"], { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, W("four") - 0.2);
+        const face = (sel, cls, t) => {                  /* the result REPLACES the number */
+          tl.to(sel, { scale: 1.07, duration: 0.15, ease: "power2.out" }, t);
+          tl.to(sel, { scale: 1, duration: 0.19, ease: "power2.in" }, t + 0.15);
+          tl.to(sel + " .pf.e", { opacity: 0, duration: 0.14, ease: "power2.in" }, t + 0.04);
+          tl.to(sel + " .pf." + cls, { opacity: 1, duration: 0.2, ease: "power2.out" }, t + 0.1);
+        };
+        face("#g1", "w", W("four") + 0.5);
+        face("#g2", "l", W("three") + 0.1);
+        face("#g3", "l", W("three") + 0.6);
+        face("#g4", "l", W("three") + 1.1);
+        tl.fromTo("#afk", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.42, ease: "back.out(2)" }, W("afk") - 0.15);
+
+        /* --- asleep: the screen dims and the night runs on --- */
+        tl.to("#dim", { opacity: 1, duration: 0.7, ease: "power2.inOut" }, W("sleep") - 0.25);
+        tl.fromTo("#moon", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.6, ease: "back.out(1.7)" }, W("sleep") - 0.1);
+        tl.fromTo("#asleepTxt", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.45 }, W("climb") - 0.05);
+        tl.fromTo("#vpn", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, W("vpn") - 0.25);
+
+        /* --- 02:10, and the booster's game, live --- */
+        tl.to("#fNight", { opacity: 0, duration: 0.45, ease: "power2.in" }, W("two", 20.8) - 0.35);
+        tl.to("#fLive", { opacity: 1, duration: 0.5, ease: "power2.out" }, W("two", 20.8) + 0.05);
+        tl.fromTo("#liveDot", { opacity: 1 }, { opacity: 0.25, duration: 0.5, ease: "sine.inOut", yoyo: true, repeat: 7 }, W("watch") - 0.1);
+        tl.fromTo("#cap", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, W("live", 23.0) - 0.15);
+
+        /* --- 07:10, and the rank you were playing to reach --- */
+        tl.to("#fLive", { opacity: 0, duration: 0.45, ease: "power2.in" }, W("rank", 25.2) - 0.45);
+        tl.to("#cap", { opacity: 0, duration: 0.4, ease: "power2.in" }, W("rank", 25.2) - 0.45);
+        tl.to("#fMorn", { opacity: 1, duration: 0.5, ease: "power2.out" }, W("rank", 25.2) - 0.05);
+        tl.fromTo("#mNote", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, W("rank", 25.2) + 0.05);
+        tl.fromTo(["#mLab", "#mPills"], { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, W("rank", 25.2) + 0.45);
+
+        /* --- the close --- */
+        const tEnd = Ls[7], tCta = Ls[8];
+        tl.to("#phone", { opacity: 0, y: -70, duration: 0.55, ease: "power2.in" }, tEnd);
+        tl.fromTo("#endLogo", { opacity: 0, scale: 0.88 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd);
+        IN("#endSub", tEnd + 0.15);
+        tl.fromTo("#cta", { opacity: 0, y: 40, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tCta - 0.3);
+        tl.fromTo("#ctaShine", { x: -220 }, { x: 1000, duration: 0.8, ease: "power2.inOut" }, tCta + 0.55);
+        tl.fromTo("#endNote", { opacity: 0 }, { opacity: 1, duration: 0.45 }, tEnd + 1.25);
+        tl.fromTo("#enMain", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, tCta + 0.15);
+        tl.fromTo("#chev", { opacity: 0 }, { opacity: 1, duration: 0.3 }, tCta + 0.45);
+        tl.fromTo("#chevIn", { y: -6 }, { y: 10, duration: 0.32, ease: "sine.inOut", yoyo: true,
+          repeat: Math.max(1, 2 * Math.floor((T - tCta - 1.0) / 0.64) - 1) }, tCta + 0.75);
+
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.paused(false).timeScale(VO.speed || 1), 0);
+        window.__timelines["main"] = film;
+      });
+    </script>
+  </body>
+</html>

@@ -12,8 +12,8 @@ def cues(W, L, lines, total):
         *[('tap', t0 + span * k / 4, 0.32) for k in range(4)],
         ('boom', W('four') - 0.1, 0.4),          # 400 games
         ('tap', W('exactly') - 0.08, 0.5),       # the rank that did not move
-        ('ding', W('one', 13.5) - 0.12, 0.6),    # one day
-        ('check', W('twentyfive') - 0.1, 0.65),  # the price
+        ('ding', W('one', 13.0) - 0.12, 0.6),    # one day
+        ('check', W('ninetyone') - 0.1, 0.65),  # the price
         ('sparkle', L[6] + 0.2, 0.45),           # the nights come back
         ('pop', L[7] + 0.3, 0.6),
     ]

@@ -19,7 +19,14 @@
       };
     </script>
     <style>
-      @font-face { font-family: "MontserratE"; src: url("assets/fonts/Montserrat.ttf") format("truetype"); font-weight: 100 900; }
+      /* Inter, self-hosted — the site's own face (site/public/assets/fonts). Montserrat was
+         a stand-in borrowed from the other project; a film that quotes this shop's prices
+         should be set in this shop's type. Inter stops at 700 here, and 700 is what the
+         site's own display weight is. */
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-400-latin.woff2") format("woff2"); font-weight: 400; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-500-latin.woff2") format("woff2"); font-weight: 500; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-600-latin.woff2") format("woff2"); font-weight: 600; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-700-latin.woff2") format("woff2"); font-weight: 700; font-display: block; }
       :root {
         --bg: #06060a; --bg-2: #08080d; --panel: #0e0e16; --hair: #262632;
         --ink: #f4f1ec; --muted: #a8a5b2; --dim: #8b8b99;
@@ -30,7 +37,7 @@
       }
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
-      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: "MontserratE", sans-serif; color: var(--ink); }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: "Inter", sans-serif; color: var(--ink); }
       .layer { position: absolute; inset: 0; }
       .abs { position: absolute; }
       .m { overflow: hidden; padding: 14px 0 6px; margin: -14px 0 -6px; }
@@ -41,8 +48,8 @@
 
       /* ——— The title, always on the first frame (platform autoplay) ——— */
       #title { left: 70px; top: 196px; width: 940px; text-align: center; z-index: 7; }
-      #t1 { font-size: 62px; font-weight: 800; letter-spacing: .01em; color: var(--ink); }
-      #t2 { font-size: 72px; font-weight: 900; color: var(--ember); margin-top: 6px; }
+      #t1 { font-size: 62px; font-weight: 700; letter-spacing: .01em; color: var(--ink); }
+      #t2 { font-size: 72px; font-weight: 700; color: var(--ember); margin-top: 6px; }
 
       /* ——— The phone ——— */
       #phone { left: 190px; top: 452px; width: 700px; height: 1120px; z-index: 4; }
@@ -60,12 +67,12 @@
       .note { display: flex; align-items: center; gap: 20px; background: rgba(28,28,38,.92); border: 1px solid var(--hair);
               border-radius: 30px; padding: 22px 24px; margin-bottom: 18px; backdrop-filter: blur(8px); }
       .ico { width: 74px; height: 74px; border-radius: 20px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
-             font-size: 34px; font-weight: 900; color: #07070c; }
+             font-size: 34px; font-weight: 700; color: #07070c; }
       .ico.loss { background: var(--red); }
       .ico.esb { background: var(--grad); }
       .nt { flex: 1 1 auto; min-width: 0; }
-      .nh { font-size: 30px; font-weight: 800; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
-      .nb { font-size: 40px; font-weight: 800; color: var(--ink); margin-top: 4px; white-space: nowrap; }
+      .nh { font-size: 30px; font-weight: 700; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+      .nb { font-size: 40px; font-weight: 700; color: var(--ink); margin-top: 4px; white-space: nowrap; }
       .nb .amt { color: var(--red); }
       .ago { font-size: 28px; font-weight: 600; color: var(--dim); flex: 0 0 auto; align-self: flex-start; margin-top: 6px; }
 
@@ -75,11 +82,11 @@
 
       /* ——— The season blur (shot D) ——— */
       #season { left: 0; right: 0; top: 620px; text-align: center; z-index: 6; opacity: 0; }
-      #sNum { font-size: 250px; font-weight: 900; color: var(--ink); line-height: .92; letter-spacing: -.03em; }
-      #sLab { font-size: 54px; font-weight: 800; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+      #sNum { font-size: 250px; font-weight: 700; color: var(--ink); line-height: .92; letter-spacing: -.03em; }
+      #sLab { font-size: 54px; font-weight: 700; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
       #sRank { display: inline-flex; align-items: center; gap: 18px; margin-top: 46px; padding: 20px 40px; border-radius: 999px;
                background: rgba(163,173,184,.12); border: 2px solid rgba(163,173,184,.42); }
-      #sRank b { font-size: 46px; font-weight: 900; color: var(--silver); }
+      #sRank b { font-size: 46px; font-weight: 700; color: var(--silver); }
       #sRank span { font-size: 34px; font-weight: 700; color: var(--muted); }
 
       /* ——— The one that matters (shots E/F) ——— */
@@ -91,19 +98,24 @@
       #card { margin-top: 28px; background: var(--panel); border: 1px solid var(--hair); border-radius: 40px; padding: 44px 46px; opacity: 0; }
       #mark { width: 168px; height: 168px; border-radius: 50%; margin: 0 auto; border: 6px solid rgba(224,172,62,.8);
               background: rgba(224,172,62,.14); display: flex; align-items: center; justify-content: center;
-              font-size: 74px; font-weight: 900; color: var(--gold); }
-      #rankName { text-align: center; font-size: 66px; font-weight: 900; color: var(--gold); margin-top: 22px; }
+              font-size: 74px; font-weight: 700; color: var(--gold); }
+      #rankName { text-align: center; font-size: 66px; font-weight: 700; color: var(--gold); margin-top: 22px; }
       #meta { text-align: center; font-size: 36px; font-weight: 700; color: var(--muted); margin-top: 14px; }
       #byline { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 26px;
                 font-size: 32px; font-weight: 700; color: var(--green); }
 
       /* ——— The close ——— */
       #endLogo { left: 0; right: 0; top: 690px; text-align: center; z-index: 8; opacity: 0; }
-      #endImg { width: 640px; }
-      .logo-sub { display: inline-flex; margin-top: 16px; font-size: 28px; font-weight: 800; letter-spacing: 0.15em; color: var(--muted); }
+            /* .hd-brand + .shard, scaled up for a 1080-wide frame (the site draws them at 17px/10x22). */
+      #lockup { display: inline-flex; align-items: center; gap: 22px; }
+      #shard { width: 46px; height: 102px; flex: none; background: linear-gradient(#ffb046, #ff3d0f);
+               clip-path: polygon(0 0, 100% 18%, 62% 100%, 18% 62%); }
+      #wordmark { font-size: 78px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: #f2efec; }
+      #wordmark b { font-weight: 700; color: #ff5a1f; }
+      .logo-sub { display: inline-flex; margin-top: 16px; font-size: 28px; font-weight: 700; letter-spacing: 0.15em; color: var(--muted); }
       #cta { left: 120px; top: 1110px; width: 840px; height: 140px; z-index: 8; opacity: 0; }
       .btn { position: relative; width: 100%; height: 100%; border-radius: 70px; background: var(--grad-h); overflow: hidden;
-        color: #06060a; font-size: 46px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+        color: #06060a; font-size: 46px; font-weight: 700; display: flex; align-items: center; justify-content: center;
         box-shadow: 0 20px 44px rgba(255, 74, 31, 0.38); }
       #ctaShine { position: absolute; top: -30%; left: 0; width: 150px; height: 160%;
         background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.55), rgba(255,255,255,0)); }
@@ -112,7 +124,7 @@
     </style>
   </head>
   <body>
-    <div id="root" data-composition-id="main" data-start="0" data-duration="27.56" data-film data-width="1080" data-height="1920">
+    <div id="root" data-composition-id="main" data-start="0" data-duration="26.44" data-film data-width="1080" data-height="1920">
       <div id="haze" class="layer"></div>
 
       <div id="title" class="abs">
@@ -174,20 +186,24 @@
         </div>
       </div>
 
+      <!-- THE REAL BRAND LOCKUP, redrawn from the site's own header (.hd-brand + .shard in
+           site.css): the shard, then "esports" in the text colour and "boost" in the ember,
+           uppercase. The green bird in assets/logo-wide.png is a Google Ads export of an older
+           mark and is NOT what the site shows. -->
       <div id="endLogo" class="abs">
-        <img id="endImg" src="assets/logo-wide.png" alt="eSports Boost" />
+        <div id="lockup"><span id="shard"></span><span id="wordmark">esports<b>boost</b></span></div>
         <div class="m"><div id="endSub" class="logo-sub">PICK YOUR RANK</div></div>
       </div>
       <div id="cta" class="abs"><div class="btn"><span>Start my climb</span><div id="ctaShine" data-layout-allow-overflow></div></div></div>
       <div id="endNote" class="abs">Money back until a booster takes it</div>
       <div id="chev" class="abs"><svg id="chevIn" width="100" height="90" viewBox="0 0 60 54"><path d="M14 10l16 13 16-13M14 27l16 13 16-13" stroke="#ff4a1f" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg></div>
 
-      <audio id="bande-son" class="clip" data-start="0" data-duration="27.56" data-track-index="9" data-volume="1" src="assets/bande-son.wav"></audio>
+      <audio id="bande-son" class="clip" data-start="0" data-duration="26.44" data-track-index="9" data-volume="1" src="assets/bande-son.wav"></audio>
     </div>
 
     <script>
       window.__timelines = window.__timelines || {};
-      Promise.all(["900 100px MontserratE", "800 40px MontserratE", "300 132px MontserratE"].map((f) => document.fonts.load(f))).then(() => {
+      Promise.all(["900 100px Inter", "800 40px Inter", "300 132px Inter"].map((f) => document.fonts.load(f))).then(() => {
         for (const el of document.querySelectorAll(".fit")) {
           let fs = parseFloat(getComputedStyle(el).fontSize);
           while (el.scrollWidth > el.clientWidth + 1 && fs > 30) { fs -= 2; el.style.fontSize = fs + "px"; }

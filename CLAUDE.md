@@ -316,12 +316,35 @@ still ask for dollars — but they are **not independent defaults**. Three curre
 and GBP**, and that is the business's rule — **the EU in euros, the UK in pounds, everywhere else in
 dollars**. ⚠ CAD was dropped with that rule: Canada is now "everywhere else" and is quoted USD.
 
-- **A location implies a LANGUAGE too, and France is the whole of that rule today.**
-  `geo.LANG_COUNTRIES` (`{"FR": "fr"}`) is the language twin of `CUR_COUNTRIES`, mirrored to the
+- ⚠ **THE SITE OPENS IN ENGLISH FOR EVERYBODY, AND IN DOLLARS FOR EVERYBODY** — two separate
+  switches, both the business's call on **2026-11-08**, both taken because paid traffic is running
+  on the United States and a table that *can* resolve to French or euros is one that can hand them
+  to the wrong person (a US buyer on a European VPN, a traveller, a roaming SIM).
+  - **Language**: `geo.LANG_COUNTRIES` is now `{}`. `language_for()` answers `""` for every
+    country, `langZones` derives from it and is empty too, so `defaultLang()` reaches its `"en"`
+    fallback on all three signals.
+  - **Currency**: `DEFAULT_CURRENCY = "USD"` at the top of `defaultCurrency()` in i18n.js returns
+    before the ladder runs.
+  - **Neither deletes anything.** The `fr` / `de` dictionaries are untouched, the switcher still
+    offers all three languages and all three currencies, and **a pick is still pinned**:
+    `langPinned` / `curPinned` outrank both switches, so a visitor who chose French keeps French.
+  - **Both ladders are left intact rather than deleted**, because every rung records a decision and
+    re-deriving them is the expensive part. Restoring the old behaviour is `{"FR": "fr"}` in geo.py
+    and `DEFAULT_CURRENCY = ""` in i18n.js — nothing else.
+  - ⚠ **`geo.currency_for()` still answers EUR/GBP by country and is still what the SERVER uses.**
+    The client override is display-side; do not "fix" the disagreement by changing `currency_for()`,
+    which `charge_for()` and the order mail read.
+
+  The ladder below is what runs the day either switch is turned off, and the reasoning on every
+  rung is why it is kept:
+
+- **A location used to imply a LANGUAGE, and France was the whole of that rule.**
+  `geo.LANG_COUNTRIES` was `{"FR": "fr"}` — the language twin of `CUR_COUNTRIES`, mirrored to the
   client as `geo.langCountries` / `geo.langZones` and read by `defaultLang()` in i18n.js — the same
   three signals in the same order as the currency (edge cookie → IANA timezone → locale region
-  subtag), so a visitor in France opens the site in French instead of correcting the one control
-  that decides whether they can read it. Three things about it are load-bearing:
+  subtag), so a visitor in France opened the site in French instead of correcting the one control
+  that decides whether they can read it. Three things about it are load-bearing **if it is ever put
+  back**:
   - **It is the location, deliberately NOT `navigator.language`.** A browser's language list says
     what the machine is set to, which is English on a great many French machines — the exact reason
     the site was in English for them. A zone we cannot place therefore falls through to **English,
@@ -3566,7 +3589,7 @@ header ◄─ 302 return_to ◄─ GET /api/auth/<provider>/callback  (Set-Cooki
 
 ## The ad films — `site/tools/films/`
 
-Five 9:16 ad films for League of Legends, English voice-over, rendered from code.
+Thirteen 9:16 ad films in two batches, English voice-over, rendered from code.
 **This is the Enevie pipeline ported over** (`~/Claude/Enevie lp/outils/hyperframes/`): a
 HyperFrames project per film — HTML + CSS + GSAP, seekable — rendered to MP4 by the
 `hyperframes` CLI, against ONE ElevenLabs take timed to the word.
@@ -3581,10 +3604,61 @@ npx hyperframes snapshot --at 0.4,2.2,…   # then LOOK at the contact sheet
 cd .. && $V build_film.py <name> --render
 ```
 
-The films: `notifications` (a phone at 2 a.m.), `scoreboard` (you vs the grind),
-`order-screen` (the product's own screen), `one-month` (a calendar), `myths` (true/false
-cards). Scripts in [marketing/video-scripts-lol-en.md](marketing/video-scripts-lol-en.md),
-lines in `films/scripts.py`.
+**The LEAGUE batch (1–8)**: `notifications` (a phone at 2 a.m.), `scoreboard` (you vs
+the grind), `order-screen` (the product's own screen), `one-month` (a calendar), `myths`
+(true/false cards), `placements` (a placement tracker), `duo` (a party screen),
+`five-wins` (the LP bar and a promo series).
+
+**The CATALOGUE batch (9–13)**: `teammates` (a post-game scoreboard of four strangers),
+`asleep` (one phone on a nightstand, through one night), `series` (a streaming app and a
+second screen), `hours` (a season's ledger), `two-ways` (two lanes, duo and solo).
+
+Scripts in [marketing/video-scripts-lol-en.md](marketing/video-scripts-lol-en.md), lines
+in `films/scripts.py`.
+
+⚠ **THE TWO BATCHES OPEN DIFFERENTLY AND MUST KEEP DOING SO.** 1–8 open "Do you play
+League of Legends?" and nothing else — they sell one ladder, against a League keyword.
+9–13 open **"Do you play League of Legends, Valorant, or any other ranked game?"**,
+because they sell the shop; the business reversed the single-title rule for them on
+2026-11-08. Do not harmonise the two: the opening is what tells them apart.
+
+⚠ **THE CATALOGUE BATCH IS ONE ARGUMENT IN FIVE REGISTERS**, and the spine is the
+business's: hook → stuck in your rank → **teammates who waste your time and energy** →
+eSports Boost, with **two ways out** (we duo beside you, or we take the account to the
+rank you want while you sleep or watch a series) → **and you watch your booster play,
+live, on your phone**, which closes all five. What changes film to film is the place it
+is staged in and which of the two ways leads.
+
+⚠ **ALL FIVE END ON THE SAME SPOKEN CTA** — *"Click the link below and get your
+desired rank today."* (the business's call, 2026-11-08, on the grounds that it
+out-clicks a brand sign-off). It is the **last** line, after the brand line, so the film
+still says who it is before it says what to do, and **the end card is built to `Ls[8]`
+rather than to the close**: the lockup lands on the brand line, the guarantee fills the
+gap, and the button and "Click the link below" arrive with the spoken words. A CTA
+already on screen when the voice reaches it is furniture, not a call to action — and on
+the two films with a long sign-off, that gap was a measured 3.1 s `dead_stretch`.
+⚠ The **eight League films deliberately do NOT have it**; their closes are unchanged.
+
+⚠ **NOT ONE OF THE CATALOGUE FIVE QUOTES A PRICE** (the business's call, 2026-11-08),
+where all eight League films do. `prices` is empty on those five, so the guard that is
+load-bearing for them is `check_prices()`'s SECOND half: a take saying any "<word>
+dollars" the script did not declare fails the build, because nothing would be checking
+that figure against the engine.
+
+⚠ **No two films in the League batch quote the same climb or the same price** — the
+ladder runs Iron to Master and the engine prices every rung of it, so five films all
+closing on "Silver to Gold, twenty-five dollars" is one ad shown five times and tells a
+Platinum player the shop is not for him. The eight run $3, $4, $16, $36, $56, $57, $91
+and one with no price at all.
+
+⚠ **THE CATALOGUE FIVE CLOSE ON SOMETHING THAT IS NOT BUILT.** `streams.py` does not
+exist: nothing opens a Discord channel and nothing tells a booster to share a screen.
+The `stream` add-on already rides into fulfilment as `metadata[addons]`, so this is a
+manual ops promise today — and these five make it the headline rather than a row in a
+picker. See [Watch live](#watch-live--the-boosters-screen-share--watch_panel): build the
+seam, or somebody opens a channel by hand on every order that mentions it. It is also
+written as a fact about us and never a comparison, because "nobody else gives you this"
+is the claim `D.STREAM_CLAIM_VERIFIED = False` exists to hold back.
 
 ### What this replaced, and why
 
@@ -3622,16 +3696,50 @@ the synth music and the sound effects, which are the same library.
 - **Prices are read from `pricing.py` and CHECKED against the spoken line**
   (`check_prices()`). A re-price fails the build rather than shipping a film that says a
   figure the checkout does not charge — the voice spells numbers out, so it cannot be
-  patched; the line is rewritten and the take re-recorded.
+  patched; the line is rewritten and the take re-recorded. A `prices` entry may be a
+  **dict**, which goes straight to `quote()`: that is how a film quotes a ladder other
+  than League's, and a Valorant price taken off League's table is exactly what this
+  check exists to stop.
+- ⚠ **A whole LINE can be shared between two films, and `str.replace(..., 1)` then
+  edits the wrong one.** "eSports Boost. Pick your rank, we climb it." closes both
+  `scoreboard` (film 2) and `two-ways` (film 13), so appending the CTA by that tail hit
+  film 2. Anchor an edit on the film's key, or use `rindex`.
+- ⚠ **`W("word")` with no `after` floor finds the FIRST occurrence, and the catalogue
+  hook contains "play", "game", "you" and "other".** An unfloored `W("game")` resolves
+  to "ranked game?" at 3.6 s, so a beat written for the middle of the film fires during
+  the title and leaves a hole where it was meant to land. `two-ways` shipped that way
+  for one revision; `npx hyperframes check`'s `dead_stretch` is what caught it.
 - ⚠ **No film may quote the review score, the review count, the client count or the
   roster size** — invented placeholders, and an ad is where that becomes a false claim.
   The end card carries `GUARANTEES_INLINE` and no rating.
 - **Ranks use the site's own tier colours**, so a Gold in a film is the page's Gold.
 - **`check` must end at 0 errors AND 0 warnings**, then snapshot and *read* the frames:
-  a passing check does not show how it looks. Known intentional markers:
+  a passing check does not show how it looks. ⚠ **Read a FULL-RESOLUTION frame before
+  acting on anything you think you see in a contact sheet** — the sheet is a JPEG tile
+  grid and bleeds between cells, which reads as an element leaking from another part of
+  the film. Two "leaks" were chased that way and neither existed.
+- ⚠ **A card sized for N rows is a HOLE until the Nth arrives.** Rows either rest faint
+  (0.14–0.16) and light up, or the empty seat is given a meaning — the dashed "+ OPEN
+  SLOT" the duo and teammates party cards use. Both beat a reserved void that reads as a
+  rendering fault.
+- **Balance the block against the 1920 frame, not against the top of it.** Content that
+  measures ~700px tall is centred, and a block that has to make room for a later one
+  (the handset in the catalogue five) is lifted on its own tween when that one arrives. Known intentional markers:
   `data-layout-allow-overlap` (a dimmed layer behind a foreground block),
   `data-layout-allow-overflow` (the CTA shine sweep), `data-layout-ignore` (lock-screen
   timestamps, which are texture).
+- **The end card is the SITE's lockup, read off the real page**: the ember shard
+  (`clip-path: polygon(0 0, 100% 18%, 62% 100%, 18% 62%)`) beside `esports` + a `<b>boost`
+  in `#ff5a1f`, uppercased, in **Inter** — the face `type-b-sans.css` gives the site, self
+  hosted as four woff2 weights under each film's `assets/fonts/`. The first cut drew a
+  wordmark that was not ours; a logo in an ad is the one element that has to match the
+  page the click lands on.
+- ⚠ **A state is never rewritten by `tl.call()` — the renderer SEEKS frame by frame**, so
+  a callback that mutates `textContent` fires on a forward play and not on a seek, and the
+  rendered frame holds whatever the last seek left. Every variant ships in the DOM
+  (stacked and absolutely positioned) and is opacity-flipped or slid. ⚠ Two states in one
+  slot must **replace** each other — the outgoing one fades out *before* the incoming one
+  arrives — or the frame catches both and reads as a double exposure.
 - **The voice is Will**, `eleven_v4`, `language_code: en`. Each take is cached by a hash
   of (voice, model, settings, text), so re-rendering after a VISUAL change costs nothing.
 - **Node, ffmpeg and ffprobe**: `~/.local/node/bin` plus `films/bin` (the npm static

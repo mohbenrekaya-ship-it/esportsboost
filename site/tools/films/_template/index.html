@@ -23,7 +23,14 @@
       };
     </script>
     <style>
-      @font-face { font-family: "MontserratE"; src: url("assets/fonts/Montserrat.ttf") format("truetype"); font-weight: 100 900; }
+      /* Inter, self-hosted — the site's own face (site/public/assets/fonts). Montserrat was
+         a stand-in borrowed from the other project; a film that quotes this shop's prices
+         should be set in this shop's type. Inter stops at 700 here, and 700 is what the
+         site's own display weight is. */
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-400-latin.woff2") format("woff2"); font-weight: 400; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-500-latin.woff2") format("woff2"); font-weight: 500; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-600-latin.woff2") format("woff2"); font-weight: 600; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-700-latin.woff2") format("woff2"); font-weight: 700; font-display: block; }
       :root {
         /* Ashfall — the site's own tokens (site/public/assets/css/ashfall.css). */
         --bg: #06060a; --bg-2: #08080d; --panel: #0e0e16; --hair: #262632;
@@ -37,7 +44,7 @@
       }
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
-      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: "MontserratE", sans-serif; }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: "Inter", sans-serif; }
       .layer { position: absolute; inset: 0; }
       .abs { position: absolute; }
       /* Masked text (rises into a window): <div class="m"><div id="..">text</div></div> */
@@ -45,11 +52,16 @@
 
       /* The close: logo + gradient button + chevrons pointing at the platform button under the video. */
       #endLogo { left: 0; right: 0; top: 690px; text-align: center; z-index: 8; }
-      #endImg { width: 640px; }
-      .logo-sub { display: inline-flex; margin-top: 16px; font-size: 28px; font-weight: 800; letter-spacing: 0.15em; color: var(--muted); }
+            /* .hd-brand + .shard, scaled up for a 1080-wide frame (the site draws them at 17px/10x22). */
+      #lockup { display: inline-flex; align-items: center; gap: 22px; }
+      #shard { width: 46px; height: 102px; flex: none; background: linear-gradient(#ffb046, #ff3d0f);
+               clip-path: polygon(0 0, 100% 18%, 62% 100%, 18% 62%); }
+      #wordmark { font-size: 78px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: #f2efec; }
+      #wordmark b { font-weight: 700; color: #ff5a1f; }
+      .logo-sub { display: inline-flex; margin-top: 16px; font-size: 28px; font-weight: 700; letter-spacing: 0.15em; color: var(--muted); }
       #cta { left: 120px; top: 1110px; width: 840px; height: 140px; z-index: 8; }
       .btn { position: relative; width: 100%; height: 100%; border-radius: 70px; background: var(--grad-h); overflow: hidden;
-        color: #06060a; font-size: 46px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+        color: #06060a; font-size: 46px; font-weight: 700; display: flex; align-items: center; justify-content: center;
         box-shadow: 0 20px 44px rgba(255, 74, 31, 0.38); }
       #ctaShine { position: absolute; top: -30%; left: 0; width: 150px; height: 160%;
         background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0)); }
@@ -60,8 +72,12 @@
     <div id="root" data-composition-id="main" data-start="0" data-duration="25" data-film data-width="1080" data-height="1920">
       <!-- … the film's scenes … -->
 
+      <!-- THE REAL BRAND LOCKUP, redrawn from the site's own header (.hd-brand + .shard in
+           site.css): the shard, then "esports" in the text colour and "boost" in the ember,
+           uppercase. The green bird in assets/logo-wide.png is a Google Ads export of an older
+           mark and is NOT what the site shows. -->
       <div id="endLogo" class="abs">
-        <img id="endImg" src="assets/logo-wide.png" alt="eSports Boost" />
+        <div id="lockup"><span id="shard"></span><span id="wordmark">esports<b>boost</b></span></div>
         <div class="m"><div id="endSub" class="logo-sub">PICK YOUR RANK</div></div>
       </div>
       <div id="cta" class="abs"><div class="btn"><span>Start my climb</span><div id="ctaShine" data-layout-allow-overflow></div></div></div>
@@ -73,7 +89,7 @@
 
     <script>
       window.__timelines = window.__timelines || {};
-      Promise.all(["900 100px MontserratE", "800 40px MontserratE", "700 40px MontserratE"].map((f) => document.fonts.load(f))).then(() => {
+      Promise.all(["900 100px Inter", "800 40px Inter", "700 40px Inter"].map((f) => document.fonts.load(f))).then(() => {
         // Titres trop longs : la police rétrécit jusqu'à tenir sur une ligne (classe .fit)
         for (const el of document.querySelectorAll(".fit")) {
           let fs = parseFloat(getComputedStyle(el).fontSize);
@@ -89,7 +105,7 @@
 
         // Fin : logo + bouton (ici, juste après la dernière phrase)
         const tEnd = Ls[Ls.length - 1];
-        tl.fromTo("#endImg", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd);
+        tl.fromTo("#lockup", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd);
         IN("#endSub", tEnd + 0.15);
         tl.fromTo("#cta", { opacity: 0, y: 40, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd + 0.3);
         tl.fromTo("#ctaShine", { x: -220 }, { x: 1000, duration: 0.8, ease: "power2.inOut" }, tEnd + 0.9);

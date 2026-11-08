@@ -47,34 +47,77 @@ ENV = dict(os.environ, PATH=BIN + os.pathsep + os.environ.get('PATH', ''),
            DO_NOT_TRACK='1', HYPERFRAMES_NO_TELEMETRY='1')
 FFPROBE = os.path.join(BIN, 'ffprobe')
 
-WORDS = {4: 'four', 25: 'twenty-five', 36: 'thirty-six', 3: 'three'}
+# Spoken forms of the figures the films use. A price the engine returns but this
+# table cannot spell is a build error rather than a silent pass.
+WORDS = {3: 'three', 4: 'four', 10: 'ten', 16: 'sixteen', 21: 'twenty-one', 24: 'twenty-four',
+         25: 'twenty-five', 26: 'twenty-six', 34: 'thirty-four', 36: 'thirty-six',
+         39: 'thirty-nine', 48: 'forty-eight', 56: 'fifty-six', 57: 'fifty-seven',
+         62: 'sixty-two', 91: 'ninety-one'}
 
 
-def price(frm, to):
-    q = PR.quote({'game': GAME, 'service': 'division', 'from': frm, 'to': to, 'mode': 'Solo'})
+def price(frm, to, mode='Solo'):
+    q = PR.quote({'game': GAME, 'service': 'division', 'from': frm, 'to': to, 'mode': mode})
     assert not q['invalid'], (frm, to)
     return int(round(q['total']))
 
 
-def check_prices(lines):
+def resolve(spec):
+    """What the site charges today for what a line claims.
+
+    ('division', from, to[, mode]) · ('wins', rank, n) · ('placements', rank, n)
+    · ('division', 'FLOOR', None) is the cheapest single division on the ladder.
+
+    A DICT is passed straight to `pricing.quote()`, which is how a film quotes a
+    ladder other than League's — the hook names Valorant, and a Valorant price
+    taken off League's table would be the one thing this check exists to stop."""
+    if isinstance(spec, dict):
+        q = PR.quote(dict({'service': 'division', 'mode': 'Solo'}, **spec))
+        assert not q['invalid'], spec
+        return int(round(q['total']))
+    kind = spec[0]
+    lad = next(g for g in D.GAMES if 'League' in g['name'])['ladder']
+    if kind == 'division':
+        if spec[1] == 'FLOOR':
+            return price(lad[0], lad[1])
+        return price(spec[1], spec[2], spec[3] if len(spec) > 3 else 'Solo')
+    rank, n = spec[1], spec[2]
+    q = PR.quote({'game': GAME, 'service': kind, 'from': rank, 'to': rank, 'mode': 'Solo', kind: n})
+    assert not q['invalid'], spec
+    return int(round(q['total']))
+
+
+def check_prices(F):
     """Every price the take SAYS has to be the price the site charges today.
 
     The voice spells numbers out, so a re-price cannot be patched in the film —
-    the line has to be rewritten and the take re-recorded. Failing the build is
-    the only honest outcome."""
-    text = ' '.join(lines).lower()
-    lad = next(g for g in D.GAMES if 'League' in g['name'])['ladder']
-    checks = [('twenty-five dollars', price('Silver IV', 'Gold IV'), 25, 'Silver IV -> Gold IV'),
-              ('thirty-six dollars', price('Gold IV', 'Platinum IV'), 36, 'Gold IV -> Platinum IV'),
-              ('four dollars', price(lad[0], lad[1]), 4, 'one division')]
-    for said, now, was, what in checks:
-        if said in text and now != was:
-            raise SystemExit('%s is now $%d, but the take says "%s". Rewrite the line in '
-                             'scripts.py and re-record — the voice cannot be patched.' % (what, now, said))
+    the line is rewritten and the take re-recorded. Failing the build is the only
+    honest outcome, and it is cheap: the take is cached, so only the film whose
+    line changed pays for a new one."""
+    text = ' '.join(F['lines']).lower()
+    for said, spec in F.get('prices', []):
+        now = resolve(spec)
+        want = WORDS.get(now)
+        if said not in text:
+            raise SystemExit('scripts.py claims the take says "%s" and it does not. '
+                             'Keep `prices` in step with `lines`.' % said)
+        if want is None:
+            raise SystemExit('%s now costs $%d and WORDS cannot spell it. Add it.' % (spec, now))
+        if said != want + ' dollars':
+            raise SystemExit('%s now costs $%d ("%s dollars"), but the take says "%s".\n'
+                             'Rewrite the line in scripts.py and re-record — the voice '
+                             'cannot be patched.' % (spec, now, want, said))
+    # And nothing may quote a price it did not declare.
+    import re as _re
+    for m in _re.finditer(r'\b([a-z-]+) dollars\b', text):
+        if not any(m.group(0) == said for said, _ in F.get('prices', [])):
+            raise SystemExit('the take says "%s" but scripts.py does not declare it in '
+                             '`prices`, so nothing checks it against pricing.py.' % m.group(0))
 
 
 def sync_assets(proj):
-    """Copy anything in _template/assets that the project is missing."""
+    """Copy anything in _template/assets the project is missing — the per-film
+    copies are not in git (five copies of a font and GSAP is 10 MB), so a fresh
+    clone has an index.html with nothing to draw with until this runs."""
     src = os.path.join(HERE, '_template', 'assets')
     dst = os.path.join(proj, 'assets')
     for root, _dirs, files in os.walk(src):
@@ -113,7 +156,7 @@ def main():
     # has an index.html with nothing to draw with until this runs.
     sync_assets(proj)
 
-    check_prices(F['lines'])
+    check_prices(F)
     cfg = json.load(open(os.path.join(proj, 'config.json'))) if os.path.exists(os.path.join(proj, 'config.json')) else {}
     end_hold = cfg.get('end_hold', 2.7)          # the hold after the last line, Enevie's validated figure
 

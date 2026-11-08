@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <!-- eSports Boost film "Duo". Timing: assets/timing.js, written by ../build_film.py.
+         THE PLACE: a party screen. The film moves: your friends' ranks against yours -> the
+         row that gets dodged -> a booster joining the party beside you -> what that costs.
+         ⚠ Nothing here is rewritten by a gsap .call(): the renderer SEEKS frame by frame, so
+         every state ships in the DOM and is cross-faded. SAFE ZONE: y=180 to y=1550. -->
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/timing.js"></script>
+    <script>
+      window.__hf = window.__hf || {};
+      window.__hf.buildReady = window.__hf.buildReady || {};
+      const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+      window.W = (w, after = 0, end = false) => {
+        for (const x of VO.words) if (x.s >= after - 1e-6 && norm(x.w) === w) return end ? x.e : x.s;
+        throw new Error("word not found: " + w);
+      };
+    </script>
+    <style>
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-400-latin.woff2") format("woff2"); font-weight: 400; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-500-latin.woff2") format("woff2"); font-weight: 500; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-600-latin.woff2") format("woff2"); font-weight: 600; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-700-latin.woff2") format("woff2"); font-weight: 700; font-display: block; }
+      :root {
+        --bg: #06060a; --panel: #0e0e16; --panel2: #13131d; --hair: #262632;
+        --ink: #f4f1ec; --muted: #a8a5b2; --dim: #8b8b99;
+        --ember: #ff4a1f; --ember-lit: #ff6a3d; --green: #34c77b; --red: #e0574f;
+        --grad-h: linear-gradient(90deg, #ff6a3d 0%, #ff4a1f 100%);
+        --gold: #e0ac3e; --plat: #4fb0aa; --master: #a56fd0;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: "Inter", sans-serif; color: var(--ink); }
+      .layer { position: absolute; inset: 0; }
+      .abs { position: absolute; }
+      .m { overflow: hidden; padding: 14px 0 6px; margin: -14px 0 -6px; }
+      #haze { background: radial-gradient(900px 700px at 50% 26%, rgba(165,111,208,.14), transparent 70%),
+                          radial-gradient(800px 600px at 50% 92%, rgba(255,74,31,.12), transparent 70%), var(--bg); }
+
+      #title { left: 70px; top: 196px; width: 940px; text-align: center; z-index: 9; }
+      #t1 { font-size: 60px; font-weight: 600; }
+      #t2 { font-size: 70px; font-weight: 700; color: var(--ember); margin-top: 4px; }
+
+      /* ——— The party ——— */
+      #party { left: 90px; top: 520px; width: 900px; z-index: 5;
+               background: var(--panel); border: 1px solid var(--hair); border-radius: 40px; padding: 36px 36px 40px; }
+      #phead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 26px; }
+      #pname { font-size: 40px; font-weight: 700; }
+      #pmeta { font-size: 30px; font-weight: 600; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
+      .pl { display: flex; align-items: center; gap: 22px; background: var(--panel2); border: 2px solid var(--hair);
+            border-radius: 28px; padding: 22px 26px; margin-top: 16px; opacity: 0; }
+      .av { width: 72px; height: 72px; border-radius: 50%; flex: none; display: flex; align-items: center;
+            justify-content: center; font-size: 32px; font-weight: 700; }
+      .av.p { background: rgba(79,176,170,.16); border: 4px solid rgba(79,176,170,.85); color: var(--plat); }
+      .av.g { background: rgba(224,172,62,.16); border: 4px solid rgba(224,172,62,.85); color: var(--gold); }
+      .av.m { background: rgba(165,111,208,.16); border: 4px solid rgba(165,111,208,.9); color: var(--master); }
+      .nm { flex: 1; font-size: 38px; font-weight: 600; }
+      .rk { font-size: 34px; font-weight: 700; }
+      .rk.p { color: var(--plat); } .rk.g { color: var(--gold); } .rk.m { color: var(--master); }
+      #you { border-color: rgba(224,172,62,.4); }
+      #dodged { position: absolute; right: 36px; top: 404px; font-size: 30px; font-weight: 700; letter-spacing: .1em;
+                color: #ffd9d3; background: rgba(60,20,16,.96); border: 2px solid rgba(224,87,79,.6);
+                border-radius: 999px; padding: 12px 26px; opacity: 0; }
+      #slot4 { position: relative; height: 116px; margin-top: 16px; }
+      #slot4 .pl { position: absolute; inset: 0; margin-top: 0; }
+      #ghost { opacity: 1; border-style: dashed; border-color: rgba(255,255,255,.16); background: transparent;
+               justify-content: center; color: var(--dim); font-size: 32px; font-weight: 600; letter-spacing: .1em; }
+      #booster { border-color: rgba(165,111,208,.55); background: rgba(22,16,30,.9); }
+      #link { position: absolute; left: 14px; top: 432px; width: 13px; height: 132px; border-radius: 999px;
+              background: linear-gradient(var(--gold), var(--master)); opacity: 0;
+              box-shadow: 0 0 22px rgba(165,111,208,.55); }
+
+      /* ——— What it is ——— */
+      #chips { left: 90px; top: 1210px; width: 900px; z-index: 7; opacity: 0; }
+      .chip { display: flex; align-items: center; gap: 18px; font-size: 36px; font-weight: 500; color: var(--muted); margin-top: 18px; opacity: 0; }
+      .chip b { width: 36px; height: 36px; border-radius: 50%; flex: none; display: flex; align-items: center;
+                justify-content: center; font-size: 22px; font-weight: 700; color: #06060a; background: var(--green); }
+
+      #price { left: 140px; top: 1230px; width: 800px; z-index: 8; opacity: 0; text-align: center;
+               background: var(--panel); border: 1px solid var(--hair); border-radius: 36px; padding: 34px 40px; }
+      #pClimb { font-size: 42px; font-weight: 600; }
+      #pClimb .g { color: var(--gold); } #pClimb .p { color: var(--plat); }
+      #pAmt { font-size: 112px; font-weight: 700; color: var(--ember); line-height: 1.05; margin-top: 4px; }
+      #pNote { font-size: 32px; font-weight: 500; color: var(--muted); }
+
+      /* ——— The close ——— */
+      #endLogo { left: 0; right: 0; top: 690px; text-align: center; z-index: 9; opacity: 0; }
+      #lockup { display: inline-flex; align-items: center; gap: 22px; }
+      #shard { width: 46px; height: 102px; flex: none; background: linear-gradient(#ffb046, #ff3d0f);
+               clip-path: polygon(0 0, 100% 18%, 62% 100%, 18% 62%); }
+      #wordmark { font-size: 78px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: #f2efec; }
+      #wordmark b { font-weight: 700; color: #ff5a1f; }
+      .logo-sub { display: inline-flex; margin-top: 16px; font-size: 30px; font-weight: 600; letter-spacing: 0.15em; color: var(--muted); }
+      #cta { left: 120px; top: 1110px; width: 840px; height: 140px; z-index: 9; opacity: 0; }
+      .btn { position: relative; width: 100%; height: 100%; border-radius: 70px; background: var(--grad-h); overflow: hidden;
+        color: #06060a; font-size: 46px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 20px 44px rgba(255,74,31,.38); }
+      #ctaShine { position: absolute; top: -30%; left: 0; width: 150px; height: 160%;
+        background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.55), rgba(255,255,255,0)); }
+      #endNote { left: 0; right: 0; top: 1300px; text-align: center; font-size: 30px; font-weight: 600; color: var(--dim); z-index: 9; opacity: 0; }
+      #chev { left: 490px; top: 1400px; width: 100px; height: 90px; z-index: 9; opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="24.52" data-film data-width="1080" data-height="1920">
+      <div id="haze" class="layer"></div>
+
+      <div id="title" class="abs">
+        <div class="m"><div id="t1">Do you play</div></div>
+        <div class="m"><div id="t2">LEAGUE OF LEGENDS?</div></div>
+      </div>
+
+      <div id="party" class="abs" data-layout-allow-overlap>
+        <div id="phead"><div id="pname">Your party</div><div id="pmeta">ranked solo/duo</div></div>
+        <div class="pl" id="f1"><span class="av p">III</span><span class="nm">Friend</span><span class="rk p">Platinum III</span></div>
+        <div class="pl" id="f2"><span class="av p">IV</span><span class="nm">Friend</span><span class="rk p">Platinum IV</span></div>
+        <div class="pl" id="you"><span class="av g">IV</span><span class="nm">You</span><span class="rk g" id="yourk" data-layout-allow-occlusion>Gold IV</span></div>
+        <div id="slot4" data-layout-allow-overlap>
+          <div class="pl" id="ghost" data-layout-allow-occlusion><span>+ OPEN SLOT</span></div>
+          <div class="pl" id="booster" data-layout-allow-occlusion><span class="av m">M</span><span class="nm">Your booster</span><span class="rk m">Master</span></div>
+        </div>
+        <div id="dodged">DODGED</div>
+        <div id="link"></div>
+      </div>
+
+      <div id="chips" class="abs" data-layout-allow-overlap>
+        <div class="chip" id="ch1"><b>✓</b>Same account — you're the one playing</div>
+        <div class="chip" id="ch2"><b>✓</b>Same games, side by side</div>
+        <div class="chip" id="ch3"><b>✓</b>Your hands on the keyboard</div>
+      </div>
+
+      <div id="price" class="abs" data-layout-allow-overlap>
+        <div id="pClimb"><span class="g">Gold IV</span> → <span class="p">Platinum IV</span>, together</div>
+        <div id="pAmt">$56</div>
+        <div id="pNote">about 1 day</div>
+      </div>
+
+      <div id="endLogo" class="abs">
+        <div id="lockup"><span id="shard"></span><span id="wordmark">esports<b>boost</b></span></div>
+        <div class="m"><div id="endSub" class="logo-sub">CLIMB WITH THEM</div></div>
+      </div>
+      <div id="cta" class="abs"><div class="btn"><span>Start my climb</span><div id="ctaShine" data-layout-allow-overflow></div></div></div>
+      <div id="endNote" class="abs">Money back until a booster takes it</div>
+      <div id="chev" class="abs"><svg id="chevIn" width="100" height="90" viewBox="0 0 60 54"><path d="M14 10l16 13 16-13M14 27l16 13 16-13" stroke="#ff4a1f" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg></div>
+
+      <audio id="bande-son" class="clip" data-start="0" data-duration="24.52" data-track-index="9" data-volume="1" src="assets/bande-son.wav"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      Promise.all(["700 100px Inter", "400 40px Inter"].map((f) => document.fonts.load(f))).then(() => {
+        const tl = gsap.timeline({ paused: true });
+        const Ls = VO.lines.map((l) => l.start), T = VO.total;
+        const IN = (sel, t, d = 0.42) => tl.fromTo(sel, { yPercent: 165 }, { yPercent: 0, duration: d, ease: "power3.out" }, t);
+        const POP = (sel, t, d = 0.5) => tl.fromTo(sel, { scale: 0.55, opacity: 0 }, { scale: 1, opacity: 1, duration: d, ease: "back.out(2)" }, t);
+
+        gsap.set("#party", { opacity: 0.4, y: 40, scale: 0.97 });
+        gsap.set("#booster", { opacity: 0, y: 40 });
+        IN("#t1", 0.1, 0.5); IN("#t2", W("league") - 0.1, 0.5);
+
+        /* ——— the party, friends first, you last ——— */
+        tl.to("#party", { opacity: 1, y: 0, scale: 1, duration: 0.9, ease: "power3.out" }, Ls[1] - 0.2);
+        tl.to("#title", { opacity: 0, y: -40, duration: 0.5, ease: "power2.in" }, Ls[1] + 0.15);
+        const row = (sel, t) => tl.fromTo(sel, { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, t);
+        row("#f1", W("friends") - 0.1);
+        row("#f2", W("queue") - 0.05);
+        row("#you", W("above") - 0.1);
+        tl.fromTo("#you", { borderColor: "rgba(224,172,62,.4)" },
+          { borderColor: "rgba(224,172,62,.85)", duration: 0.5 }, W("you", 3.9) - 0.1);
+
+        /* ——— and you're the one who gets dodged ——— */
+        tl.to("#yourk", { opacity: 0, duration: 0.3, ease: "power2.in" }, W("dodged") - 0.3);
+        POP("#dodged", W("dodged") - 0.15, 0.5);
+        tl.to("#you", { opacity: 0.45, duration: 0.5, ease: "power2.out" }, W("dodged") - 0.1);
+
+        /* ——— the booster joins the party, beside you ——— */
+        tl.to("#dodged", { opacity: 0, duration: 0.4, ease: "power2.in" }, W("duo") - 0.2);
+        tl.to("#you", { opacity: 1, duration: 0.5 }, W("duo") - 0.15);
+        tl.to("#yourk", { opacity: 1, duration: 0.4 }, W("duo") - 0.05);
+        tl.to("#ghost", { opacity: 0, duration: 0.3, ease: "power2.in" }, W("booster") - 0.2);
+        tl.to("#booster", { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, W("booster") - 0.12);
+        tl.fromTo("#link", { opacity: 0, scaleY: 0.2, transformOrigin: "50% 0%" },
+          { opacity: 1, scaleY: 1, duration: 0.5, ease: "power2.out" }, W("beside") - 0.1);
+        tl.to("#pmeta", { color: "#a56fd0", duration: 0.4 }, W("beside"));
+
+        /* ——— what duo actually is ——— */
+        tl.to("#party", { y: -140, scale: 0.95, duration: 0.9, ease: "power2.inOut" }, Ls[4] - 0.25);
+        tl.to("#chips", { opacity: 1, duration: 0.3 }, Ls[4] - 0.2);
+        const chip = (sel, t) => tl.fromTo(sel, { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.45, ease: "power2.out" }, t);
+        chip("#ch1", W("account") - 0.12);
+        chip("#ch2", W("games", 12.0) - 0.12);
+        chip("#ch3", W("hands") - 0.12);
+
+        /* ——— the price ——— */
+        tl.to("#chips", { opacity: 0, y: -50, duration: 0.4, ease: "power2.in" }, W("together") - 0.7);
+        tl.fromTo("#price", { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, W("fiftysix") - 0.75);
+        POP("#pAmt", W("fiftysix") - 0.15, 0.5);
+        tl.fromTo("#pNote", { opacity: 0 }, { opacity: 1, duration: 0.4 }, W("fiftysix") + 0.25);
+
+        /* ——— the close ——— */
+        const tEnd = Ls[6];
+        tl.to(["#party", "#price"], { opacity: 0, y: -70, duration: 0.55, ease: "power2.in" }, tEnd - 0.3);
+        tl.fromTo("#endLogo", { opacity: 0, scale: 0.88 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd);
+        IN("#endSub", tEnd + 0.15);
+        tl.fromTo("#cta", { opacity: 0, y: 40, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.8)" }, tEnd + 0.3);
+        tl.fromTo("#ctaShine", { x: -220 }, { x: 1000, duration: 0.8, ease: "power2.inOut" }, tEnd + 0.9);
+        tl.fromTo("#endNote", { opacity: 0 }, { opacity: 1, duration: 0.4 }, tEnd + 0.7);
+        tl.fromTo("#chev", { opacity: 0 }, { opacity: 1, duration: 0.3 }, tEnd + 0.6);
+        tl.fromTo("#chevIn", { y: -6 }, { y: 10, duration: 0.32, ease: "sine.inOut", yoyo: true,
+          repeat: Math.max(1, 2 * Math.floor((T - tEnd - 0.8) / 0.64) - 1) }, tEnd + 0.9);
+
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.paused(false).timeScale(VO.speed || 1), 0);
+        window.__timelines["main"] = film;
+      });
+    </script>
+  </body>
+</html>
