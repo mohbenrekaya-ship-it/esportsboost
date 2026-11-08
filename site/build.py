@@ -9710,6 +9710,37 @@ def page_checkout():
   }
   window.esbTrack('add_payment_info', window.esbItemParams());
 
+  /* Meta InitiateCheckout. Fired HERE, on the checkout page itself, and
+     deliberately not on the [data-continue] click that the site's own
+     begin_checkout uses: an account card, a recovery mail and a mystery mail
+     all link straight to this page, so a handler on the configurator's CTA
+     would miss every one of them. One place, every entry path, and no
+     double-count from a double-clicked CTA.
+
+     value and currency travel as a PAIR, in the currency this buyer will be
+     CHARGED \u2014 the same rule the Purchase event on the success page follows.
+     esbItemParams() above quotes in USD because the site's own funnel is
+     normalised to it; Meta is not, and an InitiateCheckout in dollars against
+     a Purchase in euros is two different numbers for one order.
+
+     A quote that does not price (an invalid or empty order) still fires the
+     event without money attached: the buyer did reach checkout, and a bare
+     `value` with no currency is the one shape Meta misreads. */
+  try {
+    if (window.fbq) {
+      var icq = (window.esbQuote && window.esbState)
+        ? window.esbQuote(window.esbState()) : null;
+      var icp = { content_type: 'product' };
+      if (icq && !icq.invalid && typeof icq.total === 'number') {
+        var icCur = (window.ESB_LOCALE || {}).currency || 'USD';
+        var icRate = (window.ESB_RATES || {})[icCur] || 1;
+        icp.value = Math.round(icq.total * icRate * 100) / 100;
+        icp.currency = String(icCur).toUpperCase();
+      }
+      window.fbq('track', 'InitiateCheckout', icp);
+    }
+  } catch (e) {}
+
   /* ── abandoned-cart capture ──────────────────────────────────────────
      Save the address as soon as it is a real one, so a checkout that is
      never finished can be recovered. Fires on blur and on a debounced
