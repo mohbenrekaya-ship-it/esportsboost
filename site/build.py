@@ -72,6 +72,74 @@ def _gads_head():
     )
 
 
+# ── Meta Pixel (fbevents.js) ──────────────────────────────────
+# Same standing as the Google tag above: the pixel id ships in every page's
+# HTML to every visitor, so it is not a secret and is committed rather than
+# left to an env var that can silently go missing on a build. The env var
+# still overrides, so a staging project can point at a different pixel, or
+# set META_PIXEL_ID="" to disable it:
+#   META_PIXEL_ID   the pixel (default 1145104387855719)
+#
+# This is the pixel for the redesign, and it REPLACES the one on the current
+# live site — which CRO-AUDIT.md records as a Meta Pixel behind a CAPI
+# gateway (`capig.datah04.com`). Neither is in this codebase: the old tag is
+# in the old site's HTML and goes away with it on deploy, so there was
+# nothing here to remove. The gateway is deliberately NOT reinstated —
+# server-side events need a seam of their own, and the natural home is the
+# `/api/webhook` that already fulfils a paid order.
+#
+# Only PageView fires, on every page layout() renders. /ops shares nothing
+# with layout(), so the console is untracked here for the same reason it
+# ships without analytics.js. The Purchase event is deliberately left
+# unwired: the Google Ads conversion on the success page is the pattern it
+# has to follow (the real charged amount, currency and order id, never the
+# snippet's placeholder), and that is a second decision, not this one.
+META_PIXEL_ID = os.environ.get("META_PIXEL_ID", "1145104387855719").strip()
+
+
+def _meta_pixel_head():
+    """Meta's base pixel for the <head> — one per page, beside the Google tag.
+    Empty string when unconfigured. `fbq` is left global, so a later
+    Purchase / InitiateCheckout event needs no second snippet."""
+    if not META_PIXEL_ID:
+        return ""
+    pid = esc(META_PIXEL_ID)
+    return (
+        "<!-- Meta Pixel Code -->\n"
+        "<script>\n"
+        "!function(f,b,e,v,n,t,s)\n"
+        "{if(f.fbq)return;n=f.fbq=function(){n.callMethod?\n"
+        "n.callMethod.apply(n,arguments):n.queue.push(arguments)};\n"
+        "if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';\n"
+        "n.queue=[];t=b.createElement(e);t.async=!0;\n"
+        "t.src=v;s=b.getElementsByTagName(e)[0];\n"
+        "s.parentNode.insertBefore(t,s)}(window, document,'script',\n"
+        "'https://connect.facebook.net/en_US/fbevents.js');\n"
+        "fbq('init', '%s');\n"
+        "fbq('track', 'PageView');\n"
+        "</script>\n"
+        "<!-- End Meta Pixel Code -->\n" % pid
+    )
+
+
+def _meta_pixel_noscript():
+    """The <noscript> half of the same snippet — for the top of the BODY.
+
+    Meta's paste puts it in the <head> and it cannot stay there. With
+    scripting disabled, which is the only case it exists for, the parser
+    meets an <img> in its "in head noscript" mode, closes <head>, and sends
+    everything after it — <title>, the canonical link, every og:* tag —
+    into the body, where a rel=canonical is ignored. In the body it parses
+    correctly and fires exactly the same hit.
+    """
+    if not META_PIXEL_ID:
+        return ""
+    pid = esc(META_PIXEL_ID)
+    return ('<noscript><img height="1" width="1" alt="" style="display:none"\n'
+            ' src="https://www.facebook.com/tr?id=%s&amp;ev=PageView&amp;noscript=1">'
+            "</noscript>\n" % pid)
+
+
 def gads_purchase_send_to():
     """`AW-…/label` for the Purchase conversion, or "" when either half is
     unset. The success-page script guards on this before calling gtag."""
@@ -1629,7 +1697,7 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
 <head>
 <script>document.documentElement.classList.remove('no-js')</script>
 <meta charset="utf-8">
-{_gads_head()}
+{_gads_head()}{_meta_pixel_head()}
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title>
 <meta name="description" content="{esc(desc)}">
@@ -1652,7 +1720,7 @@ def layout(path, title, desc, body, current=None, jsonld=None, og_image=None,
 <link rel="stylesheet" href="{av('/assets/css/type-b-sans.css')}">
 {ld}</head>
 <body{body_cls}>
-<a class="btn btn-secondary btn-sm" href="#main" style="position:absolute;left:-9999px" onfocus="this.style.left='12px';this.style.top='12px';this.style.zIndex='99'" onblur="this.style.left='-9999px'">Skip to content</a>
+{_meta_pixel_noscript()}<a class="btn btn-secondary btn-sm" href="#main" style="position:absolute;left:-9999px" onfocus="this.style.left='12px';this.style.top='12px';this.style.zIndex='99'" onblur="this.style.left='-9999px'">Skip to content</a>
 {head}
 <main id="main">
 {body}
@@ -9927,6 +9995,31 @@ def page_checkout_success():
             currency: d.currency ? String(d.currency).toUpperCase() : undefined,
             transaction_id: d.order_id || ''
           });
+        }
+        // Meta Purchase. Same contract as the Google Ads conversion beside it:
+        // confirmed-paid sessions only, the amount Stripe actually charged, and
+        // a no-op when the pixel is unconfigured (META_PIXEL_ID="" means the
+        // head snippet never shipped, so `fbq` is simply not there).
+        //
+        // value and currency travel as a PAIR or not at all \u2014 Meta reads a bare
+        // `value` against the ad account's own currency, so a \u20ac79 order would be
+        // banked as $79 of revenue and bid against on that.
+        //
+        // eventID is the order id, which is what stops a refresh being a second
+        // sale: the receipt is reachable at ?session_id=\u2026 for as long as the buyer
+        // keeps the tab, and every reload re-fetches and re-fires. Meta dedupes on
+        // (event_name, eventID) for 48h. It is also the id a server-side CAPI
+        // event would have to carry to dedupe against this one, if the gateway
+        // the old site used is ever rebuilt on /api/webhook.
+        if (window.fbq) {
+          var fb = { content_type: 'product' };
+          if (typeof d.amount_total === 'number' && d.currency) {
+            fb.value = d.amount_total / 100;
+            fb.currency = String(d.currency).toUpperCase();
+          }
+          if (d.detail) fb.content_name = String(d.detail);
+          window.fbq('track', 'Purchase', fb,
+                     d.order_id ? { eventID: String(d.order_id) } : undefined);
         }
       } catch (e) {}
       try { localStorage.removeItem('esb.order.v1'); } catch (e) {}
