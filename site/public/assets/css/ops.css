@@ -721,3 +721,41 @@ textarea.ta {
   font-size: 11px; color: var(--muted); flex: 1 1 160px;
 }
 .edit-row .field { margin: 0; width: 100%; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ── the Ad tree ──
+   The hub → title → checkout → paid tree. Indentation carries the hierarchy
+   and a 1px rule draws the spine, so the shape is readable at a glance without
+   a chart library — the same reason the funnel is bars and not a sankey.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.tree { padding: 2px 0 4px; }
+.tr-row { position: relative; padding: 7px 0 7px 0; }
+.tr-row.d1 { padding-left: 22px; }
+.tr-row.d2 { padding-left: 46px; }
+/* the spine: one rule per depth, drawn on the row rather than between rows so
+   a branch that ends the list does not leave a line hanging under it */
+.tr-row.d1::before, .tr-row.d2::before {
+  content: ""; position: absolute; left: 9px; top: 0; bottom: 0; width: 1px;
+  background: var(--hair);
+}
+.tr-row.d2::before { left: 33px; }
+.tr-head { margin-top: 14px; padding-bottom: 9px; border-bottom: 1px solid var(--hair); }
+.tr-head:first-child { margin-top: 0; }
+.tr-head .tr-label { font-weight: 650; color: var(--ink); }
+.tr-open .tr-label { color: var(--accent); }
+.tr-line { display: flex; align-items: baseline; gap: 10px; }
+.tr-label { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink-2);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr-n { font-variant-numeric: tabular-nums; font-weight: 650; font-size: 14px; color: var(--ink); }
+.tr-pct { width: 58px; text-align: right; font-variant-numeric: tabular-nums;
+          font-size: 12.5px; color: var(--ink-3); }
+.tr-dim .tr-label, .tr-dim .tr-n { color: var(--ink-3); }
+/* the per-title trail. It is a row of counts rather than a second bar chart:
+   four numbers that only ever fall, which a reader compares by eye faster than
+   they compare four lengths. */
+.tr-trail { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.tr-step { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.tr-step b { font-variant-numeric: tabular-nums; color: var(--ink-2); font-weight: 650; }
+.tr-step.zero b { color: var(--ink-3); font-weight: 500; }
+.tr-arrow { font-style: normal; font-size: 11px; color: var(--hair-2, var(--hair)); }
+.tr-val { margin-left: 6px; font-size: 12px; font-weight: 650; color: var(--good, var(--accent)); }

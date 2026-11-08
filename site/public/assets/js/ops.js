@@ -4584,9 +4584,115 @@
   /* ══════════════════════════════════════════════════════════════════════
      render
      ══════════════════════════════════════════════════════════════════════ */
+  /* ── the landing tree ──────────────────────────────────────────────────────
+     The question an ad account asks, which `panelFunnel` cannot answer: of the
+     people we PAID to put on /games, which title did they open, and did that
+     title sell. The site funnel averages a campaign pointed at one page against
+     homepage and direct traffic in every row; this is rooted on the hub.
+
+     ⚠ Every session is filed under EXACTLY ONE title (see `_mod_tree`), so the
+     branches sum to their parent and this reads as a tree. ⚠ "Paid" is the
+     `purchase` event, not the orders store — the money is on the Orders tab,
+     because a row there carries no session and cannot be attributed to a
+     source. These two will not always agree, and only this one answers "which
+     ad". */
+  function treeRows(b, label, open) {
+    var rows = [];
+    var pctOf = function (n) { return b.sessions ? pct((n * 100.0) / b.sessions) : "—"; };
+    rows.push({ depth: 0, label: label, n: b.sessions, pct: "", head: true, open: open });
+    if (!b.sessions) return rows;
+    rows.push({ depth: 1, label: "Opened a game page", n: b.opened, pct: pctOf(b.opened) });
+    b.games.forEach(function (g) {
+      rows.push({
+        depth: 2, label: g.game, n: g.sessions,
+        pct: b.opened ? pct((g.sessions * 100.0) / b.opened) : "—",
+        trail: [["configured", g.configured], ["checkout", g.checkout],
+                ["payment", g.payment], ["paid", g.paid]],
+        paid: g.paid, value: g.value
+      });
+    });
+    rows.push({ depth: 1, label: "Left without opening a title", n: b.left, pct: pctOf(b.left), dim: true });
+    return rows;
+  }
+
+  function treeHtml(t) {
+    var parts = [];
+    [["hub", "Landed on /games — the page the ads point at", true],
+     ["off", "Arrived somewhere else", false]].forEach(function (pair) {
+      var b = t[pair[0]];
+      if (!b) return;
+      treeRows(b, pair[1], pair[2]).forEach(function (r) {
+        var cls = "tr-row d" + r.depth + (r.head ? " tr-head" : "") +
+                  (r.dim ? " tr-dim" : "") + (r.open ? " tr-open" : "");
+        var trail = "";
+        if (r.trail) {
+          trail = '<div class="tr-trail">' + r.trail.map(function (s) {
+            return '<span class="tr-step' + (s[1] ? "" : " zero") + '"><b>' +
+                   num(s[1]) + "</b> " + esc(s[0]) + "</span>";
+          }).join('<i class="tr-arrow">→</i>') +
+          (r.paid ? '<span class="tr-val">' + esc(r.value) + "</span>" : "") + "</div>";
+        }
+        parts.push('<div class="' + cls + '"><div class="tr-line">' +
+          '<span class="tr-label">' + esc(r.label) + "</span>" +
+          '<span class="tr-n">' + num(r.n) + "</span>" +
+          '<span class="tr-pct">' + (r.pct || "") + "</span></div>" + trail + "</div>");
+      });
+    });
+    return '<div class="tree">' + parts.join("") + "</div>";
+  }
+
+  function panelTree(d) {
+    var t = d.tree, f = document.createDocumentFragment();
+    var picked = t.source || "";
+    var srcs = (t.sources || []).slice();
+    if (picked && !srcs.some(function (o) { return o.key === picked; })) {
+      srcs.unshift({ key: picked, sessions: 0 });
+    }
+    var all = srcs.reduce(function (n, o) { return n + o.sessions; }, 0) || t.total;
+    var opts = '<option value="">All sources (' + num(all) + ")</option>" +
+      srcs.map(function (o) {
+        return '<option value="' + esc(o.key) + '"' + (o.key === picked ? " selected" : "") +
+               ">" + esc(o.key) + " (" + num(o.sessions) + ")</option>";
+      }).join("");
+
+    var el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML =
+      '<div class="card-hd"><h3>Where the traffic goes</h3><span class="spacer"></span>' +
+      '<select class="field" data-source-filter aria-label="Filter by traffic source">' +
+        opts + "</select></div>" +
+      '<p class="card-sub">' +
+        esc(picked ? picked + " — " + num(t.total) + " sessions in this period."
+                   : "Every source — " + num(t.total) + " sessions in this period.") +
+        " Each session is counted under one title: the one it was configuring at checkout, " +
+        "or the last one it held. Paid is the purchase event, not the orders store." + "</p>" +
+      '<div class="body">' + treeHtml(t) + "</div>";
+    wireSourceFilter(el);
+    f.appendChild(el);
+
+    var rows = [];
+    [["Landed on /games", t.hub], ["Arrived elsewhere", t.off]].forEach(function (pair) {
+      (pair[1].games || []).forEach(function (g) {
+        rows.push([pair[0], g.game, num(g.sessions), num(g.configured), num(g.checkout),
+                   num(g.payment), num(g.paid), g.pct_checkout + "%", g.value]);
+      });
+    });
+    f.appendChild(card({
+      title: "Every title, flat",
+      sub: "The same numbers as a table, for export and for sorting by eye.",
+      chart: function () {
+        return rows.length ? tableHtml({
+          head: ["Entry", "Title", "Sessions", "Configured", "Checkout", "Payment", "Paid", "To checkout", "Value"],
+          num: [2, 3, 4, 5, 6, 7], rows: rows
+        }) : "";
+      }
+    }));
+    return f;
+  }
+
   var PANELS = {
     overview: panelOverview, funnel: panelFunnel, configurator: panelConfigurator,
-    journey: panelJourney, sessions: panelSessions, orders: panelOrders,
+    journey: panelJourney, tree: panelTree, sessions: panelSessions, orders: panelOrders,
     carts: panelCarts,
     stock: panelStock,
     mystery: panelMystery,

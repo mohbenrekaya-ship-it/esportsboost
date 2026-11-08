@@ -529,6 +529,95 @@ def _mod_journey(sess, first_seen):
     }
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  the landing tree — what paid traffic to /games actually does
+# ══════════════════════════════════════════════════════════════════════════
+# Ads land on the hub, so the question an ad account asks is not "what is the
+# site funnel" but "of the people I PAID to put on /games, which title did they
+# open, and did that title sell". `_mod_funnel` cannot answer it: its steps are
+# sitewide and its denominator is every session, so a campaign pointed at one
+# page is averaged against homepage and direct traffic in every row.
+#
+# ⚠ EVERY SESSION IS COUNTED UNDER EXACTLY ONE GAME, so the branches sum to
+# their parent and the tree can be read as a tree. The game is the one it was
+# configuring when it mattered — `buy_cfg` if it reached checkout, else the last
+# configuration it held — and a session that opened a game page without the
+# configurator ever reporting one lands under "unknown" rather than being
+# dropped or spread. Counting a session under every title it browsed would make
+# the children outnumber the parent, which is the one thing a tree may not do.
+#
+# ⚠ `paid` IS `purchase` IN THE ANALYTICS STREAM, NOT THE ORDERS STORE. They
+# answer different questions and only one of them can be attributed to a
+# source: a row in `orders.py` is the money and is authoritative for revenue,
+# but it carries no session, so it cannot be told which ad it came from. This
+# column is "sessions that reached the success page", which is what a campaign
+# is judged on — and it will not always equal the Orders tab. Read the money
+# there and the attribution here.
+HUB = "/games"
+
+
+def _tree_game(s):
+    """The one title a session is filed under, or "" if it never named one."""
+    cfg = s.cfg or {}
+    return (cfg.get("game") or "").strip()
+
+
+def _mod_tree(sess, source=None):
+    """Hub → title → checkout → paid, for one traffic source or all of them."""
+    rows = list(sess)
+    # Tallied BEFORE the filter, for the same reason `_mod_sessions` does it:
+    # picking a source must not collapse the menu to the thing already picked.
+    tally = Counter(_source_key(s.src, s.med) for s in rows)
+    sources = [{"key": k, "sessions": n} for k, n in tally.most_common()]
+    if source:
+        rows = [s for s in rows if _source_key(s.src, s.med) == source]
+
+    hub = [s for s in rows if HUB in s.pages]
+    off = [s for s in rows if HUB not in s.pages]
+
+    def branch(group):
+        """One title's row: how far its sessions got."""
+        opened = [s for s in group if "/games/:game" in s.pages]
+        by = defaultdict(list)
+        for s in opened:
+            by[_tree_game(s) or "unknown"].append(s)
+        games = []
+        for name, g in by.items():
+            checkout = [s for s in g if "checkout" in s.reached]
+            payment = [s for s in g if "payment" in s.reached]
+            paid = [s for s in g if s.paid]
+            games.append({
+                "game": name,
+                "sessions": len(g),
+                "configured": sum(1 for s in g if s.requotes),
+                "checkout": len(checkout),
+                "payment": len(payment),
+                "paid": len(paid),
+                "value": _money(sum(s.value for s in paid)),
+                "pct_of_parent": _rate(len(g), len(group)),
+                "pct_checkout": _rate(len(checkout), len(g)),
+                "pct_paid": _rate(len(paid), len(g)),
+            })
+        games.sort(key=lambda r: (-r["sessions"], r["game"]))
+        return {
+            "sessions": len(group),
+            "opened": len(opened),
+            "left": len(group) - len(opened),
+            "checkout": sum(1 for s in group if "checkout" in s.reached),
+            "payment": sum(1 for s in group if "payment" in s.reached),
+            "paid": sum(1 for s in group if s.paid),
+            "games": games,
+        }
+
+    return {
+        "source": source or "",
+        "sources": sources,
+        "total": len(rows),
+        "hub": branch(hub),
+        "off": branch(off),
+    }
+
+
 def _mod_acquisition(sess):
     rows = defaultdict(lambda: {"sessions": 0, "orders": 0, "revenue": 0.0})
     for s in sess:
@@ -1238,6 +1327,7 @@ def compute(events, days=30, game=None, now=None, with_stripe=True,
         "funnel": _mod_funnel(sess),
         "configurator": _mod_configurator(sess, game),
         "journey": _mod_journey(sess, first_seen),
+        "tree": _mod_tree(sess, source),
         "acquisition": _mod_acquisition(sess),
         "friction": _mod_friction(sess, window),
         "sessions": _mod_sessions(sess, source),

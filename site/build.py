@@ -10419,7 +10419,7 @@ def page_404():
 OPS_TABS = [
     ("liveview", "Live view"),
     ("overview", "Overview"), ("funnel", "Funnel"), ("configurator", "Configurator"),
-    ("journey", "Journey"), ("sessions", "Sessions"), ("orders", "Orders"),
+    ("journey", "Journey"), ("tree", "Ad tree"), ("sessions", "Sessions"), ("orders", "Orders"),
     ("stock", "Stock"),
     ("carts", "Carts"),
     ("accounts", "Accounts"),
