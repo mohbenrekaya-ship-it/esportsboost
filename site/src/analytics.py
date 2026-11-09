@@ -41,6 +41,9 @@ import geo
 MAX_BODY = 64 * 1024      # a beacon payload is tiny; cap it hard
 MAX_BATCH = 20            # events per POST
 MAX_EVENTS = int(os.environ.get("ANALYTICS_MAX_EVENTS", "50000") or 50000)
+# Rows per LRANGE page. Upstash refuses a REST response over 10 MB, and the
+# whole store exceeds that long before MAX_EVENTS is reached — see read().
+READ_CHUNK = int(os.environ.get("ANALYTICS_READ_CHUNK", "4000") or 4000)
 HTTP_TIMEOUT = 5
 
 LIST_KEY = "esb:ev"
@@ -233,14 +236,30 @@ def read(limit=MAX_EVENTS):
     """Return up to `limit` stored events, newest first."""
     limit = max(1, min(int(limit or MAX_EVENTS), MAX_EVENTS))
     if upstash_config()[0]:
-        try:
-            res = _upstash([["LRANGE", LIST_KEY, 0, limit - 1]])
-        except StoreError as e:
-            # Same bargain as append(): the dashboard renders empty rather than
-            # exploding, but the reason goes to the log instead of nowhere.
-            sys.stderr.write("[analytics] store read FAILED: %s\n" % e)
-            return []
-        rows = res[0] if res else []
+        # Read in pages, NEVER as one LRANGE over the whole list. Upstash caps a
+        # REST response at 10 MB; at ~215 bytes an event a full 50,000-event
+        # store is ~10.8 MB, so the single-shot read this replaced threw
+        # "max request size exceeded" on EVERY call once the store filled up.
+        # read() swallows StoreError, so the console rendered a confident 0
+        # events against a store that was simply too big to fetch — months of
+        # real traffic, present and unreadable. The page size is what keeps a
+        # response well under the cap; it is not a tuning knob.
+        rows = []
+        start = 0
+        while start < limit:
+            stop = min(start + READ_CHUNK, limit) - 1
+            try:
+                res = _upstash([["LRANGE", LIST_KEY, start, stop]])
+            except StoreError as e:
+                sys.stderr.write("[analytics] store read FAILED at offset %d: "
+                                 "%s\n" % (start, e))
+                break          # keep the pages already in hand; newest-first,
+                               # so a partial read is still the recent window
+            page = res[0] if res else []
+            rows.extend(page)
+            if len(page) < (stop - start + 1):
+                break                                   # end of the list
+            start = stop + 1
     else:
         try:
             with open(log_path()) as f:
