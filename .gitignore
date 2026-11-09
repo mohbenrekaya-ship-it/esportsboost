@@ -117,3 +117,4 @@ site/tools/films/*/assets/
 # Generated per film by build_film.py from the voice take:
 site/tools/films/*/assets/timing.js
 site/tools/films/*/assets/bande-son.wav
+.env*

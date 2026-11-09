@@ -28,6 +28,7 @@ type-checked below; nothing is stored that did not survive `_clean_event()`.
 """
 import json
 import os
+import sys
 import re
 import time
 import urllib.error
@@ -210,7 +211,15 @@ def append(events):
             _upstash([["LPUSH", LIST_KEY] + lines,
                       ["LTRIM", LIST_KEY, 0, MAX_EVENTS - 1]])
             return len(lines)
-        except StoreError:
+        except StoreError as e:
+            # Swallowed, deliberately — a dropped analytics event must never
+            # turn into a 500 on a page a customer is looking at. But swallowed
+            # is not the same as unrecorded: with no line here, a store that
+            # rejects every write is indistinguishable from no traffic, and the
+            # console reports a confident 0. The message carries Upstash's
+            # status and response, never the token (it travels in a header).
+            sys.stderr.write("[analytics] store write FAILED, %d event(s) "
+                             "dropped: %s\n" % (len(lines), e))
             return 0
     try:
         with open(log_path(), "a") as f:
@@ -226,7 +235,10 @@ def read(limit=MAX_EVENTS):
     if upstash_config()[0]:
         try:
             res = _upstash([["LRANGE", LIST_KEY, 0, limit - 1]])
-        except StoreError:
+        except StoreError as e:
+            # Same bargain as append(): the dashboard renders empty rather than
+            # exploding, but the reason goes to the log instead of nowhere.
+            sys.stderr.write("[analytics] store read FAILED: %s\n" % e)
             return []
         rows = res[0] if res else []
     else:
