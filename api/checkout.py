@@ -19,7 +19,7 @@ class handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if 0 < length <= payments.MAX_BODY else b""
         base = payments.base_url_from(self.headers.get, self.headers.get("host", ""))
-        status, payload = payments.process_checkout(raw, base)
+        status, payload = payments.process_checkout(raw, base, self.headers.get)
         self._json(status, payload)
 
     def _json(self, code, payload):

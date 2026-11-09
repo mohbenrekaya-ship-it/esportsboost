@@ -48,7 +48,8 @@ site/tests/test_mail.py` (header injection, the honeypot, the rate cap and the t
 `python3 site/tests/test_stock.py` (the account stock store — one claim per unit, idempotent per
 order, that an empty shelf never refuses a sale, and that no public payload carries a
 credential) and
-`python3
+`python3 site/tests/test_capi.py` (the Meta Conversions API event: its dedupe key,
+its hashing and that it never raises) and `python3
 site/tests/test_mystery.py` (the mystery-discount token, its hour, one-card-per-inbox, the copy
 rule that keeps the flat deck honest, and the follow-up: revive-not-reissue, one chase ever, and the
 per-hour claim that drops itself when it stops arguing for the order, the halfway
@@ -2694,6 +2695,57 @@ checkout.html  ──POST /api/checkout──►  serve.py  ──►  Stripe Ch
   the two numbers is exactly the re-price factor. The guard is working as designed — it refused to
   charge a number the page never showed — so do not "fix" the guard; restart the server. In
   production this cannot happen: a deploy replaces the functions.
+
+## Meta Conversions API — `capi.py`, the server-side Purchase
+
+The browser pixel on `/checkout/success` was the only thing reporting a sale to
+Meta, and it is the least reliable reporter in the stack: it needs the buyer
+back on that page with scripting intact, which an ad blocker, a closed tab or
+iOS tracking prevention each defeat alone. `src/capi.py` reports from
+`/api/webhook`, where Stripe has already confirmed the money.
+
+⚠ **THE TWO EVENTS MUST DEDUPE OR EVERY SALE IS COUNTED TWICE**, and `event_id`
+is the entire mechanism — Meta drops a repeated `(event_name, event_id)` for 48
+hours. The pixel sends `eventID: order_id` (the Purchase block in build.py) and
+`capi.build_event()` sends `event_id: order_id`. They are the same string
+because they are the same order. Break that and Ads Manager bids on revenue
+that does not exist. `test_capi.py` locks it.
+
+- **It is deliberately NOT the Conversions API Gateway.** That product
+  provisions a cloud proxy on a recurring bill, for shops with no backend. This
+  site confirms every payment in a function it already runs.
+- **Hash what Meta hashes, and nothing else.** `em` is SHA-256 over a trimmed,
+  lower-cased address — an untrimmed or mixed-case digest does not error, it
+  silently fails to match. `fbp`/`fbc` are opaque ids Meta issued itself and
+  ride **raw**; hashing them matches nothing. IP and user-agent are unhashed too.
+- **`_fbp` / `_fbc` are captured at CHECKOUT, not at the webhook**, which runs on
+  a request the browser is no part of. `cookieVal()` in the checkout script
+  reads them into the payload, `build_session()` writes them to Stripe metadata,
+  and the webhook reads them back. The IP, user-agent and edge country come from
+  the checkout request's own headers, which is why `process_checkout()` takes a
+  `header_get` — the same three signals `/api/collect` uses.
+  ⚠ `x-forwarded-for` is a LIST and the client is the **first** entry; the last
+  is Vercel's edge address, which matches nobody.
+- **value and currency travel as a PAIR or not at all**, the same rule the pixel
+  follows: Meta reads a bare `value` against the ad account's own currency, so a
+  €77.99 order would be banked as $77.99 and bid against on that. Accounts are
+  priced in cents, so the figure is not rounded.
+- **Unconfigured degrades, never pretends.** No `META_CAPI_TOKEN` and the module
+  is inert and returns `not_configured`; an event with no identifiers at all is
+  refused rather than sent as noise. **It never raises** — it is called inside
+  the webhook, where an exception is a non-200, which is a redelivery, which is
+  a second fulfilment.
+- **Every send leaves a stderr line**, win or lose, carrying Meta's own error
+  body. The analytics store reported a confident zero for months because its
+  failures went nowhere; this does not repeat that.
+- **The token goes in the `Authorization` header, never the query string** — a
+  URL is the thing most likely to end up in a log.
+- Env: `META_CAPI_TOKEN` (required), `META_PIXEL_ID` (defaults to the same id
+  build.py ships to the browser, so the two halves cannot address different
+  datasets), `META_CAPI_TEST_CODE` (routes to Events Manager's Test Events tab).
+- **Restart the server after touching this file** — the webhook lives in
+  `serve.py`; `api/webhook.py` is the Vercel shell. Tests:
+  `python3 site/tests/test_capi.py`.
 
 ## Outbound mail — the support form and the order confirmation
 

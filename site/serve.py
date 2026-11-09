@@ -151,7 +151,8 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         route = self.path.split("?", 1)[0]
         if route == "/api/checkout":
-            status, payload = payments.process_checkout(self._read_body(), self._base_url())
+            status, payload = payments.process_checkout(
+                self._read_body(), self._base_url(), self.headers.get)
             return self._json(status, payload)
         if route == "/api/webhook":
             status, payload = payments.process_webhook(

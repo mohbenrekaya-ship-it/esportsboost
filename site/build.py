@@ -9905,6 +9905,16 @@ def page_checkout():
       return;
     }
 
+    // One cookie read, used for Meta's _fbp/_fbc below. Split on '; ' would
+    // miss the first pair and a bare indexOf would match a cookie whose name
+    // merely ENDS with this one, so the name is anchored.
+    function cookieVal(name) {
+      try {
+        var all = ('; ' + document.cookie).split('; ' + name + '=');
+        return all.length === 2 ? (all.pop().split(';').shift() || '') : '';
+      } catch (e) { return ''; }
+    }
+
     var s = window.esbState();
     var payload = {
       game: s.game, service: s.service, from: s.from, to: s.to, mode: s.mode,
@@ -9944,7 +9954,17 @@ def page_checkout():
       currency: (window.ESB_LOCALE && window.ESB_LOCALE.currency) || 'USD',
       email: mail.value.trim(),
       hours: (form.querySelector('#k-hours') || {}).value || '',
-      notes: (form.querySelector('#k-notes') || {}).value || ''
+      notes: (form.querySelector('#k-notes') || {}).value || '',
+      // Meta's own click/browser cookies, carried to the server so the
+      // Conversions API event can be attributed to the ad that earned it.
+      // They are the difference between a Purchase Meta can tie to a click and
+      // one it files as organic, and the webhook has no other way to see them:
+      // it runs long after this tab, on a request the browser is not part of.
+      // Raw, never hashed \u2014 they are opaque ids already, and a hash matches
+      // nothing. Absent when the pixel never set them (blocker, no prior ad
+      // click), and absent is fine: the event still sends with the email.
+      fbp: cookieVal('_fbp'),
+      fbc: cookieVal('_fbc')
     };
     busy(true);
     fetch('/api/checkout', {

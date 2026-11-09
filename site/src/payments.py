@@ -95,7 +95,7 @@ def new_order_id():
     return "ESB-" + base64.b32encode(os.urandom(4)).decode().rstrip("=")[:6]
 
 
-def build_session(order, base_url):
+def build_session(order, base_url, client=None):
     """Turn a validated order into Stripe Checkout Session params. The amount
     comes from pricing.quote() — the client-supplied total is ignored."""
     q = pricing.quote(order)
@@ -223,6 +223,14 @@ def build_session(order, base_url):
         "metadata[promo]": q["promo_code"],
         # The recovery token, so the webhook can burn it once the order is paid
         # and the same code can never be spent twice. Empty on a normal order.
+        # Meta Conversions API match signals, carried to the webhook because it
+        # runs on a request the buyer's browser is no part of. capi.py hashes
+        # what has to be hashed; fbp/fbc are opaque ids and ride raw.
+        "metadata[fbp]": str(order.get("fbp") or "")[:255],
+        "metadata[fbc]": str(order.get("fbc") or "")[:255],
+        "metadata[ip]": str((client or {}).get("ip") or "")[:64],
+        "metadata[ua]": str((client or {}).get("ua") or "")[:490],
+        "metadata[country]": str((client or {}).get("country") or "")[:2],
         "metadata[cart]": str(order.get("cart") or "")[:40],
         # The mystery-discount token, burned by the webhook for the same reason.
         "metadata[bingo]": bingo,
@@ -261,9 +269,15 @@ def build_session(order, base_url):
 # ── HTTP-agnostic route handlers — return (status_code, json_dict) ──────────
 
 
-def process_checkout(raw, base_url):
+def process_checkout(raw, base_url, header_get=None):
     """POST /api/checkout body → (status, payload). `raw` is the request body
-    bytes; `base_url` is the public origin for Stripe's redirect URLs."""
+    bytes; `base_url` is the public origin for Stripe's redirect URLs.
+
+    `header_get` is the request's header accessor, used only to read the caller's
+    IP, user-agent and edge country for the Meta Conversions API event the
+    webhook sends later. It is optional so every existing caller keeps working,
+    and the facts it carries are about the REQUEST, never about the person: the
+    same three signals `/api/collect` already uses."""
     if not stripe_key():
         # Not configured — let the page fall back to its preview confirmation.
         return 503, {"error": "payments_not_configured"}
@@ -369,7 +383,15 @@ def process_checkout(raw, base_url):
     # the eleven is non-zero today, so nothing is refused.
 
     try:
-        params, order_id, q = build_session(order, base_url)
+        get = header_get or (lambda *_a, **_k: "")
+        # x-forwarded-for is a LIST on a proxied request and the client is the
+        # FIRST entry; taking the last gives Vercel's own edge address, which
+        # matches nobody. Country comes from the edge header geo.py already uses.
+        fwd = (get("x-forwarded-for") or "").split(",")[0].strip()
+        cc = (get("x-vercel-ip-country") or "").strip().upper()
+        client = {"ip": fwd, "ua": (get("user-agent") or "").strip(),
+                  "country": cc if len(cc) == 2 and cc.isalpha() else ""}
+        params, order_id, q = build_session(order, base_url, client)
         # Keyed on the order id we just minted, so a retry of THIS request
         # resolves to the same Session while a genuinely new order gets a new one.
         session = stripe_call("/checkout/sessions", params,
@@ -505,6 +527,22 @@ def process_webhook(raw, sig_header):
                                     " (%s)" % res["reason"] if res.get("reason") else ""))
             except Exception as e:           # noqa: BLE001 — never break fulfilment
                 sys.stderr.write("[stock] handover skipped: %s\n" % e)
+        # ⚠ Meta Conversions API. The browser pixel on /checkout/success is the
+        # only other reporter of this sale, and it is the unreliable one: it
+        # needs the buyer back on that page with scripting intact. This runs
+        # where the money is actually confirmed. The two deduplicate on the
+        # order id — capi.py's `event_id` and the pixel's `eventID` are the same
+        # string — so a buyer who DOES reach the success page is still one sale.
+        # Wrapped like every other call in this block: a non-200 here means
+        # Stripe redelivers and the order is fulfilled twice.
+        try:
+            import capi
+            res = capi.send_purchase(
+                record, md,
+                event_source_url=(site_origin() or "") + "/checkout/success")
+            capi.log_result(record.get("order_id") or "", res)
+        except Exception as e:               # noqa: BLE001 — never break fulfilment
+            sys.stderr.write("[capi] send skipped: %s\n" % e)
         sys.stderr.write("paid order → %s\n" % record.get("order_id"))
     return 200, {"received": True}
 
