@@ -111,7 +111,18 @@
     ["gclid",   "google", "cpc"],   // Google Ads, ordinary web traffic
     ["gbraid",  "google", "cpc"],   // Google Ads, iOS web-to-app
     ["wbraid",  "google", "cpc"],   // Google Ads, iOS app-to-web
-    ["msclkid", "bing",   "cpc"]    // Microsoft Ads
+    ["msclkid", "bing",   "cpc"],   // Microsoft Ads
+    /* ⚠ Meta auto-tagging, and it is the SAME failure the Google entries above
+       exist to fix. An ad click arrives carrying `fbclid` and nothing else —
+       never a utm_* unless somebody hand-tags the ad — and the Facebook and
+       Instagram in-app browsers send an EMPTY referrer, so without this row the
+       touch falls all the way through to `direct / none`. The store proved it:
+       3,361 direct sessions against 0 from Meta while Meta ads were running.
+       Named `meta`, not `facebook`, because fbclid cannot tell which surface
+       the click came from — the same parameter is used on Facebook, Instagram,
+       Messenger and Audience Network, and calling it `facebook` would be a
+       claim the parameter does not support. */
+    ["fbclid",  "meta",   "cpc"]
   ];
 
   function paidClick(q) {

@@ -3396,6 +3396,25 @@ with nothing to configure.
       either side of the deploy is measured; the newest load carries the JS that reports).
   - **Restart the server after touching `analytics.py`** — `ALLOWED_EVENTS` is read by the
     running process, so a new event name is silently dropped at `/api/collect` until it restarts.
+- ⚠ **A paid click is recognised by its CLICK ID, never by its referrer**, and
+  `PAID_CLICK` in analytics.js is the whole table: `gclid`/`gbraid`/`wbraid` →
+  google, `msclkid` → bing, `fbclid` → **meta**. Both big networks auto-tag with
+  an id and **no utm_\*** at all, and their in-app browsers send an **empty
+  referrer**, so a network missing from that table does not degrade to a
+  referral — it lands in `direct / none` and is invisible. Meta was missing for
+  the whole of the first ad spend: the store held **3,361 direct sessions and 0
+  from Meta** while Meta ads were running. `fbclid` is named `meta` rather than
+  `facebook` because the one parameter covers Facebook, Instagram, Messenger and
+  Audience Network and cannot say which. Adding a network is one row here.
+- **A tagged arrival RE-STAMPS the touch; an untagged one never does.** That
+  pair is what makes mail-driven sales keep their original source: the recovery
+  and mystery mails link to `/checkout?cart=…` / `?bingo=…` with **no utm**, so
+  a visitor who first arrived on a Meta ad and came back through a reminder is
+  still attributed to Meta. ⚠ **Do not "fix" those mail links by tagging them** —
+  a `utm_source=email` would overwrite the ad touch and quietly move every
+  recovered sale off the campaign that paid for it. It also means a mail opened
+  on a DIFFERENT device is a new browser with no stored touch, and lands as
+  `direct`; that gap is real and is not closeable without cross-device identity.
 - **The re-quote count drives real conclusions.** `configure` fires only when the quote signature
   actually changes, watched through the documented `data-*` contract rather than app.js internals.
   The `dataLayer` bridge deliberately ignores `select_item`/`add_to_cart` so re-quotes aren't
